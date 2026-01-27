@@ -3,6 +3,8 @@ dist
 build
 coverage
 .next
+.turbo
+pnpm-lock.yaml
 apps/worker/__pycache__
 apps/worker/.venv
 *.pyc
