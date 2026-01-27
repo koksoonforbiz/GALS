@@ -1,44 +1,18 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ats_user
-      POSTGRES_PASSWORD: ats_password
-      POSTGRES_DB: ats_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ats_user -d ats_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: ./apps/api
       target: development
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
     environment:
       NODE_ENV: development
       PORT: "3000"
-      DATABASE_URL: postgresql://ats_user:ats_password@postgres:5432/ats_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-secret-change-in-production
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+    networks:
+      - local-dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,12 +31,14 @@ services:
     build:
       context: ./apps/worker
     ports:
-      - "8000:8000"
+      - "${WORKER_PORT:-8000}:8000"
     environment:
       ENVIRONMENT: development
       PORT: "8000"
-      DATABASE_URL: postgresql://ats_user:ats_password@postgres:5432/ats_db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
       REDIS_URL: redis://redis:6379
+    networks:
+      - local-dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +59,8 @@ services:
       target: development
     ports:
       - "5173:5173"
+    networks:
+      - local-dev
     depends_on:
       api:
         condition: service_healthy
@@ -96,6 +74,44 @@ services:
       retries: 5
       start_period: 15s
 
+  # Infrastructure services (also in infra/docker-compose.yml for standalone use)
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ats_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ats_password}
+      POSTGRES_DB: ${POSTGRES_DB:-ats_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - local-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ats_user} -d ${POSTGRES_DB:-ats_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - local-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
+
+networks:
+  local-dev:
+    name: local-dev
+    driver: bridge
