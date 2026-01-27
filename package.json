@@ -13,9 +13,15 @@
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
+    "db:generate": "pnpm --filter @ats/api prisma:generate",
+    "db:migrate": "pnpm --filter @ats/api prisma:migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @ats/api prisma:migrate:deploy",
+    "db:reset": "pnpm --filter @ats/api prisma:migrate:reset",
+    "db:studio": "pnpm --filter @ats/api prisma:studio",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@ats/config": "workspace:*",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
@@ -38,7 +44,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "@nestjs/core",
-      "esbuild"
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
     ]
   },
   "engines": {

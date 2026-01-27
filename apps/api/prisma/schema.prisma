@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum UserRole {
+  student
+  teacher
+  admin
+}
+
+enum QuestionType {
+  text
+  drawing
+  mixed
+}
+
+enum AttemptStatus {
+  in_progress
+  submitted
+  grading
+  graded
+}
+
+enum GradedBy {
+  auto
+  manual
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  taughtCourses  Course[]        @relation("TeacherCourses")
+  enrollments    Enrollment[]
+  attempts       Attempt[]
+  gradingResults GradingResult[] @relation("GraderResults")
+
+  @@map("users")
+}
+
+model Course {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  description String
+  teacherId   String   @map("teacher_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
+  topics      Topic[]
+  enrollments Enrollment[]
+
+  @@index([teacherId])
+  @@map("courses")
+}
+
+model Enrollment {
+  id         String   @id @default(uuid()) @db.Uuid
+  studentId  String   @map("student_id") @db.Uuid
+  courseId    String   @map("course_id") @db.Uuid
+  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz
+
+  student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, courseId])
+  @@index([courseId])
+  @@map("enrollments")
+}
+
+model Topic {
+  id          String   @id @default(uuid()) @db.Uuid
+  courseId     String   @map("course_id") @db.Uuid
+  title       String
+  description String
+  orderIndex  Int      @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@index([courseId])
+  @@map("topics")
+}
+
+model Question {
+  id        String       @id @default(uuid()) @db.Uuid
+  topicId   String       @map("topic_id") @db.Uuid
+  version   Int          @default(1)
+  prompt    String
+  type      QuestionType
+  maxScore  Float        @map("max_score")
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+
+  topic    Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  attempts Attempt[]
+
+  @@index([topicId])
+  @@map("questions")
+}
+
+model Attempt {
+  id             String        @id @default(uuid()) @db.Uuid
+  studentId      String        @map("student_id") @db.Uuid
+  questionId     String        @map("question_id") @db.Uuid
+  status         AttemptStatus @default(in_progress)
+  textResponse   String?       @map("text_response")
+  drawingBlobUrl String?       @map("drawing_blob_url")
+  submittedAt    DateTime?     @map("submitted_at") @db.Timestamptz
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  student       User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  gradingResult GradingResult?
+
+  @@index([studentId])
+  @@index([questionId])
+  @@map("attempts")
+}
+
+model GradingResult {
+  id        String   @id @default(uuid()) @db.Uuid
+  attemptId String   @unique @map("attempt_id") @db.Uuid
+  score     Float
+  feedback  String
+  gradedBy  GradedBy @map("graded_by")
+  graderId  String?  @map("grader_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  grader  User?   @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
+
+  @@index([graderId])
+  @@map("grading_results")
+}

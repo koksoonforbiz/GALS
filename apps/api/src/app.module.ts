@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -7,6 +8,7 @@ import { HealthController } from './health.controller';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    PrismaModule,
   ],
   controllers: [HealthController],
 })

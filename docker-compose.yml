@@ -20,6 +20,7 @@ services:
         condition: service_healthy
     volumes:
       - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 10s
