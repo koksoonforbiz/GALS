@@ -33,6 +33,13 @@ enum GradedBy {
   manual
 }
 
+enum EventStatus {
+  pending
+  processing
+  processed
+  failed
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -99,14 +106,15 @@ model Topic {
 }
 
 model Question {
-  id        String       @id @default(uuid()) @db.Uuid
-  topicId   String       @map("topic_id") @db.Uuid
-  version   Int          @default(1)
-  prompt    String
-  type      QuestionType
-  maxScore  Float        @map("max_score")
-  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  id         String       @id @default(uuid()) @db.Uuid
+  topicId    String       @map("topic_id") @db.Uuid
+  version    Int          @default(1)
+  prompt     String
+  type       QuestionType
+  maxScore   Float        @map("max_score")
+  rubricJson Json?        @map("rubric_json")
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
   topic    Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
   attempts Attempt[]
@@ -149,4 +157,16 @@ model GradingResult {
 
   @@index([graderId])
   @@map("grading_results")
+}
+
+model EventQueue {
+  id          String      @id @default(uuid()) @db.Uuid
+  topic       String
+  payload     Json
+  status      EventStatus @default(pending)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  processedAt DateTime?   @map("processed_at") @db.Timestamptz
+
+  @@index([topic, status])
+  @@map("event_queue")
 }

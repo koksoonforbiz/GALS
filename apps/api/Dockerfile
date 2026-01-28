@@ -2,14 +2,26 @@ FROM node:20-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json ./
+FROM base AS shared-build
+WORKDIR /repo
+COPY tsconfig.base.json ./
+WORKDIR /repo/packages/shared
+COPY packages/shared/package.json ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN pnpm install
+COPY packages/shared/ ./
+RUN pnpm run build
+
+FROM base AS deps
+COPY apps/api/package.json ./
+RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
+RUN pnpm install
+COPY --from=shared-build /repo/packages/shared /shared
+RUN pnpm add /shared
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY apps/api/ .
 RUN pnpm exec prisma generate
 RUN pnpm exec nest build
 
@@ -24,10 +36,12 @@ CMD ["node", "dist/main"]
 
 FROM base AS development
 ENV NODE_ENV=development
-COPY package.json ./
-RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
+COPY apps/api/package.json ./
+RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN pnpm install
-COPY . .
+COPY --from=shared-build /repo/packages/shared /shared
+RUN pnpm add /shared
+COPY apps/api/ .
 RUN chmod +x start-dev.sh
 EXPOSE 3000
 CMD ["sh", "start-dev.sh"]

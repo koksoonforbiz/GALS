@@ -15,15 +15,19 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@ats/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.975.0",
     "@aws-sdk/s3-request-presigner": "^3.975.0",
     "@nestjs/common": "^10.4.0",
     "@nestjs/config": "^3.2.0",
     "@nestjs/core": "^10.4.0",
     "@nestjs/platform-express": "^10.4.0",
+    "@nestjs/platform-socket.io": "^10.4.22",
+    "@nestjs/websockets": "^10.4.22",
     "@prisma/client": "^6.19.2",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "zod": "^3.23.0"
   },
   "devDependencies": {

@@ -1,7 +1,8 @@
 services:
   api:
     build:
-      context: ./apps/api
+      context: .
+      dockerfile: apps/api/Dockerfile
       target: development
     ports:
       - "${API_PORT:-3000}:3000"

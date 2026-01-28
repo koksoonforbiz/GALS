@@ -1,12 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from './prisma';
 import { BlobService } from './blob';
+import { EventBusService } from './event-bus';
 
 @Controller('health')
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly blob: BlobService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   @Get()
@@ -26,7 +28,15 @@ export class HealthController {
       blobStatus = 'error';
     }
 
-    const allOk = dbStatus === 'ok' && blobStatus === 'ok';
+    let eventBusStatus = 'ok';
+    try {
+      const healthy = await this.eventBus.isHealthy();
+      if (!healthy) eventBusStatus = 'error';
+    } catch {
+      eventBusStatus = 'error';
+    }
+
+    const allOk = dbStatus === 'ok' && blobStatus === 'ok' && eventBusStatus === 'ok';
 
     return {
       status: allOk ? 'ok' : 'degraded',
@@ -35,6 +45,7 @@ export class HealthController {
       checks: {
         database: dbStatus,
         blobStorage: blobStatus,
+        eventBus: eventBusStatus,
       },
     };
   }

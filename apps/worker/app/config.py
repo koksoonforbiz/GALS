@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     port: int = 8000
     database_url: str
     redis_url: str
+    blob_storage_endpoint: str = "http://localhost:9000"
+    blob_storage_bucket: str = "ats-blobs"
+    blob_storage_access_key: str = "minioadmin"
+    blob_storage_secret_key: str = "minioadmin"
 
     model_config = {"env_file": ".env"}
 
