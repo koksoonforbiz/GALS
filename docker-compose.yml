@@ -11,12 +11,20 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      BLOB_STORAGE_ENDPOINT: http://minio:9000
+      BLOB_STORAGE_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
+      BLOB_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      BLOB_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      BLOB_STORAGE_REGION: us-east-1
+      BLOB_STORAGE_PUBLIC_ENDPOINT: http://localhost:${MINIO_API_PORT:-9000}
     networks:
       - local-dev
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     volumes:
       - ./apps/api/src:/app/src
@@ -38,12 +46,18 @@ services:
       PORT: "8000"
       DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
       REDIS_URL: redis://redis:6379
+      BLOB_STORAGE_ENDPOINT: http://minio:9000
+      BLOB_STORAGE_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
+      BLOB_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      BLOB_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     networks:
       - local-dev
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     volumes:
       - ./apps/worker/app:/app/app
@@ -108,9 +122,29 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    networks:
+      - local-dev
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
+  minio_data:
 
 networks:
   local-dev:

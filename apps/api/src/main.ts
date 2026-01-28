@@ -5,7 +5,7 @@ import { validateEnv } from './env';
 async function bootstrap() {
   const env = validateEnv();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableCors();
   app.setGlobalPrefix('api');
 

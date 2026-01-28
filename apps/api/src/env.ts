@@ -6,6 +6,12 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters'),
+  BLOB_STORAGE_ENDPOINT: z.string().url('BLOB_STORAGE_ENDPOINT must be a valid URL'),
+  BLOB_STORAGE_BUCKET: z.string().min(1, 'BLOB_STORAGE_BUCKET is required'),
+  BLOB_STORAGE_ACCESS_KEY: z.string().min(1, 'BLOB_STORAGE_ACCESS_KEY is required'),
+  BLOB_STORAGE_SECRET_KEY: z.string().min(1, 'BLOB_STORAGE_SECRET_KEY is required'),
+  BLOB_STORAGE_REGION: z.string().default('us-east-1'),
+  BLOB_STORAGE_PUBLIC_ENDPOINT: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

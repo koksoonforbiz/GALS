@@ -1,9 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from './prisma';
+import { BlobService } from './blob';
 
 @Controller('health')
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly blob: BlobService,
+  ) {}
 
   @Get()
   async check() {
@@ -14,12 +18,23 @@ export class HealthController {
       dbStatus = 'error';
     }
 
+    let blobStatus = 'ok';
+    try {
+      const healthy = await this.blob.isHealthy();
+      if (!healthy) blobStatus = 'error';
+    } catch {
+      blobStatus = 'error';
+    }
+
+    const allOk = dbStatus === 'ok' && blobStatus === 'ok';
+
     return {
-      status: dbStatus === 'ok' ? 'ok' : 'degraded',
+      status: allOk ? 'ok' : 'degraded',
       service: 'api',
       timestamp: new Date().toISOString(),
       checks: {
         database: dbStatus,
+        blobStorage: blobStatus,
       },
     };
   }
