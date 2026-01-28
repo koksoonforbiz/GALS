@@ -1,0 +1,130 @@
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { api } from '../lib/api';
+import { joinStudentRoom, disconnectSocket } from '../lib/socket';
+import type { UserRole } from '@ats/shared';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AuthResponse {
+  accessToken: string;
+  user: User;
+}
+
+interface AuthContextValue {
+  user: User | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load user from token on mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+
+    if (token && savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser) as User;
+        setUser(parsedUser);
+
+        // Join socket room for students
+        if (parsedUser.role === 'student') {
+          joinStudentRoom(parsedUser.id);
+        }
+
+        // Validate token by fetching current user
+        api
+          .get<User>('/auth/me')
+          .then((freshUser) => {
+            setUser(freshUser);
+            localStorage.setItem('user', JSON.stringify(freshUser));
+          })
+          .catch(() => {
+            // Token invalid, clear storage
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          })
+          .finally(() => {
+            setIsLoading(false);
+          });
+      } catch {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setIsLoading(false);
+      }
+    } else {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const login = useCallback(async (email: string, password: string) => {
+    const response = await api.post<AuthResponse>('/auth/login', {
+      email,
+      password,
+    });
+
+    localStorage.setItem('token', response.accessToken);
+    localStorage.setItem('user', JSON.stringify(response.user));
+    setUser(response.user);
+
+    if (response.user.role === 'student') {
+      joinStudentRoom(response.user.id);
+    }
+  }, []);
+
+  const register = useCallback(
+    async (email: string, password: string, name: string, role: UserRole) => {
+      const response = await api.post<AuthResponse>('/auth/register', {
+        email,
+        password,
+        name,
+        role,
+      });
+
+      localStorage.setItem('token', response.accessToken);
+      localStorage.setItem('user', JSON.stringify(response.user));
+      setUser(response.user);
+
+      if (response.user.role === 'student') {
+        joinStudentRoom(response.user.id);
+      }
+    },
+    [],
+  );
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    disconnectSocket();
+    setUser(null);
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}

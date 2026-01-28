@@ -11,6 +11,11 @@ export default defineConfig({
         target: 'http://api:3000',
         changeOrigin: true,
       },
+      '/socket.io': {
+        target: 'http://api:3000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

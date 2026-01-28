@@ -70,6 +70,7 @@ model Course {
   teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
   topics      Topic[]
   enrollments Enrollment[]
+  assessments Assessment[]
 
   @@index([teacherId])
   @@map("courses")
@@ -116,8 +117,9 @@ model Question {
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
-  topic    Topic     @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  attempts Attempt[]
+  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  attempts            Attempt[]
+  assessmentQuestions AssessmentQuestion[]
 
   @@index([topicId])
   @@map("questions")
@@ -127,8 +129,10 @@ model Attempt {
   id             String        @id @default(uuid()) @db.Uuid
   studentId      String        @map("student_id") @db.Uuid
   questionId     String        @map("question_id") @db.Uuid
+  assessmentId   String?       @map("assessment_id") @db.Uuid
   status         AttemptStatus @default(in_progress)
   textResponse   String?       @map("text_response")
+  strokesJson    Json?         @map("strokes_json")
   drawingBlobUrl String?       @map("drawing_blob_url")
   submittedAt    DateTime?     @map("submitted_at") @db.Timestamptz
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
@@ -136,16 +140,17 @@ model Attempt {
 
   student       User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  gradingResult GradingResult?
+  gradingResults GradingResult[]
 
   @@index([studentId])
   @@index([questionId])
+  @@index([assessmentId])
   @@map("attempts")
 }
 
 model GradingResult {
   id        String   @id @default(uuid()) @db.Uuid
-  attemptId String   @unique @map("attempt_id") @db.Uuid
+  attemptId String   @map("attempt_id") @db.Uuid
   score     Float
   feedback  String
   gradedBy  GradedBy @map("graded_by")
@@ -155,6 +160,7 @@ model GradingResult {
   attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   grader  User?   @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
 
+  @@index([attemptId])
   @@index([graderId])
   @@map("grading_results")
 }
@@ -169,4 +175,33 @@ model EventQueue {
 
   @@index([topic, status])
   @@map("event_queue")
+}
+
+model Assessment {
+  id          String   @id @default(uuid()) @db.Uuid
+  courseId    String   @map("course_id") @db.Uuid
+  title       String
+  description String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  course    Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions AssessmentQuestion[]
+
+  @@index([courseId])
+  @@map("assessments")
+}
+
+model AssessmentQuestion {
+  id           String @id @default(uuid()) @db.Uuid
+  assessmentId String @map("assessment_id") @db.Uuid
+  questionId   String @map("question_id") @db.Uuid
+  orderIndex   Int    @map("order_index")
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+  @@index([assessmentId])
+  @@map("assessment_questions")
 }

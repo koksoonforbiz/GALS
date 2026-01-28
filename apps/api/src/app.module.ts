@@ -4,6 +4,13 @@ import { PrismaModule } from './prisma';
 import { BlobModule } from './blob';
 import { EventBusModule } from './event-bus';
 import { GradingModule } from './grading';
+import { AuthModule } from './auth';
+import { CoursesModule } from './courses';
+import { TopicsModule } from './topics';
+import { QuestionsModule } from './questions';
+import { AssessmentsModule } from './assessments';
+import { EnrollmentsModule } from './enrollments';
+import { AttemptsModule } from './attempts';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -15,6 +22,13 @@ import { HealthController } from './health.controller';
     BlobModule,
     EventBusModule,
     GradingModule,
+    AuthModule,
+    CoursesModule,
+    TopicsModule,
+    QuestionsModule,
+    AssessmentsModule,
+    EnrollmentsModule,
+    AttemptsModule,
   ],
   controllers: [HealthController],
 })

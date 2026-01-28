@@ -71,7 +71,8 @@ services:
 
   web:
     build:
-      context: ./apps/web
+      context: .
+      dockerfile: apps/web/Dockerfile
       target: development
     ports:
       - "5173:5173"

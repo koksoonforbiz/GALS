@@ -1,5 +1,6 @@
 import { Controller, Post, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma';
 
 @Controller('dev')
@@ -18,10 +19,13 @@ export class SeedController {
       return { error: 'Seed endpoint is only available in development' };
     }
 
+    const timestamp = Date.now();
+    const passwordHash = await bcrypt.hash('password123', 10);
+
     const teacher = await this.prisma.user.create({
       data: {
-        email: `teacher-${Date.now()}@test.com`,
-        passwordHash: '$2b$10$placeholder',
+        email: `teacher-${timestamp}@test.com`,
+        passwordHash,
         name: 'Dr. Smith',
         role: 'teacher',
       },
@@ -29,8 +33,8 @@ export class SeedController {
 
     const student = await this.prisma.user.create({
       data: {
-        email: `student-${Date.now()}@test.com`,
-        passwordHash: '$2b$10$placeholder',
+        email: `student-${timestamp}@test.com`,
+        passwordHash,
         name: 'Alice Student',
         role: 'student',
       },
@@ -63,11 +67,33 @@ export class SeedController {
     const question = await this.prisma.question.create({
       data: {
         topicId: topic.id,
-        prompt: 'What is the process by which plants convert sunlight into energy?',
-        type: 'text',
+        prompt: `# What is Photosynthesis?
+
+Explain the process by which plants convert sunlight into energy.
+
+You may use the following formula for reference:
+
+$$6CO_2 + 6H_2O \\xrightarrow{light} C_6H_{12}O_6 + 6O_2$$
+
+**Your answer should include:**
+- The main inputs and outputs
+- The role of chlorophyll`,
+        type: 'mixed',
         maxScore: 10,
         rubricJson: {
           answer_key: ['photosynthesis', 'the process of photosynthesis'],
+        },
+      },
+    });
+
+    // Create an assessment with the question
+    const assessment = await this.prisma.assessment.create({
+      data: {
+        courseId: course.id,
+        title: 'Photosynthesis Quiz',
+        description: 'Test your understanding of photosynthesis',
+        questions: {
+          create: [{ questionId: question.id, orderIndex: 0 }],
         },
       },
     });
@@ -83,12 +109,20 @@ export class SeedController {
     this.logger.log('Seed data created successfully');
 
     return {
-      teacherId: teacher.id,
-      studentId: student.id,
-      courseId: course.id,
-      topicId: topic.id,
-      questionId: question.id,
-      attemptId: attempt.id,
+      message: 'Seed data created successfully',
+      credentials: {
+        teacher: { email: `teacher-${timestamp}@test.com`, password: 'password123' },
+        student: { email: `student-${timestamp}@test.com`, password: 'password123' },
+      },
+      ids: {
+        teacherId: teacher.id,
+        studentId: student.id,
+        courseId: course.id,
+        topicId: topic.id,
+        questionId: question.id,
+        assessmentId: assessment.id,
+        attemptId: attempt.id,
+      },
     };
   }
 }
