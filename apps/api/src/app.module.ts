@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma';
 import { BlobModule } from './blob';
 import { EventBusModule } from './event-bus';
@@ -13,11 +14,16 @@ import { EnrollmentsModule } from './enrollments';
 import { AttemptsModule } from './attempts';
 import { MasteryModule } from './mastery';
 import { HealthController } from './health.controller';
+import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60000, limit: 30 }],
+      storage: new ThrottlerRedisStorage(),
     }),
     PrismaModule,
     BlobModule,
