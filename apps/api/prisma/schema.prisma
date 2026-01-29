@@ -134,6 +134,7 @@ model Attempt {
   textResponse   String?       @map("text_response")
   strokesJson    Json?         @map("strokes_json")
   drawingBlobUrl String?       @map("drawing_blob_url")
+  currentScore   Float?        @map("current_score")
   submittedAt    DateTime?     @map("submitted_at") @db.Timestamptz
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz

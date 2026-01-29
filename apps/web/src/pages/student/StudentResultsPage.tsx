@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
 
+interface Grader {
+  id: string;
+  name: string;
+}
+
 interface GradingResult {
   id: string;
   score: number;
   feedback: string;
   gradedBy: string;
-  gradedAt: string;
+  grader: Grader | null;
+  createdAt: string;
 }
 
 interface Question {
@@ -19,6 +25,7 @@ interface Attempt {
   id: string;
   status: string;
   textResponse: string | null;
+  currentScore: number | null;
   submittedAt: string | null;
   question: Question;
   gradingResults: GradingResult[];
@@ -28,6 +35,7 @@ export function StudentResultsPage() {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAttempts = async () => {
@@ -59,10 +67,14 @@ export function StudentResultsPage() {
           <div className="text-gray-500 text-center py-8">No graded results yet.</div>
         ) : (
           attempts.map((attempt) => {
-            const result = attempt.gradingResults[0];
-            const percentage = result
-              ? Math.round((result.score / attempt.question.maxScore) * 100)
-              : 0;
+            const latestResult = attempt.gradingResults[0] ?? null;
+            const currentScore = attempt.currentScore ?? latestResult?.score ?? null;
+            const percentage =
+              currentScore !== null
+                ? Math.round((currentScore / attempt.question.maxScore) * 100)
+                : 0;
+            const isExpanded = expandedId === attempt.id;
+            const hasMultipleGrades = attempt.gradingResults.length > 1;
 
             return (
               <div
@@ -81,20 +93,101 @@ export function StudentResultsPage() {
                       <p className="text-gray-900">{attempt.textResponse || 'No text response'}</p>
                     </div>
 
-                    {result && (
+                    {latestResult && (
                       <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-gray-500 mb-1">Feedback:</p>
-                        <p className="text-gray-900">{result.feedback}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-sm text-gray-500">Latest Feedback:</p>
+                          <span className="inline-block px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded text-xs font-medium">
+                            Latest
+                          </span>
+                        </div>
+                        <p className="text-gray-900">{latestResult.feedback}</p>
                         <p className="text-xs text-gray-500 mt-2">
-                          Graded by: {result.gradedBy} |{' '}
-                          {new Date(result.gradedAt).toLocaleString()}
+                          Graded by:{' '}
+                          {latestResult.gradedBy === 'auto'
+                            ? 'Auto-grader'
+                            : (latestResult.grader?.name ?? 'Teacher')}{' '}
+                          | {new Date(latestResult.createdAt).toLocaleString()}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Grading History Toggle */}
+                    {hasMultipleGrades && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => setExpandedId(isExpanded ? null : attempt.id)}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          {isExpanded ? 'Hide' : 'Show'} grading history (
+                          {attempt.gradingResults.length} grades)
+                        </button>
+
+                        {isExpanded && (
+                          <div className="mt-2 overflow-x-auto">
+                            <table className="w-full text-sm border border-gray-200 rounded-lg">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">
+                                    #
+                                  </th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">
+                                    Score
+                                  </th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">
+                                    Feedback
+                                  </th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">
+                                    Graded By
+                                  </th>
+                                  <th className="text-left px-3 py-1.5 font-medium text-gray-600">
+                                    Date
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {attempt.gradingResults.map((result, index) => (
+                                  <tr
+                                    key={result.id}
+                                    className={`border-t border-gray-100 ${
+                                      index === 0 ? 'bg-yellow-50' : ''
+                                    }`}
+                                  >
+                                    <td className="px-3 py-1.5 text-gray-500">
+                                      {index === 0 ? (
+                                        <span className="inline-block px-1.5 py-0.5 bg-yellow-200 text-yellow-800 rounded text-xs font-medium">
+                                          Latest
+                                        </span>
+                                      ) : (
+                                        attempt.gradingResults.length - index
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-1.5 font-medium">
+                                      {result.score} / {attempt.question.maxScore}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-gray-700 max-w-xs truncate">
+                                      {result.feedback}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-gray-600">
+                                      {result.gradedBy === 'auto'
+                                        ? 'Auto-grader'
+                                        : (result.grader?.name ?? 'Teacher')}
+                                    </td>
+                                    <td className="px-3 py-1.5 text-gray-500">
+                                      {new Date(result.createdAt).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
 
                   <div className="ml-4 text-right">
-                    {result ? (
+                    {currentScore !== null ? (
                       <>
                         <div
                           className={`text-2xl font-bold ${
@@ -105,9 +198,14 @@ export function StudentResultsPage() {
                                 : 'text-red-600'
                           }`}
                         >
-                          {result.score}/{attempt.question.maxScore}
+                          {currentScore}/{attempt.question.maxScore}
                         </div>
                         <div className="text-sm text-gray-500">{percentage}%</div>
+                        {hasMultipleGrades && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            {attempt.gradingResults.length} grades
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div className="text-gray-500">Pending</div>

@@ -10,6 +10,7 @@ export const AttemptSchema = z.object({
   status: AttemptStatus,
   textResponse: z.string().nullable(),
   drawingBlobUrl: z.string().nullable(),
+  currentScore: z.number().nullable().optional(),
   submittedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),

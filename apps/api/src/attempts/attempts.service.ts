@@ -136,7 +136,12 @@ export class AttemptsService {
             },
           },
         },
-        gradingResults: true,
+        gradingResults: {
+          include: {
+            grader: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -155,7 +160,12 @@ export class AttemptsService {
             },
           },
         },
-        gradingResults: true,
+        gradingResults: {
+          include: {
+            grader: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         student: {
           select: { id: true, name: true, email: true },
         },
@@ -251,10 +261,10 @@ export class AttemptsService {
   }
 
   async findForReview(teacherId: string) {
-    // Find submitted attempts for courses taught by this teacher
+    // Find submitted and graded attempts for courses taught by this teacher
     return this.prisma.attempt.findMany({
       where: {
-        status: 'submitted',
+        status: { in: ['submitted', 'grading', 'graded'] },
         question: {
           topic: {
             course: { teacherId },
@@ -274,7 +284,12 @@ export class AttemptsService {
         student: {
           select: { id: true, name: true, email: true },
         },
-        gradingResults: true,
+        gradingResults: {
+          include: {
+            grader: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
       orderBy: { submittedAt: 'asc' },
     });
@@ -300,8 +315,8 @@ export class AttemptsService {
       throw new ForbiddenException('You can only grade attempts in your own courses');
     }
 
-    if (attempt.status === 'graded') {
-      throw new BadRequestException('Attempt has already been graded');
+    if (attempt.status === 'in_progress') {
+      throw new BadRequestException('Cannot grade an in-progress attempt');
     }
 
     // Validate score against max score
@@ -311,7 +326,7 @@ export class AttemptsService {
       );
     }
 
-    // Create grading result
+    // Create grading result (append-only)
     await this.prisma.gradingResult.create({
       data: {
         attemptId: id,
@@ -322,10 +337,13 @@ export class AttemptsService {
       },
     });
 
-    // Update attempt status
+    // Update attempt status and current score to latest manual grade
     await this.prisma.attempt.update({
       where: { id },
-      data: { status: 'graded' },
+      data: {
+        status: 'graded',
+        currentScore: dto.score,
+      },
     });
 
     // Publish grade completed event for WebSocket notification
