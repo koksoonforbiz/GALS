@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
 /* KaTeX styles */
 @import 'katex/dist/katex.min.css';
