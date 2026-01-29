@@ -22,7 +22,7 @@ export class QuestionsService {
       throw new ForbiddenException('You can only add questions to your own courses');
     }
 
-    return this.prisma.question.create({
+    const question = await this.prisma.question.create({
       data: {
         topicId: dto.topicId,
         prompt: dto.prompt,
@@ -34,11 +34,28 @@ export class QuestionsService {
             : (dto.rubricJson as Prisma.InputJsonValue | undefined),
       },
     });
+
+    // Link KCs if provided
+    if (dto.kcIds && dto.kcIds.length > 0) {
+      await this.prisma.questionKc.createMany({
+        data: dto.kcIds.map((kcId) => ({
+          questionId: question.id,
+          kcId,
+        })),
+      });
+    }
+
+    return question;
   }
 
   async findByTopic(topicId: string) {
     return this.prisma.question.findMany({
       where: { topicId },
+      include: {
+        questionKcs: {
+          include: { kc: { select: { id: true, code: true, label: true } } },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -53,6 +70,9 @@ export class QuestionsService {
               select: { id: true, title: true, teacherId: true },
             },
           },
+        },
+        questionKcs: {
+          include: { kc: { select: { id: true, code: true, label: true } } },
         },
       },
     });
@@ -92,10 +112,26 @@ export class QuestionsService {
         dto.rubricJson === null ? Prisma.DbNull : (dto.rubricJson as Prisma.InputJsonValue);
     }
 
-    return this.prisma.question.update({
+    const updated = await this.prisma.question.update({
       where: { id },
       data: updateData,
     });
+
+    // Update KC links if provided
+    if (dto.kcIds !== undefined) {
+      // Remove existing links and re-create
+      await this.prisma.questionKc.deleteMany({ where: { questionId: id } });
+      if (dto.kcIds && dto.kcIds.length > 0) {
+        await this.prisma.questionKc.createMany({
+          data: dto.kcIds.map((kcId) => ({
+            questionId: id,
+            kcId,
+          })),
+        });
+      }
+    }
+
+    return updated;
   }
 
   async remove(id: string, teacherId: string) {

@@ -64,6 +64,7 @@ export const CreateQuestionSchema = z.object({
   type: QuestionType,
   maxScore: z.number().positive(),
   rubricJson: z.unknown().nullable().default(null),
+  kcIds: z.array(z.string().uuid()).optional(),
 });
 export type CreateQuestion = z.infer<typeof CreateQuestionSchema>;
 

@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import { EventBusService } from '../event-bus';
+import { MasteryService } from '../mastery';
 import { EventTopics } from '@ats/shared';
 import type {
   CreateAttempt,
@@ -21,6 +22,7 @@ export class AttemptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
+    private readonly masteryService: MasteryService,
   ) {}
 
   async create(studentId: string, dto: CreateAttempt) {
@@ -327,7 +329,7 @@ export class AttemptsService {
     }
 
     // Create grading result (append-only)
-    await this.prisma.gradingResult.create({
+    const gradingResult = await this.prisma.gradingResult.create({
       data: {
         attemptId: id,
         score: dto.score,
@@ -345,6 +347,9 @@ export class AttemptsService {
         currentScore: dto.score,
       },
     });
+
+    // Update KC mastery (if question has KC tags)
+    await this.masteryService.updateMasteryAfterGrading(gradingResult.id, id);
 
     // Publish grade completed event for WebSocket notification
     const gradeCompletedPayload: GradeCompletedPayload = {

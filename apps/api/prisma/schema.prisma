@@ -55,6 +55,7 @@ model User {
   enrollments    Enrollment[]
   attempts       Attempt[]
   gradingResults GradingResult[] @relation("GraderResults")
+  masteries      UserMastery[]
 
   @@map("users")
 }
@@ -99,8 +100,9 @@ model Topic {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  questions Question[]
+  course              Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions           Question[]
+  knowledgeComponents KnowledgeComponent[]
 
   @@index([courseId])
   @@map("topics")
@@ -120,6 +122,7 @@ model Question {
   topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
   attempts            Attempt[]
   assessmentQuestions AssessmentQuestion[]
+  questionKcs         QuestionKc[]
 
   @@index([topicId])
   @@map("questions")
@@ -158,8 +161,9 @@ model GradingResult {
   graderId  String?  @map("grader_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  grader  User?   @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
+  attempt    Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  grader     User?        @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
+  kcEvidence KcEvidence[]
 
   @@index([attemptId])
   @@index([graderId])
@@ -205,4 +209,80 @@ model AssessmentQuestion {
   @@unique([assessmentId, questionId])
   @@index([assessmentId])
   @@map("assessment_questions")
+}
+
+// ─── Knowledge Components & Mastery ─────────────────────
+
+model KnowledgeComponent {
+  id          String   @id @default(uuid()) @db.Uuid
+  topicId     String   @map("topic_id") @db.Uuid
+  code        String
+  label       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  topic         Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  questionKcs   QuestionKc[]
+  kcEvidence    KcEvidence[]
+  userMasteries UserMastery[]
+
+  @@unique([topicId, code])
+  @@index([topicId])
+  @@map("knowledge_components")
+}
+
+model QuestionKc {
+  id         String @id @default(uuid()) @db.Uuid
+  questionId String @map("question_id") @db.Uuid
+  kcId       String @map("kc_id") @db.Uuid
+  weight     Float  @default(1.0)
+
+  question Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  kc       KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, kcId])
+  @@index([questionId])
+  @@index([kcId])
+  @@map("question_kcs")
+}
+
+model KcEvidence {
+  id              String   @id @default(uuid()) @db.Uuid
+  gradingResultId String   @map("grading_result_id") @db.Uuid
+  kcId            String   @map("kc_id") @db.Uuid
+  isCorrect       Boolean  @map("is_correct")
+  score           Float
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  gradingResult GradingResult      @relation(fields: [gradingResultId], references: [id], onDelete: Cascade)
+  kc            KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
+
+  @@index([gradingResultId])
+  @@index([kcId])
+  @@map("kc_evidence")
+}
+
+model UserMastery {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  kcId             String    @map("kc_id") @db.Uuid
+  probabilityKnown Float     @default(0.5) @map("probability_known")
+  totalAttempts    Int       @default(0) @map("total_attempts")
+  correctAttempts  Int       @default(0) @map("correct_attempts")
+  lastAttemptAt    DateTime? @map("last_attempt_at") @db.Timestamptz
+
+  // BKT-ready columns (for future Bayesian Knowledge Tracing)
+  pLearn   Float? @map("p_learn")
+  pGuess   Float? @map("p_guess")
+  pSlip    Float? @map("p_slip")
+  pTransit Float? @map("p_transit")
+
+  user User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kc   KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kcId])
+  @@index([userId])
+  @@index([kcId])
+  @@map("user_mastery")
 }

@@ -11,6 +11,7 @@ import { QuestionsModule } from './questions';
 import { AssessmentsModule } from './assessments';
 import { EnrollmentsModule } from './enrollments';
 import { AttemptsModule } from './attempts';
+import { MasteryModule } from './mastery';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -29,6 +30,7 @@ import { HealthController } from './health.controller';
     AssessmentsModule,
     EnrollmentsModule,
     AttemptsModule,
+    MasteryModule,
   ],
   controllers: [HealthController],
 })

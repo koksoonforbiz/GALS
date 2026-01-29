@@ -9,6 +9,7 @@ from app.db import (
     publish_event,
     update_attempt_status,
     insert_grading_result,
+    update_mastery_after_grading,
 )
 from app.grader import grade_attempt
 
@@ -30,7 +31,7 @@ def process_grading_event(event: dict) -> None:
 
     result = grade_attempt(payload)
 
-    insert_grading_result(
+    grading_result_id = insert_grading_result(
         attempt_id=attempt_id,
         score=result["score"],
         feedback=result["feedback"],
@@ -38,6 +39,12 @@ def process_grading_event(event: dict) -> None:
     )
 
     update_attempt_status(attempt_id, "graded")
+
+    # Update KC mastery (if question has KC tags)
+    try:
+        update_mastery_after_grading(grading_result_id, attempt_id, result["score"])
+    except Exception:
+        logger.exception("Failed to update mastery for attempt %s", attempt_id)
 
     publish_event(
         GRADE_COMPLETED_TOPIC,
