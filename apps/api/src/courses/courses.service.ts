@@ -25,6 +25,7 @@ export class CoursesService {
       return this.prisma.course.findMany({
         include: {
           teacher: { select: { id: true, name: true, email: true } },
+          topics: { orderBy: { orderIndex: 'asc' } },
           _count: { select: { topics: true, enrollments: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -36,6 +37,7 @@ export class CoursesService {
         where: { teacherId: userId },
         include: {
           teacher: { select: { id: true, name: true, email: true } },
+          topics: { orderBy: { orderIndex: 'asc' } },
           _count: { select: { topics: true, enrollments: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -49,6 +51,7 @@ export class CoursesService {
       },
       include: {
         teacher: { select: { id: true, name: true, email: true } },
+        topics: { orderBy: { orderIndex: 'asc' } },
         _count: { select: { topics: true } },
       },
       orderBy: { createdAt: 'desc' },

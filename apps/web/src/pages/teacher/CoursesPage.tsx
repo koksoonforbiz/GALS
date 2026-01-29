@@ -1,16 +1,11 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
 
-interface Topic {
-  id: string;
-  title: string;
-}
-
 interface Course {
   id: string;
   title: string;
   description: string | null;
-  topics: Topic[];
+  _count: { topics: number; enrollments: number };
   createdAt: string;
 }
 
@@ -129,7 +124,7 @@ export function CoursesPage() {
             >
               <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
               {course.description && <p className="text-gray-600 mt-1">{course.description}</p>}
-              <div className="mt-2 text-sm text-gray-500">{course.topics.length} topic(s)</div>
+              <div className="mt-2 text-sm text-gray-500">{course._count.topics} topic(s)</div>
             </div>
           ))
         )}
