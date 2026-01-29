@@ -41,8 +41,8 @@ export function QuestionsPage() {
   const fetchData = async () => {
     try {
       const [questionsData, coursesData] = await Promise.all([
-        apiFetch<Question[]>('/api/questions'),
-        apiFetch<Course[]>('/api/courses'),
+        apiFetch<Question[]>('/questions'),
+        apiFetch<Course[]>('/courses'),
       ]);
       setQuestions(questionsData);
       setCourses(coursesData);
@@ -64,7 +64,7 @@ export function QuestionsPage() {
 
     try {
       const parsedRubric = JSON.parse(rubricJson);
-      await apiFetch<Question>('/api/questions', {
+      await apiFetch<Question>('/questions', {
         method: 'POST',
         body: JSON.stringify({
           topicId: selectedTopicId,

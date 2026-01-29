@@ -25,7 +25,7 @@ export function CoursesPage() {
 
   const fetchCourses = async () => {
     try {
-      const data = await apiFetch<Course[]>('/api/courses');
+      const data = await apiFetch<Course[]>('/courses');
       setCourses(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load courses');
@@ -42,7 +42,7 @@ export function CoursesPage() {
     e.preventDefault();
     setCreating(true);
     try {
-      await apiFetch<Course>('/api/courses', {
+      await apiFetch<Course>('/courses', {
         method: 'POST',
         body: JSON.stringify({
           title: newCourseName,

@@ -37,8 +37,8 @@ export function StudentAssessmentsPage() {
     const fetchData = async () => {
       try {
         const [assessmentsData, attemptsData] = await Promise.all([
-          apiFetch<Assessment[]>('/api/assessments/available'),
-          apiFetch<Attempt[]>('/api/attempts/my'),
+          apiFetch<Assessment[]>('/assessments/available'),
+          apiFetch<Attempt[]>('/attempts/my'),
         ]);
         setAssessments(assessmentsData);
         setAttempts(attemptsData);
@@ -66,7 +66,7 @@ export function StudentAssessmentsPage() {
     setError(null);
 
     try {
-      const attempt = await apiFetch<Attempt>('/api/attempts', {
+      const attempt = await apiFetch<Attempt>('/attempts', {
         method: 'POST',
         body: JSON.stringify({
           assessmentId: assessment.id,

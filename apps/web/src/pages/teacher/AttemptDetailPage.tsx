@@ -66,7 +66,7 @@ export function AttemptDetailPage() {
 
   const fetchAttempt = async () => {
     try {
-      const data = await apiFetch<Attempt>(`/api/attempts/${attemptId}`);
+      const data = await apiFetch<Attempt>(`/attempts/${attemptId}`);
       setAttempt(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load attempt');
@@ -87,7 +87,7 @@ export function AttemptDetailPage() {
     setError(null);
 
     try {
-      await apiFetch(`/api/attempts/${attempt.id}/grade`, {
+      await apiFetch(`/attempts/${attempt.id}/grade`, {
         method: 'POST',
         body: JSON.stringify({ score, feedback }),
       });

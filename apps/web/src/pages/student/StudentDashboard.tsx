@@ -48,7 +48,7 @@ export function StudentDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data = await apiFetch<Enrollment[]>('/api/enrollments/my');
+        const data = await apiFetch<Enrollment[]>('/enrollments/my');
         setEnrollments(data);
       } catch {
         // Silently fail for dashboard
@@ -59,7 +59,7 @@ export function StudentDashboard() {
 
     const fetchMastery = async () => {
       try {
-        const data = await apiFetch<MasteryByTopic[]>('/api/me/mastery');
+        const data = await apiFetch<MasteryByTopic[]>('/me/mastery');
         setMasteryData(data);
       } catch {
         // Silently fail
@@ -76,7 +76,7 @@ export function StudentDashboard() {
     setGeneratingWorksheet(true);
     setWorksheetError(null);
     try {
-      const assessment = await apiFetch<Assessment>('/api/me/revise-worksheet', {
+      const assessment = await apiFetch<Assessment>('/me/revise-worksheet', {
         method: 'POST',
       });
       void assessment;

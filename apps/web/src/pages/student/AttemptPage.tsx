@@ -64,7 +64,7 @@ export function AttemptPage() {
       if (!attemptId) return;
 
       try {
-        const data = await apiFetch<Attempt>(`/api/attempts/${attemptId}`);
+        const data = await apiFetch<Attempt>(`/attempts/${attemptId}`);
         setAttempt(data);
         setTextResponse(data.textResponse || '');
         setStrokes(data.strokesJson || []);
@@ -124,7 +124,7 @@ export function AttemptPage() {
 
     setSaving(true);
     try {
-      await apiFetch(`/api/attempts/${attemptId}`, {
+      await apiFetch(`/attempts/${attemptId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           textResponse: textResponse || null,
@@ -196,7 +196,7 @@ export function AttemptPage() {
       }
 
       // Submit the attempt
-      await apiFetch(`/api/attempts/${attemptId}/submit`, {
+      await apiFetch(`/attempts/${attemptId}/submit`, {
         method: 'POST',
         body: JSON.stringify({
           textResponse: textResponse || null,

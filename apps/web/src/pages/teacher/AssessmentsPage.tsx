@@ -47,9 +47,9 @@ export function AssessmentsPage() {
   const fetchData = async () => {
     try {
       const [assessmentsData, coursesData, questionsData] = await Promise.all([
-        apiFetch<Assessment[]>('/api/assessments'),
-        apiFetch<Course[]>('/api/courses'),
-        apiFetch<Question[]>('/api/questions'),
+        apiFetch<Assessment[]>('/assessments'),
+        apiFetch<Course[]>('/courses'),
+        apiFetch<Question[]>('/questions'),
       ]);
       setAssessments(assessmentsData);
       setCourses(coursesData);
@@ -71,7 +71,7 @@ export function AssessmentsPage() {
     setError(null);
 
     try {
-      await apiFetch<Assessment>('/api/assessments', {
+      await apiFetch<Assessment>('/assessments', {
         method: 'POST',
         body: JSON.stringify({
           courseId: selectedCourseId,
@@ -100,7 +100,7 @@ export function AssessmentsPage() {
 
   const handlePublishToggle = async (assessment: Assessment) => {
     try {
-      await apiFetch(`/api/assessments/${assessment.id}`, {
+      await apiFetch(`/assessments/${assessment.id}`, {
         method: 'PATCH',
         body: JSON.stringify({ isPublished: !assessment.isPublished }),
       });

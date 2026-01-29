@@ -40,7 +40,7 @@ export function StudentResultsPage() {
   useEffect(() => {
     const fetchAttempts = async () => {
       try {
-        const data = await apiFetch<Attempt[]>('/api/attempts/my');
+        const data = await apiFetch<Attempt[]>('/attempts/my');
         // Filter to only show graded attempts
         setAttempts(data.filter((a) => a.status === 'graded'));
       } catch (err) {

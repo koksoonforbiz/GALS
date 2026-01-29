@@ -51,7 +51,7 @@ export function ReviewPage() {
 
   const fetchAttempts = async () => {
     try {
-      const data = await apiFetch<Attempt[]>('/api/attempts/review');
+      const data = await apiFetch<Attempt[]>('/attempts/review');
       setAttempts(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load attempts');
