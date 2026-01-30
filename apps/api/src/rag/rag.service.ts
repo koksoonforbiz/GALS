@@ -1,7 +1,14 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
-import { PDFParse } from 'pdf-parse';
+// pdf-parse is optionally loaded at runtime to avoid hard crashes if not installed
+let PDFParseClass: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  PDFParseClass = require('pdf-parse').PDFParse;
+} catch {
+  // pdf-parse not available; will fall back to raw text extraction
+}
 
 export interface ChunkWithScore {
   id: string;
@@ -132,11 +139,15 @@ export class RagService {
     const doc = await this.prisma.sourceDocument.findUnique({ where: { id: documentId } });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
 
-    // Clear previous error
-    await this.prisma.sourceDocument.update({
-      where: { id: documentId },
-      data: { errorMessage: null, indexedAt: null },
-    });
+    // Clear previous state (errorMessage may not exist if migration not applied)
+    try {
+      await this.prisma.sourceDocument.update({
+        where: { id: documentId },
+        data: { indexedAt: null },
+      });
+    } catch (e) {
+      this.logger.warn('Could not clear indexedAt, continuing anyway');
+    }
 
     try {
       // Download the file content
@@ -174,7 +185,6 @@ export class RagService {
         data: {
           chunkCount: chunks.length,
           pageCount: pageCount,
-          errorMessage: null,
           indexedAt: new Date(),
         },
       });
@@ -184,10 +194,15 @@ export class RagService {
     } catch (err: any) {
       const errorMsg = err?.message || 'Unknown error during chunking';
       this.logger.error(`Chunking failed for document ${documentId}: ${errorMsg}`, err?.stack);
-      await this.prisma.sourceDocument.update({
-        where: { id: documentId },
-        data: { errorMessage: errorMsg },
-      });
+      // Try to save error to DB (may fail if migration not applied)
+      try {
+        await this.prisma.sourceDocument.update({
+          where: { id: documentId },
+          data: { errorMessage: errorMsg },
+        });
+      } catch (dbErr) {
+        this.logger.warn('Could not save error message to document', dbErr);
+      }
       throw err;
     }
   }
@@ -201,9 +216,36 @@ export class RagService {
     }
 
     if (mimeType === 'application/pdf') {
+      if (!PDFParseClass) {
+        this.logger.warn('pdf-parse not installed. Run: cd apps/api && pnpm add pdf-parse');
+        // Attempt basic text extraction from PDF bytes
+        const rawText = buffer.toString('utf-8');
+        // Try to extract readable text between stream/endstream markers
+        const streamTexts: string[] = [];
+        const streamRegex = /stream\r?\n([\s\S]*?)endstream/g;
+        let match: RegExpExecArray | null;
+        while ((match = streamRegex.exec(rawText)) !== null) {
+          const content = match[1] || '';
+          // Extract text from PDF text operators: (text) Tj or [(...)] TJ
+          const textOps = content.match(/\(([^)]+)\)\s*T[jJ]/g);
+          if (textOps) {
+            for (const op of textOps) {
+              const textMatch = op.match(/\(([^)]+)\)/);
+              if (textMatch?.[1]) streamTexts.push(textMatch[1]);
+            }
+          }
+        }
+        if (streamTexts.length > 0) {
+          const text = streamTexts.join(' ');
+          this.logger.log(`Extracted ${text.length} chars from PDF using basic parser`);
+          return { text, pageCount: null };
+        }
+        throw new Error('pdf-parse package not installed. Run: cd apps/api && pnpm add pdf-parse');
+      }
+
       try {
         const pdfData = new Uint8Array(buffer);
-        const pdf = new PDFParse({ data: pdfData });
+        const pdf = new PDFParseClass({ data: pdfData });
         const textResult = await pdf.getText();
         const pageCount = textResult.total || null;
         const text = textResult.text;
@@ -211,8 +253,8 @@ export class RagService {
         this.logger.log(`Extracted ${text.length} chars from PDF (${pageCount} pages)`);
         return { text, pageCount };
       } catch (err) {
-        this.logger.error('PDF parsing failed, falling back to raw text', err);
-        return { text: buffer.toString('utf-8'), pageCount: null };
+        this.logger.error('PDF parsing failed', err);
+        throw new Error(`PDF text extraction failed: ${(err as Error)?.message || 'Unknown error'}`);
       }
     }
 
