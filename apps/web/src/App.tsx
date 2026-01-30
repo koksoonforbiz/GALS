@@ -17,6 +17,7 @@ import { AssessmentsPage } from './pages/teacher/AssessmentsPage';
 import { ReviewPage } from './pages/teacher/ReviewPage';
 import { AttemptDetailPage } from './pages/teacher/AttemptDetailPage';
 import { CourseStudioPage } from './pages/teacher/CourseStudioPage';
+import { AiSettingsPage } from './pages/teacher/AiSettingsPage';
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -76,6 +77,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['teacher', 'admin']}>
                     <CourseStudioPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/ai-settings"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <AiSettingsPage />
                   </RoleRoute>
                 }
               />

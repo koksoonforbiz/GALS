@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
+import * as crypto from 'crypto';
 
 interface GenerateRagAnswerInput {
   courseId: string;
@@ -35,19 +36,104 @@ interface LlmResponse {
   completionTokens: number;
 }
 
+interface UserLlmSettings {
+  provider: string | null;
+  model: string | null;
+  hasKey: boolean;
+}
+
+// Simple symmetric encryption for storing API keys at rest
+const ENCRYPTION_ALGO = 'aes-256-gcm';
+
 @Injectable()
 export class LlmService {
   private readonly logger = new Logger(LlmService.name);
-  private readonly apiKey: string | undefined;
-  private readonly modelId: string;
+  private readonly encryptionKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly ragService: RagService,
   ) {
-    this.apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
-    this.modelId = this.config.get<string>('LLM_MODEL', 'claude-3-haiku-20240307');
+    // Derive a 32-byte key from JWT_SECRET for encrypting stored API keys
+    const secret = this.config.get<string>('JWT_SECRET', 'dev-secret-change-in-production');
+    this.encryptionKey = crypto.scryptSync(secret, 'llm-key-salt', 32);
+  }
+
+  // ─── API Key Management ─────────────────────────────────
+
+  private encrypt(text: string): string {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGO, this.encryptionKey, iv);
+    const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+    // Store as iv:authTag:encrypted (all hex)
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
+  }
+
+  private decrypt(data: string): string {
+    const [ivHex, authTagHex, encryptedHex] = data.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const encrypted = Buffer.from(encryptedHex, 'hex');
+    const decipher = crypto.createDecipheriv(ENCRYPTION_ALGO, this.encryptionKey, iv);
+    decipher.setAuthTag(authTag);
+    return decipher.update(encrypted) + decipher.final('utf8');
+  }
+
+  async saveApiKey(userId: string, provider: string, apiKey: string, model?: string) {
+    const encrypted = this.encrypt(apiKey);
+    const defaultModel = provider === 'openai' ? 'gpt-4o-mini' : 'gpt-4o-mini';
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        llmProvider: provider,
+        encryptedApiKey: encrypted,
+        llmModel: model || defaultModel,
+      },
+    });
+
+    return { saved: true, provider, model: model || defaultModel };
+  }
+
+  async removeApiKey(userId: string) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        llmProvider: null,
+        encryptedApiKey: null,
+        llmModel: null,
+      },
+    });
+    return { removed: true };
+  }
+
+  async getUserLlmSettings(userId: string): Promise<UserLlmSettings> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
+    });
+    return {
+      provider: user?.llmProvider || null,
+      model: user?.llmModel || null,
+      hasKey: !!user?.encryptedApiKey,
+    };
+  }
+
+  private async getUserApiKey(userId: string): Promise<{ apiKey: string; model: string } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
+    });
+    if (!user?.encryptedApiKey) return null;
+    try {
+      const apiKey = this.decrypt(user.encryptedApiKey);
+      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
+    } catch {
+      this.logger.error(`Failed to decrypt API key for user ${userId}`);
+      return null;
+    }
   }
 
   // ─── RAG Answer Generation ─────────────────────────────
@@ -59,18 +145,15 @@ export class LlmService {
       return this.noSourcesResponse(input);
     }
 
-    // Build the prompt with source context
     const contextBlock = this.buildContextBlock(input.chunks);
     const systemPrompt = this.buildRagSystemPrompt(input.strictSource);
     const userPrompt = `${contextBlock}\n\n---\n\nQuestion: ${input.query}`;
 
-    // Call LLM (or use built-in generation if no API key)
-    const result = await this.callLlm(systemPrompt, userPrompt);
+    const credentials = await this.getUserApiKey(input.userId);
+    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
 
-    // Parse citations from the response
     const citations = this.extractCitations(result.content, input.chunks);
 
-    // Validate strict-source mode
     let strictSourceValid = true;
     let notEnoughInfo = false;
 
@@ -82,7 +165,6 @@ export class LlmService {
       );
       strictSourceValid = validation.valid;
 
-      // Check if LLM indicated insufficient sources
       if (
         result.content.includes('NOT_ENOUGH_INFO') ||
         result.content.includes('insufficient sources')
@@ -92,13 +174,13 @@ export class LlmService {
     }
 
     const durationMs = Date.now() - startTime;
+    const modelUsed = credentials?.model || 'template';
 
-    // Audit log
     await this.createAuditLog({
       courseId: input.courseId,
       userId: input.userId,
       action: 'query_rag',
-      model: this.modelId,
+      model: modelUsed,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       durationMs,
@@ -120,7 +202,7 @@ export class LlmService {
       citations,
       strictSourceValid,
       notEnoughInfo,
-      model: this.modelId,
+      model: modelUsed,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
     };
@@ -132,7 +214,6 @@ export class LlmService {
     const startTime = Date.now();
 
     if (input.chunks.length === 0 && input.strictSource) {
-      // No sources available - return NOT_ENOUGH_INFO
       const draft = await this.prisma.contentDraft.create({
         data: {
           courseId: input.courseId,
@@ -151,7 +232,8 @@ export class LlmService {
     const systemPrompt = this.buildContentGenerationPrompt(input.strictSource);
     const userPrompt = `${contextBlock}\n\n---\n\nGenerate course content for: "${input.title}"\n\nTeacher instructions: ${input.prompt}`;
 
-    const result = await this.callLlm(systemPrompt, userPrompt);
+    const credentials = await this.getUserApiKey(input.userId);
+    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
 
     const citations = this.extractCitations(result.content, input.chunks);
 
@@ -171,8 +253,8 @@ export class LlmService {
     }
 
     const durationMs = Date.now() - startTime;
+    const modelUsed = credentials?.model || 'template';
 
-    // Create the draft (always DRAFT - human must approve)
     const draft = await this.prisma.contentDraft.create({
       data: {
         courseId: input.courseId,
@@ -184,13 +266,12 @@ export class LlmService {
       },
     });
 
-    // Audit log
     await this.createAuditLog({
       draftId: draft.id,
       courseId: input.courseId,
       userId: input.userId,
       action: 'generate_content',
-      model: this.modelId,
+      model: modelUsed,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       durationMs,
@@ -215,7 +296,7 @@ export class LlmService {
       strictSourceValid,
       notEnoughInfo,
       debugInfo: {
-        model: this.modelId,
+        model: modelUsed,
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         durationMs,
@@ -324,48 +405,52 @@ export class LlmService {
   private async callLlm(
     systemPrompt: string,
     userPrompt: string,
+    credentials: { apiKey: string; model: string } | null,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    if (this.apiKey) {
-      return this.callAnthropicApi(systemPrompt, userPrompt);
+    if (credentials) {
+      return this.callOpenAiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
     }
-    // Fallback: built-in template-based generation (no API key required)
+    // Fallback: built-in template-based generation (no API key configured)
     return this.generateWithoutApi(systemPrompt, userPrompt);
   }
 
-  private async callAnthropicApi(
+  private async callOpenAiApi(
     systemPrompt: string,
     userPrompt: string,
+    apiKey: string,
+    model: string,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': this.apiKey!,
-          'anthropic-version': '2023-06-01',
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: this.modelId,
+          model,
           max_tokens: 4096,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
         }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        this.logger.error(`Anthropic API error: ${response.status} ${errorText}`);
-        throw new Error(`LLM API error: ${response.status}`);
+        this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
+        throw new Error(`OpenAI API error: ${response.status}`);
       }
 
       const data = await response.json();
       return {
-        content: data.content?.[0]?.text || '',
-        promptTokens: data.usage?.input_tokens || 0,
-        completionTokens: data.usage?.output_tokens || 0,
+        content: data.choices?.[0]?.message?.content || '',
+        promptTokens: data.usage?.prompt_tokens || 0,
+        completionTokens: data.usage?.completion_tokens || 0,
       };
     } catch (error) {
-      this.logger.error('Failed to call Anthropic API', error);
+      this.logger.error('Failed to call OpenAI API', error);
       // Fallback to template-based generation
       return this.generateWithoutApi(systemPrompt, userPrompt);
     }
@@ -375,7 +460,6 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    // Extract chunks from the user prompt
     const sourceMatch = userPrompt.match(/Source \d+[\s\S]*?(?=---|\z)/g);
     const questionMatch = userPrompt.match(/Question:\s*(.*)/);
     const generateMatch = userPrompt.match(/Generate course content for:\s*"([^"]+)"/);
@@ -384,12 +468,10 @@ export class LlmService {
     let content = '';
 
     if (generateMatch) {
-      // Content generation mode
       const title = generateMatch[1];
       const instructions = instructionsMatch?.[1]?.trim() || '';
       content = this.buildTemplateContent(title, instructions, sourceMatch || []);
     } else if (questionMatch) {
-      // Q&A mode
       const question = questionMatch[1];
       content = this.buildTemplateAnswer(question, sourceMatch || []);
     } else {
@@ -413,7 +495,6 @@ export class LlmService {
       return `> **NOT_ENOUGH_INFO**: No source documents available to generate content for "${title}". Please upload reference materials and try again.`;
     }
 
-    // Extract content from source blocks
     const sourceTexts = sources.map((s) => {
       const contentMatch = s.match(/Content:\s*([\s\S]*?)(?=\n\n|$)/);
       return contentMatch?.[1]?.trim() || s;
@@ -429,7 +510,6 @@ export class LlmService {
     mdx += `Each section below is grounded in the uploaded reference materials. [1]\n\n`;
     mdx += `## Key Concepts\n\n`;
 
-    // Extract key sentences from sources to build sections
     const sentences = preview
       .split(/[.!?]+/)
       .filter((s) => s.trim().length > 20)

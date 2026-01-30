@@ -82,6 +82,9 @@ model User {
   passwordHash String   @map("password_hash")
   name         String
   role         UserRole
+  llmProvider       String?  @map("llm_provider")       // e.g. "openai"
+  encryptedApiKey   String?  @map("encrypted_api_key")
+  llmModel          String?  @map("llm_model")          // e.g. "gpt-4o-mini"
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

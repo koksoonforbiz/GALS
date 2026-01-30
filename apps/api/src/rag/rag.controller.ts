@@ -224,4 +224,29 @@ export class RagController {
   ) {
     return this.llmService.getAuditLogs(courseId, parseInt(limit || '50', 10));
   }
+
+  // ─── LLM Settings (API Key Management) ────────────────
+
+  @Get('llm-settings')
+  @Roles('teacher', 'admin')
+  async getLlmSettings(@Request() req: { user: RequestUser }) {
+    return this.llmService.getUserLlmSettings(req.user.id);
+  }
+
+  @Post('llm-settings')
+  @Roles('teacher', 'admin')
+  async saveLlmSettings(
+    @Request() req: { user: RequestUser },
+    @Body() body: { provider: string; apiKey: string; model?: string },
+  ) {
+    if (!body.provider?.trim()) throw new BadRequestException('Provider is required');
+    if (!body.apiKey?.trim()) throw new BadRequestException('API key is required');
+    return this.llmService.saveApiKey(req.user.id, body.provider, body.apiKey, body.model);
+  }
+
+  @Delete('llm-settings')
+  @Roles('teacher', 'admin')
+  async removeLlmSettings(@Request() req: { user: RequestUser }) {
+    return this.llmService.removeApiKey(req.user.id);
+  }
 }
