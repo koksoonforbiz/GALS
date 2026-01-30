@@ -52,8 +52,6 @@ export class RagService implements OnModuleInit {
   private readonly logger = new Logger(RagService.name);
   /** In-memory progress tracking for document chunking */
   readonly progress = new Map<string, DocumentProgress>();
-  /** Cached pdf-parse PDFParse class, loaded once at startup */
-  private PDFParseClass: any = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -61,15 +59,29 @@ export class RagService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.logger.log('[RAG v2] RagService initialising...');
+    this.logger.log('[RAG v3] RagService initialising...');
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const pdfParseModule = require('pdf-parse');
-      this.PDFParseClass = pdfParseModule.PDFParse || pdfParseModule.default?.PDFParse;
-      this.logger.log(`[RAG v2] pdf-parse loaded: PDFParse=${typeof this.PDFParseClass}`);
+      const cls = pdfParseModule.PDFParse || pdfParseModule.default?.PDFParse;
+      this.logger.log(`[RAG v3] pdf-parse probe: PDFParse=${typeof cls}`);
     } catch (err: any) {
-      this.logger.warn(`[RAG v2] pdf-parse not available: ${err.message}. PDF uploads will fail.`);
+      this.logger.warn(`[RAG v3] pdf-parse not found: ${err.message}`);
     }
+  }
+
+  /**
+   * Load PDFParse class at call time via require().
+   * This avoids any instance-caching issues with NestJS DI.
+   */
+  private loadPDFParse(): any {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('pdf-parse');
+    const cls = mod.PDFParse || mod.default?.PDFParse;
+    if (!cls) {
+      throw new Error('pdf-parse module loaded but PDFParse class not found');
+    }
+    return cls;
   }
 
   // ─── Document Management ────────────────────────────────
@@ -233,24 +245,19 @@ export class RagService implements OnModuleInit {
     }
 
     if (mimeType === 'application/pdf') {
-      if (!this.PDFParseClass) {
-        throw new Error(
-          'PDF parsing is not available. The pdf-parse package failed to load at startup. ' +
-            'Check the API logs for "[RAG v2]" messages.',
-        );
-      }
       try {
-        this.logger.log(`Parsing PDF buffer (${buffer.length} bytes)...`);
+        const PDFParseClass = this.loadPDFParse();
+        this.logger.log(`[RAG v3] Parsing PDF buffer (${buffer.length} bytes)...`);
         const pdfData = new Uint8Array(buffer);
-        const pdf = new this.PDFParseClass({ data: pdfData });
+        const pdf = new PDFParseClass({ data: pdfData });
         const textResult = await pdf.getText();
         const pageCount = textResult.total || null;
         const text = textResult.text;
         await pdf.destroy();
-        this.logger.log(`Extracted ${text.length} chars from PDF (${pageCount} pages)`);
+        this.logger.log(`[RAG v3] Extracted ${text.length} chars from PDF (${pageCount} pages)`);
         return { text, pageCount };
       } catch (err) {
-        this.logger.error('PDF extraction error:', err);
+        this.logger.error('[RAG v3] PDF extraction error:', err);
         throw new Error(
           `PDF text extraction failed: ${(err as Error)?.message || 'Unknown error'}`,
         );
