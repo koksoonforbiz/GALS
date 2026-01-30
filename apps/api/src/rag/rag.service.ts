@@ -110,6 +110,8 @@ export class RagService {
         pageCount: true,
         chunkCount: true,
         chunkingStrategy: true,
+        processingStatus: true,
+        processingPct: true,
         errorMessage: true,
         indexedAt: true,
         createdAt: true,
@@ -135,38 +137,62 @@ export class RagService {
 
   // ─── Chunking ───────────────────────────────────────────
 
+  private async updateProgress(documentId: string, status: string, pct: number) {
+    try {
+      await this.prisma.sourceDocument.update({
+        where: { id: documentId },
+        data: { processingStatus: status, processingPct: pct },
+      });
+    } catch {
+      // Ignore if columns don't exist yet
+    }
+  }
+
   async chunkDocument(documentId: string) {
     const doc = await this.prisma.sourceDocument.findUnique({ where: { id: documentId } });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
 
-    // Clear previous state (errorMessage may not exist if migration not applied)
+    // Clear previous state
     try {
       await this.prisma.sourceDocument.update({
         where: { id: documentId },
-        data: { indexedAt: null },
+        data: { indexedAt: null, errorMessage: null, processingStatus: 'Starting', processingPct: 0 },
       });
-    } catch (e) {
-      this.logger.warn('Could not clear indexedAt, continuing anyway');
+    } catch {
+      try {
+        await this.prisma.sourceDocument.update({
+          where: { id: documentId },
+          data: { indexedAt: null },
+        });
+      } catch {
+        this.logger.warn('Could not clear indexedAt, continuing anyway');
+      }
     }
 
     try {
-      // Download the file content
+      // Step 1: Download (10%)
+      await this.updateProgress(documentId, 'Downloading file', 10);
       this.logger.log(`Downloading blob for document ${documentId}: ${doc.blobKey}`);
       const { body } = await this.blobService.get(doc.blobKey);
       this.logger.log(`Downloaded ${body.length} bytes, mimeType=${doc.mimeType}`);
 
+      // Step 2: Extract text (40%)
+      await this.updateProgress(documentId, 'Extracting text from PDF', 30);
       const { text, pageCount } = await this.extractText(body, doc.mimeType);
       this.logger.log(`Extracted text: ${text.length} chars, ${pageCount} pages`);
+      await this.updateProgress(documentId, 'Text extracted', 50);
 
       if (!text || text.trim().length === 0) {
         throw new Error('No text could be extracted from the document');
       }
 
-      // Chunk based on strategy
+      // Step 3: Chunk (70%)
+      await this.updateProgress(documentId, 'Splitting into chunks', 60);
       const chunks = this.splitIntoChunks(text, doc.chunkingStrategy);
       this.logger.log(`Split into ${chunks.length} chunks`);
 
-      // Delete existing chunks and re-create
+      // Step 4: Save chunks (90%)
+      await this.updateProgress(documentId, `Saving ${chunks.length} chunks`, 75);
       await this.prisma.documentChunk.deleteMany({ where: { documentId } });
 
       const chunkRecords = chunks.map((chunk, index) => ({
@@ -178,14 +204,18 @@ export class RagService {
       }));
 
       await this.prisma.documentChunk.createMany({ data: chunkRecords });
+      await this.updateProgress(documentId, 'Finalising', 90);
 
-      // Update document metadata
+      // Step 5: Done (100%)
       await this.prisma.sourceDocument.update({
         where: { id: documentId },
         data: {
           chunkCount: chunks.length,
           pageCount: pageCount,
           indexedAt: new Date(),
+          processingStatus: 'Done',
+          processingPct: 100,
+          errorMessage: null,
         },
       });
 
@@ -194,14 +224,13 @@ export class RagService {
     } catch (err: any) {
       const errorMsg = err?.message || 'Unknown error during chunking';
       this.logger.error(`Chunking failed for document ${documentId}: ${errorMsg}`, err?.stack);
-      // Try to save error to DB (may fail if migration not applied)
       try {
         await this.prisma.sourceDocument.update({
           where: { id: documentId },
-          data: { errorMessage: errorMsg },
+          data: { errorMessage: errorMsg, processingStatus: 'Failed', processingPct: 0 },
         });
-      } catch (dbErr) {
-        this.logger.warn('Could not save error message to document', dbErr);
+      } catch {
+        this.logger.warn('Could not save error state to document');
       }
       throw err;
     }

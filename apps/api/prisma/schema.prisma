@@ -321,6 +321,8 @@ model SourceDocument {
   pageCount       Int?             @map("page_count")
   chunkingStrategy ChunkingStrategy @default(PARAGRAPH) @map("chunking_strategy")
   chunkCount      Int              @default(0) @map("chunk_count")
+  processingStatus String?         @map("processing_status")
+  processingPct    Int?            @map("processing_pct")
   errorMessage    String?          @map("error_message")
   indexedAt        DateTime?        @map("indexed_at") @db.Timestamptz
   createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz

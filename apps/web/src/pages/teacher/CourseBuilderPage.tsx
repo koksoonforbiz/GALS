@@ -47,6 +47,8 @@ interface SourceDocument {
   pageCount: number | null;
   chunkCount: number;
   chunkingStrategy: string;
+  processingStatus: string | null;
+  processingPct: number | null;
   errorMessage: string | null;
   indexedAt: string | null;
   createdAt: string;
@@ -181,6 +183,19 @@ export function CourseBuilderPage() {
   useEffect(() => {
     if (activeTab === 'sources') fetchDocuments();
   }, [activeTab, fetchDocuments]);
+
+  // Poll for progress while any document is still processing
+  useEffect(() => {
+    const hasProcessing = documents.some(
+      (d) => !d.indexedAt && !d.errorMessage,
+    );
+    if (!hasProcessing || activeTab !== 'sources') return;
+
+    const interval = setInterval(() => {
+      fetchDocuments();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [documents, activeTab, fetchDocuments]);
 
   // ─── Autosave for Overview (debounced) ──────────────────
 
@@ -763,11 +778,21 @@ export function CourseBuilderPage() {
                           Error
                         </span>
                       ) : (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
-                          Processing...
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700 animate-pulse">
+                          {doc.processingStatus || 'Processing...'}
+                          {doc.processingPct != null && ` ${doc.processingPct}%`}
                         </span>
                       )}
                     </div>
+                    {/* Progress bar while processing */}
+                    {!doc.indexedAt && !doc.errorMessage && doc.processingPct != null && (
+                      <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-indigo-500 h-2 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${doc.processingPct}%` }}
+                        />
+                      </div>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
                       {doc.filename} &middot; {Math.round(doc.sizeBytes / 1024)}KB &middot; Uploaded
                       by {doc.uploadedBy.name} &middot;{' '}
