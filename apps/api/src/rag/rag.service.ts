@@ -213,23 +213,16 @@ export class RagService {
     }
 
     if (mimeType === 'application/pdf') {
-      // Lazy-load pdf-parse at call time (not module load time)
-      let PDFParseClass: any;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        PDFParseClass = require('pdf-parse').PDFParse;
-        this.logger.log(`pdf-parse loaded: ${typeof PDFParseClass}`);
-      } catch (loadErr) {
-        this.logger.error('Failed to load pdf-parse', loadErr);
-      }
+        // Use dynamic import() which works reliably in NestJS/TypeScript
+        const pdfParseModule = await import('pdf-parse');
+        const PDFParseClass = pdfParseModule.PDFParse;
+        this.logger.log(`pdf-parse loaded via import(): ${typeof PDFParseClass}`);
 
-      if (!PDFParseClass) {
-        throw new Error(
-          'pdf-parse package not available. Install it: cd apps/api && pnpm add pdf-parse',
-        );
-      }
+        if (!PDFParseClass) {
+          throw new Error('PDFParse class not found in pdf-parse module');
+        }
 
-      try {
         const pdfData = new Uint8Array(buffer);
         const pdf = new PDFParseClass({ data: pdfData });
         const textResult = await pdf.getText();
@@ -239,8 +232,11 @@ export class RagService {
         this.logger.log(`Extracted ${text.length} chars from PDF (${pageCount} pages)`);
         return { text, pageCount };
       } catch (err) {
-        this.logger.error('PDF parsing failed', err);
-        throw new Error(`PDF text extraction failed: ${(err as Error)?.message || 'Unknown error'}`);
+        this.logger.error('PDF extraction error:', err);
+        throw new Error(
+          `PDF extraction failed: ${(err as Error)?.message || 'Unknown error'}. ` +
+          'Ensure pdf-parse is installed: cd apps/api && pnpm add pdf-parse',
+        );
       }
     }
 
