@@ -40,6 +40,11 @@ export class CoursesController {
     return this.coursesService.findAll(req.user.id, req.user.role);
   }
 
+  @Get('catalog')
+  catalog() {
+    return this.coursesService.findCatalog();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.coursesService.findOne(id);

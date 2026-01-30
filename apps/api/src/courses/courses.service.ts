@@ -62,6 +62,26 @@ export class CoursesService {
     });
   }
 
+  async findCatalog() {
+    return this.prisma.course.findMany({
+      where: {
+        status: 'PUBLISHED',
+        visibility: 'PUBLIC',
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        bannerBlobKey: true,
+        createdAt: true,
+        teacher: { select: { id: true, name: true } },
+        _count: { select: { modules: true, enrollments: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findOne(id: string) {
     const course = await this.prisma.course.findUnique({
       where: { id },

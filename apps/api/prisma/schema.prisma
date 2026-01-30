@@ -57,6 +57,11 @@ enum ModuleItemType {
   ASSESSMENT
 }
 
+enum EnrollmentStatus {
+  ACTIVE
+  DROPPED
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -101,10 +106,11 @@ model Course {
 }
 
 model Enrollment {
-  id         String   @id @default(uuid()) @db.Uuid
-  studentId  String   @map("student_id") @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
-  enrolledAt DateTime @default(now()) @map("enrolled_at") @db.Timestamptz
+  id         String           @id @default(uuid()) @db.Uuid
+  studentId  String           @map("student_id") @db.Uuid
+  courseId    String           @map("course_id") @db.Uuid
+  status     EnrollmentStatus @default(ACTIVE)
+  enrolledAt DateTime         @default(now()) @map("enrolled_at") @db.Timestamptz
 
   student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)

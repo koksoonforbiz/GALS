@@ -22,6 +22,9 @@ import { StudentDashboard } from './pages/student/StudentDashboard';
 import { StudentAssessmentsPage } from './pages/student/StudentAssessmentsPage';
 import { StudentResultsPage } from './pages/student/StudentResultsPage';
 import { AttemptPage } from './pages/student/AttemptPage';
+import { CatalogPage } from './pages/student/CatalogPage';
+import { MyCoursesPage } from './pages/student/MyCoursesPage';
+import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
 
 function App() {
   return (
@@ -130,6 +133,30 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['student']}>
                     <AttemptPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/catalog"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <CatalogPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/courses"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <MyCoursesPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/courses/:courseId"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <StudentCourseViewPage />
                   </RoleRoute>
                 }
               />

@@ -26,11 +26,32 @@ interface RequestUser {
 export class EnrollmentsController {
   constructor(private readonly enrollmentsService: EnrollmentsService) {}
 
+  // Teacher-initiated enrollment
   @Post()
   @Roles('teacher', 'admin')
   @UsePipes(new ZodValidationPipe(CreateEnrollmentSchema))
   create(@Request() req: { user: RequestUser }, @Body() dto: CreateEnrollment) {
     return this.enrollmentsService.create(req.user.id, dto);
+  }
+
+  // Student self-enrollment
+  @Post('self')
+  @Roles('student')
+  selfEnroll(
+    @Request() req: { user: RequestUser },
+    @Body() body: { courseId: string },
+  ) {
+    return this.enrollmentsService.selfEnroll(req.user.id, body.courseId);
+  }
+
+  // Student drop course
+  @Post(':courseId/drop')
+  @Roles('student')
+  drop(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+  ) {
+    return this.enrollmentsService.drop(req.user.id, courseId);
   }
 
   @Get()
