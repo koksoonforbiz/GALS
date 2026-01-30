@@ -343,7 +343,7 @@ export class RagService {
     // Check each paragraph has at least one citation reference
     const citationPattern = /\[(\d+)\]/g;
     for (let i = 0; i < paragraphs.length; i++) {
-      const matches = paragraphs[i].match(citationPattern);
+      const matches = paragraphs[i]!.match(citationPattern);
       if (!matches) {
         issues.push(`Paragraph ${i + 1} has no citation references`);
       }

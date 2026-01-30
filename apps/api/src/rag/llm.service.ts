@@ -72,10 +72,10 @@ export class LlmService {
   }
 
   private decrypt(data: string): string {
-    const [ivHex, authTagHex, encryptedHex] = data.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
-    const encrypted = Buffer.from(encryptedHex, 'hex');
+    const parts = data.split(':');
+    const iv = Buffer.from(parts[0]!, 'hex');
+    const authTag = Buffer.from(parts[1]!, 'hex');
+    const encrypted = Buffer.from(parts[2]!, 'hex');
     const decipher = crypto.createDecipheriv(ENCRYPTION_ALGO, this.encryptionKey, iv);
     decipher.setAuthTag(authTag);
     return decipher.update(encrypted) + decipher.final('utf8');
@@ -443,7 +443,10 @@ export class LlmService {
         throw new Error(`OpenAI API error: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
       return {
         content: data.choices?.[0]?.message?.content || '',
         promptTokens: data.usage?.prompt_tokens || 0,
@@ -468,11 +471,11 @@ export class LlmService {
     let content = '';
 
     if (generateMatch) {
-      const title = generateMatch[1];
+      const title = generateMatch[1] || '';
       const instructions = instructionsMatch?.[1]?.trim() || '';
       content = this.buildTemplateContent(title, instructions, sourceMatch || []);
     } else if (questionMatch) {
-      const question = questionMatch[1];
+      const question = questionMatch[1] || '';
       content = this.buildTemplateAnswer(question, sourceMatch || []);
     } else {
       content =
@@ -612,13 +615,13 @@ Rules:
     let match;
 
     while ((match = citationPattern.exec(content)) !== null) {
-      citedNumbers.add(parseInt(match[1], 10));
+      citedNumbers.add(parseInt(match[1]!, 10));
     }
 
     return Array.from(citedNumbers)
       .filter((n) => n >= 1 && n <= chunks.length)
       .map((n) => {
-        const chunk = chunks[n - 1];
+        const chunk = chunks[n - 1]!;
         return {
           chunkId: chunk.id,
           documentTitle: chunk.documentTitle,
