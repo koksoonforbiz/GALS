@@ -21,11 +21,16 @@ export class CoursesService {
   }
 
   async findAll(userId: string, role: UserRole) {
+    const topicsInclude = {
+      orderBy: { orderIndex: 'asc' as const },
+      include: { _count: { select: { questions: true } } },
+    };
+
     if (role === 'admin') {
       return this.prisma.course.findMany({
         include: {
           teacher: { select: { id: true, name: true, email: true } },
-          topics: { orderBy: { orderIndex: 'asc' } },
+          topics: topicsInclude,
           _count: { select: { topics: true, enrollments: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -37,7 +42,7 @@ export class CoursesService {
         where: { teacherId: userId },
         include: {
           teacher: { select: { id: true, name: true, email: true } },
-          topics: { orderBy: { orderIndex: 'asc' } },
+          topics: topicsInclude,
           _count: { select: { topics: true, enrollments: true } },
         },
         orderBy: { createdAt: 'desc' },
@@ -51,7 +56,7 @@ export class CoursesService {
       },
       include: {
         teacher: { select: { id: true, name: true, email: true } },
-        topics: { orderBy: { orderIndex: 'asc' } },
+        topics: topicsInclude,
         _count: { select: { topics: true } },
       },
       orderBy: { createdAt: 'desc' },
