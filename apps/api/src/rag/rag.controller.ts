@@ -68,8 +68,12 @@ export class RagController {
 
   @Post('documents/:documentId/rechunk')
   @Roles('teacher', 'admin')
-  rechunkDocument(@Param('documentId') documentId: string) {
-    return this.ragService.chunkDocument(documentId);
+  async rechunkDocument(@Param('documentId') documentId: string) {
+    try {
+      return await this.ragService.chunkDocument(documentId);
+    } catch (err: any) {
+      return { error: true, message: err?.message || 'Chunking failed' };
+    }
   }
 
   // ─── RAG Query (with debug info) ───────────────────────

@@ -47,6 +47,7 @@ interface SourceDocument {
   pageCount: number | null;
   chunkCount: number;
   chunkingStrategy: string;
+  errorMessage: string | null;
   indexedAt: string | null;
   createdAt: string;
   uploadedBy: { id: string; name: string };
@@ -139,13 +140,19 @@ export function CourseBuilderPage() {
 
   const handleRechunk = async (docId: string) => {
     try {
-      const result = await apiFetch<{ chunkCount: number }>(`/documents/${docId}/rechunk`, {
+      toast('info', 'Re-chunking document...');
+      const result = await apiFetch<{ chunkCount?: number; error?: boolean; message?: string }>(`/documents/${docId}/rechunk`, {
         method: 'POST',
       });
-      toast('success', `Re-chunked into ${result.chunkCount} chunks`);
+      if (result.error) {
+        toast('error', result.message || 'Re-chunking failed');
+      } else {
+        toast('success', `Re-chunked into ${result.chunkCount} chunks`);
+      }
       fetchDocuments();
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Re-chunking failed');
+      fetchDocuments();
     }
   };
 
@@ -751,6 +758,10 @@ export function CourseBuilderPage() {
                         <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
                           {doc.chunkCount} chunks
                         </span>
+                      ) : doc.errorMessage ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700" title={doc.errorMessage}>
+                          Error
+                        </span>
                       ) : (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
                           Processing...
@@ -762,6 +773,11 @@ export function CourseBuilderPage() {
                       by {doc.uploadedBy.name} &middot;{' '}
                       {new Date(doc.createdAt).toLocaleDateString()}
                     </p>
+                    {doc.errorMessage && (
+                      <p className="text-xs text-red-600 mt-1">
+                        {doc.errorMessage}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <button

@@ -79,9 +79,13 @@ export class RagService {
     });
 
     // Trigger chunking asynchronously
-    this.chunkDocument(doc.id).catch((err) =>
-      this.logger.error(`Failed to chunk document ${doc.id}`, err),
-    );
+    this.chunkDocument(doc.id).catch(async (err) => {
+      this.logger.error(`Failed to chunk document ${doc.id}`, err);
+      await this.prisma.sourceDocument.update({
+        where: { id: doc.id },
+        data: { errorMessage: err?.message || 'Unknown chunking error' },
+      });
+    });
 
     return doc;
   }
@@ -99,6 +103,7 @@ export class RagService {
         pageCount: true,
         chunkCount: true,
         chunkingStrategy: true,
+        errorMessage: true,
         indexedAt: true,
         createdAt: true,
         uploadedBy: { select: { id: true, name: true } },
@@ -127,38 +132,64 @@ export class RagService {
     const doc = await this.prisma.sourceDocument.findUnique({ where: { id: documentId } });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
 
-    // Download the file content
-    const { body } = await this.blobService.get(doc.blobKey);
-    const { text, pageCount } = await this.extractText(body, doc.mimeType);
-
-    // Chunk based on strategy
-    const chunks = this.splitIntoChunks(text, doc.chunkingStrategy);
-
-    // Delete existing chunks and re-create
-    await this.prisma.documentChunk.deleteMany({ where: { documentId } });
-
-    const chunkRecords = chunks.map((chunk, index) => ({
-      documentId,
-      chunkIndex: index,
-      content: chunk.content,
-      pageNumber: chunk.pageNumber,
-      tokenCount: this.estimateTokenCount(chunk.content),
-    }));
-
-    await this.prisma.documentChunk.createMany({ data: chunkRecords });
-
-    // Update document metadata
+    // Clear previous error
     await this.prisma.sourceDocument.update({
       where: { id: documentId },
-      data: {
-        chunkCount: chunks.length,
-        pageCount: pageCount,
-        indexedAt: new Date(),
-      },
+      data: { errorMessage: null, indexedAt: null },
     });
 
-    this.logger.log(`Chunked document ${documentId} into ${chunks.length} chunks`);
-    return { chunkCount: chunks.length };
+    try {
+      // Download the file content
+      this.logger.log(`Downloading blob for document ${documentId}: ${doc.blobKey}`);
+      const { body } = await this.blobService.get(doc.blobKey);
+      this.logger.log(`Downloaded ${body.length} bytes, mimeType=${doc.mimeType}`);
+
+      const { text, pageCount } = await this.extractText(body, doc.mimeType);
+      this.logger.log(`Extracted text: ${text.length} chars, ${pageCount} pages`);
+
+      if (!text || text.trim().length === 0) {
+        throw new Error('No text could be extracted from the document');
+      }
+
+      // Chunk based on strategy
+      const chunks = this.splitIntoChunks(text, doc.chunkingStrategy);
+      this.logger.log(`Split into ${chunks.length} chunks`);
+
+      // Delete existing chunks and re-create
+      await this.prisma.documentChunk.deleteMany({ where: { documentId } });
+
+      const chunkRecords = chunks.map((chunk, index) => ({
+        documentId,
+        chunkIndex: index,
+        content: chunk.content,
+        pageNumber: chunk.pageNumber,
+        tokenCount: this.estimateTokenCount(chunk.content),
+      }));
+
+      await this.prisma.documentChunk.createMany({ data: chunkRecords });
+
+      // Update document metadata
+      await this.prisma.sourceDocument.update({
+        where: { id: documentId },
+        data: {
+          chunkCount: chunks.length,
+          pageCount: pageCount,
+          errorMessage: null,
+          indexedAt: new Date(),
+        },
+      });
+
+      this.logger.log(`Chunked document ${documentId} into ${chunks.length} chunks`);
+      return { chunkCount: chunks.length };
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Unknown error during chunking';
+      this.logger.error(`Chunking failed for document ${documentId}: ${errorMsg}`, err?.stack);
+      await this.prisma.sourceDocument.update({
+        where: { id: documentId },
+        data: { errorMessage: errorMsg },
+      });
+      throw err;
+    }
   }
 
   private async extractText(
