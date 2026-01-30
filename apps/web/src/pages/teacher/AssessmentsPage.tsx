@@ -21,7 +21,8 @@ interface Assessment {
   title: string;
   description: string | null;
   isPublished: boolean;
-  assessmentQuestions: AssessmentQuestion[];
+  questions: AssessmentQuestion[];
+  course?: { id: string; title: string };
   createdAt: string;
 }
 
@@ -249,7 +250,7 @@ export function AssessmentsPage() {
                     <p className="text-gray-600 mt-1">{assessment.description}</p>
                   )}
                   <p className="text-sm text-gray-500 mt-2">
-                    {assessment.assessmentQuestions.length} question(s)
+                    {assessment.questions.length} question(s)
                   </p>
                 </div>
                 <button

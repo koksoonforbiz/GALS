@@ -34,8 +34,14 @@ export class AssessmentsController {
   }
 
   @Get()
-  findByCourse(@Query('courseId') courseId: string) {
-    return this.assessmentsService.findByCourse(courseId);
+  findAll(
+    @Request() req: { user: RequestUser },
+    @Query('courseId') courseId?: string,
+  ) {
+    if (courseId) {
+      return this.assessmentsService.findByCourse(courseId);
+    }
+    return this.assessmentsService.findAllForTeacher(req.user.id);
   }
 
   @Get('available')

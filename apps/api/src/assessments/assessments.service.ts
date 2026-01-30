@@ -64,6 +64,22 @@ export class AssessmentsService {
     });
   }
 
+  async findAllForTeacher(teacherId: string) {
+    return this.prisma.assessment.findMany({
+      where: {
+        course: { teacherId },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        course: { select: { id: true, title: true } },
+        questions: {
+          orderBy: { orderIndex: 'asc' },
+          include: { question: true },
+        },
+      },
+    });
+  }
+
   async findAvailable(studentId: string) {
     // Find assessments from courses the student is enrolled in
     const assessments = await this.prisma.assessment.findMany({
