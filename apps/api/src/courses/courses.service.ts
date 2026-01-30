@@ -132,7 +132,7 @@ export class CoursesService {
 
     return this.prisma.course.update({
       where: { id },
-      data: { status: 'PUBLISHED' },
+      data: { status: 'PUBLISHED', visibility: 'PUBLIC' },
       include: this.listInclude,
     });
   }
