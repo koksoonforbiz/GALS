@@ -43,9 +43,17 @@ export interface RagQueryResult {
   };
 }
 
+export interface DocumentProgress {
+  status: string;
+  pct: number;
+  error?: string;
+}
+
 @Injectable()
 export class RagService {
   private readonly logger = new Logger(RagService.name);
+  /** In-memory progress tracking for document chunking */
+  readonly progress = new Map<string, DocumentProgress>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -85,13 +93,9 @@ export class RagService {
       },
     });
 
-    // Trigger chunking asynchronously
-    this.chunkDocument(doc.id).catch(async (err) => {
+    // Trigger chunking asynchronously (progress tracked in-memory)
+    this.chunkDocument(doc.id).catch((err) => {
       this.logger.error(`Failed to chunk document ${doc.id}`, err);
-      await this.prisma.sourceDocument.update({
-        where: { id: doc.id },
-        data: { errorMessage: err?.message || 'Unknown chunking error' },
-      });
     });
 
     return doc;
@@ -110,9 +114,6 @@ export class RagService {
         pageCount: true,
         chunkCount: true,
         chunkingStrategy: true,
-        processingStatus: true,
-        processingPct: true,
-        errorMessage: true,
         indexedAt: true,
         createdAt: true,
         uploadedBy: { select: { id: true, name: true } },
@@ -137,62 +138,46 @@ export class RagService {
 
   // ─── Chunking ───────────────────────────────────────────
 
-  private async updateProgress(documentId: string, status: string, pct: number) {
-    try {
-      await this.prisma.sourceDocument.update({
-        where: { id: documentId },
-        data: { processingStatus: status, processingPct: pct },
-      });
-    } catch {
-      // Ignore if columns don't exist yet
-    }
+  private setProgress(documentId: string, status: string, pct: number, error?: string) {
+    this.progress.set(documentId, { status, pct, error });
   }
 
   async chunkDocument(documentId: string) {
     const doc = await this.prisma.sourceDocument.findUnique({ where: { id: documentId } });
     if (!doc) throw new NotFoundException(`Document ${documentId} not found`);
 
+    this.setProgress(documentId, 'Starting', 5);
+
     // Clear previous state
-    try {
-      await this.prisma.sourceDocument.update({
-        where: { id: documentId },
-        data: { indexedAt: null, errorMessage: null, processingStatus: 'Starting', processingPct: 0 },
-      });
-    } catch {
-      try {
-        await this.prisma.sourceDocument.update({
-          where: { id: documentId },
-          data: { indexedAt: null },
-        });
-      } catch {
-        this.logger.warn('Could not clear indexedAt, continuing anyway');
-      }
-    }
+    await this.prisma.sourceDocument.update({
+      where: { id: documentId },
+      data: { indexedAt: null },
+    });
 
     try {
       // Step 1: Download (10%)
-      await this.updateProgress(documentId, 'Downloading file', 10);
+      this.setProgress(documentId, 'Downloading file', 10);
       this.logger.log(`Downloading blob for document ${documentId}: ${doc.blobKey}`);
       const { body } = await this.blobService.get(doc.blobKey);
       this.logger.log(`Downloaded ${body.length} bytes, mimeType=${doc.mimeType}`);
 
-      // Step 2: Extract text (40%)
-      await this.updateProgress(documentId, 'Extracting text from PDF', 30);
+      // Step 2: Extract text (30-50%)
+      this.setProgress(documentId, 'Extracting text', 30);
       const { text, pageCount } = await this.extractText(body, doc.mimeType);
       this.logger.log(`Extracted text: ${text.length} chars, ${pageCount} pages`);
-      await this.updateProgress(documentId, 'Text extracted', 50);
+      this.setProgress(documentId, 'Text extracted', 50);
 
       if (!text || text.trim().length === 0) {
         throw new Error('No text could be extracted from the document');
       }
 
-      // Step 3: Chunk (70%)
-      await this.updateProgress(documentId, 'Splitting into chunks', 60);
+      // Step 3: Chunk (60%)
+      this.setProgress(documentId, 'Splitting into chunks', 60);
       const chunks = this.splitIntoChunks(text, doc.chunkingStrategy);
       this.logger.log(`Split into ${chunks.length} chunks`);
 
-      // Step 4: Save chunks (90%)
-      await this.updateProgress(documentId, `Saving ${chunks.length} chunks`, 75);
+      // Step 4: Save chunks (75%)
+      this.setProgress(documentId, `Saving ${chunks.length} chunks`, 75);
       await this.prisma.documentChunk.deleteMany({ where: { documentId } });
 
       const chunkRecords = chunks.map((chunk, index) => ({
@@ -204,7 +189,7 @@ export class RagService {
       }));
 
       await this.prisma.documentChunk.createMany({ data: chunkRecords });
-      await this.updateProgress(documentId, 'Finalising', 90);
+      this.setProgress(documentId, 'Finalising', 90);
 
       // Step 5: Done (100%)
       await this.prisma.sourceDocument.update({
@@ -213,25 +198,16 @@ export class RagService {
           chunkCount: chunks.length,
           pageCount: pageCount,
           indexedAt: new Date(),
-          processingStatus: 'Done',
-          processingPct: 100,
-          errorMessage: null,
         },
       });
 
+      this.setProgress(documentId, 'Done', 100);
       this.logger.log(`Chunked document ${documentId} into ${chunks.length} chunks`);
       return { chunkCount: chunks.length };
     } catch (err: any) {
       const errorMsg = err?.message || 'Unknown error during chunking';
       this.logger.error(`Chunking failed for document ${documentId}: ${errorMsg}`, err?.stack);
-      try {
-        await this.prisma.sourceDocument.update({
-          where: { id: documentId },
-          data: { errorMessage: errorMsg, processingStatus: 'Failed', processingPct: 0 },
-        });
-      } catch {
-        this.logger.warn('Could not save error state to document');
-      }
+      this.setProgress(documentId, 'Failed', 0, errorMsg);
       throw err;
     }
   }

@@ -142,15 +142,8 @@ export function CourseBuilderPage() {
 
   const handleRechunk = async (docId: string) => {
     try {
-      toast('info', 'Re-chunking document...');
-      const result = await apiFetch<{ chunkCount?: number; error?: boolean; message?: string }>(`/documents/${docId}/rechunk`, {
-        method: 'POST',
-      });
-      if (result.error) {
-        toast('error', result.message || 'Re-chunking failed');
-      } else {
-        toast('success', `Re-chunked into ${result.chunkCount} chunks`);
-      }
+      await apiFetch(`/documents/${docId}/rechunk`, { method: 'POST' });
+      toast('info', 'Re-chunking started...');
       fetchDocuments();
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Re-chunking failed');

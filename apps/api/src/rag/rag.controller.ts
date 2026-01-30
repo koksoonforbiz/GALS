@@ -36,8 +36,18 @@ export class RagController {
 
   @Get('courses/:courseId/documents')
   @Roles('teacher', 'admin')
-  listDocuments(@Param('courseId') courseId: string) {
-    return this.ragService.listDocuments(courseId);
+  async listDocuments(@Param('courseId') courseId: string) {
+    const docs = await this.ragService.listDocuments(courseId);
+    // Enrich with in-memory progress info
+    return docs.map((doc) => {
+      const prog = this.ragService.progress.get(doc.id);
+      return {
+        ...doc,
+        processingStatus: prog?.status || null,
+        processingPct: prog?.pct ?? null,
+        errorMessage: prog?.error || null,
+      };
+    });
   }
 
   @Post('courses/:courseId/documents')
@@ -68,12 +78,16 @@ export class RagController {
 
   @Post('documents/:documentId/rechunk')
   @Roles('teacher', 'admin')
-  async rechunkDocument(@Param('documentId') documentId: string) {
-    try {
-      return await this.ragService.chunkDocument(documentId);
-    } catch (err: any) {
-      return { error: true, message: err?.message || 'Chunking failed' };
-    }
+  rechunkDocument(@Param('documentId') documentId: string) {
+    // Run chunking async so the client can poll for progress
+    this.ragService.chunkDocument(documentId).catch((err) => {
+      this.ragService.progress.set(documentId, {
+        status: 'Failed',
+        pct: 0,
+        error: err?.message || 'Chunking failed',
+      });
+    });
+    return { started: true };
   }
 
   // ─── RAG Query (with debug info) ───────────────────────
