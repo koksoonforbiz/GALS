@@ -1,14 +1,6 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
-// pdf-parse is optionally loaded at runtime to avoid hard crashes if not installed
-let PDFParseClass: any = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  PDFParseClass = require('pdf-parse').PDFParse;
-} catch {
-  // pdf-parse not available; will fall back to raw text extraction
-}
 
 export interface ChunkWithScore {
   id: string;
@@ -221,31 +213,20 @@ export class RagService {
     }
 
     if (mimeType === 'application/pdf') {
+      // Lazy-load pdf-parse at call time (not module load time)
+      let PDFParseClass: any;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        PDFParseClass = require('pdf-parse').PDFParse;
+        this.logger.log(`pdf-parse loaded: ${typeof PDFParseClass}`);
+      } catch (loadErr) {
+        this.logger.error('Failed to load pdf-parse', loadErr);
+      }
+
       if (!PDFParseClass) {
-        this.logger.warn('pdf-parse not installed. Run: cd apps/api && pnpm add pdf-parse');
-        // Attempt basic text extraction from PDF bytes
-        const rawText = buffer.toString('utf-8');
-        // Try to extract readable text between stream/endstream markers
-        const streamTexts: string[] = [];
-        const streamRegex = /stream\r?\n([\s\S]*?)endstream/g;
-        let match: RegExpExecArray | null;
-        while ((match = streamRegex.exec(rawText)) !== null) {
-          const content = match[1] || '';
-          // Extract text from PDF text operators: (text) Tj or [(...)] TJ
-          const textOps = content.match(/\(([^)]+)\)\s*T[jJ]/g);
-          if (textOps) {
-            for (const op of textOps) {
-              const textMatch = op.match(/\(([^)]+)\)/);
-              if (textMatch?.[1]) streamTexts.push(textMatch[1]);
-            }
-          }
-        }
-        if (streamTexts.length > 0) {
-          const text = streamTexts.join(' ');
-          this.logger.log(`Extracted ${text.length} chars from PDF using basic parser`);
-          return { text, pageCount: null };
-        }
-        throw new Error('pdf-parse package not installed. Run: cd apps/api && pnpm add pdf-parse');
+        throw new Error(
+          'pdf-parse package not available. Install it: cd apps/api && pnpm add pdf-parse',
+        );
       }
 
       try {
