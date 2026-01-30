@@ -16,6 +16,7 @@ import { QuestionsPage } from './pages/teacher/QuestionsPage';
 import { AssessmentsPage } from './pages/teacher/AssessmentsPage';
 import { ReviewPage } from './pages/teacher/ReviewPage';
 import { AttemptDetailPage } from './pages/teacher/AttemptDetailPage';
+import { CourseStudioPage } from './pages/teacher/CourseStudioPage';
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -67,6 +68,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['teacher', 'admin']}>
                     <CourseBuilderPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/studio/:courseId"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <CourseStudioPage />
                   </RoleRoute>
                 }
               />

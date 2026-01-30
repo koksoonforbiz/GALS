@@ -62,6 +62,18 @@ enum EnrollmentStatus {
   DROPPED
 }
 
+enum DraftStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+enum ChunkingStrategy {
+  FIXED_SIZE
+  PARAGRAPH
+  SEMANTIC
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -73,11 +85,13 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  taughtCourses  Course[]        @relation("TeacherCourses")
-  enrollments    Enrollment[]
-  attempts       Attempt[]
-  gradingResults GradingResult[] @relation("GraderResults")
-  masteries      UserMastery[]
+  taughtCourses     Course[]        @relation("TeacherCourses")
+  enrollments       Enrollment[]
+  attempts          Attempt[]
+  gradingResults    GradingResult[] @relation("GraderResults")
+  masteries         UserMastery[]
+  uploadedDocuments SourceDocument[] @relation("UploadedDocuments")
+  createdDrafts     ContentDraft[]   @relation("CreatedDrafts")
 
   @@map("users")
 }
@@ -95,11 +109,13 @@ model Course {
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  teacher     User           @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
-  topics      Topic[]
-  enrollments Enrollment[]
-  assessments Assessment[]
-  modules     CourseModule[]
+  teacher         User             @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
+  topics          Topic[]
+  enrollments     Enrollment[]
+  assessments     Assessment[]
+  modules         CourseModule[]
+  sourceDocuments SourceDocument[]
+  contentDrafts   ContentDraft[]
 
   @@index([teacherId])
   @@map("courses")
@@ -286,6 +302,97 @@ model ModuleItem {
 
   @@index([moduleId])
   @@map("module_items")
+}
+
+// ─── RAG: Source Documents & Chunks ──────────────────────
+
+model SourceDocument {
+  id              String           @id @default(uuid()) @db.Uuid
+  courseId         String           @map("course_id") @db.Uuid
+  uploadedById    String           @map("uploaded_by_id") @db.Uuid
+  title           String
+  filename        String
+  blobKey         String           @map("blob_key")
+  mimeType        String           @map("mime_type")
+  sizeBytes       Int              @map("size_bytes")
+  pageCount       Int?             @map("page_count")
+  chunkingStrategy ChunkingStrategy @default(PARAGRAPH) @map("chunking_strategy")
+  chunkCount      Int              @default(0) @map("chunk_count")
+  indexedAt        DateTime?        @map("indexed_at") @db.Timestamptz
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  course     Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy User            @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
+  chunks     DocumentChunk[]
+
+  @@index([courseId])
+  @@map("source_documents")
+}
+
+model DocumentChunk {
+  id           String   @id @default(uuid()) @db.Uuid
+  documentId   String   @map("document_id") @db.Uuid
+  chunkIndex   Int      @map("chunk_index")
+  content      String
+  pageNumber   Int?     @map("page_number")
+  tokenCount   Int      @default(0) @map("token_count")
+  embedding    Json?    // stored as float array in JSON
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  document SourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
+  @@map("document_chunks")
+}
+
+// ─── LLM: Content Drafts & Audit Logs ───────────────────
+
+model ContentDraft {
+  id           String      @id @default(uuid()) @db.Uuid
+  courseId      String      @map("course_id") @db.Uuid
+  createdById  String      @map("created_by_id") @db.Uuid
+  title        String
+  contentMdx   String      @map("content_mdx")
+  citations    Json?       // [{chunkId, documentTitle, pageNumber, quote}]
+  status       DraftStatus @default(DRAFT)
+  reviewedAt   DateTime?   @map("reviewed_at") @db.Timestamptz
+  version      Int         @default(1)
+  parentDraftId String?    @map("parent_draft_id") @db.Uuid
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("CreatedDrafts", fields: [createdById], references: [id], onDelete: Cascade)
+  auditLogs LlmAuditLog[]
+
+  @@index([courseId])
+  @@index([createdById])
+  @@map("content_drafts")
+}
+
+model LlmAuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  draftId        String?  @map("draft_id") @db.Uuid
+  courseId        String   @map("course_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  action         String   // e.g. "generate_content", "query_rag", "validate_citations"
+  model          String   // e.g. "claude-3-sonnet", "text-embedding-3-small"
+  promptTokens   Int      @default(0) @map("prompt_tokens")
+  completionTokens Int    @default(0) @map("completion_tokens")
+  durationMs     Int      @default(0) @map("duration_ms")
+  inputPayload   Json?    @map("input_payload")   // query, settings
+  outputPayload  Json?    @map("output_payload")  // response, chunks used
+  errorMessage   String?  @map("error_message")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  draft  ContentDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+
+  @@index([courseId])
+  @@index([userId])
+  @@index([draftId])
+  @@map("llm_audit_logs")
 }
 
 // ─── Knowledge Components & Mastery ─────────────────────

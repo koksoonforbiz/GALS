@@ -38,7 +38,21 @@ interface Course {
   _count: { enrollments: number; topics: number; modules: number };
 }
 
-type TabKey = 'overview' | 'content' | 'settings';
+interface SourceDocument {
+  id: string;
+  title: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  pageCount: number | null;
+  chunkCount: number;
+  chunkingStrategy: string;
+  indexedAt: string | null;
+  createdAt: string;
+  uploadedBy: { id: string; name: string };
+}
+
+type TabKey = 'overview' | 'content' | 'sources' | 'settings';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -74,6 +88,67 @@ export function CourseBuilderPage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
 
+  // Sources tab state
+  const [documents, setDocuments] = useState<SourceDocument[]>([]);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
+  const fetchDocuments = useCallback(async () => {
+    setLoadingDocs(true);
+    try {
+      const docs = await apiFetch<SourceDocument[]>(`/courses/${courseId}/documents`);
+      setDocuments(docs);
+    } catch {
+      // silently fail - documents tab may not be active
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [courseId]);
+
+  const handleDocUpload = async (file: File) => {
+    setUploadingDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/courses/${courseId}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      toast('success', `Uploaded "${file.name}"`);
+      fetchDocuments();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    if (!confirm('Delete this document and all its chunks?')) return;
+    try {
+      await apiFetch(`/documents/${docId}`, { method: 'DELETE' });
+      toast('success', 'Document deleted');
+      fetchDocuments();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
+
+  const handleRechunk = async (docId: string) => {
+    try {
+      const result = await apiFetch<{ chunkCount: number }>(`/documents/${docId}/rechunk`, {
+        method: 'POST',
+      });
+      toast('success', `Re-chunked into ${result.chunkCount} chunks`);
+      fetchDocuments();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Re-chunking failed');
+    }
+  };
+
   const fetchCourse = useCallback(async () => {
     try {
       const data = await apiFetch<Course>(`/courses/${courseId}`);
@@ -95,6 +170,10 @@ export function CourseBuilderPage() {
   useEffect(() => {
     fetchCourse();
   }, [courseId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeTab === 'sources') fetchDocuments();
+  }, [activeTab, fetchDocuments]);
 
   // ─── Autosave for Overview (debounced) ──────────────────
 
@@ -298,6 +377,7 @@ export function CourseBuilderPage() {
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'content', label: 'Content' },
+    { key: 'sources', label: 'Sources' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -610,6 +690,107 @@ export function CourseBuilderPage() {
                   : 'Select a module from the left.'}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Sources Tab ─── */}
+      {activeTab === 'sources' && (
+        <div className="max-w-4xl">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Source Documents</h3>
+              <p className="text-sm text-gray-500">
+                Upload reference materials for RAG-based content generation. Documents are chunked and indexed for retrieval.
+              </p>
+            </div>
+            <label className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50">
+              {uploadingDoc ? 'Uploading...' : 'Upload Document'}
+              <input
+                type="file"
+                accept=".txt,.md,.pdf,.docx"
+                className="hidden"
+                disabled={uploadingDoc}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleDocUpload(file);
+                }}
+              />
+            </label>
+          </div>
+
+          {loadingDocs ? (
+            <p className="text-gray-400">Loading documents...</p>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <p className="text-gray-500 mb-2">No source documents yet</p>
+              <p className="text-sm text-gray-400">
+                Upload PDFs, text, or markdown files to use as source material for AI-generated content.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {doc.title}
+                      </span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                        {doc.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                      </span>
+                      {doc.indexedAt ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                          {doc.chunkCount} chunks
+                        </span>
+                      ) : (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
+                          Processing...
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {doc.filename} &middot; {Math.round(doc.sizeBytes / 1024)}KB &middot;{' '}
+                      Uploaded by {doc.uploadedBy.name} &middot;{' '}
+                      {new Date(doc.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => handleRechunk(doc.id)}
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                      title="Re-chunk document"
+                    >
+                      Re-chunk
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDoc(doc.id)}
+                      className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Link to Course Studio */}
+          <div className="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-indigo-900 mb-1">AI Course Studio</h4>
+            <p className="text-sm text-indigo-700 mb-3">
+              Use your source documents to generate course content with RAG-powered AI. All content is generated as drafts for your review.
+            </p>
+            <button
+              onClick={() => navigate(`/teacher/studio/${courseId}`)}
+              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              Open Course Studio
+            </button>
           </div>
         </div>
       )}
