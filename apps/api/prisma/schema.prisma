@@ -74,6 +74,13 @@ enum ChunkingStrategy {
   SEMANTIC
 }
 
+enum GenerationJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -140,17 +147,19 @@ model Enrollment {
 }
 
 model Topic {
-  id          String   @id @default(uuid()) @db.Uuid
-  courseId     String   @map("course_id") @db.Uuid
-  title       String
-  description String
-  orderIndex  Int      @map("order_index")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id               String   @id @default(uuid()) @db.Uuid
+  courseId          String   @map("course_id") @db.Uuid
+  title            String
+  description      String
+  orderIndex       Int      @map("order_index")
+  generationJobId  String?  @map("generation_job_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   course              Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   questions           Question[]
   knowledgeComponents KnowledgeComponent[]
+  modules             CourseModule[]
 
   @@index([courseId])
   @@map("topics")
@@ -263,17 +272,21 @@ model AssessmentQuestion {
 // ─── Course Modules & Items ─────────────────────────────
 
 model CourseModule {
-  id         String   @id @default(uuid()) @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
-  title      String
-  orderIndex Int      @map("order_index")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id              String   @id @default(uuid()) @db.Uuid
+  courseId         String   @map("course_id") @db.Uuid
+  topicId         String?  @map("topic_id") @db.Uuid
+  title           String
+  orderIndex      Int      @map("order_index")
+  generationJobId String?  @map("generation_job_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic  Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
   items  ModuleItem[]
 
   @@index([courseId])
+  @@index([topicId])
   @@map("course_modules")
 }
 
@@ -297,6 +310,11 @@ model ModuleItem {
 
   // ASSESSMENT type
   assessmentId String?        @map("assessment_id") @db.Uuid
+
+  // AI-generated metadata
+  learningOutcomes Json?    @map("learning_outcomes") // string[]
+  estimatedMinutes Int?     @map("estimated_minutes")
+  generationJobId  String?  @map("generation_job_id") @db.Uuid
 
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
@@ -373,6 +391,30 @@ model ContentDraft {
   @@index([courseId])
   @@index([createdById])
   @@map("content_drafts")
+}
+
+model LlmGenerationJob {
+  id             String               @id @default(uuid()) @db.Uuid
+  courseId        String               @map("course_id") @db.Uuid
+  userId         String               @map("user_id") @db.Uuid
+  status         GenerationJobStatus  @default(PENDING)
+  jobType        String               @map("job_type") // "course_structure"
+  inputPayload   Json                 @map("input_payload")
+  outputPayload  Json?                @map("output_payload")
+  retrievedChunkIds Json?             @map("retrieved_chunk_ids") // string[]
+  errorMessage   String?              @map("error_message")
+  model          String?              // LLM model used
+  promptTokens   Int                  @default(0) @map("prompt_tokens")
+  completionTokens Int                @default(0) @map("completion_tokens")
+  durationMs     Int                  @default(0) @map("duration_ms")
+  startedAt      DateTime?            @map("started_at") @db.Timestamptz
+  completedAt    DateTime?            @map("completed_at") @db.Timestamptz
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([courseId])
+  @@index([userId])
+  @@index([status])
+  @@map("llm_generation_jobs")
 }
 
 model LlmAuditLog {

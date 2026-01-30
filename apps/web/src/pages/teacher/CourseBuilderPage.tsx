@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import GenerateStructureWizard from '../../components/GenerateStructureWizard';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ export function CourseBuilderPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [showStructureWizard, setShowStructureWizard] = useState(false);
 
   // Overview form state
   const [title, setTitle] = useState('');
@@ -476,7 +478,38 @@ export function CourseBuilderPage() {
               {course._count.enrollments} student(s) enrolled
             </p>
           </div>
+
+          {/* AI Structure Generation */}
+          <div className="mt-6 p-4 bg-violet-50 border border-violet-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-violet-900 mb-1">
+              AI Course Structure Generator
+            </h4>
+            <p className="text-sm text-violet-700 mb-3">
+              Automatically generate topics, subtopics, and lesson modules from your uploaded
+              curriculum documents using AI.
+            </p>
+            <button
+              onClick={() => setShowStructureWizard(true)}
+              className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700"
+            >
+              Generate Course Structure
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* Structure Generation Wizard Modal */}
+      {showStructureWizard && course && (
+        <GenerateStructureWizard
+          courseId={course.id}
+          courseTitle={course.title}
+          onClose={() => setShowStructureWizard(false)}
+          onApplied={() => {
+            fetchCourse();
+            setShowStructureWizard(false);
+          }}
+          toast={toast}
+        />
       )}
 
       {/* ─── Content Tab ─── */}
