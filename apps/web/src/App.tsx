@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ToastProvider } from './components/Toast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { RoleRoute } from './components/RoleRoute';
 import { Layout } from './components/Layout';
@@ -10,6 +11,7 @@ import Health from './pages/Health';
 // Teacher pages
 import { TeacherDashboard } from './pages/teacher/TeacherDashboard';
 import { CoursesPage } from './pages/teacher/CoursesPage';
+import { CourseBuilderPage } from './pages/teacher/CourseBuilderPage';
 import { QuestionsPage } from './pages/teacher/QuestionsPage';
 import { AssessmentsPage } from './pages/teacher/AssessmentsPage';
 import { ReviewPage } from './pages/teacher/ReviewPage';
@@ -25,109 +27,119 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/health" element={<Health />} />
+        <ToastProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/health" element={<Health />} />
 
-          {/* Protected routes with layout */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Teacher routes */}
+            {/* Protected routes with layout */}
             <Route
-              path="/teacher"
               element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <TeacherDashboard />
-                </RoleRoute>
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
               }
-            />
-            <Route
-              path="/teacher/courses"
-              element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <CoursesPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/teacher/questions"
-              element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <QuestionsPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/teacher/assessments"
-              element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <AssessmentsPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/teacher/review"
-              element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <ReviewPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/teacher/attempt/:attemptId"
-              element={
-                <RoleRoute allowedRoles={['teacher', 'admin']}>
-                  <AttemptDetailPage />
-                </RoleRoute>
-              }
-            />
+            >
+              {/* Teacher routes */}
+              <Route
+                path="/teacher"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <TeacherDashboard />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/courses"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <CoursesPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/courses/:courseId"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <CourseBuilderPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/questions"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <QuestionsPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/assessments"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <AssessmentsPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/review"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <ReviewPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/attempt/:attemptId"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <AttemptDetailPage />
+                  </RoleRoute>
+                }
+              />
 
-            {/* Student routes */}
-            <Route
-              path="/student"
-              element={
-                <RoleRoute allowedRoles={['student']}>
-                  <StudentDashboard />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/student/assessments"
-              element={
-                <RoleRoute allowedRoles={['student']}>
-                  <StudentAssessmentsPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/student/results"
-              element={
-                <RoleRoute allowedRoles={['student']}>
-                  <StudentResultsPage />
-                </RoleRoute>
-              }
-            />
-            <Route
-              path="/student/attempt/:attemptId"
-              element={
-                <RoleRoute allowedRoles={['student']}>
-                  <AttemptPage />
-                </RoleRoute>
-              }
-            />
-          </Route>
+              {/* Student routes */}
+              <Route
+                path="/student"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <StudentDashboard />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/assessments"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <StudentAssessmentsPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/results"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <StudentResultsPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/attempt/:attemptId"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <AttemptPage />
+                  </RoleRoute>
+                }
+              />
+            </Route>
 
-          {/* Redirect root to appropriate dashboard */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+            {/* Redirect root to appropriate dashboard */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

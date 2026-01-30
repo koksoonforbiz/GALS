@@ -40,6 +40,23 @@ enum EventStatus {
   failed
 }
 
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum CourseVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum ModuleItemType {
+  PAGE
+  PDF
+  LINK
+  ASSESSMENT
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -61,17 +78,23 @@ model User {
 }
 
 model Course {
-  id          String   @id @default(uuid()) @db.Uuid
-  title       String
-  description String
-  teacherId   String   @map("teacher_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id             String           @id @default(uuid()) @db.Uuid
+  title          String
+  description    String
+  teacherId      String           @map("teacher_id") @db.Uuid
+  status         CourseStatus     @default(DRAFT)
+  visibility     CourseVisibility @default(PRIVATE)
+  bannerBlobKey  String?          @map("banner_blob_key")
+  orderIndex     Int              @default(0) @map("order_index")
+  archivedAt     DateTime?        @map("archived_at") @db.Timestamptz
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  teacher     User         @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
+  teacher     User           @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
   topics      Topic[]
   enrollments Enrollment[]
   assessments Assessment[]
+  modules     CourseModule[]
 
   @@index([teacherId])
   @@map("courses")
@@ -210,6 +233,53 @@ model AssessmentQuestion {
   @@unique([assessmentId, questionId])
   @@index([assessmentId])
   @@map("assessment_questions")
+}
+
+// ─── Course Modules & Items ─────────────────────────────
+
+model CourseModule {
+  id         String   @id @default(uuid()) @db.Uuid
+  courseId    String   @map("course_id") @db.Uuid
+  title      String
+  orderIndex Int      @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  items  ModuleItem[]
+
+  @@index([courseId])
+  @@map("course_modules")
+}
+
+model ModuleItem {
+  id           String         @id @default(uuid()) @db.Uuid
+  moduleId     String         @map("module_id") @db.Uuid
+  type         ModuleItemType
+  title        String
+  orderIndex   Int            @map("order_index")
+
+  // PAGE type
+  contentMdx   String?        @map("content_mdx")
+
+  // PDF type
+  pdfBlobKey   String?        @map("pdf_blob_key")
+  pdfFilename  String?        @map("pdf_filename")
+  pdfSize      Int?           @map("pdf_size")
+
+  // LINK type
+  url          String?
+
+  // ASSESSMENT type
+  assessmentId String?        @map("assessment_id") @db.Uuid
+
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@index([moduleId])
+  @@map("module_items")
 }
 
 // ─── Knowledge Components & Mastery ─────────────────────

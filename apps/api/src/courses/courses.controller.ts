@@ -50,9 +50,27 @@ export class CoursesController {
   update(
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(UpdateCourseSchema)) dto: UpdateCourse,
+    @Body() dto: UpdateCourse & Record<string, unknown>,
   ) {
     return this.coursesService.update(id, req.user.id, dto);
+  }
+
+  @Post(':id/duplicate')
+  @Roles('teacher', 'admin')
+  duplicate(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    return this.coursesService.duplicate(id, req.user.id);
+  }
+
+  @Post(':id/publish')
+  @Roles('teacher', 'admin')
+  publish(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    return this.coursesService.publish(id, req.user.id);
+  }
+
+  @Post(':id/unpublish')
+  @Roles('teacher', 'admin')
+  unpublish(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    return this.coursesService.unpublish(id, req.user.id);
   }
 
   @Delete(':id')

@@ -13,6 +13,7 @@ import { AssessmentsModule } from './assessments';
 import { EnrollmentsModule } from './enrollments';
 import { AttemptsModule } from './attempts';
 import { MasteryModule } from './mastery';
+import { CourseModulesModule } from './modules';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -37,6 +38,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     EnrollmentsModule,
     AttemptsModule,
     MasteryModule,
+    CourseModulesModule,
   ],
   controllers: [HealthController],
 })

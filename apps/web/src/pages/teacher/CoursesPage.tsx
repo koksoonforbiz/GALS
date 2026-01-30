@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import { useToast } from '../../components/Toast';
 
 interface Topic {
   id: string;
@@ -13,12 +15,16 @@ interface Course {
   id: string;
   title: string;
   description: string | null;
+  status: 'DRAFT' | 'PUBLISHED';
+  visibility: 'PUBLIC' | 'PRIVATE';
   topics: Topic[];
-  _count: { topics: number; enrollments: number };
+  _count: { topics: number; enrollments: number; modules: number };
   createdAt: string;
 }
 
 export function CoursesPage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +33,11 @@ export function CoursesPage() {
   const [newCourseDescription, setNewCourseDescription] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Topic management state
+  // Filters
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'DRAFT' | 'PUBLISHED'>('all');
+
+  // Topic management
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [newTopicTitle, setNewTopicTitle] = useState('');
   const [newTopicDescription, setNewTopicDescription] = useState('');
@@ -56,17 +66,50 @@ export function CoursesPage() {
         method: 'POST',
         body: JSON.stringify({
           title: newCourseName,
-          description: newCourseDescription || undefined,
+          description: newCourseDescription || '',
         }),
       });
       setNewCourseName('');
       setNewCourseDescription('');
       setShowCreateForm(false);
+      toast('success', 'Course created');
       fetchCourses();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create course');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handlePublish = async (course: Course) => {
+    try {
+      const endpoint = course.status === 'PUBLISHED' ? 'unpublish' : 'publish';
+      await apiFetch(`/courses/${course.id}/${endpoint}`, { method: 'POST' });
+      toast('success', course.status === 'PUBLISHED' ? 'Course unpublished' : 'Course published');
+      fetchCourses();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to update course');
+    }
+  };
+
+  const handleDuplicate = async (course: Course) => {
+    try {
+      await apiFetch(`/courses/${course.id}/duplicate`, { method: 'POST' });
+      toast('success', `Duplicated "${course.title}"`);
+      fetchCourses();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to duplicate');
+    }
+  };
+
+  const handleArchive = async (course: Course) => {
+    if (!confirm(`Archive "${course.title}"? This will hide it from students.`)) return;
+    try {
+      await apiFetch(`/courses/${course.id}`, { method: 'DELETE' });
+      toast('success', `Archived "${course.title}"`);
+      fetchCourses();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to archive');
     }
   };
 
@@ -87,6 +130,7 @@ export function CoursesPage() {
       });
       setNewTopicTitle('');
       setNewTopicDescription('');
+      toast('success', 'Topic added');
       fetchCourses();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add topic');
@@ -94,6 +138,12 @@ export function CoursesPage() {
       setCreatingTopic(false);
     }
   };
+
+  const filteredCourses = courses.filter((c) => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   if (loading) {
     return <div className="text-gray-500">Loading courses...</div>;
@@ -112,6 +162,32 @@ export function CoursesPage() {
       </div>
 
       {error && <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-lg">{error}</div>}
+
+      {/* Search & Filter Bar */}
+      <div className="flex gap-3 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search courses..."
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+        <div className="flex gap-1">
+          {(['all', 'DRAFT', 'PUBLISHED'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-2 text-sm rounded-lg transition-colors ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {s === 'all' ? 'All' : s === 'DRAFT' ? 'Draft' : 'Published'}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {showCreateForm && (
         <form
@@ -152,12 +228,14 @@ export function CoursesPage() {
       )}
 
       <div className="space-y-4">
-        {courses.length === 0 ? (
+        {filteredCourses.length === 0 ? (
           <div className="text-gray-500 text-center py-8">
-            No courses yet. Create your first course!
+            {courses.length === 0
+              ? 'No courses yet. Create your first course!'
+              : 'No courses match your filters.'}
           </div>
         ) : (
-          courses.map((course) => {
+          filteredCourses.map((course) => {
             const isExpanded = expandedCourseId === course.id;
 
             return (
@@ -165,21 +243,69 @@ export function CoursesPage() {
                 key={course.id}
                 className="bg-white rounded-lg shadow-sm border border-gray-200"
               >
-                <div
-                  className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => setExpandedCourseId(isExpanded ? null : course.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+                <div className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div
+                      className="flex-1 cursor-pointer"
+                      onClick={() => setExpandedCourseId(isExpanded ? null : course.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            course.status === 'PUBLISHED'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {course.status === 'PUBLISHED' ? 'Published' : 'Draft'}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          {course.visibility}
+                        </span>
+                      </div>
                       {course.description && (
-                        <p className="text-gray-600 mt-1">{course.description}</p>
+                        <p className="text-gray-600 mt-1 text-sm">{course.description}</p>
                       )}
-                      <div className="mt-2 text-sm text-gray-500">
-                        {course._count.topics} topic(s)
+                      <div className="mt-2 text-sm text-gray-500 flex gap-4">
+                        <span>{course._count.topics} topic(s)</span>
+                        <span>{course._count.modules} module(s)</span>
+                        <span>{course._count.enrollments} student(s)</span>
                       </div>
                     </div>
-                    <span className="text-gray-400 text-xl">{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                    <div className="flex gap-1 ml-4">
+                      <button
+                        onClick={() => navigate(`/teacher/courses/${course.id}`)}
+                        className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                        title="Edit course content"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(course)}
+                        className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                        title="Duplicate course"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        onClick={() => handlePublish(course)}
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          course.status === 'PUBLISHED'
+                            ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                            : 'bg-green-100 text-green-700 hover:bg-green-200'
+                        }`}
+                      >
+                        {course.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
+                      </button>
+                      <button
+                        onClick={() => handleArchive(course)}
+                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
+                        title="Archive course"
+                      >
+                        Archive
+                      </button>
+                    </div>
                   </div>
                 </div>
 
