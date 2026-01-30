@@ -11,6 +11,7 @@ import {
   UploadedFile,
   Query,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -27,6 +28,8 @@ interface RequestUser {
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class RagController {
+  private readonly logger = new Logger(RagController.name);
+
   constructor(
     private readonly ragService: RagService,
     private readonly llmService: LlmService,
@@ -39,7 +42,7 @@ export class RagController {
   async listDocuments(@Param('courseId') courseId: string) {
     const docs = await this.ragService.listDocuments(courseId);
     // Enrich with in-memory progress info
-    return docs.map((doc) => {
+    return docs.map((doc: any) => {
       const prog = this.ragService.progress.get(doc.id);
       return {
         ...doc,
@@ -69,18 +72,17 @@ export class RagController {
 
   @Delete('documents/:documentId')
   @Roles('teacher', 'admin')
-  deleteDocument(
-    @Request() req: { user: RequestUser },
-    @Param('documentId') documentId: string,
-  ) {
+  deleteDocument(@Request() req: { user: RequestUser }, @Param('documentId') documentId: string) {
     return this.ragService.deleteDocument(documentId, req.user.id);
   }
 
   @Post('documents/:documentId/rechunk')
   @Roles('teacher', 'admin')
   rechunkDocument(@Param('documentId') documentId: string) {
+    this.logger.log(`[RAG v2] Rechunk requested for document ${documentId}`);
     // Run chunking async so the client can poll for progress
     this.ragService.chunkDocument(documentId).catch((err) => {
+      this.logger.error(`[RAG v2] Rechunk failed for ${documentId}: ${err?.message}`);
       this.ragService.progress.set(documentId, {
         status: 'Failed',
         pct: 0,
@@ -225,10 +227,7 @@ export class RagController {
 
   @Post('drafts/:draftId/reject')
   @Roles('teacher', 'admin')
-  async rejectDraft(
-    @Request() req: { user: RequestUser },
-    @Param('draftId') draftId: string,
-  ) {
+  async rejectDraft(@Request() req: { user: RequestUser }, @Param('draftId') draftId: string) {
     return this.llmService.rejectDraft(draftId, req.user.id);
   }
 
@@ -236,10 +235,7 @@ export class RagController {
 
   @Get('courses/:courseId/llm-logs')
   @Roles('teacher', 'admin')
-  async getLlmLogs(
-    @Param('courseId') courseId: string,
-    @Query('limit') limit?: string,
-  ) {
+  async getLlmLogs(@Param('courseId') courseId: string, @Query('limit') limit?: string) {
     return this.llmService.getAuditLogs(courseId, parseInt(limit || '50', 10));
   }
 

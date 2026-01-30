@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 
@@ -42,15 +48,29 @@ export interface DocumentProgress {
 }
 
 @Injectable()
-export class RagService {
+export class RagService implements OnModuleInit {
   private readonly logger = new Logger(RagService.name);
   /** In-memory progress tracking for document chunking */
   readonly progress = new Map<string, DocumentProgress>();
+  /** Cached pdf-parse PDFParse class, loaded once at startup */
+  private PDFParseClass: any = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly blobService: BlobService,
   ) {}
+
+  async onModuleInit() {
+    this.logger.log('[RAG v2] RagService initialising...');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pdfParseModule = require('pdf-parse');
+      this.PDFParseClass = pdfParseModule.PDFParse || pdfParseModule.default?.PDFParse;
+      this.logger.log(`[RAG v2] pdf-parse loaded: PDFParse=${typeof this.PDFParseClass}`);
+    } catch (err: any) {
+      this.logger.warn(`[RAG v2] pdf-parse not available: ${err.message}. PDF uploads will fail.`);
+    }
+  }
 
   // ─── Document Management ────────────────────────────────
 
@@ -213,18 +233,16 @@ export class RagService {
     }
 
     if (mimeType === 'application/pdf') {
+      if (!this.PDFParseClass) {
+        throw new Error(
+          'PDF parsing is not available. The pdf-parse package failed to load at startup. ' +
+            'Check the API logs for "[RAG v2]" messages.',
+        );
+      }
       try {
-        // Use dynamic import() which works reliably in NestJS/TypeScript
-        const pdfParseModule = await import('pdf-parse');
-        const PDFParseClass = pdfParseModule.PDFParse;
-        this.logger.log(`pdf-parse loaded via import(): ${typeof PDFParseClass}`);
-
-        if (!PDFParseClass) {
-          throw new Error('PDFParse class not found in pdf-parse module');
-        }
-
+        this.logger.log(`Parsing PDF buffer (${buffer.length} bytes)...`);
         const pdfData = new Uint8Array(buffer);
-        const pdf = new PDFParseClass({ data: pdfData });
+        const pdf = new this.PDFParseClass({ data: pdfData });
         const textResult = await pdf.getText();
         const pageCount = textResult.total || null;
         const text = textResult.text;
@@ -234,8 +252,7 @@ export class RagService {
       } catch (err) {
         this.logger.error('PDF extraction error:', err);
         throw new Error(
-          `PDF extraction failed: ${(err as Error)?.message || 'Unknown error'}. ` +
-          'Ensure pdf-parse is installed: cd apps/api && pnpm add pdf-parse',
+          `PDF text extraction failed: ${(err as Error)?.message || 'Unknown error'}`,
         );
       }
     }
