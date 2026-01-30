@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
+import { PDFParse } from 'pdf-parse';
 
 export interface ChunkWithScore {
   id: string;
@@ -128,7 +129,7 @@ export class RagService {
 
     // Download the file content
     const { body } = await this.blobService.get(doc.blobKey);
-    const text = this.extractText(body, doc.mimeType);
+    const { text, pageCount } = await this.extractText(body, doc.mimeType);
 
     // Chunk based on strategy
     const chunks = this.splitIntoChunks(text, doc.chunkingStrategy);
@@ -151,6 +152,7 @@ export class RagService {
       where: { id: documentId },
       data: {
         chunkCount: chunks.length,
+        pageCount: pageCount,
         indexedAt: new Date(),
       },
     });
@@ -159,15 +161,32 @@ export class RagService {
     return { chunkCount: chunks.length };
   }
 
-  private extractText(buffer: Buffer, mimeType: string): string {
-    // For text-based files, decode directly
-    // For PDFs, extract text (simplified - in production use pdf-parse or similar)
+  private async extractText(
+    buffer: Buffer,
+    mimeType: string,
+  ): Promise<{ text: string; pageCount: number | null }> {
     if (mimeType === 'text/plain' || mimeType === 'text/markdown') {
-      return buffer.toString('utf-8');
+      return { text: buffer.toString('utf-8'), pageCount: null };
     }
-    // For PDF and other binary formats, decode as UTF-8 best-effort
-    // In production, integrate pdf-parse or Apache Tika
-    return buffer.toString('utf-8');
+
+    if (mimeType === 'application/pdf') {
+      try {
+        const pdfData = new Uint8Array(buffer);
+        const pdf = new PDFParse({ data: pdfData });
+        const textResult = await pdf.getText();
+        const pageCount = textResult.total || null;
+        const text = textResult.text;
+        await pdf.destroy();
+        this.logger.log(`Extracted ${text.length} chars from PDF (${pageCount} pages)`);
+        return { text, pageCount };
+      } catch (err) {
+        this.logger.error('PDF parsing failed, falling back to raw text', err);
+        return { text: buffer.toString('utf-8'), pageCount: null };
+      }
+    }
+
+    // Fallback for other formats
+    return { text: buffer.toString('utf-8'), pageCount: null };
   }
 
   private splitIntoChunks(
@@ -240,11 +259,7 @@ export class RagService {
 
   // ─── Retrieval ──────────────────────────────────────────
 
-  async queryChunks(
-    courseId: string,
-    query: string,
-    topK: number = 10,
-  ): Promise<ChunkWithScore[]> {
+  async queryChunks(courseId: string, query: string, topK: number = 10): Promise<ChunkWithScore[]> {
     const startTime = Date.now();
 
     // Get all chunks for this course's documents
@@ -261,7 +276,7 @@ export class RagService {
 
     // Score chunks using TF-IDF-like keyword matching
     // (In production, use vector similarity with embeddings)
-    const scored = chunks.map((chunk) => ({
+    const scored: ChunkWithScore[] = chunks.map((chunk: any) => ({
       id: chunk.id,
       documentId: chunk.document.id,
       documentTitle: chunk.document.title,
@@ -286,13 +301,18 @@ export class RagService {
     topChunks.sort((a, b) => b.rerankerScore - a.rerankerScore);
 
     const elapsed = Date.now() - startTime;
-    this.logger.debug(`RAG query for course ${courseId} took ${elapsed}ms, found ${topChunks.length} chunks`);
+    this.logger.debug(
+      `RAG query for course ${courseId} took ${elapsed}ms, found ${topChunks.length} chunks`,
+    );
 
     return topChunks;
   }
 
   private computeKeywordScore(query: string, content: string): number {
-    const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+    const queryTerms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
     const contentLower = content.toLowerCase();
     if (queryTerms.length === 0) return 0;
 
@@ -304,7 +324,8 @@ export class RagService {
     }
 
     // Normalize by query terms and content length
-    const termCoverage = queryTerms.filter((t) => contentLower.includes(t)).length / queryTerms.length;
+    const termCoverage =
+      queryTerms.filter((t) => contentLower.includes(t)).length / queryTerms.length;
     const density = matchCount / (content.length / 100);
 
     return termCoverage * 0.6 + Math.min(density, 1) * 0.4;
@@ -332,7 +353,12 @@ export class RagService {
 
   validateCitations(
     contentMdx: string,
-    citations: Array<{ chunkId: string; documentTitle: string; pageNumber: number | null; quote: string }>,
+    citations: Array<{
+      chunkId: string;
+      documentTitle: string;
+      pageNumber: number | null;
+      quote: string;
+    }>,
     chunks: ChunkWithScore[],
   ): { valid: boolean; issues: string[] } {
     const issues: string[] = [];
@@ -353,7 +379,9 @@ export class RagService {
     for (const citation of citations) {
       const chunk = chunks.find((c) => c.id === citation.chunkId);
       if (!chunk) {
-        issues.push(`Citation references chunk ${citation.chunkId} which was not in retrieved chunks`);
+        issues.push(
+          `Citation references chunk ${citation.chunkId} which was not in retrieved chunks`,
+        );
       } else if (citation.quote) {
         // Verify the quote actually appears in the chunk
         if (!chunk.content.toLowerCase().includes(citation.quote.toLowerCase().slice(0, 50))) {

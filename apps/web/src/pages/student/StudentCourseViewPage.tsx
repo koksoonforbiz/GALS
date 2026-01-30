@@ -61,7 +61,7 @@ export function StudentCourseViewPage() {
 
   const handlePdfDownload = async (itemId: string) => {
     try {
-      const { url, filename } = await apiFetch<{ url: string; filename: string }>(
+      const { url } = await apiFetch<{ url: string; filename: string }>(
         `/items/${itemId}/download-url`,
       );
       window.open(url, '_blank');
@@ -99,9 +99,7 @@ export function StudentCourseViewPage() {
       </div>
 
       {course.modules.length === 0 ? (
-        <div className="text-gray-400 text-center py-12">
-          This course has no content yet.
-        </div>
+        <div className="text-gray-400 text-center py-12">This course has no content yet.</div>
       ) : (
         <div className="flex gap-6">
           {/* Sidebar: Module/Item navigation */}

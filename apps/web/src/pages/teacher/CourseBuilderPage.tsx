@@ -157,7 +157,7 @@ export function CourseBuilderPage() {
       setDescription(data.description);
       setVisibility(data.visibility);
       if (data.modules.length > 0 && !selectedModuleId) {
-        setSelectedModuleId(data.modules[0].id);
+        setSelectedModuleId(data.modules[0]!.id);
       }
     } catch {
       toast('error', 'Failed to load course');
@@ -306,7 +306,7 @@ export function CourseBuilderPage() {
   };
 
   // PDF upload
-  const handlePdfUpload = async (itemId: string, moduleId: string, file: File) => {
+  const handlePdfUpload = async (itemId: string, _moduleId: string, file: File) => {
     try {
       // Get presigned upload URL
       const { url } = await apiFetch<{ url: string; key: string }>(`/items/${itemId}/upload-url`, {
@@ -456,7 +456,10 @@ export function CourseBuilderPage() {
             </select>
           </div>
           <div className="pt-2 text-sm text-gray-500">
-            <p>{course._count.modules} module(s) | {course._count.topics} topic(s) | {course._count.enrollments} student(s) enrolled</p>
+            <p>
+              {course._count.modules} module(s) | {course._count.topics} topic(s) |{' '}
+              {course._count.enrollments} student(s) enrolled
+            </p>
           </div>
         </div>
       )}
@@ -525,10 +528,7 @@ export function CourseBuilderPage() {
                     <p className="text-sm text-gray-400">No items yet. Add one below.</p>
                   ) : (
                     selectedModule.items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="bg-white border border-gray-200 rounded-lg p-3"
-                      >
+                      <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span
@@ -596,7 +596,9 @@ export function CourseBuilderPage() {
                         {/* PDF info */}
                         {item.type === 'PDF' && item.pdfFilename && (
                           <p className="text-xs text-gray-500 mt-1">
-                            {item.pdfFilename} ({item.pdfSize ? `${Math.round(item.pdfSize / 1024)}KB` : 'unknown size'})
+                            {item.pdfFilename} (
+                            {item.pdfSize ? `${Math.round(item.pdfSize / 1024)}KB` : 'unknown size'}
+                            )
                           </p>
                         )}
 
@@ -701,7 +703,8 @@ export function CourseBuilderPage() {
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Source Documents</h3>
               <p className="text-sm text-gray-500">
-                Upload reference materials for RAG-based content generation. Documents are chunked and indexed for retrieval.
+                Upload reference materials for RAG-based content generation. Documents are chunked
+                and indexed for retrieval.
               </p>
             </div>
             <label className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer disabled:opacity-50">
@@ -725,7 +728,8 @@ export function CourseBuilderPage() {
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
               <p className="text-gray-500 mb-2">No source documents yet</p>
               <p className="text-sm text-gray-400">
-                Upload PDFs, text, or markdown files to use as source material for AI-generated content.
+                Upload PDFs, text, or markdown files to use as source material for AI-generated
+                content.
               </p>
             </div>
           ) : (
@@ -754,8 +758,8 @@ export function CourseBuilderPage() {
                       )}
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      {doc.filename} &middot; {Math.round(doc.sizeBytes / 1024)}KB &middot;{' '}
-                      Uploaded by {doc.uploadedBy.name} &middot;{' '}
+                      {doc.filename} &middot; {Math.round(doc.sizeBytes / 1024)}KB &middot; Uploaded
+                      by {doc.uploadedBy.name} &middot;{' '}
                       {new Date(doc.createdAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -783,7 +787,8 @@ export function CourseBuilderPage() {
           <div className="mt-6 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
             <h4 className="text-sm font-semibold text-indigo-900 mb-1">AI Course Studio</h4>
             <p className="text-sm text-indigo-700 mb-3">
-              Use your source documents to generate course content with RAG-powered AI. All content is generated as drafts for your review.
+              Use your source documents to generate course content with RAG-powered AI. All content
+              is generated as drafts for your review.
             </p>
             <button
               onClick={() => navigate(`/teacher/studio/${courseId}`)}
