@@ -187,6 +187,7 @@ model Assessment {
   courseId    String   @map("course_id") @db.Uuid
   title       String
   description String   @default("")
+  isPublished Boolean  @default(false) @map("is_published")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -53,6 +54,16 @@ export class AssessmentsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.assessmentsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles('teacher', 'admin')
+  update(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Body() dto: { isPublished?: boolean; title?: string; description?: string },
+  ) {
+    return this.assessmentsService.update(id, req.user.id, dto);
   }
 
   @Delete(':id')

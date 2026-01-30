@@ -134,6 +134,33 @@ export class AssessmentsService {
     return assessment;
   }
 
+  async update(id: string, teacherId: string, data: { isPublished?: boolean; title?: string; description?: string }) {
+    const assessment = await this.prisma.assessment.findUnique({
+      where: { id },
+      include: { course: true },
+    });
+
+    if (!assessment) {
+      throw new NotFoundException(`Assessment ${id} not found`);
+    }
+
+    if (assessment.course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only update assessments in your own courses');
+    }
+
+    return this.prisma.assessment.update({
+      where: { id },
+      data,
+      include: {
+        course: { select: { id: true, title: true } },
+        questions: {
+          orderBy: { orderIndex: 'asc' },
+          include: { question: true },
+        },
+      },
+    });
+  }
+
   async remove(id: string, teacherId: string) {
     const assessment = await this.prisma.assessment.findUnique({
       where: { id },
