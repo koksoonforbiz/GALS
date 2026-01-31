@@ -49,10 +49,17 @@ export type BlockDataMap = {
   divider: DividerBlockData;
 };
 
+export interface BlockMetadata {
+  generatedBy?: 'ai' | 'human';
+  generationJobId?: string;
+  editedAt?: string; // ISO timestamp of last human edit
+}
+
 export interface Block<T extends BlockType = BlockType> {
   id: string;
   type: T;
   data: BlockDataMap[T];
+  metadata?: BlockMetadata;
 }
 
 // ─── Document Envelope ────────────────────────────────

@@ -215,15 +215,18 @@ export class PageContentService {
       // 9. Parse output
       const parsed = this.parsePageContentOutput(llmResult.content, pageItem.title);
 
-      // 10. Save content to page
-      const contentMdx = this.renderContentToMdx(parsed);
+      // 10. Save content to page as block-based JSON
+      const contentJson = this.renderContentToBlocks(parsed, job.id);
       await this.prisma.moduleItem.update({
         where: { id: input.pageId },
         data: {
-          contentMdx,
+          contentMdx: contentJson,
           generationJobId: job.id,
         },
       });
+
+      // 10b. Create version snapshot with AI source
+      await this.createVersionSnapshot(input.pageId, contentJson, 'ai', input.userId, job.id);
 
       // 11. Update job
       const durationMs = Date.now() - startTime;
@@ -493,64 +496,141 @@ export class PageContentService {
     }
   }
 
-  private renderContentToMdx(parsed: any): string {
+  /**
+   * Convert parsed LLM output into a BlockDocument JSON string.
+   * Each section maps to an appropriate block type with AI metadata.
+   */
+  private renderContentToBlocks(parsed: any, jobId: string): string {
     const c = parsed.content || {};
-    let mdx = `# ${parsed.pageTitle}\n\n`;
+    let blockCounter = 0;
+    const mkId = () => `blk_ai_${++blockCounter}`;
+    const aiMeta = { generatedBy: 'ai', generationJobId: jobId };
 
+    const blocks: any[] = [];
+
+    // Title + Learning Outcomes text block
+    let introHtml = `<h1>${this.esc(parsed.pageTitle)}</h1>`;
     if (c.learning_outcomes?.length) {
-      mdx += `## Learning Outcomes\n\n`;
-      c.learning_outcomes.forEach((o: string) => { mdx += `- ${o}\n`; });
-      mdx += '\n';
+      introHtml += `<h2>Learning Outcomes</h2><ul>${c.learning_outcomes.map((o: string) => `<li>${this.esc(o)}</li>`).join('')}</ul>`;
     }
-
     if (c.key_concepts?.length) {
-      mdx += `## Key Concepts\n\n`;
-      c.key_concepts.forEach((k: string) => { mdx += `- ${k}\n`; });
-      mdx += '\n';
+      introHtml += `<h2>Key Concepts</h2><ul>${c.key_concepts.map((k: string) => `<li>${this.esc(k)}</li>`).join('')}</ul>`;
     }
+    blocks.push({ id: mkId(), type: 'text', data: { html: introHtml }, metadata: aiMeta });
 
+    // Explanation text block
     if (c.explanation) {
-      mdx += `## Explanation\n\n${c.explanation}\n\n`;
+      blocks.push({
+        id: mkId(),
+        type: 'text',
+        data: { html: this.wrapInParagraphs(c.explanation) },
+        metadata: aiMeta,
+      });
     }
 
+    // Worked examples
     if (c.worked_examples?.length) {
-      mdx += `## Worked Examples\n\n`;
+      let exHtml = `<h2>Worked Examples</h2>`;
       c.worked_examples.forEach((ex: any, i: number) => {
-        mdx += `### Example ${i + 1}\n\n`;
-        mdx += `**Problem:** ${ex.problem}\n\n`;
-        mdx += `**Solution:** ${ex.solution}\n\n`;
+        exHtml += `<h3>Example ${i + 1}</h3>`;
+        exHtml += `<p><strong>Problem:</strong> ${this.esc(ex.problem)}</p>`;
+        exHtml += `<p><strong>Solution:</strong> ${this.esc(ex.solution)}</p>`;
       });
+      blocks.push({ id: mkId(), type: 'text', data: { html: exHtml }, metadata: aiMeta });
     }
 
+    // Misconceptions as callout blocks
     if (c.misconceptions?.length) {
-      mdx += `## Common Misconceptions\n\n`;
       c.misconceptions.forEach((m: any) => {
-        mdx += `> **Misconception:** ${m.misconception}\n>\n> **Correction:** ${m.correction}\n\n`;
+        blocks.push({
+          id: mkId(),
+          type: 'callout',
+          data: {
+            variant: 'common-mistake',
+            html: `<p><strong>Misconception:</strong> ${this.esc(m.misconception)}</p><p><strong>Correction:</strong> ${this.esc(m.correction)}</p>`,
+          },
+          metadata: aiMeta,
+        });
       });
     }
 
+    // Quick check
     if (c.quick_check?.length) {
-      mdx += `## Quick Check\n\n`;
+      let qcHtml = `<h2>Quick Check</h2>`;
       c.quick_check.forEach((q: any, i: number) => {
-        mdx += `**Q${i + 1}:** ${q.question}\n\n`;
-        mdx += `<details>\n<summary>Answer</summary>\n\n${q.answer}\n\n${q.explanation || ''}\n</details>\n\n`;
+        qcHtml += `<p><strong>Q${i + 1}:</strong> ${this.esc(q.question)}</p>`;
+        qcHtml += `<p><em>Answer:</em> ${this.esc(q.answer)}${q.explanation ? ` — ${this.esc(q.explanation)}` : ''}</p>`;
       });
+      blocks.push({ id: mkId(), type: 'text', data: { html: qcHtml }, metadata: aiMeta });
     }
 
+    // Summary
     if (c.summary_next_steps) {
-      mdx += `## Summary\n\n${c.summary_next_steps}\n\n`;
-    }
-
-    if (parsed.citations?.length) {
-      mdx += `---\n\n### Sources\n\n`;
-      parsed.citations.forEach((cit: any) => {
-        mdx += `- ${cit.marker}\n`;
+      blocks.push({
+        id: mkId(),
+        type: 'callout',
+        data: {
+          variant: 'tip',
+          html: `<p><strong>Summary:</strong> ${this.esc(c.summary_next_steps)}</p>`,
+        },
+        metadata: aiMeta,
       });
-      mdx += '\n';
     }
 
-    mdx += `\n---\n*AI-generated content. Review before publishing.*\n`;
-    return mdx;
+    // Citations divider + sources
+    if (parsed.citations?.length) {
+      blocks.push({ id: mkId(), type: 'divider', data: {}, metadata: aiMeta });
+      const srcHtml = `<h3>Sources</h3><ul>${parsed.citations.map((cit: any) => `<li>${this.esc(cit.marker)}</li>`).join('')}</ul><p><em>AI-generated content. Review before publishing.</em></p>`;
+      blocks.push({ id: mkId(), type: 'text', data: { html: srcHtml }, metadata: aiMeta });
+    }
+
+    return JSON.stringify({ version: 2, blocks });
+  }
+
+  private esc(str: string): string {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  private wrapInParagraphs(text: string): string {
+    if (!text) return '';
+    // If it already looks like HTML, pass through
+    if (/<[a-z][\s\S]*>/i.test(text)) return text;
+    // Otherwise wrap paragraphs
+    return text
+      .split(/\n\n+/)
+      .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+      .join('');
+  }
+
+  private async createVersionSnapshot(
+    itemId: string,
+    contentJson: string,
+    source: string,
+    userId?: string,
+    jobId?: string,
+  ) {
+    try {
+      const latest = await this.prisma.pageContentVersion.findFirst({
+        where: { itemId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const nextVersion = (latest?.version ?? 0) + 1;
+
+      await this.prisma.pageContentVersion.create({
+        data: {
+          itemId,
+          version: nextVersion,
+          contentJson,
+          source,
+          authorId: userId || null,
+          jobId: jobId || null,
+        },
+      });
+    } catch (err) {
+      this.logger.error('Failed to create version snapshot', err);
+    }
   }
 
   // ─── Private: Job Update ───────────────────────────────

@@ -87,4 +87,35 @@ export class ItemActionsController {
   getDownloadUrl(@Param('id') id: string) {
     return this.itemsService.getDownloadUrl(id);
   }
+
+  // ─── Version History ──────────────────────────────────
+
+  @Get(':id/versions')
+  @Roles('teacher', 'admin')
+  getVersionHistory(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+  ) {
+    return this.itemsService.getVersionHistory(id, req.user.id);
+  }
+
+  @Get(':id/versions/:versionId')
+  @Roles('teacher', 'admin')
+  getVersion(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.itemsService.getVersion(id, versionId, req.user.id);
+  }
+
+  @Post(':id/versions/:versionId/rollback')
+  @Roles('teacher', 'admin')
+  rollbackToVersion(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Param('versionId') versionId: string,
+  ) {
+    return this.itemsService.rollbackToVersion(id, versionId, req.user.id);
+  }
 }

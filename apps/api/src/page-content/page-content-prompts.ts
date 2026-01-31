@@ -37,9 +37,10 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
   "missingInfo": string[]
 }
 
-RULES:
-- Output ONLY valid JSON. No markdown fences, no text outside JSON.
-- The "explanation" field should be detailed, well-structured with paragraphs. Use markdown formatting within the string.
+CONTENT FORMATTING RULES:
+- The "explanation" field should be detailed, well-structured with paragraphs.
+- Use HTML formatting: <h2>, <h3> for sub-headings, <p> for paragraphs, <strong>, <em>, <ul>/<li> for lists, <code> for inline code.
+- For LaTeX equations: use <span data-inline-math="" latex="LATEX_HERE"></span> for inline math, <div data-block-math="" latex="LATEX_HERE"></div> for display equations.
 - Include inline citation markers like [SRC:abc123 p5-7] within explanation, worked_examples, and corrections.
 - Provide at least 2 worked examples and 2 quick-check questions when source material allows.
 - "learning_outcomes" should be specific, measurable outcomes using Bloom's taxonomy verbs.

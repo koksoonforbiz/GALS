@@ -68,12 +68,89 @@ export class ItemsService {
     });
   }
 
-  async update(itemId: string, teacherId: string, dto: UpdateItemDto) {
+  async update(itemId: string, teacherId: string, dto: UpdateItemDto, source?: string) {
     await this.verifyItemOwnership(itemId, teacherId);
+
+    // Create version snapshot when contentMdx changes
+    if (dto.contentMdx !== undefined) {
+      await this.createVersionSnapshot(itemId, dto.contentMdx, source || 'human', teacherId);
+    }
 
     return this.prisma.moduleItem.update({
       where: { id: itemId },
       data: dto,
+    });
+  }
+
+  // ─── Version History ──────────────────────────────────
+
+  async getVersionHistory(itemId: string, teacherId: string) {
+    await this.verifyItemOwnership(itemId, teacherId);
+
+    return this.prisma.pageContentVersion.findMany({
+      where: { itemId },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        source: true,
+        authorId: true,
+        jobId: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async getVersion(itemId: string, versionId: string, teacherId: string) {
+    await this.verifyItemOwnership(itemId, teacherId);
+
+    const ver = await this.prisma.pageContentVersion.findFirst({
+      where: { id: versionId, itemId },
+    });
+    if (!ver) throw new NotFoundException('Version not found');
+    return ver;
+  }
+
+  async rollbackToVersion(itemId: string, versionId: string, teacherId: string) {
+    await this.verifyItemOwnership(itemId, teacherId);
+
+    const ver = await this.prisma.pageContentVersion.findFirst({
+      where: { id: versionId, itemId },
+    });
+    if (!ver) throw new NotFoundException('Version not found');
+
+    // Create a new version from the rollback
+    await this.createVersionSnapshot(itemId, ver.contentJson, 'rollback', teacherId);
+
+    return this.prisma.moduleItem.update({
+      where: { id: itemId },
+      data: { contentMdx: ver.contentJson },
+    });
+  }
+
+  private async createVersionSnapshot(
+    itemId: string,
+    contentJson: string,
+    source: string,
+    authorId?: string,
+    jobId?: string,
+  ) {
+    const latest = await this.prisma.pageContentVersion.findFirst({
+      where: { itemId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    });
+    const nextVersion = (latest?.version ?? 0) + 1;
+
+    await this.prisma.pageContentVersion.create({
+      data: {
+        itemId,
+        version: nextVersion,
+        contentJson,
+        source,
+        authorId: authorId || null,
+        jobId: jobId || null,
+      },
     });
   }
 

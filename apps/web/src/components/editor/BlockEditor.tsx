@@ -29,6 +29,7 @@ import VideoBlock from './blocks/VideoBlock';
 import DiagramBlock from './blocks/DiagramBlock';
 import CalloutBlock from './blocks/CalloutBlock';
 import DividerBlock from './blocks/DividerBlock';
+import BlockRenderer from './BlockRenderer';
 
 // ─── Props ───────────────────────────────────────────
 
@@ -37,6 +38,7 @@ interface Props {
   onSave: (json: string) => void;
   readOnly?: boolean;
   autoSaveMs?: number;
+  onOpenHistory?: () => void;
 }
 
 // ─── Block type metadata ─────────────────────────────
@@ -114,6 +116,9 @@ function SortableBlock({
       {!readOnly && (
         <div className="absolute -right-1 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <span className="text-[10px] text-gray-400 mr-1">{BLOCK_LABELS[block.type]}</span>
+          {block.metadata?.generatedBy === 'ai' && (
+            <span className="text-[9px] px-1 py-0.5 bg-violet-100 text-violet-600 rounded mr-1">AI</span>
+          )}
           <button
             onClick={() => onDuplicate(block.id)}
             className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
@@ -218,9 +223,11 @@ export default function BlockEditor({
   onSave,
   readOnly = false,
   autoSaveMs = 2000,
+  onOpenHistory,
 }: Props) {
   const [blocks, setBlocks] = useState<Block[]>(() => parseBlockDocument(content).blocks);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [preview, setPreview] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const lastSavedRef = useRef(content);
   const lastExternalContentRef = useRef(content);
@@ -264,7 +271,16 @@ export default function BlockEditor({
 
   const updateBlock = useCallback(
     (id: string, data: BlockDataMap[BlockType]) => {
-      setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, data } : b)));
+      setBlocks((prev) =>
+        prev.map((b) => {
+          if (b.id !== id) return b;
+          // Human edit clears AI metadata
+          const metadata = b.metadata?.generatedBy === 'ai'
+            ? { ...b.metadata, generatedBy: 'human' as const, editedAt: new Date().toISOString() }
+            : b.metadata;
+          return { ...b, data, metadata };
+        }),
+      );
       triggerSave();
     },
     [triggerSave],
@@ -338,12 +354,37 @@ export default function BlockEditor({
               {saveStatus === 'saving' && 'Saving...'}
               {saveStatus === 'saved' && <span className="text-green-600">Saved</span>}
             </div>
+            <button
+              onClick={() => setPreview((p) => !p)}
+              className={`text-xs px-2 py-1 rounded transition-colors ${
+                preview
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {preview ? 'Edit' : 'Preview'}
+            </button>
+            {onOpenHistory && (
+              <button
+                onClick={onOpenHistory}
+                className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+              >
+                History
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {/* Block list */}
-      <div className="px-10 py-4 min-h-[200px]">
+      {/* Preview mode */}
+      {preview && !readOnly && (
+        <div className="px-10 py-6 min-h-[200px]">
+          <BlockRenderer content={serializeBlockDocument({ version: 2, blocks })} />
+        </div>
+      )}
+
+      {/* Block list (edit mode) */}
+      {!preview && <div className="px-10 py-4 min-h-[200px]">
         {/* Top add-block */}
         {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={0} />}
 
@@ -388,7 +429,7 @@ export default function BlockEditor({
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

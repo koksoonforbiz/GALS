@@ -319,10 +319,28 @@ model ModuleItem {
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
-  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  module   CourseModule          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  versions PageContentVersion[]
 
   @@index([moduleId])
   @@map("module_items")
+}
+
+model PageContentVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  itemId       String   @map("item_id") @db.Uuid
+  version      Int
+  contentJson  String   @map("content_json") // BlockDocument JSON
+  source       String   // "human" | "ai" | "rollback"
+  authorId     String?  @map("author_id") @db.Uuid
+  jobId        String?  @map("job_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  item ModuleItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, version])
+  @@index([itemId])
+  @@map("page_content_versions")
 }
 
 // ─── RAG: Source Documents & Chunks ──────────────────────

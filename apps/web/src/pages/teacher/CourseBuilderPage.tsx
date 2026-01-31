@@ -7,6 +7,7 @@ import SourceSelector from '../../components/SourceSelector';
 import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
 import BulkProgressPanel from '../../components/BulkProgressPanel';
 import BlockEditor from '../../components/editor/BlockEditor';
+import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export function CourseBuilderPage() {
   // Edit item state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [historyItemId, setHistoryItemId] = useState<string | null>(null);
 
   // AI Content Generation state
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
@@ -932,6 +934,7 @@ export function CourseBuilderPage() {
                               content={editContent}
                               onSave={(json) => handleSaveItemContent(item.id, item.moduleId, json)}
                               autoSaveMs={2000}
+                              onOpenHistory={() => setHistoryItemId(item.id)}
                             />
                           </div>
                         )}
@@ -1162,6 +1165,18 @@ export function CourseBuilderPage() {
             Archive Course
           </button>
         </div>
+      )}
+
+      {/* ─── Version History Panel ─── */}
+      {historyItemId && (
+        <VersionHistoryPanel
+          itemId={historyItemId}
+          onClose={() => setHistoryItemId(null)}
+          onRollback={(content) => {
+            setEditContent(content);
+            fetchCourse();
+          }}
+        />
       )}
     </div>
   );
