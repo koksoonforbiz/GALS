@@ -1,14 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
-import katex from 'katex';
-
-function decodeHTMLEntities(str: string): string {
-  const textarea = document.createElement('textarea');
-  textarea.innerHTML = str;
-  return textarea.value;
-}
+import BlockRenderer from '../../components/editor/BlockRenderer';
 
 interface ModuleItem {
   id: string;
@@ -76,60 +70,6 @@ export function StudentCourseViewPage() {
       toast('error', err instanceof Error ? err.message : 'Failed to open PDF');
     }
   };
-
-  // Process HTML content: render KaTeX math nodes and handle legacy plain text
-  const renderContent = useMemo(() => {
-    return (raw: string) => {
-      // If content doesn't look like HTML, wrap it as plain text
-      const isHtml = /<[a-z][\s\S]*>/i.test(raw);
-      if (!isHtml) {
-        // Legacy plain-text content: wrap paragraphs
-        return raw
-          .split('\n\n')
-          .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
-          .join('');
-      }
-
-      // Process math nodes: replace data-inline-math and data-block-math spans/divs
-      // with rendered KaTeX HTML
-      let html = raw;
-
-      // Inline math: <span data-inline-math="" latex="...">...</span>
-      html = html.replace(
-        /<span[^>]*data-inline-math[^>]*latex="([^"]*)"[^>]*>[\s\S]*?<\/span>/g,
-        (_, latex) => {
-          try {
-            return katex.renderToString(decodeHTMLEntities(latex), {
-              throwOnError: false,
-              displayMode: false,
-            });
-          } catch {
-            return latex;
-          }
-        },
-      );
-
-      // Block math: <div data-block-math="" latex="...">...</div>
-      html = html.replace(
-        /<div[^>]*data-block-math[^>]*latex="([^"]*)"[^>]*>[\s\S]*?<\/div>/g,
-        (_, latex) => {
-          try {
-            return `<div style="text-align:center;margin:0.5rem 0">${katex.renderToString(
-              decodeHTMLEntities(latex),
-              {
-                throwOnError: false,
-                displayMode: true,
-              },
-            )}</div>`;
-          } catch {
-            return latex;
-          }
-        },
-      );
-
-      return html;
-    };
-  }, []);
 
   if (loading || !course) return <div className="text-gray-500">Loading course...</div>;
 
@@ -208,12 +148,7 @@ export function StudentCourseViewPage() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
                 {selectedItem.contentMdx ? (
-                  <div
-                    className="prose prose-sm max-w-none tiptap"
-                    dangerouslySetInnerHTML={{
-                      __html: renderContent(selectedItem.contentMdx),
-                    }}
-                  />
+                  <BlockRenderer content={selectedItem.contentMdx} />
                 ) : (
                   <p className="text-gray-400">No content yet.</p>
                 )}

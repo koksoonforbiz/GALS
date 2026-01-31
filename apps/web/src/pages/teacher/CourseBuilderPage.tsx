@@ -6,7 +6,7 @@ import GenerateStructureWizard from '../../components/GenerateStructureWizard';
 import SourceSelector from '../../components/SourceSelector';
 import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
 import BulkProgressPanel from '../../components/BulkProgressPanel';
-import RichTextEditor from '../../components/editor/RichTextEditor';
+import BlockEditor from '../../components/editor/BlockEditor';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -928,10 +928,9 @@ export function CourseBuilderPage() {
                         {/* PAGE editor */}
                         {editingItemId === item.id && (
                           <div className="mt-2">
-                            <RichTextEditor
+                            <BlockEditor
                               content={editContent}
-                              onSave={(html) => handleSaveItemContent(item.id, item.moduleId, html)}
-                              placeholder="Start writing lesson content..."
+                              onSave={(json) => handleSaveItemContent(item.id, item.moduleId, json)}
                               autoSaveMs={2000}
                             />
                           </div>
