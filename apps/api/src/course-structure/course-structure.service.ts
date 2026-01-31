@@ -8,6 +8,12 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RagService, ChunkWithScore } from '../rag/rag.service';
 import { LlmService } from '../rag/llm.service';
+import {
+  buildStructureSystemPrompt,
+  buildStructureUserPrompt,
+  buildRetrievalQuery,
+  StructurePromptInput,
+} from './prompts';
 
 // ─── Interfaces ─────────────────────────────────────────
 
@@ -20,12 +26,19 @@ export interface GenerateStructureInput {
   lessons_per_subtopic: number;
   strict_sources: boolean;
   admin_prompt?: string;
+  selectedSourceIds: string[];
+  retrieval_mode: 'selected_only' | 'selected_then_course';
 }
 
 export interface OutlineTopic {
   title: string;
   rationale: string;
-  sourceEvidence: Array<{ sourceId: string; pageStart: number; pageEnd: number }>;
+  sourceEvidence: Array<{
+    sourceId: string;
+    pageStart: number;
+    pageEnd: number;
+    chunkIds?: string[];
+  }>;
   subtopics: Array<{
     title: string;
     lessonModules: Array<{
@@ -44,6 +57,7 @@ export interface OutlineDraft {
     topics: OutlineTopic[];
   };
   coverage: {
+    sourcesSelected: Array<{ sourceId: string; name: string }>;
     sourcesUsed: Array<{ sourceId: string; pages: string; whyUsed: string }>;
     gaps: string[];
   };
@@ -78,7 +92,10 @@ export class CourseStructureService {
       throw new ForbiddenException('Only the course teacher can generate structure');
     }
 
-    // 2. Create job record
+    // 2. Resolve selected source names for prompts and audit
+    const selectedSources = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
+
+    // 3. Create job record
     const job = await this.prisma.llmGenerationJob.create({
       data: {
         courseId: input.courseId,
@@ -93,26 +110,63 @@ export class CourseStructureService {
           lessons_per_subtopic: input.lessons_per_subtopic,
           strict_sources: input.strict_sources,
           admin_prompt: input.admin_prompt || null,
+          selectedSourceIds: input.selectedSourceIds,
+          retrieval_mode: input.retrieval_mode,
         },
       },
     });
 
     try {
-      // 3. Retrieve RAG chunks (course-scoped)
-      const retrievalQuery = this.buildRetrievalQuery(course, input);
-      const chunks = await this.ragService.queryChunks(
-        input.courseId,
-        retrievalQuery,
-        20, // get more chunks for structure generation
+      // 4. Retrieve RAG chunks using source-filtered retrieval
+      const retrievalQuery = buildRetrievalQuery(
+        course.title,
+        course.description,
+        input.mode,
+        input.admin_prompt,
       );
+
+      let chunks: ChunkWithScore[];
+      if (input.retrieval_mode === 'selected_only' && input.selectedSourceIds.length > 0) {
+        chunks = await this.ragService.queryChunksFiltered(
+          input.courseId,
+          retrievalQuery,
+          input.selectedSourceIds,
+          30,
+        );
+      } else if (
+        input.retrieval_mode === 'selected_then_course' &&
+        input.selectedSourceIds.length > 0
+      ) {
+        // First try selected sources, then fall back to all course sources if not enough
+        chunks = await this.ragService.queryChunksFiltered(
+          input.courseId,
+          retrievalQuery,
+          input.selectedSourceIds,
+          30,
+        );
+        if (chunks.length < 5) {
+          const allChunks = await this.ragService.queryChunks(input.courseId, retrievalQuery, 30);
+          // Merge: selected chunks first, then additional course chunks
+          const selectedIds = new Set(chunks.map((c) => c.id));
+          const additional = allChunks.filter((c) => !selectedIds.has(c.id));
+          chunks = [...chunks, ...additional].slice(0, 30);
+        }
+      } else {
+        // No sources selected — get all course chunks
+        chunks = await this.ragService.queryChunks(input.courseId, retrievalQuery, 30);
+      }
 
       this.logger.log(
         `Retrieved ${chunks.length} chunks for structure generation (course: ${course.title})`,
       );
 
-      // 4. Check strict mode feasibility
+      // 5. Check strict mode feasibility
       if (input.strict_sources && chunks.length === 0) {
-        const notEnoughDraft = this.buildNotEnoughInfoDraft(course.title, input.mode);
+        const notEnoughDraft = this.buildNotEnoughInfoDraft(
+          course.title,
+          input.mode,
+          selectedSources,
+        );
 
         await this.prisma.llmGenerationJob.update({
           where: { id: job.id },
@@ -127,16 +181,48 @@ export class CourseStructureService {
         return { jobId: job.id, outlineDraft: notEnoughDraft };
       }
 
-      // 5. Build prompt and call LLM
-      const { systemPrompt, userPrompt } = this.buildPrompts(course, input, chunks);
-
+      // 6. Check LLM credentials — require an API key (no fake generation)
       const credentials = await this.getLlmCredentials(input.userId);
-      const llmResult = await this.callLlm(systemPrompt, userPrompt, credentials);
+      if (!credentials) {
+        throw new BadRequestException(
+          'No LLM API key configured. Please add your OpenAI API key in AI Settings before generating a course structure.',
+        );
+      }
 
-      // 6. Parse the LLM output
-      const outlineDraft = this.parseLlmOutput(llmResult.content, course.title, input);
+      // 7. Build prompts from templates
+      const promptInput: StructurePromptInput = {
+        courseTitle: course.title,
+        courseDescription: course.description,
+        mode: input.mode,
+        desiredTopics: input.desired_topics,
+        subtopicsPerTopic: input.subtopics_per_topic,
+        lessonsPerSubtopic: input.lessons_per_subtopic,
+        strictSources: input.strict_sources,
+        adminPrompt: input.admin_prompt,
+        chunks,
+        selectedSourceNames: selectedSources,
+      };
 
-      // 7. Store results
+      const systemPrompt = buildStructureSystemPrompt(promptInput);
+      const userPrompt = buildStructureUserPrompt(promptInput);
+
+      // 8. Call LLM
+      const llmResult = await this.callOpenAiApi(
+        systemPrompt,
+        userPrompt,
+        credentials.apiKey,
+        credentials.model,
+      );
+
+      // 9. Parse the LLM output
+      const outlineDraft = this.parseLlmOutput(
+        llmResult.content,
+        course.title,
+        input,
+        selectedSources,
+      );
+
+      // 10. Store results
       const durationMs = Date.now() - startTime;
       await this.prisma.llmGenerationJob.update({
         where: { id: job.id },
@@ -144,7 +230,7 @@ export class CourseStructureService {
           status: 'COMPLETED',
           outputPayload: outlineDraft as any,
           retrievedChunkIds: chunks.map((c) => c.id),
-          model: credentials?.model || 'template',
+          model: credentials.model,
           promptTokens: llmResult.promptTokens,
           completionTokens: llmResult.completionTokens,
           durationMs,
@@ -152,12 +238,12 @@ export class CourseStructureService {
         },
       });
 
-      // 8. Audit log
+      // 11. Audit log
       await this.createAuditLog({
         courseId: input.courseId,
         userId: input.userId,
         action: 'generate_course_structure',
-        model: credentials?.model || 'template',
+        model: credentials.model,
         promptTokens: llmResult.promptTokens,
         completionTokens: llmResult.completionTokens,
         durationMs,
@@ -166,6 +252,8 @@ export class CourseStructureService {
           desired_topics: input.desired_topics,
           strict_sources: input.strict_sources,
           admin_prompt: input.admin_prompt,
+          selectedSourceIds: input.selectedSourceIds,
+          retrieval_mode: input.retrieval_mode,
           chunkCount: chunks.length,
         },
         outputPayload: {
@@ -329,9 +417,7 @@ export class CourseStructureService {
       },
     });
 
-    this.logger.log(
-      `Applied structure for course ${courseId}: ${result.length} topics created`,
-    );
+    this.logger.log(`Applied structure for course ${courseId}: ${result.length} topics created`);
 
     return { applied: true, topics: result };
   }
@@ -364,133 +450,26 @@ export class CourseStructureService {
     });
   }
 
-  // ─── Private: Prompt Building ─────────────────────────
+  // ─── Private: Source Resolution ─────────────────────────
 
-  private buildRetrievalQuery(
-    course: { title: string; description: string },
-    input: GenerateStructureInput,
-  ): string {
-    const parts = [
-      `Course: ${course.title}`,
-      `Description: ${course.description}`,
-    ];
-    if (input.mode === 'level_based') {
-      parts.push('Generate structure from beginner to advanced level');
-    } else {
-      parts.push('Extract curriculum structure, topics, and syllabus');
-    }
-    if (input.admin_prompt) {
-      parts.push(`Focus: ${input.admin_prompt}`);
-    }
-    return parts.join('. ');
-  }
+  private async resolveSourceNames(
+    courseId: string,
+    selectedSourceIds: string[],
+  ): Promise<Array<{ sourceId: string; name: string }>> {
+    if (selectedSourceIds.length === 0) return [];
 
-  private buildPrompts(
-    course: { title: string; description: string },
-    input: GenerateStructureInput,
-    chunks: ChunkWithScore[],
-  ): { systemPrompt: string; userPrompt: string } {
-    const systemPrompt = this.buildSystemPrompt(input);
-    const contextBlock = this.buildContextBlock(chunks);
-    const userPrompt = this.buildUserPrompt(course, input, contextBlock);
-    return { systemPrompt, userPrompt };
-  }
+    const docs = await this.prisma.sourceDocument.findMany({
+      where: {
+        courseId,
+        id: { in: selectedSourceIds },
+      },
+      select: { id: true, title: true, filename: true },
+    });
 
-  private buildSystemPrompt(input: GenerateStructureInput): string {
-    let prompt = `You are an expert curriculum designer. Your task is to generate a structured course outline as valid JSON.
-
-IMPORTANT RULES:
-- Output ONLY valid JSON. No markdown fences, no explanation text outside JSON.
-- The output must match the exact schema specified.
-- Every topic must have a rationale explaining why it is included.
-- Subtopics break each topic into teachable units.
-- Each lesson module should have clear learning outcomes and realistic time estimates.`;
-
-    if (input.mode === 'curriculum_based') {
-      prompt += `
-
-CURRICULUM-BASED MODE:
-- Prioritize alignment with the curriculum structure found in the provided sources.
-- Each topic must cite source evidence (document ID + page ranges).
-- Do NOT add topics that are not supported by the source materials unless absolutely necessary for coherence.`;
-    } else {
-      prompt += `
-
-LEVEL-BASED MODE:
-- Build a logical progression from beginner to advanced concepts.
-- Use the provided source materials when possible for content grounding.
-- You may add topics beyond the sources to create a complete learning path.`;
-    }
-
-    if (input.strict_sources) {
-      prompt += `
-
-STRICT SOURCE MODE:
-- Every topic MUST have at least one sourceEvidence entry.
-- If the sources do not contain enough information to build a coherent outline, return status="NOT_ENOUGH_INFO" with coverage.gaps listing what is missing.
-- NEVER hallucinate or invent topics not supported by sources.`;
-    }
-
-    prompt += `
-
-OUTPUT SCHEMA (JSON only):
-{
-  "status": "OK" | "NOT_ENOUGH_INFO",
-  "courseStructure": {
-    "courseTitle": string,
-    "mode": "${input.mode}",
-    "topics": [
-      {
-        "title": string,
-        "rationale": string,
-        "sourceEvidence": [{ "sourceId": string, "pageStart": number, "pageEnd": number }],
-        "subtopics": [
-          {
-            "title": string,
-            "lessonModules": [
-              { "title": string, "learningOutcomes": [string], "estimatedMinutes": number }
-            ]
-          }
-        ]
-      }
-    ]
-  },
-  "coverage": {
-    "sourcesUsed": [{ "sourceId": string, "pages": string, "whyUsed": string }],
-    "gaps": [string]
-  },
-  "_notes": string
-}`;
-
-    return prompt;
-  }
-
-  private buildContextBlock(chunks: ChunkWithScore[]): string {
-    if (chunks.length === 0) return 'No source documents available.';
-    return chunks
-      .map(
-        (chunk, i) =>
-          `[Source ${i + 1}] Document: "${chunk.documentTitle}" (ID: ${chunk.documentId}), Page: ${chunk.pageNumber ?? 'N/A'}\n${chunk.content}`,
-      )
-      .join('\n\n---\n\n');
-  }
-
-  private buildUserPrompt(
-    course: { title: string; description: string },
-    input: GenerateStructureInput,
-    contextBlock: string,
-  ): string {
-    return `COURSE INFORMATION:
-- Title: ${course.title}
-- Description: ${course.description}
-- Mode: ${input.mode}
-- Target: ${input.desired_topics} topics, ${input.subtopics_per_topic} subtopics per topic, ${input.lessons_per_subtopic} lessons per subtopic
-${input.admin_prompt ? `- Admin instructions: ${input.admin_prompt}` : ''}
-
-SOURCE MATERIALS:
-${contextBlock}
-
-Generate the course structure now. Output JSON only.`;
+    return docs.map((d) => ({
+      sourceId: d.id,
+      name: d.title || d.filename,
+    }));
   }
 
   // ─── Private: LLM Interaction ─────────────────────────
@@ -512,10 +491,9 @@ Generate the course structure now. Output JSON only.`;
   }
 
   private decryptApiKey(encrypted: string): string {
-    // Reuse the same encryption approach from LlmService
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const crypto = require('crypto');
-    const secret =
-      process.env.JWT_SECRET || 'dev-secret-change-in-production';
+    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
     const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts[0]!, 'hex');
@@ -526,152 +504,47 @@ Generate the course structure now. Output JSON only.`;
     return decipher.update(encryptedBuf) + decipher.final('utf8');
   }
 
-  private async callLlm(
-    systemPrompt: string,
-    userPrompt: string,
-    credentials: { apiKey: string; model: string } | null,
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    if (credentials) {
-      return this.callOpenAiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
-    }
-    return this.generateTemplateStructure(userPrompt);
-  }
-
   private async callOpenAiApi(
     systemPrompt: string,
     userPrompt: string,
     apiKey: string,
     model: string,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 8192,
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
-        throw new Error(`OpenAI API error: ${response.status}`);
-      }
-
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-
-      return {
-        content: data.choices?.[0]?.message?.content || '',
-        promptTokens: data.usage?.prompt_tokens || 0,
-        completionTokens: data.usage?.completion_tokens || 0,
-      };
-    } catch (error: any) {
-      this.logger.error('OpenAI API call failed, using template fallback', error.message);
-      return this.generateTemplateStructure(userPrompt);
-    }
-  }
-
-  // ─── Private: Template Fallback ───────────────────────
-
-  private async generateTemplateStructure(
-    userPrompt: string,
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    // Extract parameters from the user prompt
-    const titleMatch = userPrompt.match(/Title:\s*(.+)/);
-    const topicCountMatch = userPrompt.match(/(\d+)\s*topics/);
-    const subtopicCountMatch = userPrompt.match(/(\d+)\s*subtopics/);
-    const lessonCountMatch = userPrompt.match(/(\d+)\s*lessons/);
-    const modeMatch = userPrompt.match(/Mode:\s*(\w+)/);
-
-    const courseTitle = titleMatch?.[1]?.trim() || 'Course';
-    const topicCount = parseInt(topicCountMatch?.[1] || '5', 10);
-    const subtopicCount = parseInt(subtopicCountMatch?.[1] || '3', 10);
-    const lessonCount = parseInt(lessonCountMatch?.[1] || '2', 10);
-    const mode = modeMatch?.[1] || 'curriculum_based';
-
-    // Extract source info from the prompt
-    const sourcePattern = /\[Source \d+\] Document: "([^"]+)" \(ID: ([^)]+)\)/g;
-    const sources: Array<{ title: string; id: string }> = [];
-    let match;
-    while ((match = sourcePattern.exec(userPrompt)) !== null) {
-      sources.push({ title: match[1]!, id: match[2]! });
-    }
-
-    // Build a template structure based on available sources
-    const topics: any[] = [];
-    for (let t = 0; t < topicCount; t++) {
-      const subtopics: any[] = [];
-      for (let s = 0; s < subtopicCount; s++) {
-        const lessons: any[] = [];
-        for (let l = 0; l < lessonCount; l++) {
-          lessons.push({
-            title: `Lesson ${t + 1}.${s + 1}.${l + 1}`,
-            learningOutcomes: [
-              `Understand key concepts of topic ${t + 1}, subtopic ${s + 1}`,
-              `Apply learned principles in practice exercises`,
-            ],
-            estimatedMinutes: 30,
-          });
-        }
-        subtopics.push({
-          title: `Subtopic ${t + 1}.${s + 1}`,
-          lessonModules: lessons,
-        });
-      }
-
-      const sourceEvidence =
-        sources.length > 0
-          ? [{ sourceId: sources[t % sources.length]!.id, pageStart: 1, pageEnd: 5 }]
-          : [];
-
-      topics.push({
-        title: `Topic ${t + 1}: ${courseTitle} Part ${t + 1}`,
-        rationale: `Core area ${t + 1} of the course curriculum.`,
-        sourceEvidence,
-        subtopics,
-      });
-    }
-
-    const draft: OutlineDraft = {
-      status: sources.length > 0 || mode !== 'curriculum_based' ? 'OK' : 'NOT_ENOUGH_INFO',
-      courseStructure: {
-        courseTitle,
-        mode: mode as 'curriculum_based' | 'level_based',
-        topics,
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
       },
-      coverage: {
-        sourcesUsed: sources.map((s) => ({
-          sourceId: s.id,
-          pages: '1-5',
-          whyUsed: `Content from "${s.title}" used for topic structure`,
-        })),
-        gaps:
-          sources.length === 0
-            ? ['No source documents uploaded. Upload curriculum files for better results.']
-            : [],
-      },
-      _notes:
-        'This is a template-generated structure. Configure an LLM API key in AI Settings for AI-powered generation.',
+      body: JSON.stringify({
+        model,
+        max_tokens: 8192,
+        temperature: 0.3,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
+      throw new BadRequestException(
+        `LLM API error (${response.status}). Check your API key and try again.`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
-    const content = JSON.stringify(draft);
     return {
-      content,
-      promptTokens: Math.ceil(userPrompt.length / 4),
-      completionTokens: Math.ceil(content.length / 4),
+      content: data.choices?.[0]?.message?.content || '',
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
     };
   }
 
@@ -681,8 +554,8 @@ Generate the course structure now. Output JSON only.`;
     raw: string,
     courseTitle: string,
     input: GenerateStructureInput,
+    selectedSources: Array<{ sourceId: string; name: string }>,
   ): OutlineDraft {
-    // Try to extract JSON from the response
     let jsonStr = raw.trim();
 
     // Strip markdown code fences if present
@@ -693,7 +566,6 @@ Generate the course structure now. Output JSON only.`;
 
     try {
       const parsed = JSON.parse(jsonStr);
-      // Validate minimal shape
       if (!parsed.courseStructure?.topics || !Array.isArray(parsed.courseStructure.topics)) {
         throw new Error('Missing courseStructure.topics array');
       }
@@ -724,6 +596,12 @@ Generate the course structure now. Output JSON only.`;
           })),
         },
         coverage: {
+          sourcesSelected:
+            parsed.coverage?.sourcesSelected ||
+            selectedSources.map((s) => ({
+              sourceId: s.sourceId,
+              name: s.name,
+            })),
           sourcesUsed: Array.isArray(parsed.coverage?.sourcesUsed)
             ? parsed.coverage.sourcesUsed
             : [],
@@ -743,6 +621,7 @@ Generate the course structure now. Output JSON only.`;
   private buildNotEnoughInfoDraft(
     courseTitle: string,
     mode: 'curriculum_based' | 'level_based',
+    selectedSources: Array<{ sourceId: string; name: string }>,
   ): OutlineDraft {
     return {
       status: 'NOT_ENOUGH_INFO',
@@ -752,13 +631,15 @@ Generate the course structure now. Output JSON only.`;
         topics: [],
       },
       coverage: {
+        sourcesSelected: selectedSources,
         sourcesUsed: [],
         gaps: [
           'No source documents have been uploaded or indexed for this course.',
           'Please upload curriculum files in the Sources tab, then try again.',
         ],
       },
-      _notes: 'Strict source mode is enabled but no sources are available.',
+      _notes:
+        'Strict source mode is enabled but no indexed content was found in the selected sources.',
     };
   }
 

@@ -25,6 +25,8 @@ interface GenerateStructureBody {
   lessons_per_subtopic?: number;
   strict_sources?: boolean;
   admin_prompt?: string;
+  selectedSourceIds?: string[];
+  retrieval_mode?: 'selected_only' | 'selected_then_course';
 }
 
 interface ApplyStructureBody {
@@ -64,8 +66,23 @@ export class CourseStructureController {
       throw new BadRequestException('lessons_per_subtopic must be between 1 and 5');
     }
 
+    // Validate selectedSourceIds
+    const selectedSourceIds = body.selectedSourceIds ?? [];
+    if (!Array.isArray(selectedSourceIds)) {
+      throw new BadRequestException('selectedSourceIds must be an array of strings');
+    }
+
+    // Validate retrieval_mode
+    const retrieval_mode = body.retrieval_mode ?? 'selected_only';
+    if (!['selected_only', 'selected_then_course'].includes(retrieval_mode)) {
+      throw new BadRequestException(
+        'retrieval_mode must be "selected_only" or "selected_then_course"',
+      );
+    }
+
     this.logger.log(
-      `Generate structure requested for course ${courseId} by user ${req.user.id} (mode: ${body.mode})`,
+      `Generate structure requested for course ${courseId} by user ${req.user.id} ` +
+        `(mode: ${body.mode}, sources: ${selectedSourceIds.length}, retrieval: ${retrieval_mode})`,
     );
 
     return this.courseStructureService.generateStructure({
@@ -75,8 +92,10 @@ export class CourseStructureController {
       desired_topics,
       subtopics_per_topic,
       lessons_per_subtopic,
-      strict_sources: body.strict_sources ?? (body.mode === 'curriculum_based'),
+      strict_sources: body.strict_sources ?? body.mode === 'curriculum_based',
       admin_prompt: body.admin_prompt,
+      selectedSourceIds,
+      retrieval_mode,
     });
   }
 
@@ -96,12 +115,7 @@ export class CourseStructureController {
       `Apply structure requested for course ${courseId}, job ${jobId} by user ${req.user.id}`,
     );
 
-    return this.courseStructureService.applyStructure(
-      courseId,
-      req.user.id,
-      jobId,
-      body.structure,
-    );
+    return this.courseStructureService.applyStructure(courseId, req.user.id, jobId, body.structure);
   }
 
   @Get('admin/courses/:courseId/structure-jobs')

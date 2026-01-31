@@ -387,6 +387,61 @@ export class RagService implements OnModuleInit {
     return topChunks;
   }
 
+  /**
+   * Query chunks filtered by specific source document IDs.
+   * Used by structure generation to restrict retrieval to selected sources.
+   */
+  async queryChunksFiltered(
+    courseId: string,
+    query: string,
+    sourceIds: string[],
+    topK: number = 10,
+  ): Promise<ChunkWithScore[]> {
+    const startTime = Date.now();
+
+    const where: any = { document: { courseId } };
+    if (sourceIds.length > 0) {
+      where.document.id = { in: sourceIds };
+    }
+
+    const chunks = await this.prisma.documentChunk.findMany({
+      where,
+      include: {
+        document: { select: { id: true, title: true } },
+      },
+    });
+
+    if (chunks.length === 0) return [];
+
+    const scored: ChunkWithScore[] = chunks.map((chunk: any) => ({
+      id: chunk.id,
+      documentId: chunk.document.id,
+      documentTitle: chunk.document.title,
+      chunkIndex: chunk.chunkIndex,
+      content: chunk.content,
+      pageNumber: chunk.pageNumber,
+      tokenCount: chunk.tokenCount,
+      similarityScore: this.computeKeywordScore(query, chunk.content),
+      rerankerScore: 0,
+    }));
+
+    scored.sort((a, b) => b.similarityScore - a.similarityScore);
+    const topChunks = scored.slice(0, topK);
+
+    for (const chunk of topChunks) {
+      chunk.rerankerScore = this.computeRerankerScore(query, chunk.content);
+    }
+
+    topChunks.sort((a, b) => b.rerankerScore - a.rerankerScore);
+
+    const elapsed = Date.now() - startTime;
+    this.logger.log(
+      `Filtered RAG query: ${chunks.length} total chunks from ${sourceIds.length} sources, returned ${topChunks.length} (${elapsed}ms)`,
+    );
+
+    return topChunks;
+  }
+
   private computeKeywordScore(query: string, content: string): number {
     const queryTerms = query
       .toLowerCase()
