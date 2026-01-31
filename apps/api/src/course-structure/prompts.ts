@@ -15,7 +15,7 @@ export interface StructurePromptInput {
   strictSources: boolean;
   adminPrompt?: string;
   chunks: ChunkWithScore[];
-  selectedSourceNames: Array<{ id: string; name: string }>;
+  selectedSourceNames: Array<{ sourceId: string; name: string }>;
 }
 
 export function buildStructureSystemPrompt(input: StructurePromptInput): string {
@@ -67,7 +67,7 @@ TARGET STRUCTURE:
 - Aim for approximately ${input.lessonsPerSubtopic} lesson modules per subtopic
 
 AVAILABLE SOURCES (${input.selectedSourceNames.length} documents):
-${input.selectedSourceNames.map((s) => `- "${s.name}" (ID: ${s.id})`).join('\n')}
+${input.selectedSourceNames.map((s) => `- "${s.name}" (ID: ${s.sourceId})`).join('\n')}
 
 OUTPUT JSON SCHEMA:
 {
