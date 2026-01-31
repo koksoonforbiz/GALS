@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import GenerateStructureWizard from '../../components/GenerateStructureWizard';
+import SourceSelector from '../../components/SourceSelector';
+import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
+import BulkProgressPanel from '../../components/BulkProgressPanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -92,6 +95,22 @@ export function CourseBuilderPage() {
   // Edit item state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
+
+  // AI Content Generation state
+  const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
+  const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(new Set());
+  const [showPromptComposer, setShowPromptComposer] = useState(false);
+  const [showSourcePanel, setShowSourcePanel] = useState(false);
+  const [strictSources, setStrictSources] = useState(true);
+  const [scopePreference, setScopePreference] = useState<'module_only' | 'module_then_course' | 'course_only'>('module_then_course');
+  const [bulkResults, setBulkResults] = useState<Array<{
+    pageId: string;
+    status: 'OK' | 'NOT_ENOUGH_INFO' | 'ERROR' | 'PENDING' | 'RUNNING';
+    jobId?: string;
+    message?: string;
+    missingInfo?: string[];
+  }> | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   // Sources tab state
   const [documents, setDocuments] = useState<SourceDocument[]>([]);
@@ -383,6 +402,116 @@ export function CourseBuilderPage() {
     }
   };
 
+  // ─── AI Content Generation ─────────────────────────────
+
+  const togglePageSelection = (pageId: string) => {
+    setSelectedPageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(pageId)) next.delete(pageId);
+      else next.add(pageId);
+      return next;
+    });
+  };
+
+  const selectAllPages = () => {
+    if (!selectedModule) return;
+    const pageItems = selectedModule.items.filter((i) => i.type === 'PAGE');
+    setSelectedPageIds(new Set(pageItems.map((i) => i.id)));
+  };
+
+  const clearPageSelection = () => setSelectedPageIds(new Set());
+
+  const openPromptComposer = (pageIds?: string[]) => {
+    if (pageIds) {
+      setSelectedPageIds(new Set(pageIds));
+    }
+    setShowPromptComposer(true);
+  };
+
+  const handleAIGenerate = async (config: GenerateConfig) => {
+    if (!courseId || !selectedModuleId) return;
+    setShowPromptComposer(false);
+    setGenerating(true);
+
+    const pageIds = Array.from(selectedPageIds);
+
+    // Initialize progress
+    setBulkResults(pageIds.map((id) => ({ pageId: id, status: 'PENDING' })));
+
+    try {
+      if (pageIds.length === 1) {
+        // Single page
+        setBulkResults([{ pageId: pageIds[0]!, status: 'RUNNING' }]);
+        const res = await apiFetch<{
+          pageId: string;
+          status: 'OK' | 'NOT_ENOUGH_INFO' | 'ERROR';
+          jobId?: string;
+          message?: string;
+          missingInfo?: string[];
+        }>(`/admin/pages/${pageIds[0]}/generate-content`, {
+          method: 'POST',
+          body: JSON.stringify({
+            courseId,
+            moduleId: selectedModuleId,
+            selectedSourceIds: config.selectedSourceIds,
+            strictSources: config.strictSources,
+            scopePreference: config.scopePreference,
+            adminPrompt: config.adminPrompt,
+          }),
+        });
+        setBulkResults([res]);
+        if (res.status === 'OK') {
+          toast('success', 'Content generated successfully');
+          fetchCourse();
+        }
+      } else {
+        // Batch
+        setBulkResults(pageIds.map((id) => ({ pageId: id, status: 'RUNNING' })));
+        const res = await apiFetch<{
+          batchJobId: string;
+          results: Array<{
+            pageId: string;
+            status: 'OK' | 'NOT_ENOUGH_INFO' | 'ERROR';
+            jobId?: string;
+            message?: string;
+            missingInfo?: string[];
+          }>;
+        }>('/admin/pages/generate-content-batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            courseId,
+            moduleId: selectedModuleId,
+            pageIds,
+            selectedSourceIds: config.selectedSourceIds,
+            strictSources: config.strictSources,
+            scopePreference: config.scopePreference,
+            adminPrompt: config.adminPrompt,
+          }),
+        });
+        setBulkResults(res.results);
+        const okCount = res.results.filter((r) => r.status === 'OK').length;
+        if (okCount > 0) {
+          toast('success', `Generated content for ${okCount}/${res.results.length} page(s)`);
+          fetchCourse();
+        }
+      }
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Generation failed');
+      setBulkResults(pageIds.map((id) => ({
+        pageId: id,
+        status: 'ERROR' as const,
+        message: err instanceof Error ? err.message : 'Generation failed',
+      })));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleRetryFailed = (failedPageIds: string[]) => {
+    setSelectedPageIds(new Set(failedPageIds));
+    setShowPromptComposer(true);
+  };
+
   // ─── Render ────────────────────────────────────────────
 
   if (loading || !course) {
@@ -566,9 +695,117 @@ export function CourseBuilderPage() {
           <div className="flex-1 min-w-0">
             {selectedModule ? (
               <>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                  Items in &quot;{selectedModule.title}&quot;
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    Items in &quot;{selectedModule.title}&quot;
+                  </h3>
+                </div>
+
+                {/* AI Generation Toolbar */}
+                {selectedModule.items.filter((i) => i.type === 'PAGE').length > 0 && (
+                  <div className="mb-3 p-3 bg-violet-50 border border-violet-200 rounded-lg">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        {/* Select all / clear */}
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={
+                              selectedModule.items.filter((i) => i.type === 'PAGE').length > 0 &&
+                              selectedModule.items
+                                .filter((i) => i.type === 'PAGE')
+                                .every((i) => selectedPageIds.has(i.id))
+                            }
+                            onChange={(e) => (e.target.checked ? selectAllPages() : clearPageSelection())}
+                            className="rounded border-gray-300 text-violet-600"
+                          />
+                          Select all pages
+                        </label>
+
+                        {selectedPageIds.size > 0 && (
+                          <span className="text-xs font-medium text-violet-700">
+                            {selectedPageIds.size} selected
+                          </span>
+                        )}
+
+                        {selectedPageIds.size > 0 && (
+                          <button
+                            onClick={clearPageSelection}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Source selection toggle */}
+                        <button
+                          onClick={() => setShowSourcePanel(!showSourcePanel)}
+                          className="text-xs px-2 py-1 bg-white border border-violet-200 text-violet-700 rounded hover:bg-violet-100"
+                        >
+                          Sources ({selectedSourceIds.size})
+                        </button>
+
+                        {/* Scope dropdown */}
+                        <select
+                          value={scopePreference}
+                          onChange={(e) => setScopePreference(e.target.value as any)}
+                          className="text-xs px-1.5 py-1 border border-violet-200 rounded bg-white text-gray-600"
+                        >
+                          <option value="module_only">Module only</option>
+                          <option value="module_then_course">Module + course</option>
+                          <option value="course_only">Course only</option>
+                        </select>
+
+                        {/* Strict toggle */}
+                        <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={strictSources}
+                            onChange={(e) => setStrictSources(e.target.checked)}
+                            className="rounded border-gray-300 text-violet-600 w-3.5 h-3.5"
+                          />
+                          Strict
+                        </label>
+
+                        {/* Generate button */}
+                        <button
+                          onClick={() => openPromptComposer()}
+                          disabled={selectedPageIds.size === 0 || generating}
+                          className="text-xs px-3 py-1.5 bg-violet-600 text-white rounded hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {generating ? 'Generating...' : 'Generate AI Content'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Source selection panel (inline) */}
+                    {showSourcePanel && courseId && (
+                      <div className="mt-2 pt-2 border-t border-violet-200">
+                        <SourceSelector
+                          courseId={courseId}
+                          selectedSourceIds={selectedSourceIds}
+                          onSelectionChange={setSelectedSourceIds}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Bulk progress panel */}
+                {bulkResults && (
+                  <div className="mb-3">
+                    <BulkProgressPanel
+                      results={bulkResults}
+                      pageTitles={Object.fromEntries(
+                        selectedModule.items.map((i) => [i.id, i.title]),
+                      )}
+                      onRetryFailed={handleRetryFailed}
+                      onClose={() => setBulkResults(null)}
+                    />
+                  </div>
+                )}
 
                 {/* Items list */}
                 <div className="space-y-2 mb-4">
@@ -579,6 +816,15 @@ export function CourseBuilderPage() {
                       <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
+                            {/* Page selection checkbox */}
+                            {item.type === 'PAGE' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedPageIds.has(item.id)}
+                                onChange={() => togglePageSelection(item.id)}
+                                className="rounded border-gray-300 text-violet-600 w-3.5 h-3.5"
+                              />
+                            )}
                             <span
                               className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                                 item.type === 'PAGE'
@@ -593,8 +839,24 @@ export function CourseBuilderPage() {
                               {item.type}
                             </span>
                             <span className="text-sm font-medium text-gray-800">{item.title}</span>
+                            {item.type === 'PAGE' && item.contentMdx && (
+                              <span className="text-[10px] px-1 py-0.5 bg-green-100 text-green-600 rounded">
+                                has content
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
+                            {/* AI Generate button per page */}
+                            {item.type === 'PAGE' && (
+                              <button
+                                onClick={() => openPromptComposer([item.id])}
+                                disabled={generating}
+                                className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50"
+                                title="Generate AI content for this page"
+                              >
+                                AI
+                              </button>
+                            )}
                             {item.type === 'PAGE' && (
                               <button
                                 onClick={() => {
@@ -865,6 +1127,22 @@ export function CourseBuilderPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Prompt Composer Modal */}
+      {showPromptComposer && courseId && selectedModuleId && selectedModule && (
+        <PromptComposerModal
+          courseId={courseId}
+          moduleId={selectedModuleId}
+          moduleTitle={selectedModule.title}
+          selectedPageIds={Array.from(selectedPageIds)}
+          selectedPageTitles={Array.from(selectedPageIds).map(
+            (id) => selectedModule.items.find((i) => i.id === id)?.title || id,
+          )}
+          initialSourceIds={selectedSourceIds}
+          onClose={() => setShowPromptComposer(false)}
+          onGenerate={handleAIGenerate}
+        />
       )}
 
       {/* ─── Settings Tab ─── */}
