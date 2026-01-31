@@ -6,6 +6,7 @@ import GenerateStructureWizard from '../../components/GenerateStructureWizard';
 import SourceSelector from '../../components/SourceSelector';
 import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
 import BulkProgressPanel from '../../components/BulkProgressPanel';
+import RichTextEditor from '../../components/editor/RichTextEditor';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -102,7 +103,9 @@ export function CourseBuilderPage() {
   const [showPromptComposer, setShowPromptComposer] = useState(false);
   const [showSourcePanel, setShowSourcePanel] = useState(false);
   const [strictSources, setStrictSources] = useState(true);
-  const [scopePreference, setScopePreference] = useState<'module_only' | 'module_then_course' | 'course_only'>('module_then_course');
+  const [scopePreference, setScopePreference] = useState<
+    'module_only' | 'module_then_course' | 'course_only'
+  >('module_then_course');
   const [bulkResults, setBulkResults] = useState<Array<{
     pageId: string;
     status: 'OK' | 'NOT_ENOUGH_INFO' | 'ERROR' | 'PENDING' | 'RUNNING';
@@ -200,9 +203,7 @@ export function CourseBuilderPage() {
 
   // Poll for progress while any document is still processing
   useEffect(() => {
-    const hasProcessing = documents.some(
-      (d) => !d.indexedAt && !d.errorMessage,
-    );
+    const hasProcessing = documents.some((d) => !d.indexedAt && !d.errorMessage);
     if (!hasProcessing || activeTab !== 'sources') return;
 
     const interval = setInterval(() => {
@@ -327,15 +328,18 @@ export function CourseBuilderPage() {
     }
   };
 
-  const handleSaveItemContent = async (itemId: string, moduleId: string) => {
+  const handleSaveItemContent = async (itemId: string, moduleId: string, html?: string) => {
     try {
       await apiFetch(`/modules/${moduleId}/items/${itemId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ contentMdx: editContent }),
+        body: JSON.stringify({ contentMdx: html ?? editContent }),
       });
-      setEditingItemId(null);
-      toast('success', 'Content saved');
-      fetchCourse();
+      // Only close editor and show toast for manual saves (no html param)
+      if (html === undefined) {
+        setEditingItemId(null);
+        toast('success', 'Content saved');
+        fetchCourse();
+      }
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to save');
     }
@@ -497,11 +501,13 @@ export function CourseBuilderPage() {
       }
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Generation failed');
-      setBulkResults(pageIds.map((id) => ({
-        pageId: id,
-        status: 'ERROR' as const,
-        message: err instanceof Error ? err.message : 'Generation failed',
-      })));
+      setBulkResults(
+        pageIds.map((id) => ({
+          pageId: id,
+          status: 'ERROR' as const,
+          message: err instanceof Error ? err.message : 'Generation failed',
+        })),
+      );
     } finally {
       setGenerating(false);
     }
@@ -716,7 +722,9 @@ export function CourseBuilderPage() {
                                 .filter((i) => i.type === 'PAGE')
                                 .every((i) => selectedPageIds.has(i.id))
                             }
-                            onChange={(e) => (e.target.checked ? selectAllPages() : clearPageSelection())}
+                            onChange={(e) =>
+                              e.target.checked ? selectAllPages() : clearPageSelection()
+                            }
                             className="rounded border-gray-300 text-violet-600"
                           />
                           Select all pages
@@ -920,19 +928,12 @@ export function CourseBuilderPage() {
                         {/* PAGE editor */}
                         {editingItemId === item.id && (
                           <div className="mt-2">
-                            <textarea
-                              value={editContent}
-                              onChange={(e) => setEditContent(e.target.value)}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              rows={8}
-                              placeholder="Write MDX content..."
+                            <RichTextEditor
+                              content={editContent}
+                              onSave={(html) => handleSaveItemContent(item.id, item.moduleId, html)}
+                              placeholder="Start writing lesson content..."
+                              autoSaveMs={2000}
                             />
-                            <button
-                              onClick={() => handleSaveItemContent(item.id, item.moduleId)}
-                              className="mt-1 px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                            >
-                              Save Content
-                            </button>
                           </div>
                         )}
                       </div>
@@ -1062,7 +1063,10 @@ export function CourseBuilderPage() {
                           {doc.chunkCount} chunks
                         </span>
                       ) : doc.errorMessage ? (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700" title={doc.errorMessage}>
+                        <span
+                          className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700"
+                          title={doc.errorMessage}
+                        >
                           Error
                         </span>
                       ) : (
@@ -1087,9 +1091,7 @@ export function CourseBuilderPage() {
                       {new Date(doc.createdAt).toLocaleDateString()}
                     </p>
                     {doc.errorMessage && (
-                      <p className="text-xs text-red-600 mt-1">
-                        {doc.errorMessage}
-                      </p>
+                      <p className="text-xs text-red-600 mt-1">{doc.errorMessage}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 ml-4">
