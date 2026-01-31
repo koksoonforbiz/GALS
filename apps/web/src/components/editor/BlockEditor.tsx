@@ -170,8 +170,16 @@ function AddBlockMenu({
 }) {
   const [open, setOpen] = useState(false);
 
+  // Stop pointer events from reaching DndContext sensors
+  const stopDnd = (e: React.PointerEvent | React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="relative flex items-center justify-center py-1 group/add">
+    <div
+      className="relative flex items-center justify-center py-1 group/add"
+      onPointerDown={stopDnd}
+    >
       <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-transparent group-hover/add:border-gray-200 transition-colors" />
       <button
         onClick={() => setOpen(!open)}
@@ -182,12 +190,15 @@ function AddBlockMenu({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-20" onMouseDown={() => setOpen(false)} />
+          <div
+            className="fixed inset-0 z-20"
+            onClick={() => setOpen(false)}
+            onPointerDown={stopDnd}
+          />
           <div className="absolute z-30 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]">
             {BLOCK_MENU.map((item) => (
               <button
                 key={item.type}
-                onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => {
                   onAdd(item.type, insertIndex);
                   setOpen(false);
