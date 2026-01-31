@@ -182,11 +182,12 @@ function AddBlockMenu({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-20" onMouseDown={() => setOpen(false)} />
           <div className="absolute z-30 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]">
             {BLOCK_MENU.map((item) => (
               <button
                 key={item.type}
+                onMouseDown={(e) => e.stopPropagation()}
                 onClick={() => {
                   onAdd(item.type, insertIndex);
                   setOpen(false);
