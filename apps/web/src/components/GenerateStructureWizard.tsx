@@ -107,7 +107,7 @@ export default function GenerateStructureWizard({
     let cancelled = false;
     (async () => {
       try {
-        const docs = await apiFetch<SourceDocument[]>(`/admin/courses/${courseId}/rag/documents`);
+        const docs = await apiFetch<SourceDocument[]>(`/courses/${courseId}/documents`);
         if (!cancelled) {
           setSources(docs);
           // Auto-select all indexed sources
