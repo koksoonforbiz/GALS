@@ -17,6 +17,7 @@ import { CourseModulesModule } from './modules';
 import { RagModule } from './rag';
 import { CourseStructureModule } from './course-structure';
 import { PageContentModule } from './page-content';
+import { EvaluationModule } from './evaluation';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -45,6 +46,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     RagModule,
     CourseStructureModule,
     PageContentModule,
+    EvaluationModule,
   ],
   controllers: [HealthController],
 })

@@ -1123,12 +1123,20 @@ export function CourseBuilderPage() {
               Use your source documents to generate course content with RAG-powered AI. All content
               is generated as drafts for your review.
             </p>
-            <button
-              onClick={() => navigate(`/teacher/studio/${courseId}`)}
-              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-            >
-              Open Course Studio
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigate(`/teacher/studio/${courseId}`)}
+                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              >
+                Open Course Studio
+              </button>
+              <button
+                onClick={() => navigate(`/teacher/courses/${courseId}/evaluate`)}
+                className="px-4 py-2 text-sm bg-white text-indigo-600 border border-indigo-300 rounded-lg hover:bg-indigo-50"
+              >
+                Evaluate Content
+              </button>
+            </div>
           </div>
         </div>
       )}

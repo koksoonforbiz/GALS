@@ -533,3 +533,49 @@ model UserMastery {
   @@index([kcId])
   @@map("user_mastery")
 }
+
+// ─── Content Evaluation ─────────────────────────────────
+
+enum EvaluationRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model EvaluationRun {
+  id             String              @id @default(uuid()) @db.Uuid
+  courseId        String              @map("course_id") @db.Uuid
+  userId         String              @map("user_id") @db.Uuid
+  status         EvaluationRunStatus @default(PENDING)
+  config         Json                // {rubrics, strictness, depth, customPrompt, pageIds}
+  summary        Json?               // aggregate scores
+  errorMessage   String?             @map("error_message")
+  startedAt      DateTime?           @map("started_at") @db.Timestamptz
+  completedAt    DateTime?           @map("completed_at") @db.Timestamptz
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  results PageEvalResult[]
+
+  @@index([courseId])
+  @@index([userId])
+  @@map("evaluation_runs")
+}
+
+model PageEvalResult {
+  id              String   @id @default(uuid()) @db.Uuid
+  runId           String   @map("run_id") @db.Uuid
+  itemId          String   @map("item_id") @db.Uuid
+  itemTitle       String   @map("item_title")
+  scores          Json     // {formatting, equations, pedagogy, rigor, overall}
+  issues          Json     // [{category, severity, location, message, suggestedFix}]
+  mathIssues      Json?    @map("math_issues") // deterministic math normalizer findings
+  fixesApplied    Boolean  @default(false) @map("fixes_applied")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  run EvaluationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([itemId])
+  @@map("page_eval_results")
+}
