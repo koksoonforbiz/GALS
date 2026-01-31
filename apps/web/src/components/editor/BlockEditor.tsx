@@ -170,47 +170,42 @@ function AddBlockMenu({
 }) {
   const [open, setOpen] = useState(false);
 
-  // Stop pointer events from reaching DndContext sensors
-  const stopDnd = (e: React.PointerEvent | React.MouseEvent) => {
-    e.stopPropagation();
-  };
-
   return (
-    <div
-      className="relative flex items-center justify-center py-1 group/add"
-      onPointerDown={stopDnd}
-    >
-      <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-transparent group-hover/add:border-gray-200 transition-colors" />
-      <button
-        onClick={() => setOpen(!open)}
-        className="relative z-10 flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-full border border-transparent hover:border-gray-200 transition-all opacity-0 group-hover/add:opacity-100"
-      >
-        <span className="text-base leading-none">+</span>
-        <span>Add block</span>
-      </button>
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-20"
+    <div className="py-1 group/add">
+      {!open ? (
+        <div className="flex items-center justify-center">
+          <div className="flex-1 border-t border-dashed border-transparent group-hover/add:border-gray-200 transition-colors" />
+          <button
+            onClick={() => setOpen(true)}
+            className="mx-2 flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-full border border-transparent hover:border-gray-200 transition-all opacity-0 group-hover/add:opacity-100"
+          >
+            <span className="text-base leading-none">+</span>
+            <span>Add block</span>
+          </button>
+          <div className="flex-1 border-t border-dashed border-transparent group-hover/add:border-gray-200 transition-colors" />
+        </div>
+      ) : (
+        <div className="flex items-center justify-center gap-1 py-1 bg-gray-50 rounded-lg border border-gray-200">
+          {BLOCK_MENU.map((item) => (
+            <button
+              key={item.type}
+              onClick={() => {
+                onAdd(item.type, insertIndex);
+                setOpen(false);
+              }}
+              className="px-2.5 py-1 text-xs text-gray-600 hover:bg-white hover:shadow-sm rounded transition-all flex items-center gap-1"
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+          <button
             onClick={() => setOpen(false)}
-            onPointerDown={stopDnd}
-          />
-          <div className="absolute z-30 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px]">
-            {BLOCK_MENU.map((item) => (
-              <button
-                key={item.type}
-                onClick={() => {
-                  onAdd(item.type, insertIndex);
-                  setOpen(false);
-                }}
-                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-              >
-                <span className="w-5 text-center text-xs">{item.icon}</span>
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </>
+            className="ml-1 px-1.5 py-1 text-xs text-gray-400 hover:text-gray-600 rounded"
+          >
+            &times;
+          </button>
+        </div>
       )}
     </div>
   );
@@ -331,7 +326,7 @@ export default function BlockEditor({
   );
 
   return (
-    <div className="border border-gray-300 rounded-lg bg-white overflow-hidden">
+    <div className="border border-gray-300 rounded-lg bg-white">
       {/* Header bar */}
       {!readOnly && (
         <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
