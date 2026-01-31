@@ -228,6 +228,7 @@ export default function BlockEditor({
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const lastSavedRef = useRef(content);
+  const lastExternalContentRef = useRef(content);
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
 
@@ -252,11 +253,14 @@ export default function BlockEditor({
     }, autoSaveMs);
   }, [onSave, autoSaveMs, readOnly]);
 
-  // Sync external content changes (e.g., AI-generated)
+  // Sync external content changes (e.g., AI-generated content injected by parent)
+  // Only reset blocks when the parent genuinely provides new content,
+  // not when our own autosave has diverged lastSavedRef from the prop.
   useEffect(() => {
-    if (content !== lastSavedRef.current) {
+    if (content !== lastExternalContentRef.current) {
       const doc = parseBlockDocument(content);
       setBlocks(doc.blocks);
+      lastExternalContentRef.current = content;
       lastSavedRef.current = content;
     }
   }, [content]);
