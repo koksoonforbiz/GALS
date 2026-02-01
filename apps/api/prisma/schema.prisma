@@ -579,3 +579,35 @@ model PageEvalResult {
   @@index([itemId])
   @@map("page_eval_results")
 }
+
+// ─── Proposed Knowledge Components (AI-generated) ───────
+
+enum ProposedKCStatus {
+  PROPOSED
+  APPROVED
+  ARCHIVED
+}
+
+model ProposedKC {
+  id               String           @id @default(uuid()) @db.Uuid
+  courseId          String           @map("course_id") @db.Uuid
+  name             String
+  description      String?
+  status           ProposedKCStatus @default(PROPOSED)
+  confidenceLevel  String           @default("MEDIUM") @map("confidence_level") // LOW, MEDIUM, HIGH
+  createdBy        String           @default("ai") @map("created_by") // "ai" or "human"
+  generationJobId  String?          @map("generation_job_id") @db.Uuid
+  relatedToKCId    String?          @map("related_to_kc_id") @db.Uuid
+  evidence         Json             @default("[]") // [{pageId, blockIds, chunkIds}]
+  pageIds          String[]         @map("page_ids") @db.Uuid
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  relatedTo ProposedKC? @relation("KCDuplicates", fields: [relatedToKCId], references: [id], onDelete: SetNull)
+  duplicates ProposedKC[] @relation("KCDuplicates")
+
+  @@index([courseId])
+  @@index([status])
+  @@index([courseId, status])
+  @@map("proposed_kcs")
+}

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RagService, ChunkWithScore } from '../rag/rag.service';
+import { KcSuggestionService } from '../kc/kc-suggestion.service';
 import {
   buildPageContentSystemPrompt,
   buildPageContentUserPrompt,
@@ -56,6 +57,7 @@ export class PageContentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ragService: RagService,
+    private readonly kcSuggestionService: KcSuggestionService,
   ) {}
 
   // ─── Suggest Prompt ────────────────────────────────────
@@ -262,6 +264,22 @@ export class PageContentService {
         },
         outputPayload: { jobId: job.id, status: parsed.status },
       });
+
+      // 13. Fire-and-forget KC suggestion (non-blocking)
+      this.kcSuggestionService
+        .suggestKcsForPage({
+          courseId: input.courseId,
+          pageId: input.pageId,
+          moduleTitle: mod.title,
+          courseTitle: course.title,
+          pageTitle: pageItem.title,
+          contentJson,
+          generationJobId: job.id,
+          userId: input.userId,
+        })
+        .catch((err) =>
+          this.logger.error(`KC suggestion background task failed: ${err.message}`),
+        );
 
       return {
         pageId: input.pageId,
