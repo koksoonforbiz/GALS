@@ -493,7 +493,7 @@ export class EvaluationService {
       Object.assign(scores, llmResult.scores);
       scores.overall = llmResult.overall;
       for (const issue of llmResult.issues) {
-        const hasConcretefix = !!(issue.original && issue.suggestedFix);
+        const hasConcretefix = !!((issue.blockId || issue.original) && issue.suggestedFix);
         issues.push({
           ...issue,
           source: 'llm',
