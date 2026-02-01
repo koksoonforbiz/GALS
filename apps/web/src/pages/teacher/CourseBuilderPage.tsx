@@ -9,6 +9,7 @@ import BulkProgressPanel from '../../components/BulkProgressPanel';
 import BlockEditor from '../../components/editor/BlockEditor';
 import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
 import { EvaluationCenterPage } from './EvaluationCenterPage';
+import KcStudioPanel from '../../components/KcStudioPanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'settings' | 'evaluate';
+type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'settings';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -534,6 +535,7 @@ export function CourseBuilderPage() {
     { key: 'content', label: 'Content' },
     { key: 'sources', label: 'Sources' },
     { key: 'evaluate', label: 'Evaluate' },
+    { key: 'kc-studio', label: 'KC Studio' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1156,6 +1158,11 @@ export function CourseBuilderPage() {
       {/* ─── Evaluate Tab ─── */}
       {activeTab === 'evaluate' && courseId && (
         <EvaluationCenterPage courseId={courseId} embedded />
+      )}
+
+      {/* ─── KC Studio Tab ─── */}
+      {activeTab === 'kc-studio' && courseId && (
+        <KcStudioPanel courseId={courseId} />
       )}
 
       {/* ─── Settings Tab ─── */}
