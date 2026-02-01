@@ -434,26 +434,37 @@ export function EvaluationCenterPage({
   }, [tab, loadPastRuns]);
 
   // ─── Refresh active run helper ──────────────────────
+  // Use a ref to avoid stale closure issues with activeRun/selectedPageResult
+  const activeRunRef = { current: activeRun };
+  activeRunRef.current = activeRun;
+  const selectedPageResultRef = { current: selectedPageResult };
+  selectedPageResultRef.current = selectedPageResult;
 
   const refreshActiveRun = useCallback(async () => {
-    if (!courseId || !activeRun) return;
+    const currentRun = activeRunRef.current;
+    if (!courseId || !currentRun) return;
     try {
-      const run = await apiFetch<EvalRun>(`/courses/${courseId}/evaluation/runs/${activeRun.id}`);
+      const run = await apiFetch<EvalRun>(`/courses/${courseId}/evaluation/runs/${currentRun.id}`);
       setActiveRun(run);
       // Also refresh selected page result if it exists
-      if (selectedPageResult) {
-        const updated = run.results.find((r) => r.id === selectedPageResult.id);
+      const currentSelected = selectedPageResultRef.current;
+      if (currentSelected) {
+        const updated = run.results.find((r) => r.id === currentSelected.id);
         if (updated) setSelectedPageResult(updated);
       }
     } catch {
       /* silent */
     }
-  }, [courseId, activeRun, selectedPageResult]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
   // ─── Apply All Auto-Fixes for a page ────────────────
 
+  const [fixMessage, setFixMessage] = useState<string | null>(null);
+
   const handleApplyAllFixes = async (resultId: string) => {
     if (!courseId) return;
+    setFixMessage(null);
     try {
       const res = await apiFetch<{ applied: boolean; fixCount?: number; message?: string }>(
         `/courses/${courseId}/evaluation/apply-fixes`,
@@ -463,11 +474,16 @@ export function EvaluationCenterPage({
         },
       );
       if (res.applied) {
+        setFixMessage(`Applied ${res.fixCount ?? 0} fix(es) successfully.`);
         await refreshActiveRun();
+      } else {
+        setFixMessage(res.message || 'No auto-fixable issues found.');
       }
       return res;
-    } catch {
-      return { applied: false, message: 'Failed to apply fixes' };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to apply fixes';
+      setFixMessage(msg);
+      return { applied: false, message: msg };
     }
   };
 
@@ -476,6 +492,7 @@ export function EvaluationCenterPage({
   const handleApplySingleFix = async (issueIndex: number) => {
     if (!courseId || !selectedPageResult) return;
     setApplyingIndex(issueIndex);
+    setFixMessage(null);
     try {
       const res = await apiFetch<{ applied: boolean; fixCount?: number; message?: string }>(
         `/courses/${courseId}/evaluation/apply-fixes`,
@@ -489,10 +506,13 @@ export function EvaluationCenterPage({
         },
       );
       if (res.applied) {
+        setFixMessage(`Fix applied successfully.`);
         await refreshActiveRun();
+      } else {
+        setFixMessage(res.message || 'Could not apply this fix.');
       }
-    } catch {
-      /* silent */
+    } catch (err) {
+      setFixMessage(err instanceof Error ? err.message : 'Failed to apply fix');
     } finally {
       setApplyingIndex(null);
     }
@@ -875,6 +895,13 @@ export function EvaluationCenterPage({
                       ))}
                   </div>
 
+                  {/* Fix feedback message */}
+                  {fixMessage && (
+                    <div className="mx-4 mt-3 px-3 py-2 rounded text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                      {fixMessage}
+                    </div>
+                  )}
+
                   {/* Issues List */}
                   <div>
                     {selectedPageResult.issues.length > 0 ? (
@@ -923,10 +950,22 @@ export function EvaluationCenterPage({
                 <div
                   key={run.id}
                   className="border border-gray-200 rounded-lg bg-white p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={() => {
-                    setActiveRun(run);
-                    setSelectedPageResult(null);
-                    setTab('results');
+                  onClick={async () => {
+                    // Fetch full run data (listRuns returns partial results)
+                    if (!courseId) return;
+                    try {
+                      const fullRun = await apiFetch<EvalRun>(
+                        `/courses/${courseId}/evaluation/runs/${run.id}`,
+                      );
+                      setActiveRun(fullRun);
+                      setSelectedPageResult(null);
+                      setTab('results');
+                    } catch {
+                      // Fallback to partial data
+                      setActiveRun(run);
+                      setSelectedPageResult(null);
+                      setTab('results');
+                    }
                   }}
                 >
                   <div className="flex items-center justify-between mb-2">
