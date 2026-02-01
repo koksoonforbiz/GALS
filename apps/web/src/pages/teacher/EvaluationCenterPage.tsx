@@ -70,7 +70,7 @@ interface EvalRun {
   results: PageResult[];
 }
 
-// ─── Score Badge Component ──────────────────────────────
+// ─── Score Badge ────────────────────────────────────────
 
 function ScoreBadge({ score, label }: { score: number | undefined; label: string }) {
   if (score === undefined) return null;
@@ -82,11 +82,8 @@ function ScoreBadge({ score, label }: { score: number | undefined; label: string
         : score >= 40
           ? 'bg-orange-100 text-orange-700'
           : 'bg-red-100 text-red-700';
-
   return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${color}`}
-    >
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${color}`}>
       {label}: {score}
     </span>
   );
@@ -99,9 +96,166 @@ function SeverityBadge({ severity }: { severity: string }) {
       : severity === 'warning'
         ? 'bg-yellow-100 text-yellow-700'
         : 'bg-blue-100 text-blue-700';
+  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>{severity}</span>;
+}
+
+// ─── Issue Row (expandable with per-issue fix button) ───
+
+function IssueRow({
+  issue,
+  index,
+  onApplyFix,
+  applyingIndex,
+}: {
+  issue: EvalIssue;
+  index: number;
+  onApplyFix: ((idx: number) => void) | null;
+  applyingIndex: number | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasFix = issue.suggestedFix && issue.suggestedFix.length > 0;
+  const isLong = hasFix && issue.suggestedFix!.length > 60;
+
   return (
-    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>{severity}</span>
+    <div className="border-b border-gray-100 hover:bg-gray-50">
+      <div className="flex items-start gap-3 py-3 px-3">
+        {/* Severity */}
+        <div className="pt-0.5 shrink-0 w-16">
+          <SeverityBadge severity={issue.severity} />
+        </div>
+
+        {/* Category */}
+        <div className="shrink-0 w-20 text-xs text-gray-600 pt-0.5">{issue.category}</div>
+
+        {/* Location */}
+        <div className="shrink-0 w-40 text-xs text-gray-500 pt-0.5">{issue.location}</div>
+
+        {/* Issue message */}
+        <div className="flex-1 min-w-0 text-xs text-gray-700">{issue.message}</div>
+
+        {/* Actions */}
+        <div className="shrink-0 flex items-center gap-2">
+          {hasFix && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-[10px] px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded"
+            >
+              {expanded ? 'Hide fix' : 'Show fix'}
+            </button>
+          )}
+          {issue.autoFixable && onApplyFix && (
+            <button
+              onClick={() => onApplyFix(index)}
+              disabled={applyingIndex !== null}
+              className="text-[10px] px-2.5 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              {applyingIndex === index ? 'Applying...' : 'Apply Fix'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded suggested fix */}
+      {expanded && hasFix && (
+        <div className="mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs">
+          <div className="text-[10px] font-medium text-gray-400 mb-1">Suggested Fix:</div>
+          <pre className="whitespace-pre-wrap break-words text-gray-700 font-mono text-[11px] leading-relaxed">
+            {issue.suggestedFix}
+          </pre>
+        </div>
+      )}
+    </div>
   );
+}
+
+// ─── PDF Export ─────────────────────────────────────────
+
+function generateReportHtml(run: EvalRun, tree: PageTree | null): string {
+  const now = new Date().toLocaleString();
+  const courseTitle = tree?.courseTitle || 'Course';
+
+  const scoreColor = (s: number) =>
+    s >= 80 ? '#16a34a' : s >= 60 ? '#ca8a04' : s >= 40 ? '#ea580c' : '#dc2626';
+
+  const severityColor = (s: string) =>
+    s === 'error' ? '#dc2626' : s === 'warning' ? '#ca8a04' : '#2563eb';
+
+  let html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Evaluation Report — ${courseTitle}</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; color: #1f2937; font-size: 13px; line-height: 1.5; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h2 { font-size: 16px; margin-top: 28px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+  h3 { font-size: 14px; margin-top: 20px; margin-bottom: 6px; }
+  .meta { color: #6b7280; font-size: 12px; margin-bottom: 20px; }
+  .score-bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .score { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 12px; }
+  th { text-align: left; padding: 6px 8px; background: #f9fafb; border-bottom: 2px solid #e5e7eb; font-weight: 600; color: #374151; }
+  td { padding: 6px 8px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  .severity { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; color: white; }
+  .fix-cell { max-width: 300px; word-wrap: break-word; color: #6b7280; }
+  .page-break { page-break-before: always; }
+  @media print { body { margin: 20px; } }
+</style></head><body>`;
+
+  html += `<h1>Content Evaluation Report</h1>`;
+  html += `<div class="meta">${courseTitle} &mdash; Generated ${now}</div>`;
+
+  // Summary
+  if (run.summary) {
+    html += `<h2>Overall Summary</h2><div class="score-bar">`;
+    for (const [key, val] of Object.entries(run.summary)) {
+      html += `<span class="score" style="background:${scoreColor(val)}22;color:${scoreColor(val)}">${key.charAt(0).toUpperCase() + key.slice(1)}: ${val}</span>`;
+    }
+    html += `</div>`;
+    html += `<p>${run.results.length} page(s) evaluated &bull; Status: ${run.status}</p>`;
+  }
+
+  // Per-page reports
+  for (const result of run.results) {
+    html += `<div class="page-break"></div>`;
+    html += `<h2>${result.itemTitle}</h2>`;
+
+    if (result.scores.error) {
+      html += `<p style="color:#dc2626">Evaluation error: ${result.scores.message || 'Unknown'}</p>`;
+      continue;
+    }
+
+    // Scores
+    html += `<div class="score-bar">`;
+    for (const [key, val] of Object.entries(result.scores)) {
+      if (key === 'error' || key === 'message') continue;
+      const v = val as number;
+      html += `<span class="score" style="background:${scoreColor(v)}22;color:${scoreColor(v)}">${key.charAt(0).toUpperCase() + key.slice(1)}: ${v}</span>`;
+    }
+    html += `</div>`;
+
+    // Issues table
+    if (result.issues.length > 0) {
+      html += `<h3>Issues (${result.issues.length})</h3>`;
+      html += `<table><thead><tr><th>Severity</th><th>Category</th><th>Location</th><th>Issue</th><th>Suggested Fix</th></tr></thead><tbody>`;
+      for (const issue of result.issues) {
+        html += `<tr>`;
+        html += `<td><span class="severity" style="background:${severityColor(issue.severity)}">${issue.severity}</span></td>`;
+        html += `<td>${issue.category}</td>`;
+        html += `<td>${issue.location}</td>`;
+        html += `<td>${issue.message}</td>`;
+        html += `<td class="fix-cell">${issue.suggestedFix || '—'}</td>`;
+        html += `</tr>`;
+      }
+      html += `</tbody></table>`;
+    } else {
+      html += `<p style="color:#9ca3af">No issues found.</p>`;
+    }
+
+    if (result.fixesApplied) {
+      html += `<p style="color:#16a34a;font-size:11px">&#10003; Auto-fixes have been applied to this page.</p>`;
+    }
+  }
+
+  html += `</body></html>`;
+  return html;
 }
 
 // ─── Main Component ─────────────────────────────────────
@@ -117,12 +271,7 @@ export function EvaluationCenterPage() {
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
 
   // Config
-  const [rubrics, setRubrics] = useState<string[]>([
-    'formatting',
-    'equations',
-    'pedagogy',
-    'rigor',
-  ]);
+  const [rubrics, setRubrics] = useState<string[]>(['formatting', 'equations', 'pedagogy', 'rigor']);
   const [strictness, setStrictness] = useState<EvalConfig['strictness']>('moderate');
   const [depth, setDepth] = useState<EvalConfig['depth']>('standard');
   const [customPrompt, setCustomPrompt] = useState('');
@@ -135,6 +284,9 @@ export function EvaluationCenterPage() {
   // Past runs
   const [pastRuns, setPastRuns] = useState<EvalRun[]>([]);
   const [selectedPageResult, setSelectedPageResult] = useState<PageResult | null>(null);
+
+  // Per-issue fix state
+  const [applyingIndex, setApplyingIndex] = useState<number | null>(null);
 
   // Tab
   const [tab, setTab] = useState<'setup' | 'results' | 'history'>('setup');
@@ -175,8 +327,7 @@ export function EvaluationCenterPage() {
 
   const selectAll = () => {
     if (!tree) return;
-    const all = tree.modules.flatMap((m) => m.pages.map((p) => p.id));
-    setSelectedPageIds(new Set(all));
+    setSelectedPageIds(new Set(tree.modules.flatMap((m) => m.pages.map((p) => p.id))));
   };
 
   const selectNone = () => setSelectedPageIds(new Set());
@@ -208,7 +359,6 @@ export function EvaluationCenterPage() {
         },
       );
 
-      // Poll for completion
       const timer = setInterval(async () => {
         try {
           const run = await apiFetch<EvalRun>(`/courses/${courseId}/evaluation/runs/${runId}`);
@@ -230,7 +380,6 @@ export function EvaluationCenterPage() {
     }
   };
 
-  // Cleanup poll on unmount
   useEffect(() => {
     return () => {
       if (pollTimer) clearInterval(pollTimer);
@@ -253,9 +402,26 @@ export function EvaluationCenterPage() {
     if (tab === 'history') loadPastRuns();
   }, [tab, loadPastRuns]);
 
-  // ─── Apply Fixes ────────────────────────────────────
+  // ─── Refresh active run helper ──────────────────────
 
-  const handleApplyFixes = async (resultId: string) => {
+  const refreshActiveRun = useCallback(async () => {
+    if (!courseId || !activeRun) return;
+    try {
+      const run = await apiFetch<EvalRun>(`/courses/${courseId}/evaluation/runs/${activeRun.id}`);
+      setActiveRun(run);
+      // Also refresh selected page result if it exists
+      if (selectedPageResult) {
+        const updated = run.results.find((r) => r.id === selectedPageResult.id);
+        if (updated) setSelectedPageResult(updated);
+      }
+    } catch {
+      /* silent */
+    }
+  }, [courseId, activeRun, selectedPageResult]);
+
+  // ─── Apply All Auto-Fixes for a page ────────────────
+
+  const handleApplyAllFixes = async (resultId: string) => {
     if (!courseId) return;
     try {
       const res = await apiFetch<{ applied: boolean; fixCount?: number; message?: string }>(
@@ -266,26 +432,57 @@ export function EvaluationCenterPage() {
         },
       );
       if (res.applied) {
-        alert(`Applied ${res.fixCount} fix(es) successfully.`);
-        // Refresh run
-        if (activeRun) {
-          const run = await apiFetch<EvalRun>(
-            `/courses/${courseId}/evaluation/runs/${activeRun.id}`,
-          );
-          setActiveRun(run);
-        }
-      } else {
-        alert(res.message || 'No auto-fixable issues found.');
+        await refreshActiveRun();
       }
+      return res;
     } catch {
-      alert('Failed to apply fixes.');
+      return { applied: false, message: 'Failed to apply fixes' };
     }
   };
 
-  // ─── Export to PDF ──────────────────────────────────
+  // ─── Apply Single Issue Fix ──────────────────────────
+
+  const handleApplySingleFix = async (issueIndex: number) => {
+    if (!courseId || !selectedPageResult) return;
+    setApplyingIndex(issueIndex);
+    try {
+      const res = await apiFetch<{ applied: boolean; fixCount?: number; message?: string }>(
+        `/courses/${courseId}/evaluation/apply-fixes`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            resultId: selectedPageResult.id,
+            fixTypes: ['math', 'formatting'],
+            issueIndex,
+          }),
+        },
+      );
+      if (res.applied) {
+        await refreshActiveRun();
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setApplyingIndex(null);
+    }
+  };
+
+  // ─── Export PDF ──────────────────────────────────────
 
   const handleExportPdf = () => {
-    window.print();
+    if (!activeRun) return;
+    const html = generateReportHtml(activeRun, tree);
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank');
+    if (win) {
+      win.addEventListener('load', () => {
+        setTimeout(() => {
+          win.print();
+          URL.revokeObjectURL(url);
+        }, 300);
+      });
+    }
   };
 
   // ─── Render ─────────────────────────────────────────
@@ -295,10 +492,7 @@ export function EvaluationCenterPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <Link
-            to={`/teacher/courses/${courseId}`}
-            className="text-xs text-indigo-600 hover:underline"
-          >
+          <Link to={`/teacher/courses/${courseId}`} className="text-xs text-indigo-600 hover:underline">
             &larr; Back to Course Builder
           </Link>
           <h1 className="text-xl font-bold text-gray-900 mt-1">Content Evaluation Center</h1>
@@ -360,9 +554,7 @@ export function EvaluationCenterPage() {
                           className="rounded border-gray-300 text-indigo-600"
                         />
                         <span className="text-sm font-medium text-gray-700">{mod.title}</span>
-                        <span className="text-xs text-gray-400 ml-auto">
-                          {mod.pages.length} pages
-                        </span>
+                        <span className="text-xs text-gray-400 ml-auto">{mod.pages.length} pages</span>
                       </label>
                       <div className="ml-6">
                         {mod.pages.map((page) => (
@@ -399,7 +591,6 @@ export function EvaluationCenterPage() {
             <div className="border border-gray-200 rounded-lg bg-white p-4">
               <h2 className="text-sm font-semibold text-gray-700 mb-3">Evaluation Configuration</h2>
 
-              {/* Rubrics */}
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Rubrics</label>
                 <div className="flex flex-wrap gap-2">
@@ -419,7 +610,6 @@ export function EvaluationCenterPage() {
                 </div>
               </div>
 
-              {/* Strictness */}
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Strictness</label>
                 <select
@@ -433,7 +623,6 @@ export function EvaluationCenterPage() {
                 </select>
               </div>
 
-              {/* Depth */}
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Depth</label>
                 <select
@@ -447,7 +636,6 @@ export function EvaluationCenterPage() {
                 </select>
               </div>
 
-              {/* Custom Prompt */}
               <div className="mb-4">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">
                   Custom Instructions (optional)
@@ -462,7 +650,6 @@ export function EvaluationCenterPage() {
               </div>
             </div>
 
-            {/* Run Button */}
             <button
               onClick={startEvaluation}
               disabled={running || selectedPageIds.size === 0 || rubrics.length === 0}
@@ -474,9 +661,7 @@ export function EvaluationCenterPage() {
             </button>
 
             {selectedPageIds.size === 0 && (
-              <p className="text-xs text-gray-400 text-center">
-                Select at least one page to evaluate
-              </p>
+              <p className="text-xs text-gray-400 text-center">Select at least one page to evaluate</p>
             )}
           </div>
         </div>
@@ -487,9 +672,7 @@ export function EvaluationCenterPage() {
         <div>
           {!activeRun && !running && (
             <div className="text-center py-12">
-              <p className="text-sm text-gray-400">
-                No active evaluation. Go to Setup & Run to start one.
-              </p>
+              <p className="text-sm text-gray-400">No active evaluation. Go to Setup & Run to start one.</p>
             </div>
           )}
 
@@ -523,20 +706,19 @@ export function EvaluationCenterPage() {
                   </div>
                   <button
                     onClick={handleExportPdf}
-                    className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                    className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 flex items-center gap-1"
                   >
-                    Export / Print
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export PDF
                   </button>
                 </div>
 
                 {activeRun.summary && (
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(activeRun.summary).map(([key, val]) => (
-                      <ScoreBadge
-                        key={key}
-                        label={key.charAt(0).toUpperCase() + key.slice(1)}
-                        score={val}
-                      />
+                      <ScoreBadge key={key} label={key.charAt(0).toUpperCase() + key.slice(1)} score={val} />
                     ))}
                   </div>
                 )}
@@ -560,7 +742,10 @@ export function EvaluationCenterPage() {
                 {activeRun.results.map((result) => (
                   <button
                     key={result.id}
-                    onClick={() => setSelectedPageResult(result)}
+                    onClick={() => {
+                      setSelectedPageResult(result);
+                      setApplyingIndex(null);
+                    }}
                     className={`text-left border rounded-lg p-3 transition-colors ${
                       selectedPageResult?.id === result.id
                         ? 'border-indigo-400 bg-indigo-50'
@@ -578,9 +763,7 @@ export function EvaluationCenterPage() {
                       )}
                     </div>
                     {result.scores.error ? (
-                      <p className="text-xs text-red-500">
-                        Evaluation error: {result.scores.message}
-                      </p>
+                      <p className="text-xs text-red-500">Error: {result.scores.message}</p>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {Object.entries(result.scores)
@@ -599,8 +782,9 @@ export function EvaluationCenterPage() {
 
               {/* Detailed Page Report */}
               {selectedPageResult && (
-                <div className="border border-gray-200 rounded-lg bg-white p-4" id="eval-report">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="border border-gray-200 rounded-lg bg-white">
+                  {/* Report Header */}
+                  <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-gray-700">
                       Detailed Report: {selectedPageResult.itemTitle}
                     </h3>
@@ -608,17 +792,22 @@ export function EvaluationCenterPage() {
                       {!selectedPageResult.fixesApplied &&
                         selectedPageResult.issues.some((i) => i.autoFixable) && (
                           <button
-                            onClick={() => handleApplyFixes(selectedPageResult.id)}
-                            className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            onClick={async () => {
+                              const res = await handleApplyAllFixes(selectedPageResult.id);
+                              if (res && !res.applied) {
+                                // no-op, already refreshed
+                              }
+                            }}
+                            className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700"
                           >
-                            Auto-Fix Math Issues
+                            Apply All Auto-Fixes
                           </button>
                         )}
                     </div>
                   </div>
 
                   {/* Scores */}
-                  <div className="flex flex-wrap gap-2 mb-4">
+                  <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-2">
                     {Object.entries(selectedPageResult.scores)
                       .filter(([k]) => k !== 'error' && k !== 'message')
                       .map(([key, val]) => (
@@ -630,52 +819,36 @@ export function EvaluationCenterPage() {
                       ))}
                   </div>
 
-                  {/* Issues Table */}
-                  {selectedPageResult.issues.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-gray-200">
-                            <th className="text-left py-2 px-2 font-medium text-gray-500">
-                              Severity
-                            </th>
-                            <th className="text-left py-2 px-2 font-medium text-gray-500">
-                              Category
-                            </th>
-                            <th className="text-left py-2 px-2 font-medium text-gray-500">
-                              Location
-                            </th>
-                            <th className="text-left py-2 px-2 font-medium text-gray-500">Issue</th>
-                            <th className="text-left py-2 px-2 font-medium text-gray-500">
-                              Suggested Fix
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedPageResult.issues.map((issue, idx) => (
-                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                              <td className="py-2 px-2">
-                                <SeverityBadge severity={issue.severity} />
-                              </td>
-                              <td className="py-2 px-2 text-gray-600">{issue.category}</td>
-                              <td className="py-2 px-2 text-gray-500">{issue.location}</td>
-                              <td className="py-2 px-2 text-gray-700">{issue.message}</td>
-                              <td className="py-2 px-2 text-gray-500 max-w-[200px] truncate">
-                                {issue.suggestedFix || '—'}
-                                {issue.autoFixable && (
-                                  <span className="ml-1 text-[9px] px-1 py-0.5 bg-violet-100 text-violet-600 rounded">
-                                    auto
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400">No issues found for this page.</p>
-                  )}
+                  {/* Issues List */}
+                  <div>
+                    {selectedPageResult.issues.length > 0 ? (
+                      <div>
+                        {/* Column headers */}
+                        <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                          <div className="w-16">Severity</div>
+                          <div className="w-20">Category</div>
+                          <div className="w-40">Location</div>
+                          <div className="flex-1">Issue</div>
+                          <div className="w-32 text-right">Actions</div>
+                        </div>
+                        {selectedPageResult.issues.map((issue, idx) => (
+                          <IssueRow
+                            key={idx}
+                            issue={issue}
+                            index={idx}
+                            onApplyFix={
+                              issue.autoFixable && !selectedPageResult.fixesApplied
+                                ? handleApplySingleFix
+                                : null
+                            }
+                            applyingIndex={applyingIndex}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="p-4 text-sm text-gray-400">No issues found for this page.</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

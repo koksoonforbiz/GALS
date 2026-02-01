@@ -32,6 +32,7 @@ export interface ApplyFixesInput {
   userId: string;
   resultId: string;
   fixTypes: ('math' | 'formatting')[];
+  issueIndex?: number; // if set, apply only this specific issue
 }
 
 interface LlmEvalOutput {
@@ -155,7 +156,26 @@ export class EvaluationService {
 
     // Apply math fixes (deterministic)
     if (input.fixTypes.includes('math')) {
-      const { fixed, appliedCount } = this.mathNormalizer.applyFixes(content);
+      const allMathIssues = this.mathNormalizer.analyze(content);
+      let issuesToApply = allMathIssues.filter((i) => i.autoFixable);
+
+      // If a specific issue index is given, apply only that one
+      if (input.issueIndex !== undefined) {
+        const mathIssues = (result.mathIssues as unknown as Array<{ autoFixable?: boolean }>) || [];
+        const targetIssue = mathIssues[input.issueIndex];
+        if (targetIssue) {
+          // Match by original text + blockId from the stored math issues
+          const stored = result.mathIssues as unknown as Array<{ blockId: string; original: string }>;
+          const target = stored[input.issueIndex];
+          if (target) {
+            issuesToApply = allMathIssues.filter(
+              (i) => i.autoFixable && i.blockId === target.blockId && i.original === target.original,
+            );
+          }
+        }
+      }
+
+      const { fixed, appliedCount } = this.mathNormalizer.applyFixes(content, issuesToApply);
       content = fixed;
       totalFixed += appliedCount;
     }
