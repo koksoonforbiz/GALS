@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 
+interface EvaluationCenterProps {
+  courseId?: string;
+  embedded?: boolean;
+}
+
 // ─── Types ──────────────────────────────────────────────
 
 interface PageNode {
@@ -83,7 +88,9 @@ function ScoreBadge({ score, label }: { score: number | undefined; label: string
           ? 'bg-orange-100 text-orange-700'
           : 'bg-red-100 text-red-700';
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${color}`}>
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${color}`}
+    >
       {label}: {score}
     </span>
   );
@@ -96,7 +103,9 @@ function SeverityBadge({ severity }: { severity: string }) {
       : severity === 'warning'
         ? 'bg-yellow-100 text-yellow-700'
         : 'bg-blue-100 text-blue-700';
-  return <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>{severity}</span>;
+  return (
+    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>{severity}</span>
+  );
 }
 
 // ─── Issue Row (expandable with per-issue fix button) ───
@@ -114,7 +123,6 @@ function IssueRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasFix = issue.suggestedFix && issue.suggestedFix.length > 0;
-  const isLong = hasFix && issue.suggestedFix!.length > 60;
 
   return (
     <div className="border-b border-gray-100 hover:bg-gray-50">
@@ -260,8 +268,12 @@ function generateReportHtml(run: EvalRun, tree: PageTree | null): string {
 
 // ─── Main Component ─────────────────────────────────────
 
-export function EvaluationCenterPage() {
-  const { courseId } = useParams<{ courseId: string }>();
+export function EvaluationCenterPage({
+  courseId: propCourseId,
+  embedded,
+}: EvaluationCenterProps = {}) {
+  const { courseId: paramCourseId } = useParams<{ courseId: string }>();
+  const courseId = propCourseId || paramCourseId;
 
   // Tree
   const [tree, setTree] = useState<PageTree | null>(null);
@@ -271,7 +283,12 @@ export function EvaluationCenterPage() {
   const [selectedPageIds, setSelectedPageIds] = useState<Set<string>>(new Set());
 
   // Config
-  const [rubrics, setRubrics] = useState<string[]>(['formatting', 'equations', 'pedagogy', 'rigor']);
+  const [rubrics, setRubrics] = useState<string[]>([
+    'formatting',
+    'equations',
+    'pedagogy',
+    'rigor',
+  ]);
   const [strictness, setStrictness] = useState<EvalConfig['strictness']>('moderate');
   const [depth, setDepth] = useState<EvalConfig['depth']>('standard');
   const [customPrompt, setCustomPrompt] = useState('');
@@ -488,17 +505,22 @@ export function EvaluationCenterPage() {
   // ─── Render ─────────────────────────────────────────
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className={embedded ? '' : 'max-w-7xl mx-auto px-4 py-6'}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <Link to={`/teacher/courses/${courseId}`} className="text-xs text-indigo-600 hover:underline">
-            &larr; Back to Course Builder
-          </Link>
-          <h1 className="text-xl font-bold text-gray-900 mt-1">Content Evaluation Center</h1>
-          {tree && <p className="text-sm text-gray-500">{tree.courseTitle}</p>}
+      {!embedded && (
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <Link
+              to={`/teacher/courses/${courseId}`}
+              className="text-xs text-indigo-600 hover:underline"
+            >
+              &larr; Back to Course Builder
+            </Link>
+            <h1 className="text-xl font-bold text-gray-900 mt-1">Content Evaluation Center</h1>
+            {tree && <p className="text-sm text-gray-500">{tree.courseTitle}</p>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-gray-200">
@@ -554,7 +576,9 @@ export function EvaluationCenterPage() {
                           className="rounded border-gray-300 text-indigo-600"
                         />
                         <span className="text-sm font-medium text-gray-700">{mod.title}</span>
-                        <span className="text-xs text-gray-400 ml-auto">{mod.pages.length} pages</span>
+                        <span className="text-xs text-gray-400 ml-auto">
+                          {mod.pages.length} pages
+                        </span>
                       </label>
                       <div className="ml-6">
                         {mod.pages.map((page) => (
@@ -661,7 +685,9 @@ export function EvaluationCenterPage() {
             </button>
 
             {selectedPageIds.size === 0 && (
-              <p className="text-xs text-gray-400 text-center">Select at least one page to evaluate</p>
+              <p className="text-xs text-gray-400 text-center">
+                Select at least one page to evaluate
+              </p>
             )}
           </div>
         </div>
@@ -672,7 +698,9 @@ export function EvaluationCenterPage() {
         <div>
           {!activeRun && !running && (
             <div className="text-center py-12">
-              <p className="text-sm text-gray-400">No active evaluation. Go to Setup & Run to start one.</p>
+              <p className="text-sm text-gray-400">
+                No active evaluation. Go to Setup & Run to start one.
+              </p>
             </div>
           )}
 
@@ -708,8 +736,18 @@ export function EvaluationCenterPage() {
                     onClick={handleExportPdf}
                     className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200 flex items-center gap-1"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      />
                     </svg>
                     Export PDF
                   </button>
@@ -718,7 +756,11 @@ export function EvaluationCenterPage() {
                 {activeRun.summary && (
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(activeRun.summary).map(([key, val]) => (
-                      <ScoreBadge key={key} label={key.charAt(0).toUpperCase() + key.slice(1)} score={val} />
+                      <ScoreBadge
+                        key={key}
+                        label={key.charAt(0).toUpperCase() + key.slice(1)}
+                        score={val}
+                      />
                     ))}
                   </div>
                 )}

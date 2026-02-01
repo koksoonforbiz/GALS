@@ -8,6 +8,7 @@ import PromptComposerModal, { GenerateConfig } from '../../components/PromptComp
 import BulkProgressPanel from '../../components/BulkProgressPanel';
 import BlockEditor from '../../components/editor/BlockEditor';
 import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
+import { EvaluationCenterPage } from './EvaluationCenterPage';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'settings';
+type TabKey = 'overview' | 'content' | 'sources' | 'settings' | 'evaluate';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -532,6 +533,7 @@ export function CourseBuilderPage() {
     { key: 'overview', label: 'Overview' },
     { key: 'content', label: 'Content' },
     { key: 'sources', label: 'Sources' },
+    { key: 'evaluate', label: 'Evaluate' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1130,12 +1132,6 @@ export function CourseBuilderPage() {
               >
                 Open Course Studio
               </button>
-              <button
-                onClick={() => navigate(`/teacher/courses/${courseId}/evaluate`)}
-                className="px-4 py-2 text-sm bg-white text-indigo-600 border border-indigo-300 rounded-lg hover:bg-indigo-50"
-              >
-                Evaluate Content
-              </button>
             </div>
           </div>
         </div>
@@ -1155,6 +1151,11 @@ export function CourseBuilderPage() {
           onClose={() => setShowPromptComposer(false)}
           onGenerate={handleAIGenerate}
         />
+      )}
+
+      {/* ─── Evaluate Tab ─── */}
+      {activeTab === 'evaluate' && courseId && (
+        <EvaluationCenterPage courseId={courseId} embedded />
       )}
 
       {/* ─── Settings Tab ─── */}
