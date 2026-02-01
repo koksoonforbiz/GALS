@@ -28,6 +28,24 @@ interface KcStats {
   total: number;
 }
 
+interface SimilarityPair {
+  kcA: { id: string; name: string };
+  kcB: { id: string; name: string };
+  similarity: number;
+}
+
+interface KcHealth {
+  id: string;
+  name: string;
+  status: string;
+  pageCount: number;
+  hasDescription: boolean;
+  confidenceLevel: string;
+  duplicateCount: number;
+  coverageStatus: 'uncovered' | 'low' | 'moderate' | 'high';
+  similarKcs: Array<{ id: string; name: string; similarity: number }>;
+}
+
 interface Props {
   courseId: string;
 }
@@ -46,6 +64,9 @@ export default function KcStudioPanel({ courseId }: Props) {
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [similarPairs, setSimilarPairs] = useState<SimilarityPair[]>([]);
+  const [healthData, setHealthData] = useState<KcHealth[]>([]);
+  const [showHealth, setShowHealth] = useState(false);
 
   const fetchKcs = useCallback(async () => {
     try {
@@ -67,10 +88,23 @@ export default function KcStudioPanel({ courseId }: Props) {
     }
   }, [courseId]);
 
+  const fetchHealth = useCallback(async () => {
+    try {
+      const [pairs, health] = await Promise.all([
+        apiFetch<SimilarityPair[]>(`/proposed-kcs/similar-pairs?courseId=${courseId}`),
+        apiFetch<KcHealth[]>(`/proposed-kcs/health?courseId=${courseId}`),
+      ]);
+      setSimilarPairs(pairs);
+      setHealthData(health);
+    } catch {
+      // non-critical
+    }
+  }, [courseId]);
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchKcs(), fetchStats()]).finally(() => setLoading(false));
-  }, [fetchKcs, fetchStats]);
+    Promise.all([fetchKcs(), fetchStats(), fetchHealth()]).finally(() => setLoading(false));
+  }, [fetchKcs, fetchStats, fetchHealth]);
 
   // ─── Actions ────────────────────────────────────────────
 
@@ -224,6 +258,77 @@ export default function KcStudioPanel({ courseId }: Props) {
         ))}
       </div>
 
+      {/* Health & Similarity Panel */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowHealth(!showHealth)}
+          className="px-3 py-1.5 text-xs bg-indigo-50 text-indigo-700 rounded border border-indigo-200 hover:bg-indigo-100"
+        >
+          {showHealth ? 'Hide' : 'Show'} Health Indicators
+          {similarPairs.length > 0 && (
+            <span className="ml-1 inline-block bg-orange-500 text-white rounded-full px-1.5 text-xs">
+              {similarPairs.length} similar pairs
+            </span>
+          )}
+        </button>
+      </div>
+
+      {showHealth && (
+        <div className="space-y-4">
+          {/* Similar Pairs Warning */}
+          {similarPairs.length > 0 && (
+            <div className="border border-orange-200 bg-orange-50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-orange-800 mb-2">
+                Potential Duplicates ({similarPairs.length} pairs)
+              </h4>
+              <div className="space-y-2">
+                {similarPairs.map((pair, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span className="font-medium text-gray-900">{pair.kcA.name}</span>
+                    <span className="text-orange-600">~ {Math.round(pair.similarity * 100)}%</span>
+                    <span className="font-medium text-gray-900">{pair.kcB.name}</span>
+                    <button
+                      onClick={() => {
+                        setMergeSourceId(pair.kcB.id);
+                        setMergeTargetId(pair.kcA.id);
+                      }}
+                      className="ml-auto px-2 py-0.5 bg-purple-100 text-purple-700 rounded hover:bg-purple-200"
+                    >
+                      Merge
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Coverage Health */}
+          {healthData.length > 0 && (
+            <div className="border rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Coverage Health</h4>
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                {[
+                  { label: 'Uncovered', count: healthData.filter((h) => h.coverageStatus === 'uncovered').length, color: 'text-red-600' },
+                  { label: 'Low', count: healthData.filter((h) => h.coverageStatus === 'low').length, color: 'text-orange-600' },
+                  { label: 'Moderate', count: healthData.filter((h) => h.coverageStatus === 'moderate').length, color: 'text-yellow-600' },
+                  { label: 'High', count: healthData.filter((h) => h.coverageStatus === 'high').length, color: 'text-green-600' },
+                ].map((c) => (
+                  <div key={c.label}>
+                    <div className={`text-lg font-bold ${c.color}`}>{c.count}</div>
+                    <div className="text-gray-500">{c.label}</div>
+                  </div>
+                ))}
+              </div>
+              {healthData.filter((h) => !h.hasDescription).length > 0 && (
+                <p className="mt-2 text-xs text-gray-500">
+                  {healthData.filter((h) => !h.hasDescription).length} KCs missing descriptions
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* KC Table */}
       {kcs.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
@@ -237,6 +342,7 @@ export default function KcStudioPanel({ courseId }: Props) {
                 <th className="text-left px-4 py-2 font-medium text-gray-700">Name</th>
                 <th className="text-left px-4 py-2 font-medium text-gray-700">Status</th>
                 <th className="text-left px-4 py-2 font-medium text-gray-700">Confidence</th>
+                <th className="text-left px-4 py-2 font-medium text-gray-700">Pages</th>
                 <th className="text-left px-4 py-2 font-medium text-gray-700">Source</th>
                 <th className="text-left px-4 py-2 font-medium text-gray-700">Related</th>
                 <th className="text-right px-4 py-2 font-medium text-gray-700">Actions</th>
@@ -288,6 +394,13 @@ export default function KcStudioPanel({ courseId }: Props) {
                   </td>
                   <td className="px-4 py-3">{statusBadge(kc.status)}</td>
                   <td className="px-4 py-3">{confidenceBadge(kc.confidenceLevel)}</td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const count = kc.pageIds.length;
+                      const color = count === 0 ? 'text-red-600' : count === 1 ? 'text-orange-600' : count <= 3 ? 'text-yellow-600' : 'text-green-600';
+                      return <span className={`text-xs font-medium ${color}`}>{count}</span>;
+                    })()}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="text-xs text-gray-500">{kc.createdBy}</span>
                   </td>

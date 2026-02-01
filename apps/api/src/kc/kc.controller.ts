@@ -11,12 +11,16 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { KcCrudService } from './kc-crud.service';
+import { KcNormalizationService } from './kc-normalization.service';
 
 @Controller('proposed-kcs')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('teacher', 'admin')
 export class KcController {
-  constructor(private readonly kcCrudService: KcCrudService) {}
+  constructor(
+    private readonly kcCrudService: KcCrudService,
+    private readonly kcNormalizationService: KcNormalizationService,
+  ) {}
 
   /** List proposed KCs for a course, optionally filtered by status */
   @Get()
@@ -70,5 +74,21 @@ export class KcController {
   @Get('stats')
   stats(@Query('courseId') courseId: string) {
     return this.kcCrudService.stats(courseId);
+  }
+
+  /** Find similar KC pairs for dedup/merge suggestions */
+  @Get('similar-pairs')
+  similarPairs(
+    @Query('courseId') courseId: string,
+    @Query('threshold') threshold?: string,
+  ) {
+    const t = threshold ? parseFloat(threshold) : 0.6;
+    return this.kcNormalizationService.findSimilarPairs(courseId, t);
+  }
+
+  /** Get health indicators for all KCs in a course */
+  @Get('health')
+  health(@Query('courseId') courseId: string) {
+    return this.kcNormalizationService.getHealthIndicators(courseId);
   }
 }
