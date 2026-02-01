@@ -76,7 +76,7 @@ export class EvaluationService {
         courseId: input.courseId,
         userId: input.userId,
         status: 'RUNNING',
-        config: input.config as Prisma.InputJsonValue,
+        config: input.config as unknown as unknown as Prisma.InputJsonValue,
         startedAt: new Date(),
       },
     });
@@ -254,9 +254,9 @@ export class EvaluationService {
               runId,
               itemId: page.id,
               itemTitle: page.title,
-              scores: evalResult.scores as Prisma.InputJsonValue,
-              issues: evalResult.issues as Prisma.InputJsonValue,
-              mathIssues: evalResult.mathIssues as Prisma.InputJsonValue,
+              scores: evalResult.scores as unknown as Prisma.InputJsonValue,
+              issues: evalResult.issues as unknown as Prisma.InputJsonValue,
+              mathIssues: evalResult.mathIssues as unknown as unknown as Prisma.InputJsonValue,
             },
           });
 
@@ -296,7 +296,7 @@ export class EvaluationService {
         where: { id: runId },
         data: {
           status: 'COMPLETED',
-          summary: summary as Prisma.InputJsonValue,
+          summary: summary as unknown as Prisma.InputJsonValue,
           completedAt: new Date(),
         },
       });
