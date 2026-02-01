@@ -606,8 +606,33 @@ model ProposedKC {
   relatedTo ProposedKC? @relation("KCDuplicates", fields: [relatedToKCId], references: [id], onDelete: SetNull)
   duplicates ProposedKC[] @relation("KCDuplicates")
 
+  // Graph edges where this KC is source or target
+  outgoingEdges KcEdge[] @relation("KcEdgeFrom")
+  incomingEdges KcEdge[] @relation("KcEdgeTo")
+
   @@index([courseId])
   @@index([status])
   @@index([courseId, status])
   @@map("proposed_kcs")
+}
+
+// ─── Knowledge Graph Edges (prerequisite relationships) ──
+
+model KcEdge {
+  id           String   @id @default(uuid()) @db.Uuid
+  courseId      String   @map("course_id") @db.Uuid
+  fromKcId     String   @map("from_kc_id") @db.Uuid
+  toKcId       String   @map("to_kc_id") @db.Uuid
+  relationship String   @default("prerequisite") // "prerequisite" | "related" | "builds_on"
+  weight       Float    @default(1.0)
+  createdBy    String   @default("ai") @map("created_by") // "ai" or "human"
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  fromKc ProposedKC @relation("KcEdgeFrom", fields: [fromKcId], references: [id], onDelete: Cascade)
+  toKc   ProposedKC @relation("KcEdgeTo", fields: [toKcId], references: [id], onDelete: Cascade)
+
+  @@unique([fromKcId, toKcId])
+  @@index([courseId])
+  @@map("kc_edges")
 }
