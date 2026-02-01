@@ -60,7 +60,7 @@ export class MathNormalizerService {
     if (!doc.blocks || !Array.isArray(doc.blocks)) return issues;
 
     for (let i = 0; i < doc.blocks.length; i++) {
-      const block = doc.blocks[i];
+      const block = doc.blocks[i]!;
       if (block.type === 'text' || block.type === 'callout') {
         const html =
           (block.data as { html?: string; body?: string }).html ||
@@ -242,7 +242,7 @@ export class MathNormalizerService {
         location: `Block ${blockIndex + 1}, mismatched $$ delimiters`,
         message: 'Opening $$ with single closing $',
         original: match[0].substring(0, 80),
-        suggestedFix: `<div data-block-math="" latex="${this.escapeAttr(match[1].trim())}"></div>`,
+        suggestedFix: `<div data-block-math="" latex="${this.escapeAttr(match[1]!.trim())}"></div>`,
         autoFixable: true,
       });
     }
@@ -254,7 +254,7 @@ export class MathNormalizerService {
 
   private extractLatexAttr(html: string): string {
     const m = /latex="([^"]*)"/.exec(html);
-    return m ? m[1] : '';
+    return m ? m[1]! : '';
   }
 
   private escapeAttr(s: string): string {
