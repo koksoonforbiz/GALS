@@ -155,6 +155,7 @@ export class EvaluationService {
 
     let content = item.contentMdx;
     let totalFixed = 0;
+    const fixedIssueIndices = new Set<number>();
 
     // Apply math fixes (deterministic)
     if (input.fixTypes.includes('math')) {
@@ -178,8 +179,19 @@ export class EvaluationService {
       }
 
       const { fixed, appliedCount } = this.mathNormalizer.applyFixes(content, issuesToApply);
-      content = fixed;
-      totalFixed += appliedCount;
+      if (appliedCount > 0) {
+        content = fixed;
+        totalFixed += appliedCount;
+        // Track which issues in the issues array were math_normalizer issues that got fixed
+        const issuesArr = (result.issues as unknown as Array<{ source?: string; autoFixable?: boolean }>) || [];
+        issuesArr.forEach((iss, idx) => {
+          if (iss.source === 'math_normalizer' && iss.autoFixable) {
+            if (input.issueIndex === undefined || input.issueIndex === idx) {
+              fixedIssueIndices.add(idx);
+            }
+          }
+        });
+      }
     }
 
     // Apply LLM-suggested fixes (string replacement based on original → suggestedFix)
@@ -198,24 +210,30 @@ export class EvaluationService {
           if (content.includes(target.original)) {
             content = content.replace(target.original, target.suggestedFix);
             totalFixed++;
+            fixedIssueIndices.add(input.issueIndex);
           }
         }
       } else {
         // Apply all LLM issues that have concrete fixes
-        for (const issue of llmIssues) {
+        llmIssues.forEach((issue, idx) => {
           if (issue.original && issue.suggestedFix !== null && issue.suggestedFix !== undefined && issue.source !== 'math_normalizer') {
             if (content.includes(issue.original)) {
               content = content.replace(issue.original, issue.suggestedFix);
               totalFixed++;
+              fixedIssueIndices.add(idx);
             }
           }
-        }
+        });
       }
     }
 
     if (totalFixed === 0) {
       return { applied: false, message: 'No auto-fixable issues found' };
     }
+
+    // Remove fixed issues from the stored issues array
+    const currentIssues = (result.issues as unknown as Array<Record<string, unknown>>) || [];
+    const remainingIssues = currentIssues.filter((_, idx) => !fixedIssueIndices.has(idx));
 
     // Save updated content
     await this.prisma.moduleItem.update({
@@ -226,10 +244,13 @@ export class EvaluationService {
     // Create version snapshot
     await this.createVersionSnapshot(result.itemId, content, 'eval-fix', input.userId);
 
-    // Mark result as fixed
+    // Update result: remove fixed issues and mark as fixed if none remain
     await this.prisma.pageEvalResult.update({
       where: { id: input.resultId },
-      data: { fixesApplied: true },
+      data: {
+        fixesApplied: true,
+        issues: remainingIssues as unknown as Prisma.InputJsonValue,
+      },
     });
 
     return { applied: true, fixCount: totalFixed };
