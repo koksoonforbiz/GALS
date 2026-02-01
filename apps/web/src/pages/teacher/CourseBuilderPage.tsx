@@ -11,6 +11,7 @@ import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
 import { EvaluationCenterPage } from './EvaluationCenterPage';
 import KcStudioPanel from '../../components/KcStudioPanel';
 import KcGraphStudioPanel from '../../components/KcGraphStudioPanel';
+import KcMappingPanel from '../../components/KcMappingPanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'settings';
+type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'settings';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -538,6 +539,7 @@ export function CourseBuilderPage() {
     { key: 'evaluate', label: 'Evaluate' },
     { key: 'kc-studio', label: 'KC Studio' },
     { key: 'kc-graph', label: 'KC Graph' },
+    { key: 'kc-mappings', label: 'KC Mappings' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1170,6 +1172,11 @@ export function CourseBuilderPage() {
       {/* ─── KC Graph Tab ─── */}
       {activeTab === 'kc-graph' && courseId && (
         <KcGraphStudioPanel courseId={courseId} />
+      )}
+
+      {/* ─── KC Mappings Tab ─── */}
+      {activeTab === 'kc-mappings' && courseId && (
+        <KcMappingPanel courseId={courseId} />
       )}
 
       {/* ─── Settings Tab ─── */}
