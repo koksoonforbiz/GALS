@@ -31,7 +31,7 @@ export interface ApplyFixesInput {
   courseId: string;
   userId: string;
   resultId: string;
-  fixTypes: ('math' | 'formatting')[];
+  fixTypes: ('math' | 'formatting' | 'llm')[];
   issueIndex?: number; // if set, apply only this specific issue
 }
 
@@ -42,7 +42,9 @@ interface LlmEvalOutput {
     category: string;
     severity: string;
     location: string;
+    blockId?: string;
     message: string;
+    original?: string;
     suggestedFix: string | null;
   }>;
   strengths: string[];
@@ -178,6 +180,37 @@ export class EvaluationService {
       const { fixed, appliedCount } = this.mathNormalizer.applyFixes(content, issuesToApply);
       content = fixed;
       totalFixed += appliedCount;
+    }
+
+    // Apply LLM-suggested fixes (string replacement based on original → suggestedFix)
+    if (input.fixTypes.includes('llm') || input.fixTypes.includes('formatting')) {
+      const llmIssues = (result.issues as unknown as Array<{
+        original?: string;
+        suggestedFix?: string | null;
+        blockId?: string;
+        source?: string;
+      }>) || [];
+
+      if (input.issueIndex !== undefined) {
+        // Apply a single LLM issue
+        const target = llmIssues[input.issueIndex];
+        if (target && target.original && target.suggestedFix !== null && target.suggestedFix !== undefined && target.source !== 'math_normalizer') {
+          if (content.includes(target.original)) {
+            content = content.replace(target.original, target.suggestedFix);
+            totalFixed++;
+          }
+        }
+      } else {
+        // Apply all LLM issues that have concrete fixes
+        for (const issue of llmIssues) {
+          if (issue.original && issue.suggestedFix !== null && issue.suggestedFix !== undefined && issue.source !== 'math_normalizer') {
+            if (content.includes(issue.original)) {
+              content = content.replace(issue.original, issue.suggestedFix);
+              totalFixed++;
+            }
+          }
+        }
+      }
     }
 
     if (totalFixed === 0) {
@@ -380,7 +413,14 @@ export class EvaluationService {
     if (llmResult) {
       Object.assign(scores, llmResult.scores);
       scores.overall = llmResult.overall;
-      issues.push(...llmResult.issues);
+      for (const issue of llmResult.issues) {
+        const hasConcretefix = !!(issue.original && issue.suggestedFix);
+        issues.push({
+          ...issue,
+          source: 'llm',
+          autoFixable: hasConcretefix,
+        });
+      }
     }
 
     // Add math issues to the equations score

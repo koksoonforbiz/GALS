@@ -95,13 +95,23 @@ Respond with a JSON object (no markdown fences):
       "category": "<${config.rubrics.join('|')}>",
       "severity": "<error|warning|info>",
       "location": "<human-readable location, e.g. 'Block 3, paragraph 2'>",
+      "blockId": "<the id of the block containing the issue, from the JSON>",
       "message": "<description of the issue>",
-      "suggestedFix": "<how to fix it, or null>"
+      "original": "<the EXACT text/HTML fragment from the block content that has the issue — must be copy-pasted verbatim so it can be found via string search>",
+      "suggestedFix": "<the corrected version of the 'original' fragment that should replace it, or null if you cannot provide a concrete fix>"
     }
   ],
   "strengths": ["<positive aspects>"],
   "summary": "<2-3 sentence overall assessment>"
-}`;
+}
+
+## CRITICAL: suggestedFix Requirements
+- The "original" field MUST contain the EXACT substring from the block content (HTML/text) so it can be located by string matching.
+- The "suggestedFix" field MUST contain the corrected replacement for that exact substring — NOT vague advice.
+- For math/equation issues: provide the corrected HTML with proper math containers (e.g. <span data-inline-math="" latex="..."></span>).
+- For formatting issues: provide the corrected HTML markup.
+- For pedagogy/rigor issues where no concrete text fix is possible, set suggestedFix to null.
+- NEVER return vague instructions like "Ensure all math containers are properly closed". Return the actual fixed content.`;
 }
 
 export function buildEvaluationUserPrompt(

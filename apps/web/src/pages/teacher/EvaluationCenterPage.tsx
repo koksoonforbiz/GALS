@@ -47,7 +47,9 @@ interface EvalIssue {
   category: string;
   severity: string;
   location: string;
+  blockId?: string;
   message: string;
+  original?: string;
   suggestedFix: string | null;
   source?: string;
   autoFixable?: boolean;
@@ -165,11 +167,23 @@ function IssueRow({
 
       {/* Expanded suggested fix */}
       {expanded && hasFix && (
-        <div className="mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs">
-          <div className="text-[10px] font-medium text-gray-400 mb-1">Suggested Fix:</div>
-          <pre className="whitespace-pre-wrap break-words text-gray-700 font-mono text-[11px] leading-relaxed">
-            {issue.suggestedFix}
-          </pre>
+        <div className="mx-3 mb-3 p-3 bg-gray-50 border border-gray-200 rounded text-xs space-y-2">
+          {issue.original && (
+            <div>
+              <div className="text-[10px] font-medium text-red-400 mb-1">Original:</div>
+              <pre className="whitespace-pre-wrap break-words text-red-700 bg-red-50 p-2 rounded font-mono text-[11px] leading-relaxed">
+                {issue.original}
+              </pre>
+            </div>
+          )}
+          <div>
+            <div className="text-[10px] font-medium text-emerald-500 mb-1">
+              {issue.original ? 'Replacement:' : 'Suggested Fix:'}
+            </div>
+            <pre className="whitespace-pre-wrap break-words text-emerald-700 bg-emerald-50 p-2 rounded font-mono text-[11px] leading-relaxed">
+              {issue.suggestedFix}
+            </pre>
+          </div>
         </div>
       )}
     </div>
@@ -445,7 +459,7 @@ export function EvaluationCenterPage({
         `/courses/${courseId}/evaluation/apply-fixes`,
         {
           method: 'POST',
-          body: JSON.stringify({ resultId, fixTypes: ['math', 'formatting'] }),
+          body: JSON.stringify({ resultId, fixTypes: ['math', 'formatting', 'llm'] }),
         },
       );
       if (res.applied) {
@@ -469,7 +483,7 @@ export function EvaluationCenterPage({
           method: 'POST',
           body: JSON.stringify({
             resultId: selectedPageResult.id,
-            fixTypes: ['math', 'formatting'],
+            fixTypes: ['math', 'formatting', 'llm'],
             issueIndex,
           }),
         },

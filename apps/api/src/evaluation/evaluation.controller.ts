@@ -54,7 +54,7 @@ export class EvaluationController {
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
     @Body()
-    body: { resultId: string; fixTypes: ('math' | 'formatting')[]; issueIndex?: number },
+    body: { resultId: string; fixTypes: ('math' | 'formatting' | 'llm')[]; issueIndex?: number },
   ) {
     return this.evaluationService.applyFixes({
       courseId,
