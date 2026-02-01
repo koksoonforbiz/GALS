@@ -10,7 +10,7 @@ else
 fi
 
 echo "Running database migrations..."
-pnpm exec prisma migrate deploy
+pnpm exec prisma migrate deploy || echo "WARNING: prisma migrate deploy failed (exit $?). Continuing anyway..."
 
 echo "Starting API in watch mode..."
 exec pnpm exec nest start --watch
