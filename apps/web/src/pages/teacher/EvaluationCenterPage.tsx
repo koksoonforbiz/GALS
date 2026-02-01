@@ -314,6 +314,8 @@ export function EvaluationCenterPage({
 
   // Past runs
   const [pastRuns, setPastRuns] = useState<EvalRun[]>([]);
+  const [historySelectedRun, setHistorySelectedRun] = useState<EvalRun | null>(null);
+  const [historyPageResult, setHistoryPageResult] = useState<PageResult | null>(null);
   const [selectedPageResult, setSelectedPageResult] = useState<PageResult | null>(null);
 
   // Per-issue fix state
@@ -942,60 +944,161 @@ export function EvaluationCenterPage({
       {/* ─── History Tab ───────────────────────────────── */}
       {tab === 'history' && (
         <div>
-          {pastRuns.length === 0 ? (
-            <p className="text-center py-12 text-sm text-gray-400">No past evaluation runs.</p>
-          ) : (
-            <div className="space-y-3">
-              {pastRuns.map((run) => (
-                <div
-                  key={run.id}
-                  className="border border-gray-200 rounded-lg bg-white p-4 hover:bg-gray-50 cursor-pointer"
-                  onClick={async () => {
-                    // Fetch full run data (listRuns returns partial results)
-                    if (!courseId) return;
-                    try {
-                      const fullRun = await apiFetch<EvalRun>(
-                        `/courses/${courseId}/evaluation/runs/${run.id}`,
-                      );
-                      setActiveRun(fullRun);
-                      setSelectedPageResult(null);
-                      setTab('results');
-                    } catch {
-                      // Fallback to partial data
-                      setActiveRun(run);
-                      setSelectedPageResult(null);
-                      setTab('results');
-                    }
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          run.status === 'COMPLETED'
-                            ? 'bg-green-100 text-green-700'
-                            : run.status === 'FAILED'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {run.status}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {new Date(run.createdAt).toLocaleString()}
-                      </span>
+          {historySelectedRun && (
+            <button
+              onClick={() => { setHistorySelectedRun(null); setHistoryPageResult(null); }}
+              className="mb-3 text-xs text-indigo-600 hover:underline"
+            >
+              &larr; Back to all runs
+            </button>
+          )}
+
+          {/* Run list */}
+          {!historySelectedRun && (
+            <>
+              {pastRuns.length === 0 ? (
+                <p className="text-center py-12 text-sm text-gray-400">No past evaluation runs.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pastRuns.map((run) => (
+                    <div
+                      key={run.id}
+                      className="border border-gray-200 rounded-lg bg-white p-4 hover:bg-gray-50 cursor-pointer"
+                      onClick={async () => {
+                        if (!courseId) return;
+                        try {
+                          const fullRun = await apiFetch<EvalRun>(
+                            `/courses/${courseId}/evaluation/runs/${run.id}`,
+                          );
+                          setHistorySelectedRun(fullRun);
+                          setHistoryPageResult(null);
+                        } catch {
+                          /* silent */
+                        }
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              run.status === 'COMPLETED'
+                                ? 'bg-green-100 text-green-700'
+                                : run.status === 'FAILED'
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {run.status}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(run.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-400">{run.results.length} pages</span>
+                      </div>
+                      {run.summary && (
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(run.summary).map(([key, val]) => (
+                            <ScoreBadge key={key} label={key} score={val} />
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-xs text-gray-400">{run.results.length} pages</span>
-                  </div>
-                  {run.summary && (
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(run.summary).map(([key, val]) => (
-                        <ScoreBadge key={key} label={key} score={val} />
-                      ))}
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
+            </>
+          )}
+
+          {/* Expanded run detail (inline) */}
+          {historySelectedRun && (
+            <div>
+              {/* Summary */}
+              <div className="border border-gray-200 rounded-lg bg-white p-4 mb-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <h2 className="text-sm font-semibold text-gray-700">Run Summary</h2>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    historySelectedRun.status === 'COMPLETED' ? 'bg-green-100 text-green-700'
+                      : historySelectedRun.status === 'FAILED' ? 'bg-red-100 text-red-700'
+                        : 'bg-gray-100 text-gray-600'
+                  }`}>{historySelectedRun.status}</span>
+                  <span className="text-xs text-gray-400">{new Date(historySelectedRun.createdAt).toLocaleString()}</span>
+                </div>
+                {historySelectedRun.summary && (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(historySelectedRun.summary).map(([key, val]) => (
+                      <ScoreBadge key={key} label={key.charAt(0).toUpperCase() + key.slice(1)} score={val} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Page cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                {historySelectedRun.results.map((result) => (
+                  <button
+                    key={result.id}
+                    onClick={() => setHistoryPageResult(result)}
+                    className={`text-left border rounded-lg p-3 transition-colors ${
+                      historyPageResult?.id === result.id
+                        ? 'border-indigo-400 bg-indigo-50'
+                        : 'border-gray-200 bg-white hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-sm font-medium text-gray-700 truncate block">{result.itemTitle}</span>
+                    {result.scores.error ? (
+                      <p className="text-xs text-red-500">Error: {result.scores.message}</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {Object.entries(result.scores)
+                          .filter(([k]) => k !== 'error' && k !== 'message')
+                          .map(([key, val]) => (
+                            <ScoreBadge key={key} label={key} score={val as number} />
+                          ))}
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] text-gray-400">
+                      {result.issues.length} issue{result.issues.length !== 1 ? 's' : ''}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Selected page detail */}
+              {historyPageResult && (
+                <div className="border border-gray-200 rounded-lg bg-white">
+                  <div className="px-4 py-3 border-b border-gray-200">
+                    <h3 className="text-sm font-semibold text-gray-700">
+                      Detailed Report: {historyPageResult.itemTitle}
+                    </h3>
+                  </div>
+                  <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-2">
+                    {Object.entries(historyPageResult.scores)
+                      .filter(([k]) => k !== 'error' && k !== 'message')
+                      .map(([key, val]) => (
+                        <ScoreBadge key={key} label={key.charAt(0).toUpperCase() + key.slice(1)} score={val as number} />
+                      ))}
+                  </div>
+                  <div>
+                    {historyPageResult.issues.length > 0 ? (
+                      <div>
+                        <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                          <div className="w-16">Severity</div>
+                          <div className="w-20">Category</div>
+                          <div className="w-40">Location</div>
+                          <div className="flex-1">Issue</div>
+                          <div className="w-32 text-right">Actions</div>
+                        </div>
+                        {historyPageResult.issues.map((issue, idx) => (
+                          <IssueRow key={idx} issue={issue} index={idx} onApplyFix={null} applyingIndex={null} />
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="p-4 text-sm text-gray-400">No issues found for this page.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

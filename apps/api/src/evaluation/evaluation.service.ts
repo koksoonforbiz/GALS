@@ -18,6 +18,19 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Decode common HTML entities that LLMs often produce */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, '/')
+    .replace(/&apos;/g, "'");
+}
+
 // ─── Interfaces ─────────────────────────────────────────
 
 export interface StartEvaluationInput {
@@ -203,22 +216,55 @@ export class EvaluationService {
         source?: string;
       }>) || [];
 
+      // Try to apply a single LLM issue fix, handling HTML entity mismatches.
+      // The LLM often returns HTML-entity-encoded original (e.g. &lt;p&gt;)
+      // while the stored content has raw HTML (<p>). We try multiple strategies:
+      // 1. Direct match, 2. Decoded original, 3. JSON-escaped match
+      const applyLlmFix = (issue: { original?: string; suggestedFix?: string | null }): boolean => {
+        if (!issue.original || issue.suggestedFix === null || issue.suggestedFix === undefined) return false;
+
+        const orig = issue.original;
+        const fix = issue.suggestedFix;
+
+        // Strategy 1: direct match
+        if (content.includes(orig)) {
+          content = content.replace(orig, fix);
+          return true;
+        }
+
+        // Strategy 2: LLM returned HTML-entity-encoded text, decode and match
+        const decodedOrig = decodeHtmlEntities(orig);
+        const decodedFix = decodeHtmlEntities(fix);
+        if (decodedOrig !== orig && content.includes(decodedOrig)) {
+          content = content.replace(decodedOrig, decodedFix);
+          return true;
+        }
+
+        // Strategy 3: content is JSON string — the original might appear JSON-escaped inside it
+        // e.g. content has: "html":"<p>foo</p>" and original is <p>foo</p>
+        // We need to find the JSON-escaped version: <p>foo<\\/p>  (or with \" etc.)
+        const jsonEscapedOrig = JSON.stringify(decodedOrig).slice(1, -1); // remove surrounding quotes
+        const jsonEscapedFix = JSON.stringify(decodedFix).slice(1, -1);
+        if (jsonEscapedOrig !== decodedOrig && content.includes(jsonEscapedOrig)) {
+          content = content.replace(jsonEscapedOrig, jsonEscapedFix);
+          return true;
+        }
+
+        return false;
+      };
+
       if (input.issueIndex !== undefined) {
-        // Apply a single LLM issue
         const target = llmIssues[input.issueIndex];
-        if (target && target.original && target.suggestedFix !== null && target.suggestedFix !== undefined && target.source !== 'math_normalizer') {
-          if (content.includes(target.original)) {
-            content = content.replace(target.original, target.suggestedFix);
+        if (target && target.source !== 'math_normalizer') {
+          if (applyLlmFix(target)) {
             totalFixed++;
             fixedIssueIndices.add(input.issueIndex);
           }
         }
       } else {
-        // Apply all LLM issues that have concrete fixes
         llmIssues.forEach((issue, idx) => {
-          if (issue.original && issue.suggestedFix !== null && issue.suggestedFix !== undefined && issue.source !== 'math_normalizer') {
-            if (content.includes(issue.original)) {
-              content = content.replace(issue.original, issue.suggestedFix);
+          if (issue.source !== 'math_normalizer') {
+            if (applyLlmFix(issue)) {
               totalFixed++;
               fixedIssueIndices.add(idx);
             }
