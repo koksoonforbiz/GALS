@@ -207,7 +207,10 @@ export class EvaluationService {
       }
     }
 
-    // Apply LLM-suggested fixes (string replacement based on original → suggestedFix)
+    // Apply LLM-suggested fixes (block-level replacement using blockId)
+    // The LLM returns original/suggestedFix as HTML content for a block.
+    // Instead of fragile string matching, we parse the BlockDocument JSON,
+    // find the target block by blockId, and replace its data.html directly.
     if (input.fixTypes.includes('llm') || input.fixTypes.includes('formatting')) {
       const llmIssues = (result.issues as unknown as Array<{
         original?: string;
@@ -216,60 +219,69 @@ export class EvaluationService {
         source?: string;
       }>) || [];
 
-      // Try to apply a single LLM issue fix, handling HTML entity mismatches.
-      // The LLM often returns HTML-entity-encoded original (e.g. &lt;p&gt;)
-      // while the stored content has raw HTML (<p>). We try multiple strategies:
-      // 1. Direct match, 2. Decoded original, 3. JSON-escaped match
-      const applyLlmFix = (issue: { original?: string; suggestedFix?: string | null }): boolean => {
-        if (!issue.original || issue.suggestedFix === null || issue.suggestedFix === undefined) return false;
+      let doc: { version: number; blocks: Array<{ id: string; type: string; data: { html?: string; [k: string]: unknown } }> } | null = null;
+      try {
+        doc = JSON.parse(content);
+      } catch {
+        this.logger.warn(`Failed to parse contentMdx as JSON for item ${result.itemId}`);
+      }
 
-        const orig = issue.original;
-        const fix = issue.suggestedFix;
+      if (doc && Array.isArray(doc.blocks)) {
+        const applyLlmFix = (issue: { original?: string; suggestedFix?: string | null; blockId?: string }): boolean => {
+          if (!issue.suggestedFix) return false;
 
-        // Strategy 1: direct match
-        if (content.includes(orig)) {
-          content = content.replace(orig, fix);
-          return true;
-        }
+          const decodedFix = decodeHtmlEntities(issue.suggestedFix);
 
-        // Strategy 2: LLM returned HTML-entity-encoded text, decode and match
-        const decodedOrig = decodeHtmlEntities(orig);
-        const decodedFix = decodeHtmlEntities(fix);
-        if (decodedOrig !== orig && content.includes(decodedOrig)) {
-          content = content.replace(decodedOrig, decodedFix);
-          return true;
-        }
-
-        // Strategy 3: content is JSON string — the original might appear JSON-escaped inside it
-        // e.g. content has: "html":"<p>foo</p>" and original is <p>foo</p>
-        // We need to find the JSON-escaped version: <p>foo<\\/p>  (or with \" etc.)
-        const jsonEscapedOrig = JSON.stringify(decodedOrig).slice(1, -1); // remove surrounding quotes
-        const jsonEscapedFix = JSON.stringify(decodedFix).slice(1, -1);
-        if (jsonEscapedOrig !== decodedOrig && content.includes(jsonEscapedOrig)) {
-          content = content.replace(jsonEscapedOrig, jsonEscapedFix);
-          return true;
-        }
-
-        return false;
-      };
-
-      if (input.issueIndex !== undefined) {
-        const target = llmIssues[input.issueIndex];
-        if (target && target.source !== 'math_normalizer') {
-          if (applyLlmFix(target)) {
-            totalFixed++;
-            fixedIssueIndices.add(input.issueIndex);
-          }
-        }
-      } else {
-        llmIssues.forEach((issue, idx) => {
-          if (issue.source !== 'math_normalizer') {
-            if (applyLlmFix(issue)) {
-              totalFixed++;
-              fixedIssueIndices.add(idx);
+          // Strategy 1: Find block by blockId and replace its html
+          if (issue.blockId) {
+            const block = doc!.blocks.find((b) => b.id === issue.blockId);
+            if (block && block.data && typeof block.data.html === 'string') {
+              // Only replace if the fix is actually different
+              if (block.data.html !== decodedFix) {
+                block.data.html = decodedFix;
+                return true;
+              }
             }
           }
-        });
+
+          // Strategy 2: Fallback — try direct string replacement on the raw JSON
+          if (issue.original) {
+            const decodedOrig = decodeHtmlEntities(issue.original);
+            // Check within each block's html for a match
+            for (const block of doc!.blocks) {
+              if (block.data && typeof block.data.html === 'string' && block.data.html.includes(decodedOrig)) {
+                block.data.html = block.data.html.replace(decodedOrig, decodedFix);
+                return true;
+              }
+            }
+          }
+
+          return false;
+        };
+
+        if (input.issueIndex !== undefined) {
+          const target = llmIssues[input.issueIndex];
+          if (target && target.source !== 'math_normalizer') {
+            if (applyLlmFix(target)) {
+              totalFixed++;
+              fixedIssueIndices.add(input.issueIndex);
+            }
+          }
+        } else {
+          llmIssues.forEach((issue, idx) => {
+            if (issue.source !== 'math_normalizer') {
+              if (applyLlmFix(issue)) {
+                totalFixed++;
+                fixedIssueIndices.add(idx);
+              }
+            }
+          });
+        }
+
+        // Re-serialize the modified document
+        if (totalFixed > 0 || fixedIssueIndices.size > 0) {
+          content = JSON.stringify(doc);
+        }
       }
     }
 

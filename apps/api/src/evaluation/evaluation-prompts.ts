@@ -25,6 +25,36 @@ export function buildEvaluationSystemPrompt(config: EvalConfig): string {
   return `You are an expert content evaluator for educational materials (university-level STEM courses).
 Your task is to evaluate a lesson page and produce a structured quality report.
 
+## Content Format
+The content is a BlockDocument JSON with this structure:
+{
+  "version": 2,
+  "blocks": [
+    {
+      "id": "block_id_string",
+      "type": "text|callout|image|video|diagram|divider",
+      "data": {
+        "html": "<p>HTML content with TipTap-generated markup</p>"
+      }
+    }
+  ]
+}
+
+Each "text" and "callout" block has a "data.html" field containing TipTap HTML.
+
+### Math Rendering Format
+Math expressions MUST use these specific HTML elements:
+- **Inline math**: <span data-inline-math="" latex="LATEX_HERE"></span>
+  Example: <span data-inline-math="" latex="x^2 + y^2 = r^2"></span>
+- **Block/display math**: <span data-block-math="" latex="LATEX_HERE"></span>
+  Example: <span data-block-math="" latex="\\int_0^\\infty e^{-x} dx = 1"></span>
+
+Common math problems to detect:
+- Raw LaTeX text outside math containers (e.g. bare "x^2 + y^2" without a span wrapper)
+- Broken HTML entities in math containers (e.g. &lt;span&gt; instead of <span>)
+- Self-closing tags that should not be (use </span> not />)
+- Missing or malformed latex attribute
+
 ## Evaluation Standards
 - Strictness: ${config.strictness} — ${strictnessGuide[config.strictness]}
 - Depth: ${config.depth} — ${depthGuide[config.depth]}
@@ -46,11 +76,11 @@ ${
   config.rubrics.includes('equations')
     ? `
 ### Equations (0-100)
-- All math expressions are inside proper math containers (data-inline-math or data-block-math)
+- All math expressions are inside proper <span data-inline-math=""> or <span data-block-math=""> containers
 - LaTeX syntax is correct (balanced braces, valid commands)
-- Equations are numbered or referenced where needed
-- Display vs inline math used appropriately
+- Display vs inline math used appropriately (display math for standalone equations, inline for within text)
 - No raw LaTeX text outside math containers
+- No broken HTML entities within math containers
 `
     : ''
 }
@@ -94,11 +124,10 @@ Respond with a JSON object (no markdown fences):
     {
       "category": "<${config.rubrics.join('|')}>",
       "severity": "<error|warning|info>",
-      "location": "<human-readable location, e.g. 'Block 3, paragraph 2'>",
-      "blockId": "<the id of the block containing the issue, from the JSON>",
+      "location": "<human-readable location, e.g. 'Block 3, Example 1'>",
+      "blockId": "<the exact block id string from the JSON, e.g. 'blk_abc123'>",
       "message": "<description of the issue>",
-      "original": "<the EXACT text/HTML fragment from the block content that has the issue — must be copy-pasted verbatim so it can be found via string search>",
-      "suggestedFix": "<the corrected version of the 'original' fragment that should replace it, or null if you cannot provide a concrete fix>"
+      "suggestedFix": "<the COMPLETE corrected data.html for this block — the entire HTML string that should replace the block's current data.html value, or null if no concrete fix>"
     }
   ],
   "strengths": ["<positive aspects>"],
@@ -106,12 +135,14 @@ Respond with a JSON object (no markdown fences):
 }
 
 ## CRITICAL: suggestedFix Requirements
-- The "original" field MUST contain the EXACT substring from the block content (HTML/text) so it can be located by string matching.
-- The "suggestedFix" field MUST contain the corrected replacement for that exact substring — NOT vague advice.
-- For math/equation issues: provide the corrected HTML with proper math containers (e.g. <span data-inline-math="" latex="..."></span>).
-- For formatting issues: provide the corrected HTML markup.
-- For pedagogy/rigor issues where no concrete text fix is possible, set suggestedFix to null.
-- NEVER return vague instructions like "Ensure all math containers are properly closed". Return the actual fixed content.`;
+- The "blockId" MUST be the exact id of the block from the input JSON (e.g. "blk_1738xxx_3").
+- The "suggestedFix" MUST be the COMPLETE corrected HTML for the block's data.html field.
+  It will REPLACE the entire data.html value of the identified block.
+- Do NOT include JSON escaping in suggestedFix — provide raw HTML as it would appear as the value of data.html.
+- For equation fixes: ensure all math uses <span data-inline-math="" latex="..."></span> or <span data-block-math="" latex="..."></span> with proper closing tags.
+- For formatting fixes: provide the corrected HTML with proper heading levels, paragraph structure, etc.
+- For pedagogy/rigor issues where no HTML change would help, set suggestedFix to null.
+- NEVER return vague instructions like "Ensure math containers are properly closed". Provide the actual corrected HTML.`;
 }
 
 export function buildEvaluationUserPrompt(
