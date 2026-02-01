@@ -42,6 +42,7 @@ RUN pnpm install
 COPY --from=shared-build /repo/packages/shared /shared
 RUN pnpm add /shared
 COPY apps/api/ .
+RUN pnpm exec prisma generate
 RUN chmod +x start-dev.sh
 EXPOSE 3000
 CMD ["sh", "start-dev.sh"]

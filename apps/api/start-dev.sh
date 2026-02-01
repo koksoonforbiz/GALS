@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e
 
-echo "Generating Prisma client..."
-pnpm exec prisma generate
+# Generate Prisma client only if not already present (avoids network download at runtime)
+if [ ! -d "node_modules/.prisma/client" ]; then
+  echo "Generating Prisma client..."
+  pnpm exec prisma generate
+else
+  echo "Prisma client already generated, skipping."
+fi
 
 echo "Running database migrations..."
 pnpm exec prisma migrate deploy
