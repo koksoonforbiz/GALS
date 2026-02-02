@@ -662,6 +662,26 @@ model KcContentMapping {
   @@map("kc_content_mappings")
 }
 
+// ─── Knowledge-Level Versioning ──────────────────────────
+
+model KnowledgeVersion {
+  id            String   @id @default(uuid()) @db.Uuid
+  courseId      String   @map("course_id") @db.Uuid
+  version       Int
+  changeSummary String   @map("change_summary")
+  changeType    String   @map("change_type") // KC_APPROVE, KC_EDIT, KC_MERGE, KC_ARCHIVE, KC_DELETE, EDGE_ADD, EDGE_UPDATE, EDGE_DELETE, EDGE_GENERATE, MAPPING_ADD, MAPPING_UPDATE, MAPPING_DELETE, MAPPING_AUTO_GENERATE, RESTORE
+  source        String   @default("human") // "human" | "ai" | "restore"
+  authorId      String?  @map("author_id") @db.Uuid
+  snapshotKcs   Json     @map("snapshot_kcs")      // ProposedKC[] snapshot
+  snapshotEdges Json     @map("snapshot_edges")     // KcEdge[] snapshot
+  snapshotMaps  Json     @map("snapshot_maps")      // KcContentMapping[] snapshot
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([courseId, version])
+  @@index([courseId])
+  @@map("knowledge_versions")
+}
+
 // ─── Curriculum Coverage & Gap Mapping ───────────────────
 
 model CurriculumCoverageRun {

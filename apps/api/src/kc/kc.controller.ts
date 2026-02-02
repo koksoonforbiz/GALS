@@ -7,11 +7,18 @@ import {
   Body,
   Param,
   Query,
+  Request,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { KcCrudService } from './kc-crud.service';
 import { KcNormalizationService } from './kc-normalization.service';
+import { KnowledgeVersionService } from '../knowledge-version/knowledge-version.service';
+
+interface RequestUser {
+  id: string;
+  role: string;
+}
 
 @Controller('proposed-kcs')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,6 +27,7 @@ export class KcController {
   constructor(
     private readonly kcCrudService: KcCrudService,
     private readonly kcNormalizationService: KcNormalizationService,
+    private readonly versionService: KnowledgeVersionService,
   ) {}
 
   /** List proposed KCs for a course, optionally filtered by status */
@@ -39,35 +47,76 @@ export class KcController {
 
   /** Update a proposed KC (rename, change description, change status) */
   @Patch(':id')
-  update(
+  async update(
     @Param('id') id: string,
+    @Request() req: { user: RequestUser },
     @Body() dto: { name?: string; description?: string; status?: string; confidenceLevel?: string },
   ) {
-    return this.kcCrudService.update(id, dto);
+    const result = await this.kcCrudService.update(id, dto);
+    this.versionService.createSnapshot(
+      result.courseId, 'KC_EDIT',
+      `Edited KC "${result.name}"`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Approve a proposed KC */
   @Post(':id/approve')
-  approve(@Param('id') id: string) {
-    return this.kcCrudService.approve(id);
+  async approve(
+    @Param('id') id: string,
+    @Request() req: { user: RequestUser },
+  ) {
+    const result = await this.kcCrudService.approve(id);
+    this.versionService.createSnapshot(
+      result.courseId, 'KC_APPROVE',
+      `Approved KC "${result.name}"`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Archive a proposed KC */
   @Post(':id/archive')
-  archive(@Param('id') id: string) {
-    return this.kcCrudService.archive(id);
+  async archive(
+    @Param('id') id: string,
+    @Request() req: { user: RequestUser },
+  ) {
+    const result = await this.kcCrudService.archive(id);
+    this.versionService.createSnapshot(
+      result.courseId, 'KC_ARCHIVE',
+      `Archived KC "${result.name}"`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Merge two proposed KCs (keep target, archive source) */
   @Post('merge')
-  merge(@Body() dto: { targetId: string; sourceId: string }) {
-    return this.kcCrudService.merge(dto.targetId, dto.sourceId);
+  async merge(
+    @Request() req: { user: RequestUser },
+    @Body() dto: { targetId: string; sourceId: string },
+  ) {
+    const result = await this.kcCrudService.merge(dto.targetId, dto.sourceId);
+    this.versionService.createSnapshot(
+      result.courseId, 'KC_MERGE',
+      `Merged KCs into "${result.name}"`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Delete a proposed KC */
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.kcCrudService.remove(id);
+  async remove(
+    @Param('id') id: string,
+    @Request() req: { user: RequestUser },
+  ) {
+    const kc = await this.kcCrudService.findOne(id);
+    const courseId = kc.courseId;
+    const kcName = kc.name;
+    const result = await this.kcCrudService.remove(id);
+    this.versionService.createSnapshot(
+      courseId, 'KC_DELETE',
+      `Deleted KC "${kcName}"`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Get summary stats for a course's proposed KCs */

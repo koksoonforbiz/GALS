@@ -21,6 +21,7 @@ import { EvaluationModule } from './evaluation';
 import { KcModule } from './kc';
 import { KcEvaluationModule } from './kc-evaluation';
 import { CurriculumCoverageModule } from './curriculum-coverage';
+import { KnowledgeVersionModule } from './knowledge-version';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -53,6 +54,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     KcModule,
     KcEvaluationModule,
     CurriculumCoverageModule,
+    KnowledgeVersionModule,
   ],
   controllers: [HealthController],
 })

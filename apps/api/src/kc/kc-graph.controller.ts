@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { KcGraphService } from './kc-graph.service';
+import { KnowledgeVersionService } from '../knowledge-version/knowledge-version.service';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -23,15 +24,23 @@ interface RequestUser {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('teacher', 'admin')
 export class KcGraphController {
-  constructor(private readonly kcGraphService: KcGraphService) {}
+  constructor(
+    private readonly kcGraphService: KcGraphService,
+    private readonly versionService: KnowledgeVersionService,
+  ) {}
 
   /** Generate knowledge graph edges using AI */
   @Post('generate')
-  generate(
+  async generate(
     @Request() req: { user: RequestUser },
     @Body() dto: { courseId: string },
   ) {
-    return this.kcGraphService.generateGraph(dto.courseId, req.user.id);
+    const result = await this.kcGraphService.generateGraph(dto.courseId, req.user.id);
+    this.versionService.createSnapshot(
+      dto.courseId, 'EDGE_GENERATE',
+      'AI-generated graph edges', 'ai', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Get the full graph (nodes + edges) for a course */
@@ -42,31 +51,56 @@ export class KcGraphController {
 
   /** Add a manual edge */
   @Post('edges')
-  addEdge(
+  async addEdge(
+    @Request() req: { user: RequestUser },
     @Body() dto: { courseId: string; fromKcId: string; toKcId: string; relationship?: string; weight?: number },
   ) {
-    return this.kcGraphService.addEdge(
+    const result = await this.kcGraphService.addEdge(
       dto.courseId,
       dto.fromKcId,
       dto.toKcId,
       dto.relationship || 'prerequisite',
       dto.weight ?? 1,
     );
+    this.versionService.createSnapshot(
+      dto.courseId, 'EDGE_ADD',
+      `Added ${dto.relationship || 'prerequisite'} edge`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
   }
 
   /** Update an edge */
   @Patch('edges/:id')
-  updateEdge(
+  async updateEdge(
+    @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body() dto: { relationship?: string; weight?: number },
+    @Body() dto: { relationship?: string; weight?: number; courseId?: string },
   ) {
-    return this.kcGraphService.updateEdge(id, dto);
+    const result = await this.kcGraphService.updateEdge(id, dto);
+    if (result.courseId) {
+      this.versionService.createSnapshot(
+        result.courseId, 'EDGE_UPDATE',
+        'Updated graph edge', 'human', req.user.id,
+      ).catch(() => {});
+    }
+    return result;
   }
 
   /** Remove an edge */
   @Delete('edges/:id')
-  removeEdge(@Param('id') id: string) {
-    return this.kcGraphService.removeEdge(id);
+  async removeEdge(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Query('courseId') courseId?: string,
+  ) {
+    const result = await this.kcGraphService.removeEdge(id);
+    if (courseId) {
+      this.versionService.createSnapshot(
+        courseId, 'EDGE_DELETE',
+        'Removed graph edge', 'human', req.user.id,
+      ).catch(() => {});
+    }
+    return result;
   }
 
   /** Get topological ordering */

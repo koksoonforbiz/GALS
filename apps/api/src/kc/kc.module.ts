@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma';
+import { KnowledgeVersionModule } from '../knowledge-version';
 import { KcSuggestionService } from './kc-suggestion.service';
 import { KcCrudService } from './kc-crud.service';
 import { KcNormalizationService } from './kc-normalization.service';
@@ -10,7 +11,7 @@ import { KcGraphController } from './kc-graph.controller';
 import { KcMappingController } from './kc-mapping.controller';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, KnowledgeVersionModule],
   controllers: [KcController, KcGraphController, KcMappingController],
   providers: [
     KcSuggestionService,
