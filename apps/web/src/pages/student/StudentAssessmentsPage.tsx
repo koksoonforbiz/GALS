@@ -12,6 +12,7 @@ interface Assessment {
   title: string;
   description: string | null;
   courseId: string;
+  mode?: string;
   course: {
     id: string;
     title: string;
@@ -110,6 +111,13 @@ export function StudentAssessmentsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-semibold text-gray-900">{assessment.title}</h3>
+                      {assessment.mode && (
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          assessment.mode === 'test' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                        }`}>
+                          {assessment.mode}
+                        </span>
+                      )}
                       {isCompleted && (
                         <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-100 text-green-800">
                           Completed

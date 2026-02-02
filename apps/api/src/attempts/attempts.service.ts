@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
@@ -17,8 +18,16 @@ import type {
   GradeCompletedPayload,
 } from '@ats/shared';
 
+interface MCQOption {
+  id: string;
+  text: string;
+  isCorrect: boolean;
+}
+
 @Injectable()
 export class AttemptsService {
+  private readonly logger = new Logger(AttemptsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
@@ -32,11 +41,7 @@ export class AttemptsService {
         where: { assessmentId: dto.assessmentId },
         orderBy: { orderIndex: 'asc' },
         include: {
-          question: {
-            include: {
-              topic: { include: { course: true } },
-            },
-          },
+          question: true,
           assessment: true,
         },
       });
@@ -78,6 +83,7 @@ export class AttemptsService {
         where: { id: dto.questionId },
         include: {
           topic: { include: { course: true } },
+          course: true,
         },
       });
 
@@ -85,18 +91,18 @@ export class AttemptsService {
         throw new NotFoundException(`Question ${dto.questionId} not found`);
       }
 
-      // Verify student is enrolled in the course
-      const enrollment = await this.prisma.enrollment.findUnique({
-        where: {
-          studentId_courseId: {
-            studentId,
-            courseId: question.topic.course.id,
+      // Determine courseId from question's course or topic's course
+      const courseId = question.courseId || question.topic?.course?.id;
+      if (courseId) {
+        const enrollment = await this.prisma.enrollment.findUnique({
+          where: {
+            studentId_courseId: { studentId, courseId },
           },
-        },
-      });
+        });
 
-      if (!enrollment) {
-        throw new ForbiddenException('You must be enrolled in the course to start an attempt');
+        if (!enrollment) {
+          throw new ForbiddenException('You must be enrolled in the course to start an attempt');
+        }
       }
 
       return this.prisma.attempt.create({
@@ -184,7 +190,14 @@ export class AttemptsService {
   async update(
     id: string,
     studentId: string,
-    dto: { textResponse?: string | null; strokesJson?: unknown; drawingBlobUrl?: string | null },
+    dto: {
+      textResponse?: string | null;
+      selectedOptionIds?: string[] | null;
+      strokesJson?: unknown;
+      drawingBlobUrl?: string | null;
+      workingStrokes?: unknown;
+      workingBlobUrl?: string | null;
+    },
   ) {
     const attempt = await this.prisma.attempt.findUnique({
       where: { id },
@@ -204,8 +217,15 @@ export class AttemptsService {
 
     const data: Prisma.AttemptUpdateInput = {};
     if (dto.textResponse !== undefined) data.textResponse = dto.textResponse;
+    if (dto.selectedOptionIds !== undefined) {
+      data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
+    }
     if (dto.strokesJson !== undefined) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
     if (dto.drawingBlobUrl !== undefined) data.drawingBlobUrl = dto.drawingBlobUrl;
+    if (dto.workingStrokes !== undefined) {
+      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
+    }
+    if (dto.workingBlobUrl !== undefined) data.workingBlobUrl = dto.workingBlobUrl;
 
     return this.prisma.attempt.update({
       where: { id },
@@ -238,15 +258,29 @@ export class AttemptsService {
       textResponse: dto.textResponse ?? attempt.textResponse,
       submittedAt: new Date(),
     };
+    if (dto.selectedOptionIds) {
+      data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
+    }
     if (dto.strokesJson) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
     if (dto.drawingBlobUrl) data.drawingBlobUrl = dto.drawingBlobUrl;
+    if (dto.workingStrokes) {
+      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
+    }
+    if (dto.workingBlobUrl) data.workingBlobUrl = dto.workingBlobUrl;
 
     const updated = await this.prisma.attempt.update({
       where: { id },
       data,
     });
 
-    // Publish grading event
+    // Auto-grade MCQ questions immediately
+    const qType = attempt.question.type;
+    if (qType === 'MCQ_SINGLE' || qType === 'MCQ_MULTI') {
+      await this.autoGradeMCQ(id, attempt.question, dto.selectedOptionIds || (attempt.selectedOptionIds as string[] | null));
+      return this.findOne(id);
+    }
+
+    // For other types, publish grading event for manual/AI grading
     const payload: GradeSubmissionPayload = {
       attemptId: attempt.id,
       questionId: attempt.questionId,
@@ -262,15 +296,104 @@ export class AttemptsService {
     return updated;
   }
 
+  /**
+   * Auto-grade MCQ questions by comparing selected options to correct answers.
+   */
+  private async autoGradeMCQ(
+    attemptId: string,
+    question: { id: string; type: string; options: unknown; correctOptionId: string | null; maxScore: number },
+    selectedOptionIds: string[] | null,
+  ) {
+    const options = (question.options || []) as MCQOption[];
+    const selected = selectedOptionIds || [];
+    let score = 0;
+    let feedback = '';
+
+    if (question.type === 'MCQ_SINGLE') {
+      const correctOption = options.find((o) => o.isCorrect) || options.find((o) => o.id === question.correctOptionId);
+      if (correctOption && selected.length === 1 && selected[0] === correctOption.id) {
+        score = question.maxScore;
+        feedback = 'Correct!';
+      } else {
+        score = 0;
+        feedback = correctOption
+          ? `Incorrect. The correct answer was: ${correctOption.text}`
+          : 'No correct answer defined for this question.';
+      }
+    } else if (question.type === 'MCQ_MULTI') {
+      const correctIds = new Set(options.filter((o) => o.isCorrect).map((o) => o.id));
+      const selectedSet = new Set(selected);
+      const correctSelected = selected.filter((id) => correctIds.has(id)).length;
+      const incorrectSelected = selected.filter((id) => !correctIds.has(id)).length;
+      const totalCorrect = correctIds.size;
+
+      if (totalCorrect === 0) {
+        score = 0;
+        feedback = 'No correct answers defined.';
+      } else {
+        // Partial credit: correct selections minus incorrect selections, minimum 0
+        const rawScore = Math.max(0, (correctSelected - incorrectSelected) / totalCorrect);
+        score = Math.round(rawScore * question.maxScore * 100) / 100;
+
+        if (correctSelected === totalCorrect && incorrectSelected === 0) {
+          feedback = 'All correct!';
+        } else {
+          const missed = totalCorrect - correctSelected;
+          feedback = `${correctSelected}/${totalCorrect} correct options selected.${
+            incorrectSelected > 0 ? ` ${incorrectSelected} incorrect option(s) selected.` : ''
+          }${missed > 0 ? ` ${missed} correct option(s) missed.` : ''}`;
+        }
+      }
+    }
+
+    // Create grading result
+    const gradingResult = await this.prisma.gradingResult.create({
+      data: {
+        attemptId,
+        score,
+        feedback,
+        gradedBy: 'auto',
+      },
+    });
+
+    // Update attempt
+    await this.prisma.attempt.update({
+      where: { id: attemptId },
+      data: {
+        status: 'graded',
+        currentScore: score,
+        autoFeedback: feedback,
+      },
+    });
+
+    // Update KC mastery
+    try {
+      await this.masteryService.updateMasteryAfterGrading(gradingResult.id, attemptId);
+    } catch (err: any) {
+      this.logger.warn(`Failed to update mastery after auto-grade: ${err.message}`);
+    }
+
+    // Publish grade completed event
+    const gradeCompletedPayload: GradeCompletedPayload = {
+      attemptId,
+      studentId: '', // will be filled by event handler
+      questionId: question.id,
+      score,
+      feedback,
+      gradedBy: 'auto',
+    };
+    await this.eventBus.publish(EventTopics.GRADE_COMPLETED, gradeCompletedPayload).catch(() => {});
+  }
+
   async findForReview(teacherId: string) {
-    // Find submitted and graded attempts for courses taught by this teacher
     return this.prisma.attempt.findMany({
       where: {
         status: { in: ['submitted', 'grading', 'graded'] },
         question: {
-          topic: {
-            course: { teacherId },
-          },
+          OR: [
+            { topic: { course: { teacherId } } },
+            { course: { teacherId } },
+          ],
         },
       },
       include: {
@@ -304,6 +427,7 @@ export class AttemptsService {
         question: {
           include: {
             topic: { include: { course: true } },
+            course: true,
           },
         },
       },
@@ -313,7 +437,8 @@ export class AttemptsService {
       throw new NotFoundException(`Attempt ${id} not found`);
     }
 
-    if (attempt.question.topic.course.teacherId !== teacherId) {
+    const courseTeacherId = attempt.question.topic?.course?.teacherId || attempt.question.course?.teacherId;
+    if (courseTeacherId !== teacherId) {
       throw new ForbiddenException('You can only grade attempts in your own courses');
     }
 
@@ -321,14 +446,12 @@ export class AttemptsService {
       throw new BadRequestException('Cannot grade an in-progress attempt');
     }
 
-    // Validate score against max score
     if (dto.score > attempt.question.maxScore) {
       throw new BadRequestException(
         `Score cannot exceed max score of ${attempt.question.maxScore}`,
       );
     }
 
-    // Create grading result (append-only)
     const gradingResult = await this.prisma.gradingResult.create({
       data: {
         attemptId: id,
@@ -339,7 +462,6 @@ export class AttemptsService {
       },
     });
 
-    // Update attempt status and current score to latest manual grade
     await this.prisma.attempt.update({
       where: { id },
       data: {
@@ -348,10 +470,10 @@ export class AttemptsService {
       },
     });
 
-    // Update KC mastery (if question has KC tags)
+    // Update KC mastery
     await this.masteryService.updateMasteryAfterGrading(gradingResult.id, id);
 
-    // Publish grade completed event for WebSocket notification
+    // Publish grade completed event
     const gradeCompletedPayload: GradeCompletedPayload = {
       attemptId: id,
       studentId: attempt.studentId,

@@ -19,6 +19,9 @@ enum QuestionType {
   text
   drawing
   mixed
+  MCQ_SINGLE
+  MCQ_MULTI
+  STRUCTURED
 }
 
 enum AttemptStatus {
@@ -123,6 +126,7 @@ model Course {
   topics          Topic[]
   enrollments     Enrollment[]
   assessments     Assessment[]
+  questions       Question[]
   modules         CourseModule[]
   sourceDocuments SourceDocument[]
   contentDrafts   ContentDraft[]
@@ -168,40 +172,72 @@ model Topic {
 
 model Question {
   id         String       @id @default(uuid()) @db.Uuid
-  topicId    String       @map("topic_id") @db.Uuid
+  courseId    String?      @map("course_id") @db.Uuid
+  topicId    String?      @map("topic_id") @db.Uuid
   version    Int          @default(1)
-  prompt     String
+  prompt     String                              // legacy: plain text stem
+  stem       Json?                               // rich content blocks (new)
   type       QuestionType
   maxScore   Float        @map("max_score")
   rubricJson Json?        @map("rubric_json")
+
+  // MCQ fields (JSON arrays)
+  options         Json?                           // [{id, text, isCorrect}]
+  correctOptionId String?  @map("correct_option_id") // MCQ_SINGLE: id of correct option
+  correctAnswer   Json?    @map("correct_answer")   // STRUCTURED: rubric/key points/sample solution
+
+  // Rich explanation / worked solution
+  explanation Json?                               // rich blocks for worked solution
+
+  // Tags (stored as JSON for flexibility)
+  difficulty        Int?     @default(3)           // 1-5
+  bloomsLevel       String?  @map("blooms_level")  // remember/understand/apply/analyze/evaluate/create
+  kcIds             String[] @map("kc_ids") @db.Uuid   // course-scoped KC links
+  pageIds           String[] @map("page_ids") @db.Uuid  // links to lesson pages
+  tags              Json?                          // additional custom tags
+
+  // Metadata
+  status     String   @default("draft")           // draft/approved/archived
+  createdBy  String?  @map("created_by")          // "admin" | "ai"
+  sourceType String?  @map("source_type")         // "lesson_based" | "uploaded" | "mixed"
+  provenance Json?                                // {sourceDocIds, chunkIds}
+
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz
 
-  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  course              Course?              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic               Topic?               @relation(fields: [topicId], references: [id], onDelete: Cascade)
   attempts            Attempt[]
   assessmentQuestions AssessmentQuestion[]
   questionKcs         QuestionKc[]
 
+  @@index([courseId])
   @@index([topicId])
+  @@index([status])
+  @@index([type])
   @@map("questions")
 }
 
 model Attempt {
-  id             String        @id @default(uuid()) @db.Uuid
-  studentId      String        @map("student_id") @db.Uuid
-  questionId     String        @map("question_id") @db.Uuid
-  assessmentId   String?       @map("assessment_id") @db.Uuid
-  status         AttemptStatus @default(in_progress)
-  textResponse   String?       @map("text_response")
-  strokesJson    Json?         @map("strokes_json")
-  drawingBlobUrl String?       @map("drawing_blob_url")
-  currentScore   Float?        @map("current_score")
-  submittedAt    DateTime?     @map("submitted_at") @db.Timestamptz
-  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  id               String        @id @default(uuid()) @db.Uuid
+  studentId        String        @map("student_id") @db.Uuid
+  questionId       String        @map("question_id") @db.Uuid
+  assessmentId     String?       @map("assessment_id") @db.Uuid
+  status           AttemptStatus @default(in_progress)
+  textResponse     String?       @map("text_response")
+  selectedOptionIds Json?        @map("selected_option_ids")  // string[] for MCQ answers
+  strokesJson      Json?         @map("strokes_json")
+  drawingBlobUrl   String?       @map("drawing_blob_url")
+  workingStrokes   Json?         @map("working_strokes")      // working/scratch canvas strokes (all types)
+  workingBlobUrl   String?       @map("working_blob_url")     // exported PNG of working
+  currentScore     Float?        @map("current_score")
+  autoFeedback     String?       @map("auto_feedback")        // auto-generated feedback for MCQ
+  submittedAt      DateTime?     @map("submitted_at") @db.Timestamptz
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
-  student       User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  question      Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  student        User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question       Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)
   gradingResults GradingResult[]
 
   @@index([studentId])
@@ -245,7 +281,9 @@ model Assessment {
   courseId    String   @map("course_id") @db.Uuid
   title       String
   description String   @default("")
+  mode        String   @default("practice")        // "practice" | "test"
   isPublished Boolean  @default(false) @map("is_published")
+  settings    Json?                                 // {timeLimit, maxAttempts, showSolutions, shuffle}
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -257,10 +295,12 @@ model Assessment {
 }
 
 model AssessmentQuestion {
-  id           String @id @default(uuid()) @db.Uuid
-  assessmentId String @map("assessment_id") @db.Uuid
-  questionId   String @map("question_id") @db.Uuid
-  orderIndex   Int    @map("order_index")
+  id           String  @id @default(uuid()) @db.Uuid
+  assessmentId String  @map("assessment_id") @db.Uuid
+  questionId   String  @map("question_id") @db.Uuid
+  orderIndex   Int     @map("order_index")
+  points       Float?  @default(1)                // points for this question in this assessment
+  section      String?                            // optional section grouping
 
   assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)

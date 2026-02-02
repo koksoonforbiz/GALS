@@ -12,6 +12,8 @@ export interface Stroke {
   width: number;
 }
 
+type Tool = 'pen' | 'eraser';
+
 interface DrawingCanvasProps {
   width?: number;
   height?: number;
@@ -29,10 +31,12 @@ export function DrawingCanvas({
 }: DrawingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [strokes, setStrokes] = useState<Stroke[]>(initialStrokes);
+  const [redoStack, setRedoStack] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Stroke | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [strokeColor, setStrokeColor] = useState('#000000');
   const [strokeWidth, setStrokeWidth] = useState(2);
+  const [activeTool, setActiveTool] = useState<Tool>('pen');
 
   // Redraw canvas when strokes change
   const redrawCanvas = useCallback(() => {
@@ -113,11 +117,13 @@ export function DrawingCanvas({
     e.preventDefault();
 
     const point = getPointFromEvent(e);
+    const isEraser = activeTool === 'eraser';
+
     setIsDrawing(true);
     setCurrentStroke({
       points: [point],
-      color: strokeColor,
-      width: strokeWidth,
+      color: isEraser ? '#ffffff' : strokeColor,
+      width: isEraser ? Math.max(strokeWidth * 4, 16) : strokeWidth,
     });
   };
 
@@ -143,6 +149,8 @@ export function DrawingCanvas({
 
     if (currentStroke.points.length >= 2) {
       setStrokes((prev) => [...prev, currentStroke]);
+      // New stroke drawn, clear redo stack
+      setRedoStack([]);
     }
     setCurrentStroke(null);
     setIsDrawing(false);
@@ -150,11 +158,30 @@ export function DrawingCanvas({
 
   const handleClear = () => {
     setStrokes([]);
+    setRedoStack([]);
     setCurrentStroke(null);
   };
 
   const handleUndo = () => {
-    setStrokes((prev) => prev.slice(0, -1));
+    setStrokes((prev) => {
+      if (prev.length === 0) return prev;
+      const undone = prev[prev.length - 1];
+      if (undone) {
+        setRedoStack((rs) => [...rs, undone]);
+      }
+      return prev.slice(0, -1);
+    });
+  };
+
+  const handleRedo = () => {
+    setRedoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const restored = prev[prev.length - 1];
+      if (restored) {
+        setStrokes((s) => [...s, restored]);
+      }
+      return prev.slice(0, -1);
+    });
   };
 
   // Export canvas as PNG data URL
@@ -179,14 +206,69 @@ export function DrawingCanvas({
     <div className="space-y-2">
       {!readOnly && (
         <div className="flex items-center gap-4 p-2 bg-gray-50 rounded-lg">
+          {/* Tool selector: Pen and Eraser */}
+          <div className="flex items-center gap-1">
+            <span className="text-sm text-gray-600 mr-1">Tool:</span>
+            <button
+              onClick={() => setActiveTool('pen')}
+              title="Pen"
+              className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${
+                activeTool === 'pen' ? 'bg-blue-100 ring-2 ring-blue-400' : 'hover:bg-gray-100'
+              }`}
+            >
+              {/* Pen icon (SVG) */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4"
+              >
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                <path d="m15 5 4 4" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setActiveTool('eraser')}
+              title="Eraser"
+              className={`w-8 h-8 rounded flex items-center justify-center transition-colors ${
+                activeTool === 'eraser' ? 'bg-blue-100 ring-2 ring-blue-400' : 'hover:bg-gray-100'
+              }`}
+            >
+              {/* Eraser icon (SVG) */}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4"
+              >
+                <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+                <path d="M22 21H7" />
+                <path d="m5 11 9 9" />
+              </svg>
+            </button>
+          </div>
+
           <div className="flex items-center gap-1">
             <span className="text-sm text-gray-600 mr-1">Color:</span>
             {colors.map((color) => (
               <button
                 key={color}
-                onClick={() => setStrokeColor(color)}
+                onClick={() => {
+                  setStrokeColor(color);
+                  setActiveTool('pen');
+                }}
                 className={`w-6 h-6 rounded-full border-2 transition-transform ${
-                  strokeColor === color ? 'scale-125 border-gray-400' : 'border-transparent'
+                  strokeColor === color && activeTool === 'pen'
+                    ? 'scale-125 border-gray-400'
+                    : 'border-transparent'
                 }`}
                 style={{ backgroundColor: color }}
               />
@@ -218,6 +300,13 @@ export function DrawingCanvas({
             Undo
           </button>
           <button
+            onClick={handleRedo}
+            disabled={redoStack.length === 0}
+            className="px-3 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Redo
+          </button>
+          <button
             onClick={handleClear}
             disabled={strokes.length === 0}
             className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -239,7 +328,7 @@ export function DrawingCanvas({
         onTouchMove={handleMove}
         onTouchEnd={handleEnd}
         className={`border border-gray-300 rounded-lg bg-white ${
-          readOnly ? 'cursor-default' : 'cursor-crosshair'
+          readOnly ? 'cursor-default' : activeTool === 'eraser' ? 'cursor-cell' : 'cursor-crosshair'
         }`}
         style={{ touchAction: 'none', maxWidth: '100%', height: 'auto' }}
       />

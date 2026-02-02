@@ -11,8 +11,8 @@ const config: Config = {
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^@ats/shared$': '<rootDir>/../../packages/shared/src/index.ts',
-    '^@ats/shared/(.*)$': '<rootDir>/../../packages/shared/src/$1',
+    '^@ats/shared$': '<rootDir>/../../../packages/shared/src/index.ts',
+    '^@ats/shared/(.*)$': '<rootDir>/../../../packages/shared/src/$1',
   },
   // Integration tests share a DB, run sequentially
   maxWorkers: 1,
