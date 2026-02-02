@@ -1,13 +1,10 @@
 #!/bin/sh
 set -e
 
-# Generate Prisma client only if not already present (avoids network download at runtime)
-if [ ! -d "node_modules/.prisma/client" ]; then
-  echo "Generating Prisma client..."
-  pnpm exec prisma generate
-else
-  echo "Prisma client already generated, skipping."
-fi
+# Always regenerate Prisma client in dev — the prisma/ folder is volume-mounted
+# so the schema may have changed since the Docker image was built.
+echo "Generating Prisma client..."
+pnpm exec prisma generate
 
 echo "Running database migrations..."
 pnpm exec prisma migrate deploy || echo "WARNING: prisma migrate deploy failed (exit $?). Continuing anyway..."
