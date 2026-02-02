@@ -20,6 +20,7 @@ import { PageContentModule } from './page-content';
 import { EvaluationModule } from './evaluation';
 import { KcModule } from './kc';
 import { KcEvaluationModule } from './kc-evaluation';
+import { CurriculumCoverageModule } from './curriculum-coverage';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -51,6 +52,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     EvaluationModule,
     KcModule,
     KcEvaluationModule,
+    CurriculumCoverageModule,
   ],
   controllers: [HealthController],
 })

@@ -13,6 +13,7 @@ import KcStudioPanel from '../../components/KcStudioPanel';
 import KcGraphStudioPanel from '../../components/KcGraphStudioPanel';
 import KcMappingPanel from '../../components/KcMappingPanel';
 import KcEvaluationDashboard from '../../components/KcEvaluationDashboard';
+import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'kc-eval' | 'settings';
+type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'kc-eval' | 'coverage' | 'settings';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -542,6 +543,7 @@ export function CourseBuilderPage() {
     { key: 'kc-graph', label: 'KC Graph' },
     { key: 'kc-mappings', label: 'KC Mappings' },
     { key: 'kc-eval', label: 'KC Evaluate' },
+    { key: 'coverage', label: 'Coverage' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1184,6 +1186,11 @@ export function CourseBuilderPage() {
       {/* ─── KC Evaluate Tab ─── */}
       {activeTab === 'kc-eval' && courseId && (
         <KcEvaluationDashboard courseId={courseId} />
+      )}
+
+      {/* ─── Coverage Tab ─── */}
+      {activeTab === 'coverage' && courseId && (
+        <CurriculumCoveragePanel courseId={courseId} />
       )}
 
       {/* ─── Settings Tab ─── */}

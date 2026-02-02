@@ -662,6 +662,27 @@ model KcContentMapping {
   @@map("kc_content_mappings")
 }
 
+// ─── Curriculum Coverage & Gap Mapping ───────────────────
+
+model CurriculumCoverageRun {
+  id              String              @id @default(uuid()) @db.Uuid
+  courseId         String              @map("course_id") @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
+  status          EvaluationRunStatus @default(PENDING)
+  syllabusText    String              @map("syllabus_text")  // raw syllabus/curriculum input
+  parsedOutcomes  Json?               @map("parsed_outcomes")  // SyllabusOutcome[]
+  outcomeKcMaps   Json?               @map("outcome_kc_maps")  // OutcomeKcMap[]
+  coverageResults Json?               @map("coverage_results") // CoverageAnalysisOutput
+  errorMessage    String?             @map("error_message")
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([courseId])
+  @@index([userId])
+  @@map("curriculum_coverage_runs")
+}
+
 // ─── KC-Aware Evaluation ────────────────────────────────
 
 model KcEvaluationRun {

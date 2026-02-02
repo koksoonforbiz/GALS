@@ -24,6 +24,7 @@ export async function createTestApp(): Promise<{
 
 export async function cleanDatabase(prisma: PrismaService): Promise<void> {
   // Delete in reverse dependency order
+  await prisma.curriculumCoverageRun.deleteMany();
   await prisma.kcEvidence.deleteMany();
   await prisma.userMastery.deleteMany();
   await prisma.gradingResult.deleteMany();
