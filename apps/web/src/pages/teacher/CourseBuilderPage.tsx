@@ -15,6 +15,7 @@ import KcMappingPanel from '../../components/KcMappingPanel';
 import KcEvaluationDashboard from '../../components/KcEvaluationDashboard';
 import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
+import PublishGatePanel from '../../components/PublishGatePanel';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -68,7 +69,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'kc-eval' | 'coverage' | 'kc-versions' | 'settings';
+type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'kc-eval' | 'coverage' | 'kc-versions' | 'publish-gate' | 'settings';
 
 // ─── Component ──────────────────────────────────────────
 
@@ -546,6 +547,7 @@ export function CourseBuilderPage() {
     { key: 'kc-eval', label: 'KC Evaluate' },
     { key: 'coverage', label: 'Coverage' },
     { key: 'kc-versions', label: 'Versions' },
+    { key: 'publish-gate', label: 'Publish' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1198,6 +1200,11 @@ export function CourseBuilderPage() {
       {/* ─── KC Versions Tab ─── */}
       {activeTab === 'kc-versions' && courseId && (
         <KnowledgeVersionPanel courseId={courseId} />
+      )}
+
+      {/* ─── Publish Gate Tab ─── */}
+      {activeTab === 'publish-gate' && courseId && (
+        <PublishGatePanel courseId={courseId} />
       )}
 
       {/* ─── Settings Tab ─── */}

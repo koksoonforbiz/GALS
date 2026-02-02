@@ -703,6 +703,24 @@ model CurriculumCoverageRun {
   @@map("curriculum_coverage_runs")
 }
 
+// ─── Publish Gate Audit ──────────────────────────────────
+
+model PublishGateRun {
+  id              String   @id @default(uuid()) @db.Uuid
+  courseId         String   @map("course_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  checks          Json     // PublishGateCheck[]
+  overallPass     Boolean  @map("overall_pass")
+  overridden      Boolean  @default(false)
+  overrideReason  String?  @map("override_reason")
+  published       Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([courseId])
+  @@index([userId])
+  @@map("publish_gate_runs")
+}
+
 // ─── KC-Aware Evaluation ────────────────────────────────
 
 model KcEvaluationRun {
