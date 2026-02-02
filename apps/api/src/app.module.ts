@@ -19,6 +19,7 @@ import { CourseStructureModule } from './course-structure';
 import { PageContentModule } from './page-content';
 import { EvaluationModule } from './evaluation';
 import { KcModule } from './kc';
+import { KcEvaluationModule } from './kc-evaluation';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -49,6 +50,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     PageContentModule,
     EvaluationModule,
     KcModule,
+    KcEvaluationModule,
   ],
   controllers: [HealthController],
 })

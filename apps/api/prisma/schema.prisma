@@ -661,3 +661,23 @@ model KcContentMapping {
   @@index([kcId])
   @@map("kc_content_mappings")
 }
+
+// ─── KC-Aware Evaluation ────────────────────────────────
+
+model KcEvaluationRun {
+  id              String              @id @default(uuid()) @db.Uuid
+  courseId         String              @map("course_id") @db.Uuid
+  userId          String              @map("user_id") @db.Uuid
+  status          EvaluationRunStatus @default(PENDING)
+  scope           Json                // {type: 'course'|'pages', pageIds?: string[]}
+  depth           String              @default("quick") // "quick" | "deep"
+  results         Json?               // Full KcEvaluationOutput JSON
+  errorMessage    String?             @map("error_message")
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz
+  completedAt     DateTime?           @map("completed_at") @db.Timestamptz
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([courseId])
+  @@index([userId])
+  @@map("kc_evaluation_runs")
+}
