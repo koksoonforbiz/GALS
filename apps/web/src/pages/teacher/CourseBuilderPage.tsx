@@ -16,12 +16,13 @@ import KcEvaluationDashboard from '../../components/KcEvaluationDashboard';
 import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
 import PublishGatePanel from '../../components/PublishGatePanel';
+import LearningPathPanel from '../../components/LearningPathPanel';
 
 // ─── Tab Types ──────────────────────────────────────────
 
 type TopTabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'knowledge' | 'publish' | 'settings';
 type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
-type KnowledgeSubTab = 'studio' | 'graph' | 'mappings' | 'evaluate' | 'versions';
+type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
 
 // Legacy tab key mapping → new structure
 const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
@@ -30,6 +31,7 @@ const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
   'kc-mappings': { top: 'knowledge', sub: 'mappings' },
   'kc-eval': { top: 'knowledge', sub: 'evaluate' },
   'kc-versions': { top: 'knowledge', sub: 'versions' },
+  'learning-path': { top: 'knowledge', sub: 'learning-path' },
   'coverage': { top: 'evaluate', sub: 'coverage' },
   'publish-gate': { top: 'publish' },
 };
@@ -586,6 +588,7 @@ export function CourseBuilderPage() {
   const knowledgeSubTabs: { key: KnowledgeSubTab; label: string }[] = [
     { key: 'studio', label: 'KC Studio' },
     { key: 'graph', label: 'KC Graph' },
+    { key: 'learning-path', label: 'Learning Path' },
     { key: 'mappings', label: 'KC Mappings' },
     { key: 'evaluate', label: 'KC Evaluate' },
     { key: 'versions', label: 'Versions' },
@@ -1280,6 +1283,9 @@ export function CourseBuilderPage() {
           )}
           {knowledgeSubTab === 'graph' && (
             <KcGraphStudioPanel courseId={courseId} />
+          )}
+          {knowledgeSubTab === 'learning-path' && (
+            <LearningPathPanel courseId={courseId} />
           )}
           {knowledgeSubTab === 'mappings' && (
             <KcMappingPanel courseId={courseId} />

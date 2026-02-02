@@ -160,6 +160,7 @@ model Topic {
   questions           Question[]
   knowledgeComponents KnowledgeComponent[]
   modules             CourseModule[]
+  proposedKCs         ProposedKC[]
 
   @@index([courseId])
   @@map("topics")
@@ -281,9 +282,10 @@ model CourseModule {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  topic  Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  items  ModuleItem[]
+  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic       Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  items       ModuleItem[]
+  proposedKCs ProposedKC[]
 
   @@index([courseId])
   @@index([topicId])
@@ -600,11 +602,15 @@ model ProposedKC {
   relatedToKCId    String?          @map("related_to_kc_id") @db.Uuid
   evidence         Json             @default("[]") // [{pageId, blockIds, chunkIds}]
   pageIds          String[]         @map("page_ids") @db.Uuid
+  topicId          String?          @map("topic_id") @db.Uuid
+  subtopicId       String?          @map("subtopic_id") @db.Uuid // references CourseModule id
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   relatedTo ProposedKC? @relation("KCDuplicates", fields: [relatedToKCId], references: [id], onDelete: SetNull)
   duplicates ProposedKC[] @relation("KCDuplicates")
+  topic     Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  subtopic  CourseModule? @relation(fields: [subtopicId], references: [id], onDelete: SetNull)
 
   // Graph edges where this KC is source or target
   outgoingEdges KcEdge[] @relation("KcEdgeFrom")
@@ -616,6 +622,8 @@ model ProposedKC {
   @@index([courseId])
   @@index([status])
   @@index([courseId, status])
+  @@index([topicId])
+  @@index([subtopicId])
   @@map("proposed_kcs")
 }
 
@@ -719,6 +727,17 @@ model PublishGateRun {
   @@index([courseId])
   @@index([userId])
   @@map("publish_gate_runs")
+}
+
+// ─── KC Graph Layout Persistence ────────────────────────
+
+model KcGraphLayout {
+  id         String   @id @default(uuid()) @db.Uuid
+  courseId   String   @unique @map("course_id") @db.Uuid
+  layoutJson Json     @map("layout_json") // {nodes: {id, x, y, radius}[], viewBox: {x, y, w, h}}
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("kc_graph_layouts")
 }
 
 // ─── KC-Aware Evaluation ────────────────────────────────

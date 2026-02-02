@@ -114,4 +114,53 @@ export class KcGraphController {
   detectCycles(@Query('courseId') courseId: string) {
     return this.kcGraphService.detectCycles(courseId);
   }
+
+  /** Save graph layout (node positions, sizes, viewBox) */
+  @Post('layout')
+  saveLayout(@Body() dto: { courseId: string; layout: any }) {
+    return this.kcGraphService.saveLayout(dto.courseId, dto.layout);
+  }
+
+  /** Load graph layout */
+  @Get('layout')
+  loadLayout(@Query('courseId') courseId: string) {
+    return this.kcGraphService.loadLayout(courseId);
+  }
+
+  /** Update a single KC's hierarchy (topicId / subtopicId) */
+  @Patch('hierarchy/:kcId')
+  async updateKcHierarchy(
+    @Request() req: { user: RequestUser },
+    @Param('kcId') kcId: string,
+    @Body() dto: { topicId?: string | null; subtopicId?: string | null; courseId?: string },
+  ) {
+    const result = await this.kcGraphService.updateKcHierarchy(kcId, dto);
+    if (dto.courseId) {
+      this.versionService.createSnapshot(
+        dto.courseId, 'KC_EDIT',
+        'Updated KC hierarchy assignment', 'human', req.user.id,
+      ).catch(() => {});
+    }
+    return result;
+  }
+
+  /** Batch-update hierarchy for multiple KCs */
+  @Post('hierarchy/batch')
+  async batchUpdateHierarchy(
+    @Request() req: { user: RequestUser },
+    @Body() dto: { courseId: string; assignments: Array<{ kcId: string; topicId?: string | null; subtopicId?: string | null }> },
+  ) {
+    const result = await this.kcGraphService.batchUpdateHierarchy(dto.courseId, dto.assignments);
+    this.versionService.createSnapshot(
+      dto.courseId, 'KC_EDIT',
+      `Batch-updated hierarchy for ${result.updated} KCs`, 'human', req.user.id,
+    ).catch(() => {});
+    return result;
+  }
+
+  /** Get available topics and modules for hierarchy sidebar */
+  @Get('hierarchy-options')
+  getHierarchyOptions(@Query('courseId') courseId: string) {
+    return this.kcGraphService.getHierarchyOptions(courseId);
+  }
 }

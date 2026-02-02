@@ -13,21 +13,52 @@ interface EdgeRaw {
   reasoning?: string;
 }
 
+interface GraphNode {
+  id: string;
+  name: string;
+  status: string;
+  description: string | null;
+  topicId: string | null;
+  subtopicId: string | null;
+  topicName: string | null;
+  subtopicName: string | null;
+}
+
+interface GraphEdgeData {
+  id: string;
+  fromKcId: string;
+  toKcId: string;
+  relationship: string;
+  weight: number;
+  createdBy: string;
+}
+
+interface HierarchyGroup {
+  topicId: string | null;
+  topicName: string;
+  subtopics: Array<{
+    subtopicId: string | null;
+    subtopicName: string;
+    kcIds: string[];
+  }>;
+}
+
 interface GraphData {
-  nodes: Array<{
-    id: string;
-    name: string;
-    status: string;
-    description: string | null;
-  }>;
-  edges: Array<{
-    id: string;
-    fromKcId: string;
-    toKcId: string;
-    relationship: string;
-    weight: number;
-    createdBy: string;
-  }>;
+  nodes: GraphNode[];
+  edges: GraphEdgeData[];
+  hierarchy: HierarchyGroup[];
+}
+
+interface LayoutNodePos {
+  id: string;
+  x: number;
+  y: number;
+  radius?: number;
+}
+
+interface GraphLayoutData {
+  nodes: LayoutNodePos[];
+  viewBox?: { x: number; y: number; w: number; h: number };
 }
 
 @Injectable()
@@ -126,29 +157,73 @@ export class KcGraphService {
   }
 
   /**
-   * Get the full graph (nodes + edges) for a course.
+   * Get the full graph (nodes + edges + hierarchy) for a course.
    */
   async getGraph(courseId: string): Promise<GraphData> {
     const [kcs, edges] = await Promise.all([
       this.prisma.proposedKC.findMany({
         where: { courseId, status: { not: 'ARCHIVED' } },
-        select: { id: true, name: true, status: true, description: true },
+        select: {
+          id: true, name: true, status: true, description: true,
+          topicId: true, subtopicId: true,
+          topic: { select: { id: true, title: true } },
+          subtopic: { select: { id: true, title: true } },
+        },
         orderBy: { name: 'asc' },
       }),
       this.prisma.kcEdge.findMany({
         where: { courseId },
         select: {
-          id: true,
-          fromKcId: true,
-          toKcId: true,
-          relationship: true,
-          weight: true,
-          createdBy: true,
+          id: true, fromKcId: true, toKcId: true,
+          relationship: true, weight: true, createdBy: true,
         },
       }),
     ]);
 
-    return { nodes: kcs, edges };
+    const nodes: GraphNode[] = kcs.map((kc) => ({
+      id: kc.id,
+      name: kc.name,
+      status: kc.status,
+      description: kc.description,
+      topicId: kc.topicId,
+      subtopicId: kc.subtopicId,
+      topicName: kc.topic?.title ?? null,
+      subtopicName: kc.subtopic?.title ?? null,
+    }));
+
+    // Build hierarchy groups
+    const hierarchy = this.buildHierarchy(nodes);
+
+    return { nodes, edges, hierarchy };
+  }
+
+  private buildHierarchy(nodes: GraphNode[]): HierarchyGroup[] {
+    const topicMap = new Map<string | null, { topicName: string; subs: Map<string | null, { subName: string; kcIds: string[] }> }>();
+
+    for (const n of nodes) {
+      const tKey = n.topicId;
+      const tName = n.topicName || 'Ungrouped';
+      if (!topicMap.has(tKey)) {
+        topicMap.set(tKey, { topicName: tName, subs: new Map() });
+      }
+      const topic = topicMap.get(tKey)!;
+      const sKey = n.subtopicId;
+      const sName = n.subtopicName || 'Ungrouped';
+      if (!topic.subs.has(sKey)) {
+        topic.subs.set(sKey, { subName: sName, kcIds: [] });
+      }
+      topic.subs.get(sKey)!.kcIds.push(n.id);
+    }
+
+    const result: HierarchyGroup[] = [];
+    for (const [topicId, { topicName, subs }] of topicMap) {
+      const subtopics: HierarchyGroup['subtopics'] = [];
+      for (const [subtopicId, { subName, kcIds }] of subs) {
+        subtopics.push({ subtopicId, subtopicName: subName, kcIds });
+      }
+      result.push({ topicId, topicName, subtopics });
+    }
+    return result;
   }
 
   /**
@@ -302,6 +377,91 @@ export class KcGraphService {
     }
 
     return cycles;
+  }
+
+  /**
+   * Save graph layout (node positions, sizes, view state) for a course.
+   */
+  async saveLayout(courseId: string, layout: GraphLayoutData): Promise<{ saved: boolean }> {
+    await this.prisma.kcGraphLayout.upsert({
+      where: { courseId },
+      update: { layoutJson: layout as unknown as import('@prisma/client').Prisma.InputJsonValue },
+      create: {
+        courseId,
+        layoutJson: layout as unknown as import('@prisma/client').Prisma.InputJsonValue,
+      },
+    });
+    return { saved: true };
+  }
+
+  /**
+   * Load graph layout for a course.
+   */
+  async loadLayout(courseId: string): Promise<GraphLayoutData | null> {
+    const row = await this.prisma.kcGraphLayout.findUnique({ where: { courseId } });
+    if (!row) return null;
+    return row.layoutJson as unknown as GraphLayoutData;
+  }
+
+  /**
+   * Update KC hierarchy assignments (topicId / subtopicId).
+   */
+  async updateKcHierarchy(
+    kcId: string,
+    dto: { topicId?: string | null; subtopicId?: string | null },
+  ) {
+    const kc = await this.prisma.proposedKC.findUnique({ where: { id: kcId } });
+    if (!kc) throw new NotFoundException(`ProposedKC ${kcId} not found`);
+
+    const data: { topicId?: string | null; subtopicId?: string | null } = {};
+    if (dto.topicId !== undefined) data.topicId = dto.topicId;
+    if (dto.subtopicId !== undefined) data.subtopicId = dto.subtopicId;
+
+    return this.prisma.proposedKC.update({ where: { id: kcId }, data });
+  }
+
+  /**
+   * Batch-assign hierarchy to multiple KCs at once.
+   */
+  async batchUpdateHierarchy(
+    courseId: string,
+    assignments: Array<{ kcId: string; topicId?: string | null; subtopicId?: string | null }>,
+  ) {
+    let updated = 0;
+    for (const a of assignments) {
+      try {
+        await this.prisma.proposedKC.update({
+          where: { id: a.kcId },
+          data: {
+            ...(a.topicId !== undefined ? { topicId: a.topicId } : {}),
+            ...(a.subtopicId !== undefined ? { subtopicId: a.subtopicId } : {}),
+          },
+        });
+        updated++;
+      } catch {
+        this.logger.warn(`Failed to update hierarchy for KC ${a.kcId}`);
+      }
+    }
+    return { updated, total: assignments.length };
+  }
+
+  /**
+   * Get topics and modules (subtopics) for a course, for hierarchy sidebar.
+   */
+  async getHierarchyOptions(courseId: string) {
+    const [topics, modules] = await Promise.all([
+      this.prisma.topic.findMany({
+        where: { courseId },
+        select: { id: true, title: true, orderIndex: true },
+        orderBy: { orderIndex: 'asc' },
+      }),
+      this.prisma.courseModule.findMany({
+        where: { courseId },
+        select: { id: true, title: true, topicId: true, orderIndex: true },
+        orderBy: { orderIndex: 'asc' },
+      }),
+    ]);
+    return { topics, modules };
   }
 
   // ─── Private ─────────────────────────────────────────────

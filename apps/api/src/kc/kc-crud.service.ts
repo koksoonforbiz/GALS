@@ -37,7 +37,7 @@ export class KcCrudService {
   /** Update a proposed KC */
   async update(
     id: string,
-    dto: { name?: string; description?: string; status?: string; confidenceLevel?: string },
+    dto: { name?: string; description?: string; status?: string; confidenceLevel?: string; topicId?: string | null; subtopicId?: string | null },
   ) {
     const kc = await this.prisma.proposedKC.findUnique({ where: { id } });
     if (!kc) throw new NotFoundException(`ProposedKC ${id} not found`);
@@ -49,6 +49,8 @@ export class KcCrudService {
       data.status = dto.status;
     }
     if (dto.confidenceLevel !== undefined) data.confidenceLevel = dto.confidenceLevel;
+    if (dto.topicId !== undefined) data.topicId = dto.topicId;
+    if (dto.subtopicId !== undefined) data.subtopicId = dto.subtopicId;
 
     return this.prisma.proposedKC.update({ where: { id }, data });
   }
