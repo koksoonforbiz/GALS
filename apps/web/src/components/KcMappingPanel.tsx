@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from './Toast';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -185,12 +186,14 @@ export default function KcMappingPanel({ courseId }: Props) {
           className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
         >
           {generating ? 'Generating...' : 'Auto-Generate from Evidence'}
+          <span className="ml-1 inline-flex"><InfoTooltip text="Use AI to automatically create KC-to-page mappings based on content evidence. Triggers an LLM call." /></span>
         </button>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
           className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
         >
           {showAddForm ? 'Cancel' : 'Add Mapping'}
+          <span className="ml-1 inline-flex"><InfoTooltip text="Manually create a mapping between a Knowledge Component and a page." /></span>
         </button>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -198,12 +201,14 @@ export default function KcMappingPanel({ courseId }: Props) {
             className={`px-3 py-1 text-xs rounded-l border ${viewMode === 'by-kc' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
           >
             By KC
+            <span className="ml-1 inline-flex"><InfoTooltip text="View mappings grouped by Knowledge Component." /></span>
           </button>
           <button
             onClick={() => setViewMode('by-page')}
             className={`px-3 py-1 text-xs rounded-r border ${viewMode === 'by-page' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300'}`}
           >
             By Page
+            <span className="ml-1 inline-flex"><InfoTooltip text="View mappings grouped by course page." /></span>
           </button>
         </div>
         <span className="text-xs text-gray-500">{summary?.totalMappings || 0} mappings</span>
@@ -273,6 +278,7 @@ export default function KcMappingPanel({ courseId }: Props) {
                             title="Remove"
                           >
                             ×
+                            <span className="ml-1 inline-flex"><InfoTooltip text="Remove this KC-to-page content mapping." warn={true} /></span>
                           </button>
                         )}
                       </div>
@@ -308,6 +314,7 @@ export default function KcMappingPanel({ courseId }: Props) {
                             title="Remove"
                           >
                             ×
+                            <span className="ml-1 inline-flex"><InfoTooltip text="Remove this KC-to-page content mapping." warn={true} /></span>
                           </button>
                         )}
                       </div>

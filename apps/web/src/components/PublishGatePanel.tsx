@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -310,7 +311,7 @@ export default function PublishGatePanel({ courseId }: Props) {
               disabled={loading}
               className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
             >
-              {loading ? 'Checking...' : 'Re-run Checks'}
+              {loading ? 'Checking...' : <>Re-run Checks<span className="ml-1 inline-flex"><InfoTooltip text="Re-execute all structural validation checks against the current course state." /></span></>}
             </button>
 
             {gateResult?.overallPass && (
@@ -319,7 +320,7 @@ export default function PublishGatePanel({ courseId }: Props) {
                 disabled={publishing || (publishResult?.published ?? false)}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                {publishing ? 'Publishing...' : 'Publish Course'}
+                {publishing ? 'Publishing...' : <>Publish Course<span className="ml-1 inline-flex"><InfoTooltip text="Publish this course to learners. All gate checks must pass first." /></span></>}
               </button>
             )}
 
@@ -330,14 +331,14 @@ export default function PublishGatePanel({ courseId }: Props) {
                   title="Fix all failing checks to publish"
                   disabled
                 >
-                  Publish (blocked)
+                  Publish (blocked)<span className="ml-1 inline-flex"><InfoTooltip text="Publishing is blocked because one or more checks failed. Fix the issues or use Override." warn={true} /></span>
                 </button>
                 <button
                   onClick={() => setShowOverrideModal(true)}
                   disabled={publishing}
                   className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
                 >
-                  Override & Publish
+                  Override & Publish<span className="ml-1 inline-flex"><InfoTooltip text="Publish despite failing checks. Requires a written justification that is recorded in the audit trail." warn={true} /></span>
                 </button>
               </>
             )}
@@ -473,7 +474,7 @@ export default function PublishGatePanel({ courseId }: Props) {
                 disabled={publishing || overrideReason.trim().length < 10}
                 className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
-                {publishing ? 'Publishing...' : 'Override & Publish'}
+                {publishing ? 'Publishing...' : <>Override & Publish<span className="ml-1 inline-flex"><InfoTooltip text="Confirm override publish. Your justification will be permanently recorded." warn={true} /></span></>}
               </button>
             </div>
           </div>

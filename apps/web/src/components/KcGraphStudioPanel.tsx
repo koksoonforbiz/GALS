@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from './Toast';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -247,18 +248,21 @@ export default function KcGraphStudioPanel({ courseId }: Props) {
           className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
         >
           {generating ? 'Generating...' : 'Generate Graph (AI)'}
+          <span className="ml-1 inline-flex"><InfoTooltip text="Use AI to auto-generate prerequisite and related edges between KCs. Triggers an LLM call." warn={false} /></span>
         </button>
         <button
           onClick={() => setAddEdgeMode(!addEdgeMode)}
           className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
         >
           {addEdgeMode ? 'Cancel Add Edge' : 'Add Edge'}
+          <span className="ml-1 inline-flex"><InfoTooltip text="Manually create a relationship edge between two Knowledge Components." /></span>
         </button>
         <button
           onClick={() => setShowTopo(!showTopo)}
           className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
         >
           {showTopo ? 'Hide' : 'Show'} Learning Path
+          <span className="ml-1 inline-flex"><InfoTooltip text="Display the suggested learning sequence based on graph topology (topological sort)." /></span>
         </button>
         <span className="text-xs text-gray-500">
           {graph.nodes.length} nodes, {graph.edges.length} edges
@@ -415,6 +419,7 @@ export default function KcGraphStudioPanel({ courseId }: Props) {
             className="ml-auto px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
           >
             Remove Edge
+            <span className="ml-1 inline-flex"><InfoTooltip text="Delete this edge from the KC graph. This cannot be undone." warn={true} /></span>
           </button>
         </div>
       )}

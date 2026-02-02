@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -212,12 +213,14 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                         className="text-xs px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"
                       >
                         Diff
+                        <span className="ml-1 inline-flex"><InfoTooltip text="Show detailed changes between this version snapshot and the current state." /></span>
                       </button>
                       <button
                         onClick={() => handleExport(v.id)}
                         className="text-xs px-2 py-1 bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
                       >
                         Export
+                        <span className="ml-1 inline-flex"><InfoTooltip text="Download this version snapshot as a JSON file." /></span>
                       </button>
                       {v.version < versions[0]!.version && (
                         <button
@@ -225,6 +228,7 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                           className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
                         >
                           Restore
+                          <span className="ml-1 inline-flex"><InfoTooltip text="Restore course KCs, edges, and mappings to this version. Creates a new version from the restored state." warn={true} /></span>
                         </button>
                       )}
                     </div>
@@ -278,6 +282,7 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
               Export Snapshot
+              <span className="ml-1 inline-flex"><InfoTooltip text="Download the full version snapshot including KCs, edges, and mappings." /></span>
             </button>
           </div>
         </div>
@@ -314,6 +319,7 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                 className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
                 {restoring ? 'Restoring...' : 'Restore Version'}
+                <span className="ml-1 inline-flex"><InfoTooltip text="This replaces all current KCs, edges, and mappings with the snapshot data. A new version is created automatically." warn={true} /></span>
               </button>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from './Toast';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -316,6 +317,7 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
                 }`}
               >
                 Entire Course
+                <span className="ml-1 inline-flex"><InfoTooltip text="Evaluate all pages in the course against the full KC set." /></span>
               </button>
               <button
                 onClick={() => setScopeType('pages')}
@@ -324,6 +326,7 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
                 }`}
               >
                 Selected Pages
+                <span className="ml-1 inline-flex"><InfoTooltip text="Evaluate only manually selected course pages." /></span>
               </button>
             </div>
           </div>
@@ -367,6 +370,9 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
                   }`}
                 >
                   {d === 'quick' ? 'Quick Scan' : 'Deep Analysis'}
+                  <span className="ml-1 inline-flex">
+                    <InfoTooltip text={d === 'quick' ? 'Fast evaluation with basic structural checks. Lower cost, less detail.' : 'Thorough evaluation with detailed outcome mapping. Higher cost, more comprehensive.'} />
+                  </span>
                 </button>
               ))}
             </div>
@@ -384,6 +390,7 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
             className="px-6 py-2.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
             {running ? 'Starting...' : 'Run KC Evaluation'}
+            <span className="ml-1 inline-flex"><InfoTooltip text="Execute AI-powered evaluation of your course against KC learning outcomes. Triggers an LLM call." /></span>
           </button>
         </div>
       )}
@@ -516,9 +523,11 @@ function ResultsView({
         <h3 className="text-lg font-semibold text-gray-800 flex-1">Evaluation Results</h3>
         <button onClick={onExportJson} className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
           Export JSON
+          <span className="ml-1 inline-flex"><InfoTooltip text="Download evaluation results as a JSON file for programmatic analysis." /></span>
         </button>
         <button onClick={onExportPdf} className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
           Export PDF
+          <span className="ml-1 inline-flex"><InfoTooltip text="Generate a printable PDF evaluation report." /></span>
         </button>
       </div>
 

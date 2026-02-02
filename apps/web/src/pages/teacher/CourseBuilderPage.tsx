@@ -17,6 +17,23 @@ import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
 import PublishGatePanel from '../../components/PublishGatePanel';
 
+// ─── Tab Types ──────────────────────────────────────────
+
+type TopTabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'knowledge' | 'publish' | 'settings';
+type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
+type KnowledgeSubTab = 'studio' | 'graph' | 'mappings' | 'evaluate' | 'versions';
+
+// Legacy tab key mapping → new structure
+const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
+  'kc-studio': { top: 'knowledge', sub: 'studio' },
+  'kc-graph': { top: 'knowledge', sub: 'graph' },
+  'kc-mappings': { top: 'knowledge', sub: 'mappings' },
+  'kc-eval': { top: 'knowledge', sub: 'evaluate' },
+  'kc-versions': { top: 'knowledge', sub: 'versions' },
+  'coverage': { top: 'evaluate', sub: 'coverage' },
+  'publish-gate': { top: 'publish' },
+};
+
 // ─── Types ──────────────────────────────────────────────
 
 interface ModuleItem {
@@ -69,7 +86,7 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-type TabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'kc-studio' | 'kc-graph' | 'kc-mappings' | 'kc-eval' | 'coverage' | 'kc-versions' | 'publish-gate' | 'settings';
+// (Legacy tab keys like 'kc-studio', 'coverage', etc. are handled by LEGACY_REDIRECTS above)
 
 // ─── Component ──────────────────────────────────────────
 
@@ -80,8 +97,22 @@ export function CourseBuilderPage() {
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [activeTab, setActiveTab] = useState<TopTabKey>('overview');
+  const [evalSubTab, setEvalSubTab] = useState<EvalSubTab>('content-eval');
+  const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>('studio');
   const [showStructureWizard, setShowStructureWizard] = useState(false);
+
+  // Handle legacy tab deep-links (e.g. from bookmarks or external links)
+  const handleTabChange = useCallback((key: string) => {
+    const redirect = LEGACY_REDIRECTS[key];
+    if (redirect) {
+      setActiveTab(redirect.top);
+      if (redirect.top === 'evaluate' && redirect.sub) setEvalSubTab(redirect.sub as EvalSubTab);
+      if (redirect.top === 'knowledge' && redirect.sub) setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
+      return;
+    }
+    setActiveTab(key as TopTabKey);
+  }, []);
 
   // Overview form state
   const [title, setTitle] = useState('');
@@ -536,20 +567,30 @@ export function CourseBuilderPage() {
 
   const selectedModule = course.modules.find((m) => m.id === selectedModuleId);
 
-  const tabs: { key: TabKey; label: string }[] = [
+  const topTabs: { key: TopTabKey; label: string }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'content', label: 'Content' },
     { key: 'sources', label: 'Sources' },
     { key: 'evaluate', label: 'Evaluate' },
-    { key: 'kc-studio', label: 'KC Studio' },
-    { key: 'kc-graph', label: 'KC Graph' },
-    { key: 'kc-mappings', label: 'KC Mappings' },
-    { key: 'kc-eval', label: 'KC Evaluate' },
-    { key: 'coverage', label: 'Coverage' },
-    { key: 'kc-versions', label: 'Versions' },
-    { key: 'publish-gate', label: 'Publish' },
+    { key: 'knowledge', label: 'Knowledge' },
+    { key: 'publish', label: 'Publish' },
     { key: 'settings', label: 'Settings' },
   ];
+
+  const evalSubTabs: { key: EvalSubTab; label: string }[] = [
+    { key: 'content-eval', label: 'Content Evaluation' },
+    { key: 'kc-eval', label: 'KC-Aware Evaluation' },
+    { key: 'coverage', label: 'Coverage & Gap Map' },
+  ];
+
+  const knowledgeSubTabs: { key: KnowledgeSubTab; label: string }[] = [
+    { key: 'studio', label: 'KC Studio' },
+    { key: 'graph', label: 'KC Graph' },
+    { key: 'mappings', label: 'KC Mappings' },
+    { key: 'evaluate', label: 'KC Evaluate' },
+    { key: 'versions', label: 'Versions' },
+  ];
+
 
   return (
     <div>
@@ -576,12 +617,12 @@ export function CourseBuilderPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
-        {tabs.map((tab) => (
+      {/* ─── Top-Level Tabs ─── */}
+      <div className="flex gap-1 border-b border-gray-200 mb-0">
+        {topTabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-blue-600 text-blue-600'
@@ -592,6 +633,55 @@ export function CourseBuilderPage() {
           </button>
         ))}
       </div>
+
+      {/* ─── Sub-navigation for Evaluate ─── */}
+      {activeTab === 'evaluate' && (
+        <div className="bg-gray-50 border-b border-gray-200 px-4">
+          <div className="flex items-center gap-4">
+            {/* Breadcrumb */}
+            <span className="text-xs text-gray-400 py-2 mr-2 select-none">Evaluate &rsaquo;</span>
+            {evalSubTabs.map((sub) => (
+              <button
+                key={sub.key}
+                onClick={() => setEvalSubTab(sub.key)}
+                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  evalSubTab === sub.key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Sub-navigation for Knowledge ─── */}
+      {activeTab === 'knowledge' && (
+        <div className="bg-gray-50 border-b border-gray-200 px-4">
+          <div className="flex items-center gap-4">
+            {/* Breadcrumb */}
+            <span className="text-xs text-gray-400 py-2 mr-2 select-none">Knowledge &rsaquo;</span>
+            {knowledgeSubTabs.map((sub) => (
+              <button
+                key={sub.key}
+                onClick={() => setKnowledgeSubTab(sub.key)}
+                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
+                  knowledgeSubTab === sub.key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Spacer below sub-nav or top-nav */}
+      <div className="mb-6" />
 
       {/* ─── Overview Tab ─── */}
       {activeTab === 'overview' && (
@@ -1167,43 +1257,44 @@ export function CourseBuilderPage() {
         />
       )}
 
-      {/* ─── Evaluate Tab ─── */}
+      {/* ─── Evaluate Tab (sub-tabs) ─── */}
       {activeTab === 'evaluate' && courseId && (
-        <EvaluationCenterPage courseId={courseId} embedded />
+        <>
+          {evalSubTab === 'content-eval' && (
+            <EvaluationCenterPage courseId={courseId} embedded />
+          )}
+          {evalSubTab === 'kc-eval' && (
+            <KcEvaluationDashboard courseId={courseId} />
+          )}
+          {evalSubTab === 'coverage' && (
+            <CurriculumCoveragePanel courseId={courseId} />
+          )}
+        </>
       )}
 
-      {/* ─── KC Studio Tab ─── */}
-      {activeTab === 'kc-studio' && courseId && (
-        <KcStudioPanel courseId={courseId} />
+      {/* ─── Knowledge Tab (sub-tabs) ─── */}
+      {activeTab === 'knowledge' && courseId && (
+        <>
+          {knowledgeSubTab === 'studio' && (
+            <KcStudioPanel courseId={courseId} />
+          )}
+          {knowledgeSubTab === 'graph' && (
+            <KcGraphStudioPanel courseId={courseId} />
+          )}
+          {knowledgeSubTab === 'mappings' && (
+            <KcMappingPanel courseId={courseId} />
+          )}
+          {knowledgeSubTab === 'evaluate' && (
+            <KcEvaluationDashboard courseId={courseId} />
+          )}
+          {knowledgeSubTab === 'versions' && (
+            <KnowledgeVersionPanel courseId={courseId} />
+          )}
+        </>
       )}
 
-      {/* ─── KC Graph Tab ─── */}
-      {activeTab === 'kc-graph' && courseId && (
-        <KcGraphStudioPanel courseId={courseId} />
-      )}
-
-      {/* ─── KC Mappings Tab ─── */}
-      {activeTab === 'kc-mappings' && courseId && (
-        <KcMappingPanel courseId={courseId} />
-      )}
-
-      {/* ─── KC Evaluate Tab ─── */}
-      {activeTab === 'kc-eval' && courseId && (
-        <KcEvaluationDashboard courseId={courseId} />
-      )}
-
-      {/* ─── Coverage Tab ─── */}
-      {activeTab === 'coverage' && courseId && (
-        <CurriculumCoveragePanel courseId={courseId} />
-      )}
-
-      {/* ─── KC Versions Tab ─── */}
-      {activeTab === 'kc-versions' && courseId && (
-        <KnowledgeVersionPanel courseId={courseId} />
-      )}
-
-      {/* ─── Publish Gate Tab ─── */}
-      {activeTab === 'publish-gate' && courseId && (
+      {/* ─── Publish Tab ─── */}
+      {activeTab === 'publish' && courseId && (
         <PublishGatePanel courseId={courseId} />
       )}
 

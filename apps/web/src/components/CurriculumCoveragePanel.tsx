@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
+import { InfoTooltip } from './InfoTooltip';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -275,13 +276,13 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
               onClick={handleExportJson}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
-              Export JSON
+              Export JSON<span className="ml-1 inline-flex"><InfoTooltip text="Download coverage analysis data as a JSON file." /></span>
             </button>
             <button
               onClick={handleExportPdf}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
-              Export PDF
+              Export PDF<span className="ml-1 inline-flex"><InfoTooltip text="Generate a printable coverage analysis report." /></span>
             </button>
           </div>
         )}
@@ -338,7 +339,7 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
               disabled={running || !syllabusText.trim()}
               className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
             >
-              {running ? 'Analyzing...' : 'Analyze Coverage'}
+              {running ? 'Analyzing...' : 'Analyze Coverage'}<span className="ml-1 inline-flex"><InfoTooltip text="Use AI to extract curriculum outcomes from your syllabus and analyze coverage gaps. Triggers an LLM call." /></span>
             </button>
           </div>
 
@@ -495,7 +496,7 @@ function ResultsView({
           disabled={running}
           className="text-xs px-3 py-1.5 bg-teal-100 text-teal-700 rounded hover:bg-teal-200 disabled:opacity-50"
         >
-          {running ? 'Re-analyzing...' : 'Re-analyze (after edits)'}
+          {running ? 'Re-analyzing...' : 'Re-analyze (after edits)'}<span className="ml-1 inline-flex"><InfoTooltip text="Re-run coverage analysis after manual outcome or mapping edits. Triggers an LLM call." /></span>
         </button>
       </div>
 
