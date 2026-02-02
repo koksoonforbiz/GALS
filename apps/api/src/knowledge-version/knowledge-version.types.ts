@@ -50,32 +50,16 @@ export type KnowledgeChangeType =
 
 // ─── Diff Output ────────────────────────────────────────
 
+export interface DiffResult<T> {
+  added: T[];
+  removed: T[];
+  modified: Array<{ id: string; name?: string; changes: Array<{ field: string; from: unknown; to: unknown }> }>;
+}
+
 export interface VersionDiff {
-  kcs: {
-    added: KcSnapshot[];
-    removed: KcSnapshot[];
-    modified: Array<{
-      id: string;
-      name: string;
-      changes: Array<{ field: string; from: unknown; to: unknown }>;
-    }>;
-  };
-  edges: {
-    added: EdgeSnapshot[];
-    removed: EdgeSnapshot[];
-    modified: Array<{
-      id: string;
-      changes: Array<{ field: string; from: unknown; to: unknown }>;
-    }>;
-  };
-  mappings: {
-    added: MappingSnapshot[];
-    removed: MappingSnapshot[];
-    modified: Array<{
-      id: string;
-      changes: Array<{ field: string; from: unknown; to: unknown }>;
-    }>;
-  };
+  kcs: DiffResult<KcSnapshot>;
+  edges: DiffResult<EdgeSnapshot>;
+  mappings: DiffResult<MappingSnapshot>;
 }
 
 export interface VersionSummary {
