@@ -5,7 +5,6 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import { EventBusService } from '../event-bus';
 import { MasteryService } from '../mastery';
@@ -215,15 +214,15 @@ export class AttemptsService {
       throw new BadRequestException('Can only update in-progress attempts');
     }
 
-    const data: Prisma.AttemptUpdateInput = {};
+    const data: Record<string, any> = {};
     if (dto.textResponse !== undefined) data.textResponse = dto.textResponse;
     if (dto.selectedOptionIds !== undefined) {
-      data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
+      data.selectedOptionIds = dto.selectedOptionIds as any;
     }
-    if (dto.strokesJson !== undefined) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
+    if (dto.strokesJson !== undefined) data.strokesJson = dto.strokesJson as any;
     if (dto.drawingBlobUrl !== undefined) data.drawingBlobUrl = dto.drawingBlobUrl;
     if (dto.workingStrokes !== undefined) {
-      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
+      data.workingStrokes = dto.workingStrokes as any;
     }
     if (dto.workingBlobUrl !== undefined) data.workingBlobUrl = dto.workingBlobUrl;
 
@@ -253,18 +252,18 @@ export class AttemptsService {
       );
     }
 
-    const data: Prisma.AttemptUpdateInput = {
+    const data: Record<string, any> = {
       status: 'submitted',
       textResponse: dto.textResponse ?? attempt.textResponse,
       submittedAt: new Date(),
     };
     if (dto.selectedOptionIds) {
-      data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
+      data.selectedOptionIds = dto.selectedOptionIds as any;
     }
-    if (dto.strokesJson) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
+    if (dto.strokesJson) data.strokesJson = dto.strokesJson as any;
     if (dto.drawingBlobUrl) data.drawingBlobUrl = dto.drawingBlobUrl;
     if (dto.workingStrokes) {
-      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
+      data.workingStrokes = dto.workingStrokes as any;
     }
     if (dto.workingBlobUrl) data.workingBlobUrl = dto.workingBlobUrl;
 

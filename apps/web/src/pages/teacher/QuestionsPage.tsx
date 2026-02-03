@@ -865,9 +865,7 @@ export function QuestionsPage() {
         )}
       </div>
 
-      {/* ============================================================ */}
-      /*  QUESTION EDITOR DRAWER                                        */
-      /* ============================================================ */}
+      {/* ==================== QUESTION EDITOR DRAWER ==================== */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 flex justify-end">
           {/* backdrop */}
@@ -1134,9 +1132,7 @@ export function QuestionsPage() {
         </div>
       )}
 
-      {/* ============================================================ */}
-      /*  BULK IMPORT MODAL                                             */
-      /* ============================================================ */}
+      {/* ==================== BULK IMPORT MODAL ==================== */}
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setImportOpen(false)} />
@@ -1193,9 +1189,7 @@ export function QuestionsPage() {
         </div>
       )}
 
-      {/* ============================================================ */}
-      /*  BULK STATUS MODAL                                             */
-      /* ============================================================ */}
+      {/* ==================== BULK STATUS MODAL ==================== */}
       {bulkStatusOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setBulkStatusOpen(false)} />

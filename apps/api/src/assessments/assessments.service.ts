@@ -1,7 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
-import type { CreateAssessment } from '@ats/shared';
 
 @Injectable()
 export class AssessmentsService {
@@ -37,7 +35,14 @@ export class AssessmentsService {
 
   // ─── Create ───────────────────────────────────────────────
 
-  async create(teacherId: string, dto: CreateAssessment) {
+  async create(teacherId: string, dto: {
+    courseId: string;
+    title: string;
+    description?: string;
+    mode?: string;
+    settings?: Record<string, unknown> | null;
+    questionIds?: string[];
+  }) {
     // Verify course ownership
     const course = await this.prisma.course.findUnique({
       where: { id: dto.courseId },
@@ -72,7 +77,7 @@ export class AssessmentsService {
         description: dto.description,
         mode: dto.mode ?? 'practice',
         settings: dto.settings
-          ? (dto.settings as unknown as Prisma.InputJsonValue)
+          ? (dto.settings as any)
           : undefined,
         questions: questionIds.length > 0
           ? {
@@ -167,7 +172,7 @@ export class AssessmentsService {
     });
 
     await Promise.all(
-      remaining.map((item, index) =>
+      remaining.map((item: any, index: number) =>
         this.prisma.assessmentQuestion.update({
           where: { id: item.id },
           data: { orderIndex: index },
@@ -193,7 +198,7 @@ export class AssessmentsService {
       where: { assessmentId },
     });
 
-    const existingQIds = new Set(existing.map((e) => e.questionId));
+    const existingQIds = new Set(existing.map((e: any) => e.questionId));
 
     for (const qId of questionIds) {
       if (!existingQIds.has(qId)) {
@@ -204,7 +209,7 @@ export class AssessmentsService {
     }
 
     // Build a map of questionId -> AssessmentQuestion id for fast lookup
-    const qIdToId = new Map(existing.map((e) => [e.questionId, e.id]));
+    const qIdToId = new Map(existing.map((e: any) => [e.questionId, e.id]));
 
     await Promise.all(
       questionIds.map((qId, index) =>
@@ -307,7 +312,7 @@ export class AssessmentsService {
     });
 
     // Map to expected frontend format (assessmentQuestions)
-    return assessments.map((a) => ({
+    return assessments.map((a: any) => ({
       ...a,
       assessmentQuestions: a.questions,
       questions: undefined,
@@ -359,7 +364,7 @@ export class AssessmentsService {
       data: {
         ...rest,
         ...(settings !== undefined && {
-          settings: settings as unknown as Prisma.InputJsonValue,
+          settings: settings as any,
         }),
       },
       include: this.fullInclude,

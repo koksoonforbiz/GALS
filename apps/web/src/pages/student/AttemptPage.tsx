@@ -131,7 +131,7 @@ export function AttemptPage() {
   const [submitting, setSubmitting] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [gradingStatus, setGradingStatus] = useState<'idle' | 'pending' | 'completed'>('idle');
-  const [gradeResult, setGradeResult] = useState<GradingResult | null>(null);
+  const [, setGradeResult] = useState<GradingResult | null>(null);
   const [scratchOpen, setScratchOpen] = useState(false);
 
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);

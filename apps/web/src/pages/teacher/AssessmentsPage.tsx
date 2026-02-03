@@ -315,7 +315,9 @@ export function AssessmentsPage() {
     if (swap < 0 || swap >= sorted.length) return;
 
     const ids = sorted.map((q) => q.questionId);
-    [ids[index], ids[swap]] = [ids[swap], ids[index]];
+    const tmp = ids[index]!;
+    ids[index] = ids[swap]!;
+    ids[swap] = tmp;
 
     try {
       await apiFetch(`/assessments/${activeAssessment.id}/reorder`, {

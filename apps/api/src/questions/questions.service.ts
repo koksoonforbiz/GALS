@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import type { CreateQuestion, UpdateQuestion } from '@ats/shared';
 
@@ -80,30 +79,30 @@ export class QuestionsService {
         topicId: dto.topicId ?? null,
         prompt: dto.prompt,
         stem: dto.stem === null
-          ? Prisma.DbNull
-          : (dto.stem as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.stem as any | undefined),
         type: dto.type,
         maxScore: dto.maxScore,
         rubricJson: dto.rubricJson === null
-          ? Prisma.DbNull
-          : (dto.rubricJson as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.rubricJson as any | undefined),
         options: dto.options === null
-          ? Prisma.DbNull
-          : (dto.options as unknown as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.options as any | undefined),
         correctOptionId: dto.correctOptionId ?? null,
         correctAnswer: dto.correctAnswer === null
-          ? Prisma.DbNull
-          : (dto.correctAnswer as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.correctAnswer as any | undefined),
         explanation: dto.explanation === null
-          ? Prisma.DbNull
-          : (dto.explanation as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.explanation as any | undefined),
         difficulty: dto.difficulty ?? null,
         bloomsLevel: dto.bloomsLevel ?? null,
         kcIds: dto.kcIds ?? [],
         pageIds: dto.pageIds ?? [],
         tags: dto.tags === null
-          ? Prisma.DbNull
-          : (dto.tags as Prisma.InputJsonValue | undefined),
+          ? null
+          : (dto.tags as any | undefined),
         status: dto.status ?? 'draft',
         createdBy: dto.createdBy ?? null,
         sourceType: dto.sourceType ?? null,
@@ -128,7 +127,7 @@ export class QuestionsService {
   /* ================================================================ */
 
   async findByCourse(courseId: string, filters: FindByCourseFilters = {}) {
-    const where: Prisma.QuestionWhereInput = { courseId };
+    const where: Record<string, any> = { courseId };
 
     if (filters.type) where.type = filters.type as never;
     if (filters.status) where.status = filters.status;
@@ -156,9 +155,9 @@ export class QuestionsService {
       select: { id: true },
     });
 
-    const courseIds = courses.map((c) => c.id);
+    const courseIds = courses.map((c: any) => c.id);
 
-    const where: Prisma.QuestionWhereInput = {
+    const where: Record<string, any> = {
       OR: [
         { courseId: { in: courseIds } },
         { topic: { course: { teacherId } } },
@@ -243,7 +242,7 @@ export class QuestionsService {
       this.validateMCQOptions(merged);
     }
 
-    const updateData: Prisma.QuestionUpdateInput = {
+    const updateData: Record<string, any> = {
       version: { increment: 1 },
     };
 
@@ -267,33 +266,33 @@ export class QuestionsService {
     // JSON fields
     if (dto.rubricJson !== undefined) {
       updateData.rubricJson = dto.rubricJson === null
-        ? Prisma.DbNull
-        : (dto.rubricJson as Prisma.InputJsonValue);
+        ? null
+        : (dto.rubricJson as any);
     }
     if (dto.stem !== undefined) {
       updateData.stem = dto.stem === null
-        ? Prisma.DbNull
-        : (dto.stem as Prisma.InputJsonValue);
+        ? null
+        : (dto.stem as any);
     }
     if (dto.options !== undefined) {
       updateData.options = dto.options === null
-        ? Prisma.DbNull
-        : (dto.options as unknown as Prisma.InputJsonValue);
+        ? null
+        : (dto.options as any);
     }
     if (dto.correctAnswer !== undefined) {
       updateData.correctAnswer = dto.correctAnswer === null
-        ? Prisma.DbNull
-        : (dto.correctAnswer as Prisma.InputJsonValue);
+        ? null
+        : (dto.correctAnswer as any);
     }
     if (dto.explanation !== undefined) {
       updateData.explanation = dto.explanation === null
-        ? Prisma.DbNull
-        : (dto.explanation as Prisma.InputJsonValue);
+        ? null
+        : (dto.explanation as any);
     }
     if (dto.tags !== undefined) {
       updateData.tags = dto.tags === null
-        ? Prisma.DbNull
-        : (dto.tags as Prisma.InputJsonValue);
+        ? null
+        : (dto.tags as any);
     }
 
     // Array fields
@@ -413,30 +412,30 @@ export class QuestionsService {
         topicId: original.topicId ?? null,
         prompt: original.prompt,
         stem: original.stem === null
-          ? Prisma.DbNull
-          : (original.stem as Prisma.InputJsonValue),
+          ? null
+          : (original.stem as any),
         type: original.type,
         maxScore: original.maxScore,
         rubricJson: original.rubricJson === null
-          ? Prisma.DbNull
-          : (original.rubricJson as Prisma.InputJsonValue),
+          ? null
+          : (original.rubricJson as any),
         options: original.options === null
-          ? Prisma.DbNull
-          : (original.options as Prisma.InputJsonValue),
+          ? null
+          : (original.options as any),
         correctOptionId: original.correctOptionId ?? null,
         correctAnswer: original.correctAnswer === null
-          ? Prisma.DbNull
-          : (original.correctAnswer as Prisma.InputJsonValue),
+          ? null
+          : (original.correctAnswer as any),
         explanation: original.explanation === null
-          ? Prisma.DbNull
-          : (original.explanation as Prisma.InputJsonValue),
+          ? null
+          : (original.explanation as any),
         difficulty: original.difficulty ?? null,
         bloomsLevel: original.bloomsLevel ?? null,
         kcIds: original.kcIds ?? [],
         pageIds: original.pageIds ?? [],
         tags: original.tags === null
-          ? Prisma.DbNull
-          : (original.tags as Prisma.InputJsonValue),
+          ? null
+          : (original.tags as any),
         status: 'draft',
         createdBy: original.createdBy ?? null,
         sourceType: original.sourceType ?? null,
@@ -446,7 +445,7 @@ export class QuestionsService {
     // Duplicate KC join-table links
     if (original.questionKcs && original.questionKcs.length > 0) {
       await this.prisma.questionKc.createMany({
-        data: original.questionKcs.map((qk) => ({
+        data: original.questionKcs.map((qk: any) => ({
           questionId: duplicate.id,
           kcId: qk.kcId,
         })),

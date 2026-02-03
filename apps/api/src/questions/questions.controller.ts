@@ -26,7 +26,7 @@ export class QuestionsController {
 
   // POST /questions
   @Post()
-  create(@Request() req: { user: RequestUser }, @Body() dto: Record<string, any>) {
+  create(@Request() req: { user: RequestUser }, @Body() dto: any) {
     return this.questionsService.create(req.user.id, dto);
   }
 
@@ -78,9 +78,9 @@ export class QuestionsController {
   @Post('bulk-import')
   bulkImport(
     @Request() req: { user: RequestUser },
-    @Body() body: { courseId: string; questions: Record<string, any>[] },
+    @Body() body: { courseId: string; questions: any[] },
   ) {
-    return this.questionsService.bulkImport(req.user.id, body.courseId, body.questions);
+    return this.questionsService.bulkImport(req.user.id, body.courseId, body.questions as any);
   }
 
   // POST /questions/bulk-status
