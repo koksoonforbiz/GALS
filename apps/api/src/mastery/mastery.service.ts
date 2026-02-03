@@ -247,7 +247,7 @@ export class MasteryService {
     const questionMap = new Map<string, (typeof questionKcs)[0]['question']>();
     for (const qkc of questionKcs) {
       const q = qkc.question;
-      if (enrolledCourseIds.has(q.topic.course.id) && !questionMap.has(q.id)) {
+      if (q.topic && enrolledCourseIds.has(q.topic.course.id) && !questionMap.has(q.id)) {
         questionMap.set(q.id, q);
       }
     }
@@ -261,7 +261,7 @@ export class MasteryService {
     }
 
     // 3. Pick a course for the assessment (first enrolled course that has matching questions)
-    const courseId = selectedQuestions[0]!.topic.course.id;
+    const courseId = selectedQuestions[0]!.topic!.course.id;
 
     // 4. Create the assessment
     const assessment = await this.prisma.assessment.create({
