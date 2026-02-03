@@ -4,3 +4,4 @@ export * from './course';
 export * from './assessment';
 export * from './event-bus';
 export * from './mastery';
+export * from './question-generation';

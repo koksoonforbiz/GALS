@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../lib/api';
+import { QuestionGenerationModal } from '../../components/QuestionGenerationModal';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -107,6 +108,7 @@ export function AssessmentsPage() {
 
   /* ---- delete confirmation ---- */
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   /* ================================================================ */
   /*  Data fetching                                                   */
@@ -834,7 +836,15 @@ export function AssessmentsPage() {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 sticky top-4">
               <div className="p-4 border-b border-gray-100">
-                <h3 className="font-semibold text-gray-900 text-sm mb-3">Add from Question Bank</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-gray-900 text-sm">Add from Question Bank</h3>
+                  <button
+                    onClick={() => setGenerateOpen(true)}
+                    className="px-3 py-1 text-xs border border-purple-300 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors font-medium"
+                  >
+                    Generate (AI)
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={bankSearch}
@@ -1009,6 +1019,20 @@ export function AssessmentsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Generation Modal */}
+      {activeAssessment && (
+        <QuestionGenerationModal
+          open={generateOpen}
+          onClose={() => setGenerateOpen(false)}
+          courseId={activeAssessment.courseId}
+          assessmentId={activeAssessment.id}
+          onQuestionsGenerated={() => {
+            refreshActive(activeAssessment.id);
+            fetchBankQuestions(activeAssessment.courseId);
+          }}
+        />
       )}
     </div>
   );
