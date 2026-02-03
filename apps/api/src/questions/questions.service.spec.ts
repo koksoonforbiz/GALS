@@ -54,7 +54,7 @@ describe('QuestionsService', () => {
     const baseDto = {
       courseId: 'course-1',
       prompt: 'What is 2+2?',
-      type: 'SHORT_ANSWER' as const,
+      type: 'STRUCTURED' as const,
       maxScore: 10,
     };
 
@@ -445,7 +445,7 @@ describe('QuestionsService', () => {
     const existingQuestion = {
       id: 'q1',
       prompt: 'Old prompt',
-      type: 'SHORT_ANSWER',
+      type: 'STRUCTURED',
       courseId: 'course-1',
       topicId: null,
       version: 1,
@@ -586,8 +586,8 @@ describe('QuestionsService', () => {
 
     it('should verify course ownership then create each question', async () => {
       const questions = [
-        { prompt: 'Q1', type: 'SHORT_ANSWER' as const, maxScore: 5 },
-        { prompt: 'Q2', type: 'SHORT_ANSWER' as const, maxScore: 10 },
+        { prompt: 'Q1', type: 'STRUCTURED' as const, maxScore: 5 },
+        { prompt: 'Q2', type: 'STRUCTURED' as const, maxScore: 10 },
       ];
 
       const result = await service.bulkImport(teacherId, courseId, questions as any);
@@ -673,7 +673,7 @@ describe('QuestionsService', () => {
       topicId: null,
       prompt: 'Original',
       stem: null,
-      type: 'SHORT_ANSWER',
+      type: 'STRUCTURED',
       maxScore: 10,
       rubricJson: null,
       options: null,
