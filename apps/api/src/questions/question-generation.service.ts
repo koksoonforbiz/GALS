@@ -556,6 +556,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
     courseId: string,
     userId: string,
     questions: GeneratedQuestion[],
+    assessmentId?: string,
   ): Promise<string[]> {
     const createdIds: string[] = [];
 
@@ -651,6 +652,24 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       }
 
       createdIds.push(question.id);
+    }
+
+    // Link to assessment if provided
+    if (assessmentId && createdIds.length > 0) {
+      const lastItem = await this.prisma.assessmentQuestion.findFirst({
+        where: { assessmentId },
+        orderBy: { orderIndex: 'desc' },
+      });
+      let nextIndex = lastItem ? lastItem.orderIndex + 1 : 0;
+
+      await this.prisma.assessmentQuestion.createMany({
+        data: createdIds.map((questionId) => ({
+          assessmentId,
+          questionId,
+          orderIndex: nextIndex++,
+          points: 1,
+        })),
+      });
     }
 
     this.logger.log(
