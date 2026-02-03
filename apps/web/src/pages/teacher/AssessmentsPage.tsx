@@ -904,6 +904,18 @@ export function AssessmentsPage() {
             </div>
           </div>
         </div>
+
+        {/* AI Generation Modal */}
+        <QuestionGenerationModal
+          open={generateOpen}
+          onClose={() => setGenerateOpen(false)}
+          courseId={activeAssessment.courseId}
+          assessmentId={activeAssessment.id}
+          onQuestionsGenerated={() => {
+            refreshActive(activeAssessment.id);
+            fetchBank(activeAssessment.courseId);
+          }}
+        />
       </div>
     );
   }
@@ -1021,19 +1033,6 @@ export function AssessmentsPage() {
         </div>
       )}
 
-      {/* AI Generation Modal */}
-      {activeAssessment && (
-        <QuestionGenerationModal
-          open={generateOpen}
-          onClose={() => setGenerateOpen(false)}
-          courseId={activeAssessment.courseId}
-          assessmentId={activeAssessment.id}
-          onQuestionsGenerated={() => {
-            refreshActive(activeAssessment.id);
-            fetchBankQuestions(activeAssessment.courseId);
-          }}
-        />
-      )}
     </div>
   );
 }
