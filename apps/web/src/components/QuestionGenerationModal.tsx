@@ -283,11 +283,32 @@ export function QuestionGenerationModal({
     setError(null);
     try {
       const selected = questions.filter((q) => q.selected);
+      // Transform frontend question shape back to the backend GeneratedQuestion format
+      const payload = selected.map((q) => ({
+        type: q.type,
+        stem: q.stem,
+        options: q.options.map((o, i) => ({
+          id: `opt-${i}`,
+          text: o.text,
+          isCorrect: o.isCorrect,
+        })),
+        structuredAnswer:
+          q.type === 'STRUCTURED' && q.expectedAnswer
+            ? { expectedAnswer: q.expectedAnswer, rubric: q.rubric ? q.rubric.split('\n') : [] }
+            : undefined,
+        explanation: q.explanation,
+        tags: {
+          difficulty: q.difficulty,
+          bloomsLevel: q.bloomsLevel,
+          kcNames: q.kcTags.map((kc) => kc.name),
+        },
+        provenance: { sourceMode: '', sourceIds: [], chunkIds: [] },
+      }));
       const result = await apiFetch<{ questionIds: string[] }>('/questions/generate/save', {
         method: 'POST',
         body: JSON.stringify({
           courseId,
-          questions: selected,
+          questions: payload,
           assessmentId: addToAssessment ? assessmentId : undefined,
         }),
       });
