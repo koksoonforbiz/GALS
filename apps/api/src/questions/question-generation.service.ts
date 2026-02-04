@@ -1,10 +1,5 @@
 import * as crypto from 'crypto';
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { RagService, ChunkWithScore } from '../rag/rag.service';
 
@@ -75,9 +70,7 @@ export class QuestionGenerationService {
   /*  MAIN: generateQuestions                                          */
   /* ================================================================ */
 
-  async generateQuestions(
-    input: GenerateQuestionsInput,
-  ): Promise<GeneratedQuestion[]> {
+  async generateQuestions(input: GenerateQuestionsInput): Promise<GeneratedQuestion[]> {
     const startTime = Date.now();
 
     // 1. Get user LLM credentials
@@ -89,8 +82,7 @@ export class QuestionGenerationService {
     }
 
     // 2. Retrieve RAG chunks based on sourceMode
-    const { lessonChunks, materialChunks } =
-      await this.retrieveSourceChunks(input);
+    const { lessonChunks, materialChunks } = await this.retrieveSourceChunks(input);
 
     // 3. Resolve KC focus names if IDs are provided
     let kcFocusNames: string[] = [];
@@ -134,12 +126,7 @@ export class QuestionGenerationService {
     );
 
     // 7. Parse JSON response
-    const parsed = this.parseQuestionsResponse(
-      llmResult,
-      input,
-      lessonChunks,
-      materialChunks,
-    );
+    const parsed = this.parseQuestionsResponse(llmResult, input, lessonChunks, materialChunks);
 
     // 8. Validate each question
     const validated = parsed
@@ -164,10 +151,7 @@ export class QuestionGenerationService {
     let lessonChunks: LessonChunk[] = [];
     let materialChunks: ChunkWithScore[] = [];
 
-    if (
-      input.sourceMode === 'lesson_based' ||
-      input.sourceMode === 'mixed'
-    ) {
+    if (input.sourceMode === 'lesson_based' || input.sourceMode === 'mixed') {
       // Get content from ModuleItem (type=PAGE) where id IN selectedPageIds
       if (input.selectedPageIds && input.selectedPageIds.length > 0) {
         const pages = await this.prisma.moduleItem.findMany({
@@ -202,10 +186,7 @@ export class QuestionGenerationService {
       }
     }
 
-    if (
-      input.sourceMode === 'question_material' ||
-      input.sourceMode === 'mixed'
-    ) {
+    if (input.sourceMode === 'question_material' || input.sourceMode === 'mixed') {
       const sourceIds = input.selectedSourceIds || [];
       const ragChunks = await this.ragService.queryChunksFiltered(
         input.courseId,
@@ -253,7 +234,15 @@ ${strictSource ? '10. STRICT SOURCE MODE: Every question MUST be directly ground
     materialChunks: ChunkWithScore[],
     kcFocusNames: string[],
   ): string {
-    const { quantity, types, difficultyDistribution, bloomsDistribution, kcFocus, customPrompt, sourceMode } = input;
+    const {
+      quantity,
+      types,
+      difficultyDistribution,
+      bloomsDistribution,
+      kcFocus,
+      customPrompt,
+      sourceMode,
+    } = input;
     const { easy, medium, hard } = difficultyDistribution;
 
     let prompt = `Generate ${quantity} assessment questions with this distribution:
@@ -285,7 +274,21 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
         '\nIMPORTANT: Knowledge must match lesson content facts. Style and wording should resemble the question material patterns.\n';
     }
 
-    prompt += '\nReturn JSON: { "questions": [ ... ] }';
+    prompt += `
+Return JSON matching this exact schema:
+{
+  "questions": [
+    {
+      "type": "MCQ_SINGLE" | "MCQ_MULTI" | "STRUCTURED",
+      "stem": "question text",
+      "options": [{"id": "opt-a", "text": "...", "isCorrect": true/false}, ...],
+      "structuredAnswer": {"expectedAnswer": "...", "rubric": ["point1", ...]},
+      "explanation": "why the answer is correct",
+      "tags": {"difficulty": "easy"|"medium"|"hard", "bloomsLevel": "remember"|"understand"|..., "kcNames": ["..."]}
+    }
+  ]
+}
+IMPORTANT: Every question object MUST include the "type" field with one of: "MCQ_SINGLE", "MCQ_MULTI", "STRUCTURED".`;
 
     return prompt;
   }
@@ -311,9 +314,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
 
       // Handle strict-source NOT_ENOUGH_INFO response
       if (parsed.status === 'NOT_ENOUGH_INFO') {
-        this.logger.warn(
-          `LLM returned NOT_ENOUGH_INFO: ${JSON.stringify(parsed.missingInfo)}`,
-        );
+        this.logger.warn(`LLM returned NOT_ENOUGH_INFO: ${JSON.stringify(parsed.missingInfo)}`);
         return [];
       }
 
@@ -331,7 +332,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       const chunkIds = materialChunks.map((c) => c.id);
 
       return questions.map((q: any) => ({
-        type: q.type,
+        type: this.normalizeQuestionType(q, input.types),
         stem: q.stem || '',
         options: q.options || undefined,
         structuredAnswer: q.structuredAnswer || undefined,
@@ -350,20 +351,62 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
         },
       }));
     } catch (err: any) {
-      this.logger.error(
-        `Failed to parse question generation response: ${err.message}`,
-      );
+      this.logger.error(`Failed to parse question generation response: ${err.message}`);
       return [];
     }
+  }
+
+  /**
+   * Normalise the `type` field coming back from the LLM.
+   *
+   * The model may return the type in many forms (lowercase, snake_case,
+   * camelCase, descriptive strings like "multiple_choice", etc.) or omit
+   * it entirely.  This helper maps them back to the canonical enum values
+   * MCQ_SINGLE | MCQ_MULTI | STRUCTURED, falling back to heuristic
+   * detection based on the question shape and the requested types.
+   */
+  private normalizeQuestionType(q: any, requestedTypes: string[]): string | undefined {
+    const raw: string | undefined = q.type ?? q.questionType ?? q.question_type;
+
+    if (raw) {
+      const t = raw.toUpperCase().replace(/[\s-]+/g, '_');
+
+      // Direct canonical match
+      if (['MCQ_SINGLE', 'MCQ_MULTI', 'STRUCTURED'].includes(t)) return t;
+
+      // Common LLM aliases
+      if (t.includes('SINGLE') || t === 'MCQ' || t === 'MULTIPLE_CHOICE') return 'MCQ_SINGLE';
+      if (t.includes('MULTI') && !t.includes('MULTIPLE_CHOICE')) return 'MCQ_MULTI';
+      if (
+        t.includes('STRUCT') ||
+        t.includes('FREE') ||
+        t.includes('OPEN') ||
+        t.includes('SHORT_ANSWER') ||
+        t.includes('ESSAY')
+      )
+        return 'STRUCTURED';
+    }
+
+    // Heuristic: infer from question shape
+    if (q.structuredAnswer || q.structured_answer || q.expectedAnswer) return 'STRUCTURED';
+
+    if (Array.isArray(q.options) && q.options.length > 0) {
+      const correctCount = q.options.filter((o: any) => o.isCorrect || o.is_correct).length;
+      if (correctCount > 1) return 'MCQ_MULTI';
+      return 'MCQ_SINGLE';
+    }
+
+    // Last resort: if only one type was requested, assume that type
+    if (requestedTypes.length === 1) return requestedTypes[0];
+
+    return undefined;
   }
 
   /* ================================================================ */
   /*  VALIDATION                                                       */
   /* ================================================================ */
 
-  private validateGeneratedQuestion(
-    q: GeneratedQuestion,
-  ): GeneratedQuestion | null {
+  private validateGeneratedQuestion(q: GeneratedQuestion): GeneratedQuestion | null {
     // Validate type
     const validTypes = ['MCQ_SINGLE', 'MCQ_MULTI', 'STRUCTURED'];
     if (!validTypes.includes(q.type)) {
@@ -374,25 +417,14 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
     // Validate difficulty
     const validDifficulties = ['easy', 'medium', 'hard'];
     if (!validDifficulties.includes(q.tags.difficulty)) {
-      this.logger.warn(
-        `Invalid difficulty "${q.tags.difficulty}" — defaulting to "medium"`,
-      );
+      this.logger.warn(`Invalid difficulty "${q.tags.difficulty}" — defaulting to "medium"`);
       q.tags.difficulty = 'medium';
     }
 
     // Validate bloomsLevel
-    const validBlooms = [
-      'remember',
-      'understand',
-      'apply',
-      'analyze',
-      'evaluate',
-      'create',
-    ];
+    const validBlooms = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
     if (!validBlooms.includes(q.tags.bloomsLevel)) {
-      this.logger.warn(
-        `Invalid bloomsLevel "${q.tags.bloomsLevel}" — defaulting to "understand"`,
-      );
+      this.logger.warn(`Invalid bloomsLevel "${q.tags.bloomsLevel}" — defaulting to "understand"`);
       q.tags.bloomsLevel = 'understand';
     }
 
@@ -408,16 +440,12 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
 
       const correctCount = q.options.filter((o) => o.isCorrect).length;
       if (correctCount !== 1) {
-        this.logger.warn(
-          `MCQ_SINGLE has ${correctCount} correct options (expected 1) — skipping`,
-        );
+        this.logger.warn(`MCQ_SINGLE has ${correctCount} correct options (expected 1) — skipping`);
         return null;
       }
 
       if (q.options.length < 4) {
-        this.logger.warn(
-          `MCQ_SINGLE has only ${q.options.length} options (recommended >= 4)`,
-        );
+        this.logger.warn(`MCQ_SINGLE has only ${q.options.length} options (recommended >= 4)`);
       }
     }
 
@@ -440,9 +468,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
         !q.stem.toLowerCase().includes('select all') &&
         !q.stem.toLowerCase().includes('choose all')
       ) {
-        this.logger.warn(
-          'MCQ_MULTI stem should contain "select all that apply"',
-        );
+        this.logger.warn('MCQ_MULTI stem should contain "select all that apply"');
       }
     }
 
@@ -453,18 +479,11 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
         return null;
       }
       if (!q.structuredAnswer.expectedAnswer) {
-        this.logger.warn(
-          'STRUCTURED question missing expectedAnswer — skipping',
-        );
+        this.logger.warn('STRUCTURED question missing expectedAnswer — skipping');
         return null;
       }
-      if (
-        !q.structuredAnswer.rubric ||
-        !Array.isArray(q.structuredAnswer.rubric)
-      ) {
-        this.logger.warn(
-          'STRUCTURED question missing rubric array — skipping',
-        );
+      if (!q.structuredAnswer.rubric || !Array.isArray(q.structuredAnswer.rubric)) {
+        this.logger.warn('STRUCTURED question missing rubric array — skipping');
         return null;
       }
     }
@@ -486,10 +505,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
   /*  KC RESOLUTION                                                    */
   /* ================================================================ */
 
-  async resolveKcTags(
-    courseId: string,
-    kcNames: string[],
-  ): Promise<ResolvedKc[]> {
+  async resolveKcTags(courseId: string, kcNames: string[]): Promise<ResolvedKc[]> {
     // Fetch existing ProposedKCs for the course
     const proposedKcs = await this.prisma.proposedKC.findMany({
       where: { courseId },
@@ -529,10 +545,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       if (existingNorm === normalized) return kc;
 
       // High similarity: one is substring of the other
-      if (
-        existingNorm.includes(normalized) ||
-        normalized.includes(existingNorm)
-      ) {
+      if (existingNorm.includes(normalized) || normalized.includes(existingNorm)) {
         return kc;
       }
 
@@ -569,10 +582,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       };
 
       // Resolve KC tags
-      const resolvedKcs = await this.resolveKcTags(
-        courseId,
-        q.tags.kcNames || [],
-      );
+      const resolvedKcs = await this.resolveKcTags(courseId, q.tags.kcNames || []);
 
       // Create ProposedKC entries for unmatched KCs
       const kcIds: string[] = [];
@@ -602,17 +612,12 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       }
 
       // Build options for MCQ types
-      const optionsJson =
-        q.options && q.options.length > 0 ? q.options : null;
+      const optionsJson = q.options && q.options.length > 0 ? q.options : null;
       const correctOptionId =
-        q.type === 'MCQ_SINGLE'
-          ? q.options?.find((o) => o.isCorrect)?.id || null
-          : null;
+        q.type === 'MCQ_SINGLE' ? q.options?.find((o) => o.isCorrect)?.id || null : null;
 
       // Build correctAnswer for STRUCTURED
-      const correctAnswer = q.structuredAnswer
-        ? q.structuredAnswer
-        : null;
+      const correctAnswer = q.structuredAnswer ? q.structuredAnswer : null;
 
       // Create the Question record
       const question = await this.prisma.question.create({
@@ -672,9 +677,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       });
     }
 
-    this.logger.log(
-      `Saved ${createdIds.length} generated questions for course ${courseId}`,
-    );
+    this.logger.log(`Saved ${createdIds.length} generated questions for course ${courseId}`);
 
     return createdIds;
   }
@@ -694,9 +697,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
   ): Promise<void> {
     try {
       // Estimate token counts (rough: 1 token ≈ 4 chars)
-      const promptTokens = Math.ceil(
-        (systemPrompt.length + userPrompt.length) / 4,
-      );
+      const promptTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4);
       const completionTokens = Math.ceil(response.length / 4);
 
       await this.prisma.llmAuditLog.create({
@@ -719,10 +720,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
       });
     } catch (err: any) {
       // Non-blocking: log and continue
-      this.logger.error(
-        `Failed to create audit log: ${err.message}`,
-        err.stack,
-      );
+      this.logger.error(`Failed to create audit log: ${err.message}`, err.stack);
     }
   }
 
@@ -747,8 +745,7 @@ ${materialChunks.map((c, i) => `[Material ${i + 1}] (Source: ${c.documentTitle})
   }
 
   private decryptApiKey(encrypted: string): string {
-    const secret =
-      process.env.JWT_SECRET || 'dev-secret-change-in-production';
+    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
     const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts[0]!, 'hex');
