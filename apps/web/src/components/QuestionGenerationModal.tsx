@@ -16,7 +16,7 @@ interface QuestionGenerationModalProps {
 type QuestionType = 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
 type Difficulty = 'easy' | 'medium' | 'hard';
 type BloomsLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
-type SourceMode = 'lesson' | 'question-material' | 'mixed';
+type SourceMode = 'lesson_based' | 'question_material' | 'mixed';
 type Step = 'config' | 'generating' | 'review';
 
 interface DifficultyDistribution {
@@ -78,7 +78,12 @@ const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 };
 
 const BLOOMS_LEVELS: BloomsLevel[] = [
-  'remember', 'understand', 'apply', 'analyze', 'evaluate', 'create',
+  'remember',
+  'understand',
+  'apply',
+  'analyze',
+  'evaluate',
+  'create',
 ];
 
 const DIFFICULTY_LEVELS: Difficulty[] = ['easy', 'medium', 'hard'];
@@ -104,7 +109,7 @@ export function QuestionGenerationModal({
   const [diffDist, setDiffDist] = useState<DifficultyDistribution>({ easy: 2, medium: 2, hard: 1 });
   const [bloomsOpen, setBloomsOpen] = useState(false);
   const [selectedBlooms, setSelectedBlooms] = useState<Set<BloomsLevel>>(new Set());
-  const [sourceMode, setSourceMode] = useState<SourceMode>('lesson');
+  const [sourceMode, setSourceMode] = useState<SourceMode>('lesson_based');
   const [selectedPageIds, setSelectedPageIds] = useState<string[]>([]);
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [selectedKcIds, setSelectedKcIds] = useState<string[]>([]);
@@ -135,7 +140,7 @@ export function QuestionGenerationModal({
   /* ---------- fetch pages ---------- */
   useEffect(() => {
     if (!open || !courseId) return;
-    if (sourceMode !== 'lesson' && sourceMode !== 'mixed') return;
+    if (sourceMode !== 'lesson_based' && sourceMode !== 'mixed') return;
     setLoadingPages(true);
     apiFetch<{ modules?: Module[] }>(`/courses/${courseId}`)
       .then((course) => {
@@ -156,7 +161,7 @@ export function QuestionGenerationModal({
   /* ---------- fetch documents ---------- */
   useEffect(() => {
     if (!open || !courseId) return;
-    if (sourceMode !== 'question-material' && sourceMode !== 'mixed') return;
+    if (sourceMode !== 'question_material' && sourceMode !== 'mixed') return;
     setLoadingDocs(true);
     apiFetch<Document[]>(`/courses/${courseId}/documents`)
       .then(setDocuments)
@@ -206,10 +211,7 @@ export function QuestionGenerationModal({
 
   const diffSum = diffDist.easy + diffDist.medium + diffDist.hard;
   const configValid =
-    selectedTypes.size > 0 &&
-    quantity >= 1 &&
-    quantity <= 50 &&
-    diffSum === quantity;
+    selectedTypes.size > 0 && quantity >= 1 && quantity <= 50 && diffSum === quantity;
 
   /* ---------- generate ---------- */
   const handleGenerate = async () => {
@@ -223,8 +225,12 @@ export function QuestionGenerationModal({
         difficultyDistribution: diffDist,
         bloomsLevels: selectedBlooms.size > 0 ? Array.from(selectedBlooms) : undefined,
         sourceMode,
-        selectedPageIds: (sourceMode === 'lesson' || sourceMode === 'mixed') ? selectedPageIds : undefined,
-        selectedSourceIds: (sourceMode === 'question-material' || sourceMode === 'mixed') ? selectedSourceIds : undefined,
+        selectedPageIds:
+          sourceMode === 'lesson_based' || sourceMode === 'mixed' ? selectedPageIds : undefined,
+        selectedSourceIds:
+          sourceMode === 'question_material' || sourceMode === 'mixed'
+            ? selectedSourceIds
+            : undefined,
         kcFocus: selectedKcIds.length > 0 ? selectedKcIds : undefined,
         strictSource,
         customPrompt: customPrompt.trim() || undefined,
@@ -307,7 +313,12 @@ export function QuestionGenerationModal({
               {step === 'review' && `Review ${questions.length} generated question(s)`}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          >
+            &times;
+          </button>
         </div>
 
         {/* -------- Body -------- */}
@@ -325,17 +336,19 @@ export function QuestionGenerationModal({
               <fieldset>
                 <legend className="text-sm font-semibold text-gray-700 mb-2">Question Types</legend>
                 <div className="flex flex-wrap gap-3">
-                  {(Object.entries(QUESTION_TYPE_LABELS) as [QuestionType, string][]).map(([type, label]) => (
-                    <label key={type} className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={selectedTypes.has(type)}
-                        onChange={() => toggleType(type)}
-                        className="rounded border-gray-300 text-indigo-600"
-                      />
-                      {label}
-                    </label>
-                  ))}
+                  {(Object.entries(QUESTION_TYPE_LABELS) as [QuestionType, string][]).map(
+                    ([type, label]) => (
+                      <label key={type} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={selectedTypes.has(type)}
+                          onChange={() => toggleType(type)}
+                          className="rounded border-gray-300 text-indigo-600"
+                        />
+                        {label}
+                      </label>
+                    ),
+                  )}
                 </div>
                 {selectedTypes.size === 0 && (
                   <p className="text-xs text-red-500 mt-1">Select at least one question type.</p>
@@ -350,14 +363,18 @@ export function QuestionGenerationModal({
                   min={1}
                   max={50}
                   value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                  onChange={(e) =>
+                    setQuantity(Math.max(1, Math.min(50, Number(e.target.value) || 1)))
+                  }
                   className="w-24 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
 
               {/* 3. Difficulty Distribution */}
               <fieldset>
-                <legend className="text-sm font-semibold text-gray-700 mb-2">Difficulty Distribution</legend>
+                <legend className="text-sm font-semibold text-gray-700 mb-2">
+                  Difficulty Distribution
+                </legend>
                 <div className="flex gap-4">
                   {DIFFICULTY_LEVELS.map((d) => (
                     <div key={d} className="flex flex-col items-center">
@@ -368,7 +385,10 @@ export function QuestionGenerationModal({
                         max={quantity}
                         value={diffDist[d]}
                         onChange={(e) =>
-                          setDiffDist((prev) => ({ ...prev, [d]: Math.max(0, Number(e.target.value) || 0) }))
+                          setDiffDist((prev) => ({
+                            ...prev,
+                            [d]: Math.max(0, Number(e.target.value) || 0),
+                          }))
                         }
                         className="w-16 px-2 py-1.5 text-sm text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                       />
@@ -395,7 +415,10 @@ export function QuestionGenerationModal({
                 {bloomsOpen && (
                   <div className="px-3 pb-3 flex flex-wrap gap-3">
                     {BLOOMS_LEVELS.map((b) => (
-                      <label key={b} className="flex items-center gap-1.5 text-sm text-gray-700 capitalize">
+                      <label
+                        key={b}
+                        className="flex items-center gap-1.5 text-sm text-gray-700 capitalize"
+                      >
                         <input
                           type="checkbox"
                           checked={selectedBlooms.has(b)}
@@ -413,11 +436,13 @@ export function QuestionGenerationModal({
               <fieldset>
                 <legend className="text-sm font-semibold text-gray-700 mb-2">Source Mode</legend>
                 <div className="flex gap-4">
-                  {([
-                    ['lesson', 'Lesson-based'],
-                    ['question-material', 'Question material'],
-                    ['mixed', 'Mixed'],
-                  ] as [SourceMode, string][]).map(([mode, label]) => (
+                  {(
+                    [
+                      ['lesson_based', 'Lesson-based'],
+                      ['question_material', 'Question material'],
+                      ['mixed', 'Mixed'],
+                    ] as [SourceMode, string][]
+                  ).map(([mode, label]) => (
                     <label key={mode} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="radio"
@@ -434,9 +459,11 @@ export function QuestionGenerationModal({
               </fieldset>
 
               {/* 6. Page / Source Selectors */}
-              {(sourceMode === 'lesson' || sourceMode === 'mixed') && (
+              {(sourceMode === 'lesson_based' || sourceMode === 'mixed') && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Course Pages</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Course Pages
+                  </label>
                   {loadingPages ? (
                     <p className="text-xs text-gray-400">Loading pages...</p>
                   ) : (
@@ -449,7 +476,9 @@ export function QuestionGenerationModal({
                       className="w-full h-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       {pages.map((p) => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.title}
+                        </option>
                       ))}
                     </select>
                   )}
@@ -457,9 +486,11 @@ export function QuestionGenerationModal({
                 </div>
               )}
 
-              {(sourceMode === 'question-material' || sourceMode === 'mixed') && (
+              {(sourceMode === 'question_material' || sourceMode === 'mixed') && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Uploaded Documents</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    Uploaded Documents
+                  </label>
                   {loadingDocs ? (
                     <p className="text-xs text-gray-400">Loading documents...</p>
                   ) : (
@@ -472,7 +503,9 @@ export function QuestionGenerationModal({
                       className="w-full h-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       {documents.map((d) => (
-                        <option key={d.id} value={d.id}>{d.documentTitle} ({d.filename})</option>
+                        <option key={d.id} value={d.id}>
+                          {d.documentTitle} ({d.filename})
+                        </option>
                       ))}
                     </select>
                   )}
@@ -483,7 +516,10 @@ export function QuestionGenerationModal({
               {/* 7. KC Focus */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
-                  KC Focus <span className="font-normal text-gray-400">(optional - auto-detect if empty)</span>
+                  KC Focus{' '}
+                  <span className="font-normal text-gray-400">
+                    (optional - auto-detect if empty)
+                  </span>
                 </label>
                 {loadingKcs ? (
                   <p className="text-xs text-gray-400">Loading KCs...</p>
@@ -497,7 +533,9 @@ export function QuestionGenerationModal({
                     className="w-full h-28 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   >
                     {kcs.map((kc) => (
-                      <option key={kc.id} value={kc.id}>{kc.name}</option>
+                      <option key={kc.id} value={kc.id}>
+                        {kc.name}
+                      </option>
                     ))}
                   </select>
                 )}
@@ -512,7 +550,9 @@ export function QuestionGenerationModal({
                   className="rounded border-gray-300 text-indigo-600"
                 />
                 <span className="font-semibold">Strict Source</span>
-                <span className="text-gray-400 font-normal">- questions must be grounded in source material</span>
+                <span className="text-gray-400 font-normal">
+                  - questions must be grounded in source material
+                </span>
               </label>
 
               {/* 9. Custom Prompt */}
@@ -543,14 +583,18 @@ export function QuestionGenerationModal({
           {step === 'review' && (
             <div className="space-y-4">
               {questions.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-8">No questions were generated.</p>
+                <p className="text-sm text-gray-500 text-center py-8">
+                  No questions were generated.
+                </p>
               )}
 
               {questions.map((q, idx) => (
                 <div
                   key={idx}
                   className={`border rounded-lg p-4 space-y-3 ${
-                    q.selected ? 'border-indigo-300 bg-indigo-50/30' : 'border-gray-200 bg-gray-50/50'
+                    q.selected
+                      ? 'border-indigo-300 bg-indigo-50/30'
+                      : 'border-gray-200 bg-gray-50/50'
                   }`}
                 >
                   {/* Top row: select + type badge + delete */}
@@ -567,8 +611,8 @@ export function QuestionGenerationModal({
                           q.type === 'MCQ_SINGLE'
                             ? 'bg-blue-100 text-blue-700'
                             : q.type === 'MCQ_MULTI'
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-green-100 text-green-700'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-green-100 text-green-700'
                         }`}
                       >
                         {q.type}
@@ -598,7 +642,9 @@ export function QuestionGenerationModal({
                   {/* Options (MCQ) */}
                   {(q.type === 'MCQ_SINGLE' || q.type === 'MCQ_MULTI') && (
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Options</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Options
+                      </label>
                       <div className="space-y-2">
                         {q.options.map((opt, optIdx) => (
                           <div key={optIdx} className="flex items-center gap-2">
@@ -652,7 +698,9 @@ export function QuestionGenerationModal({
                   {q.type === 'STRUCTURED' && (
                     <>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Expected Answer</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Expected Answer
+                        </label>
                         <textarea
                           value={q.expectedAnswer ?? ''}
                           onChange={(e) => updateQuestion(idx, { expectedAnswer: e.target.value })}
@@ -661,7 +709,9 @@ export function QuestionGenerationModal({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Rubric</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
+                          Rubric
+                        </label>
                         <textarea
                           value={q.rubric ?? ''}
                           onChange={(e) => updateQuestion(idx, { rubric: e.target.value })}
@@ -674,7 +724,9 @@ export function QuestionGenerationModal({
 
                   {/* Explanation */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Explanation</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      Explanation
+                    </label>
                     <textarea
                       value={q.explanation}
                       onChange={(e) => updateQuestion(idx, { explanation: e.target.value })}
@@ -687,35 +739,49 @@ export function QuestionGenerationModal({
                   <div className="flex flex-wrap items-start gap-4">
                     {/* Difficulty */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Difficulty</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Difficulty
+                      </label>
                       <select
                         value={q.difficulty}
-                        onChange={(e) => updateQuestion(idx, { difficulty: e.target.value as Difficulty })}
+                        onChange={(e) =>
+                          updateQuestion(idx, { difficulty: e.target.value as Difficulty })
+                        }
                         className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
                       >
                         {DIFFICULTY_LEVELS.map((d) => (
-                          <option key={d} value={d}>{d}</option>
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
                         ))}
                       </select>
                     </div>
 
                     {/* Bloom's */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Bloom&apos;s Level</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        Bloom&apos;s Level
+                      </label>
                       <select
                         value={q.bloomsLevel}
-                        onChange={(e) => updateQuestion(idx, { bloomsLevel: e.target.value as BloomsLevel })}
+                        onChange={(e) =>
+                          updateQuestion(idx, { bloomsLevel: e.target.value as BloomsLevel })
+                        }
                         className="px-2 py-1 text-sm border border-gray-300 rounded-lg"
                       >
                         {BLOOMS_LEVELS.map((b) => (
-                          <option key={b} value={b}>{b}</option>
+                          <option key={b} value={b}>
+                            {b}
+                          </option>
                         ))}
                       </select>
                     </div>
 
                     {/* KC Tags */}
                     <div className="flex-1 min-w-[200px]">
-                      <label className="block text-xs font-medium text-gray-500 mb-1">KC Tags</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">
+                        KC Tags
+                      </label>
                       <div className="flex flex-wrap gap-1 items-center">
                         {q.kcTags.map((tag) => (
                           <span
@@ -751,7 +817,9 @@ export function QuestionGenerationModal({
                           {kcs
                             .filter((kc) => !q.kcTags.some((t) => t.id === kc.id))
                             .map((kc) => (
-                              <option key={kc.id} value={kc.id}>{kc.name}</option>
+                              <option key={kc.id} value={kc.id}>
+                                {kc.name}
+                              </option>
                             ))}
                         </select>
                       </div>
@@ -767,7 +835,10 @@ export function QuestionGenerationModal({
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200">
           {step === 'config' && (
             <>
-              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
                 Cancel
               </button>
               <button
@@ -783,7 +854,10 @@ export function QuestionGenerationModal({
           {step === 'generating' && (
             <>
               <div />
-              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
                 Cancel
               </button>
             </>
