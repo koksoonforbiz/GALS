@@ -84,6 +84,13 @@ export class QuestionGenerationService {
     // 2. Retrieve RAG chunks based on sourceMode
     const { lessonChunks, materialChunks } = await this.retrieveSourceChunks(input);
 
+    // Guard: lesson-based mode requires actual lesson content
+    if (input.sourceMode === 'lesson_based' && lessonChunks.length === 0) {
+      throw new BadRequestException(
+        'No lesson page content found. Please select at least one course page with content.',
+      );
+    }
+
     // 3. Resolve KC focus names if IDs are provided
     let kcFocusNames: string[] = [];
     if (input.kcFocus && input.kcFocus.length > 0) {
@@ -262,6 +269,15 @@ SOURCE MATERIAL:
 --- LESSON CONTENT ---
 ${lessonChunks.map((c, i) => `[Lesson ${i + 1}] (Source: ${c.title})\n${c.content}`).join('\n\n')}
 `;
+      if (sourceMode === 'lesson_based') {
+        prompt += `
+IMPORTANT: You MUST generate questions that are DIRECTLY and EXCLUSIVELY based on the lesson content provided above.
+- Every question stem, answer, and explanation must reference facts, concepts, or examples found in the lesson content.
+- Do NOT use outside knowledge or introduce topics not covered in the lessons.
+- If the lesson content covers specific formulas, definitions, or examples, use those exact ones.
+- The difficulty and Bloom's level of each question should be appropriate for the content depth in the lessons.
+`;
+      }
     }
 
     if (sourceMode === 'question_material' || sourceMode === 'mixed') {

@@ -210,8 +210,18 @@ export function QuestionGenerationModal({
   };
 
   const diffSum = diffDist.easy + diffDist.medium + diffDist.hard;
+  const needsPages =
+    (sourceMode === 'lesson_based' || sourceMode === 'mixed') && selectedPageIds.length === 0;
+  const needsDocs =
+    (sourceMode === 'question_material' || sourceMode === 'mixed') &&
+    selectedSourceIds.length === 0;
   const configValid =
-    selectedTypes.size > 0 && quantity >= 1 && quantity <= 50 && diffSum === quantity;
+    selectedTypes.size > 0 &&
+    quantity >= 1 &&
+    quantity <= 50 &&
+    diffSum === quantity &&
+    !needsPages &&
+    !needsDocs;
 
   /* ---------- generate ---------- */
   const handleGenerate = async () => {
@@ -240,10 +250,23 @@ export function QuestionGenerationModal({
         body: JSON.stringify(body),
       });
       setQuestions(
-        (result.questions ?? []).map((q) => ({
-          ...q,
+        (result.questions ?? []).map((q: any) => ({
+          type: q.type,
+          stem: q.stem ?? '',
           options: q.options ?? [],
-          kcTags: q.kcTags ?? [],
+          expectedAnswer: q.structuredAnswer?.expectedAnswer ?? q.expectedAnswer ?? '',
+          rubric: Array.isArray(q.structuredAnswer?.rubric)
+            ? q.structuredAnswer.rubric.join('\n')
+            : (q.rubric ?? ''),
+          explanation: q.explanation ?? '',
+          difficulty: q.tags?.difficulty ?? q.difficulty ?? 'medium',
+          bloomsLevel: q.tags?.bloomsLevel ?? q.bloomsLevel ?? 'understand',
+          kcTags: (q.tags?.kcNames ?? q.kcNames ?? []).map((name: string, i: number) => {
+            const match = kcs.find(
+              (k) => k.name.toLowerCase().trim() === name.toLowerCase().trim(),
+            );
+            return match ? { id: match.id, name: match.name } : { id: `auto-${i}`, name };
+          }),
           selected: true,
         })),
       );
@@ -483,6 +506,11 @@ export function QuestionGenerationModal({
                     </select>
                   )}
                   <p className="text-xs text-gray-400 mt-1">Hold Ctrl/Cmd to select multiple.</p>
+                  {needsPages && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Select at least one course page to generate lesson-based questions.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -510,6 +538,11 @@ export function QuestionGenerationModal({
                     </select>
                   )}
                   <p className="text-xs text-gray-400 mt-1">Hold Ctrl/Cmd to select multiple.</p>
+                  {needsDocs && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Select at least one document to generate questions from.
+                    </p>
+                  )}
                 </div>
               )}
 
