@@ -24,7 +24,7 @@ export class QuestionGenerationController {
    * Generate questions via LLM + RAG
    */
   @Post()
-  generate(
+  async generate(
     @Request() req: { user: RequestUser },
     @Body() dto: {
       courseId: string;
@@ -40,7 +40,7 @@ export class QuestionGenerationController {
       customPrompt?: string;
     },
   ) {
-    return this.genService.generateQuestions({
+    const questions = await this.genService.generateQuestions({
       courseId: dto.courseId,
       userId: req.user.id,
       types: dto.types as any,
@@ -54,6 +54,7 @@ export class QuestionGenerationController {
       strictSource: dto.strictSource ?? false,
       customPrompt: dto.customPrompt,
     });
+    return { questions };
   }
 
   /**
@@ -61,7 +62,7 @@ export class QuestionGenerationController {
    * Save accepted generated questions to Question Bank (and optionally to an assessment)
    */
   @Post('save')
-  save(
+  async save(
     @Request() req: { user: RequestUser },
     @Body() dto: {
       courseId: string;
@@ -69,11 +70,12 @@ export class QuestionGenerationController {
       assessmentId?: string;
     },
   ) {
-    return this.genService.saveGeneratedQuestions(
+    const questionIds = await this.genService.saveGeneratedQuestions(
       dto.courseId,
       req.user.id,
       dto.questions,
       dto.assessmentId,
     );
+    return { questionIds };
   }
 }
