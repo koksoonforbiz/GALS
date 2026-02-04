@@ -58,7 +58,7 @@ interface Module {
 
 interface Document {
   id: string;
-  title: string;
+  documentTitle: string;
   filename: string;
 }
 
@@ -137,10 +137,10 @@ export function QuestionGenerationModal({
     if (!open || !courseId) return;
     if (sourceMode !== 'lesson' && sourceMode !== 'mixed') return;
     setLoadingPages(true);
-    apiFetch<Module[]>(`/courses/${courseId}/modules`)
-      .then((modules) => {
+    apiFetch<{ modules?: Module[] }>(`/courses/${courseId}`)
+      .then((course) => {
         const pageItems: { id: string; title: string }[] = [];
-        for (const mod of modules) {
+        for (const mod of course.modules ?? []) {
           for (const item of mod.items ?? []) {
             if (item.type === 'PAGE') {
               pageItems.push({ id: item.id, title: `${mod.title} / ${item.title}` });
@@ -168,7 +168,7 @@ export function QuestionGenerationModal({
   useEffect(() => {
     if (!open || !courseId) return;
     setLoadingKcs(true);
-    apiFetch<KC[]>(`/courses/${courseId}/kcs`)
+    apiFetch<KC[]>(`/proposed-kcs?courseId=${courseId}`)
       .then(setKcs)
       .catch(() => setKcs([]))
       .finally(() => setLoadingKcs(false));
@@ -472,7 +472,7 @@ export function QuestionGenerationModal({
                       className="w-full h-32 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       {documents.map((d) => (
-                        <option key={d.id} value={d.id}>{d.title} ({d.filename})</option>
+                        <option key={d.id} value={d.id}>{d.documentTitle} ({d.filename})</option>
                       ))}
                     </select>
                   )}
