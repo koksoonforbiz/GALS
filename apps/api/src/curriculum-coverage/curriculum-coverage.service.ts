@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   StartCoverageInput,
@@ -127,9 +121,7 @@ export class CurriculumCoverageService {
     const maps = (run.outcomeKcMaps as unknown as OutcomeKcMap[]) || [];
 
     // Find existing or add new
-    const existing = maps.find(
-      (m) => m.outcomeId === outcomeId && m.kcId === kcId,
-    );
+    const existing = maps.find((m) => m.outcomeId === outcomeId && m.kcId === kcId);
     if (existing) {
       existing.confidence = confidence;
       existing.rationale = rationale;
@@ -150,27 +142,20 @@ export class CurriculumCoverageService {
 
     await this.prisma.curriculumCoverageRun.update({
       where: { id: runId },
-      data: { outcomeKcMaps: maps as unknown as Prisma.InputJsonValue },
+      data: { outcomeKcMaps: maps as unknown as any },
     });
 
     return { ok: true };
   }
 
-  async removeOutcomeKcMap(
-    runId: string,
-    userId: string,
-    outcomeId: string,
-    kcId: string,
-  ) {
+  async removeOutcomeKcMap(runId: string, userId: string, outcomeId: string, kcId: string) {
     const run = await this.getRun(runId, userId);
     const maps = (run.outcomeKcMaps as unknown as OutcomeKcMap[]) || [];
-    const filtered = maps.filter(
-      (m) => !(m.outcomeId === outcomeId && m.kcId === kcId),
-    );
+    const filtered = maps.filter((m) => !(m.outcomeId === outcomeId && m.kcId === kcId));
 
     await this.prisma.curriculumCoverageRun.update({
       where: { id: runId },
-      data: { outcomeKcMaps: filtered as unknown as Prisma.InputJsonValue },
+      data: { outcomeKcMaps: filtered as unknown as any },
     });
 
     return { ok: true };
@@ -202,7 +187,7 @@ export class CurriculumCoverageService {
     await this.prisma.curriculumCoverageRun.update({
       where: { id: runId },
       data: {
-        coverageResults: results as unknown as Prisma.InputJsonValue,
+        coverageResults: results as unknown as any,
         completedAt: new Date(),
       },
     });
@@ -235,7 +220,7 @@ export class CurriculumCoverageService {
 
       await this.prisma.curriculumCoverageRun.update({
         where: { id: runId },
-        data: { parsedOutcomes: outcomes as unknown as Prisma.InputJsonValue },
+        data: { parsedOutcomes: outcomes as unknown as any },
       });
 
       // 3. Get approved KCs
@@ -256,7 +241,7 @@ export class CurriculumCoverageService {
 
       await this.prisma.curriculumCoverageRun.update({
         where: { id: runId },
-        data: { outcomeKcMaps: maps as unknown as Prisma.InputJsonValue },
+        data: { outcomeKcMaps: maps as unknown as any },
       });
 
       // 5. Run coverage analysis
@@ -277,7 +262,7 @@ export class CurriculumCoverageService {
         where: { id: runId },
         data: {
           status: 'COMPLETED',
-          coverageResults: results as unknown as Prisma.InputJsonValue,
+          coverageResults: results as unknown as any,
           completedAt: new Date(),
         },
       });
@@ -361,7 +346,11 @@ export class CurriculumCoverageService {
     if (outcomes.length === 0) {
       const sentences = syllabusText.split(/[.;]\s+|\n/).filter((s) => s.trim().length > 15);
       for (const s of sentences) {
-        if (/\b(understand|apply|analyze|evaluate|create|demonstrate|explain|describe|identify|compare|design|implement|develop)\b/i.test(s)) {
+        if (
+          /\b(understand|apply|analyze|evaluate|create|demonstrate|explain|describe|identify|compare|design|implement|develop)\b/i.test(
+            s,
+          )
+        ) {
           counter++;
           outcomes.push({
             id: `SO-${counter}`,
@@ -381,9 +370,11 @@ export class CurriculumCoverageService {
     const lower = text.toLowerCase();
     if (/\b(create|design|develop|construct|produce|invent)\b/.test(lower)) return 'Create';
     if (/\b(evaluate|judge|assess|critique|justify|defend)\b/.test(lower)) return 'Evaluate';
-    if (/\b(analyze|compare|contrast|differentiate|examine|categorize)\b/.test(lower)) return 'Analyze';
+    if (/\b(analyze|compare|contrast|differentiate|examine|categorize)\b/.test(lower))
+      return 'Analyze';
     if (/\b(apply|implement|use|execute|solve|demonstrate)\b/.test(lower)) return 'Apply';
-    if (/\b(understand|explain|describe|summarize|interpret|classify)\b/.test(lower)) return 'Understand';
+    if (/\b(understand|explain|describe|summarize|interpret|classify)\b/.test(lower))
+      return 'Understand';
     if (/\b(remember|recall|list|define|identify|recognize|name)\b/.test(lower)) return 'Remember';
     return null;
   }
@@ -413,9 +404,13 @@ export class CurriculumCoverageService {
       const outcomeMap = new Map(outcomes.map((o) => [o.code, o]));
 
       const mappings: OutcomeKcMap[] = (parsed.mappings || [])
-        .filter((m: any) =>
-          m && typeof m.outcomeCode === 'string' && typeof m.kcId === 'string' &&
-          typeof m.confidence === 'number' && m.confidence >= 0.3,
+        .filter(
+          (m: any) =>
+            m &&
+            typeof m.outcomeCode === 'string' &&
+            typeof m.kcId === 'string' &&
+            typeof m.confidence === 'number' &&
+            m.confidence >= 0.3,
         )
         .map((m: any) => {
           const outcome = outcomeMap.get(m.outcomeCode);
@@ -437,10 +432,7 @@ export class CurriculumCoverageService {
     }
   }
 
-  mapOutcomesToKCsHeuristic(
-    outcomes: SyllabusOutcome[],
-    kcs: KcInfo[],
-  ): OutcomeKcMap[] {
+  mapOutcomesToKCsHeuristic(outcomes: SyllabusOutcome[], kcs: KcInfo[]): OutcomeKcMap[] {
     const maps: OutcomeKcMap[] = [];
 
     for (const outcome of outcomes) {
@@ -562,9 +554,8 @@ export class CurriculumCoverageService {
     }
 
     const lateIntroducedKCs: LateIntroducedKC[] = [];
-    const halfwayPoint = sortedPages.length > 0
-      ? sortedPages[Math.floor(sortedPages.length / 2)]!.globalOrder
-      : 0;
+    const halfwayPoint =
+      sortedPages.length > 0 ? sortedPages[Math.floor(sortedPages.length / 2)]!.globalOrder : 0;
 
     for (const kc of kcs) {
       const firstPage = kcFirstPage.get(kc.id);
@@ -667,9 +658,8 @@ export class CurriculumCoverageService {
       orphanKCs,
       overrepresentedKCCount: overrepresentedKCs.length,
       lateIntroducedKCCount: lateIntroducedKCs.length,
-      coveragePercent: outcomes.length > 0
-        ? Math.round((mappedOutcomeIds.size / outcomes.length) * 100)
-        : 0,
+      coveragePercent:
+        outcomes.length > 0 ? Math.round((mappedOutcomeIds.size / outcomes.length) * 100) : 0,
     };
 
     return {
@@ -803,7 +793,9 @@ export class CurriculumCoverageService {
 
   // ─── LLM Utilities ────────────────────────────────────────
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getLlmCredentials(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },

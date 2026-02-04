@@ -4,7 +4,6 @@ import {
   buildKcExtractionSystemPrompt,
   buildKcExtractionUserPrompt,
 } from './kc-suggestion-prompts';
-import { Prisma } from '@prisma/client';
 
 interface KcExtractionInput {
   courseId: string;
@@ -94,7 +93,7 @@ export class KcSuggestionService {
             evidence: {
               pageId: input.pageId,
               blockIds: kc.evidence?.blockIds || [],
-            } as unknown as Prisma.InputJsonValue,
+            } as unknown as any,
             pageIds: [input.pageId],
           },
         });
@@ -164,7 +163,9 @@ export class KcSuggestionService {
 
   // ─── Private: LLM ───────────────────────────────────────
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getLlmCredentials(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },

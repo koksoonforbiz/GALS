@@ -178,11 +178,11 @@ export class CoursesService {
         status: 'DRAFT',
         visibility: source.visibility,
         modules: {
-          create: source.modules.map((mod) => ({
+          create: source.modules.map((mod: any) => ({
             title: mod.title,
             orderIndex: mod.orderIndex,
             items: {
-              create: mod.items.map((item) => ({
+              create: mod.items.map((item: any) => ({
                 type: item.type,
                 title: item.title,
                 orderIndex: item.orderIndex,

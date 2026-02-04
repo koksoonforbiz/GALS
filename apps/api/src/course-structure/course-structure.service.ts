@@ -466,7 +466,7 @@ export class CourseStructureService {
       select: { id: true, title: true, filename: true },
     });
 
-    return docs.map((d) => ({
+    return docs.map((d: any) => ({
       sourceId: d.id,
       name: d.title || d.filename,
     }));

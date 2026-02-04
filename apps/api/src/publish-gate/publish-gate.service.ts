@@ -5,11 +5,9 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GateCheckDetail,
-  GateCheckStatus,
   PublishGateOutput,
   GateKcInfo,
   GateEdgeInfo,
@@ -45,7 +43,7 @@ export class PublishGateService {
       data: {
         courseId,
         userId,
-        checks: checks as unknown as Prisma.InputJsonValue,
+        checks: checks as unknown as any,
         overallPass,
       },
     });
@@ -67,11 +65,7 @@ export class PublishGateService {
 
   // ─── Publish With Override ────────────────────────────────
 
-  async publishWithOverride(
-    courseId: string,
-    userId: string,
-    overrideReason: string,
-  ) {
+  async publishWithOverride(courseId: string, userId: string, overrideReason: string) {
     if (!overrideReason || overrideReason.trim().length < 10) {
       throw new BadRequestException('Override reason must be at least 10 characters');
     }
@@ -86,7 +80,7 @@ export class PublishGateService {
       data: {
         courseId,
         userId,
-        checks: gateResult.checks as unknown as Prisma.InputJsonValue,
+        checks: gateResult.checks as unknown as any,
         overallPass: gateResult.overallPass,
         overridden: true,
         overrideReason: overrideReason.trim(),
@@ -115,9 +109,7 @@ export class PublishGateService {
     const gateResult = await this.runChecks(courseId, userId);
 
     if (!gateResult.overallPass) {
-      const failedChecks = gateResult.checks
-        .filter((c) => c.status === 'fail')
-        .map((c) => c.label);
+      const failedChecks = gateResult.checks.filter((c) => c.status === 'fail').map((c) => c.label);
       return {
         published: false,
         reason: `Publish blocked: ${failedChecks.join(', ')}`,
@@ -130,7 +122,7 @@ export class PublishGateService {
       data: {
         courseId,
         userId,
-        checks: gateResult.checks as unknown as Prisma.InputJsonValue,
+        checks: gateResult.checks as unknown as any,
         overallPass: true,
         published: true,
       },
@@ -176,10 +168,7 @@ export class PublishGateService {
 
   // ─── Check 1: No Cycles ──────────────────────────────────
 
-  checkGraphNoCycles(
-    kcs: GateKcInfo[],
-    edges: GateEdgeInfo[],
-  ): GateCheckDetail {
+  checkGraphNoCycles(kcs: GateKcInfo[], edges: GateEdgeInfo[]): GateCheckDetail {
     const check: GateCheckDetail = {
       id: 'GRAPH_NO_CYCLES',
       label: 'KC Graph: No Cycles',
@@ -205,7 +194,9 @@ export class PublishGateService {
     }
 
     const kcIds = new Set(kcs.map((kc) => kc.id));
-    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const WHITE = 0,
+      GRAY = 1,
+      BLACK = 2;
     const color = new Map<string, number>();
     for (const id of kcIds) color.set(id, WHITE);
 
@@ -242,7 +233,9 @@ export class PublishGateService {
       }
       check.relatedIds = [...new Set(cycles.flat())];
     } else {
-      check.details.push(`No cycles detected among ${kcs.length} KCs and ${prereqEdges.length} prerequisite edges.`);
+      check.details.push(
+        `No cycles detected among ${kcs.length} KCs and ${prereqEdges.length} prerequisite edges.`,
+      );
     }
 
     return check;
@@ -258,7 +251,8 @@ export class PublishGateService {
     const check: GateCheckDetail = {
       id: 'GRAPH_NO_ISOLATED_CORE_KCS',
       label: 'KC Graph: No Isolated Core KCs',
-      description: 'Every approved KC must have at least one graph edge (incoming or outgoing) or content mapping.',
+      description:
+        'Every approved KC must have at least one graph edge (incoming or outgoing) or content mapping.',
       status: 'pass',
       details: [],
     };
@@ -344,7 +338,9 @@ export class PublishGateService {
       const toOrder = kcFirstOrder.get(edge.toKcId);
 
       if (fromOrder === undefined) {
-        violations.push(`Prerequisite "${fromName}" has no content mapping — cannot verify ordering.`);
+        violations.push(
+          `Prerequisite "${fromName}" has no content mapping — cannot verify ordering.`,
+        );
         violationIds.push(edge.fromKcId);
       } else if (toOrder === undefined) {
         // Target not mapped is less critical; it's a missing mapping
@@ -371,14 +367,12 @@ export class PublishGateService {
 
   // ─── Check 4: KC Evidence Threshold ───────────────────────
 
-  checkKcEvidenceThreshold(
-    kcs: GateKcInfo[],
-    mappings: GateMappingInfo[],
-  ): GateCheckDetail {
+  checkKcEvidenceThreshold(kcs: GateKcInfo[], mappings: GateMappingInfo[]): GateCheckDetail {
     const check: GateCheckDetail = {
       id: 'KC_EVIDENCE_THRESHOLD',
       label: 'KC Evidence Threshold',
-      description: 'Every approved KC must have at least one content mapping of MEDIUM or HIGH strength.',
+      description:
+        'Every approved KC must have at least one content mapping of MEDIUM or HIGH strength.',
       status: 'pass',
       details: [],
     };
@@ -424,9 +418,7 @@ export class PublishGateService {
 
   // ─── Check 5: Evaluation Critical Issues ──────────────────
 
-  checkEvalCriticalResolved(
-    evalSummary: GateEvalSummary | null,
-  ): GateCheckDetail {
+  checkEvalCriticalResolved(evalSummary: GateEvalSummary | null): GateCheckDetail {
     const check: GateCheckDetail = {
       id: 'EVAL_CRITICAL_RESOLVED',
       label: 'Evaluation: Critical Issues Resolved',
@@ -441,8 +433,7 @@ export class PublishGateService {
       return check;
     }
 
-    const criticalCount =
-      evalSummary.missingKCs + evalSummary.prerequisiteViolations;
+    const criticalCount = evalSummary.missingKCs + evalSummary.prerequisiteViolations;
 
     if (criticalCount > 0) {
       check.status = 'fail';
@@ -450,16 +441,22 @@ export class PublishGateService {
         check.details.push(`${evalSummary.missingKCs} KC(s) have no content support at all.`);
       }
       if (evalSummary.prerequisiteViolations > 0) {
-        check.details.push(`${evalSummary.prerequisiteViolations} prerequisite ordering violation(s).`);
+        check.details.push(
+          `${evalSummary.prerequisiteViolations} prerequisite ordering violation(s).`,
+        );
       }
       check.relatedIds = [evalSummary.runId];
     } else if (evalSummary.overloadedPages > 0 || evalSummary.highPriorityRecs > 0) {
       check.status = 'warn';
       if (evalSummary.overloadedPages > 0) {
-        check.details.push(`${evalSummary.overloadedPages} page(s) flagged for cognitive overload.`);
+        check.details.push(
+          `${evalSummary.overloadedPages} page(s) flagged for cognitive overload.`,
+        );
       }
       if (evalSummary.highPriorityRecs > 0) {
-        check.details.push(`${evalSummary.highPriorityRecs} high-priority recommendation(s) pending.`);
+        check.details.push(
+          `${evalSummary.highPriorityRecs} high-priority recommendation(s) pending.`,
+        );
       }
       check.relatedIds = [evalSummary.runId];
     } else {

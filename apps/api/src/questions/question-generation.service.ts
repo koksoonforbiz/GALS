@@ -91,7 +91,7 @@ export class QuestionGenerationService {
         where: { id: { in: input.kcFocus } },
         select: { label: true },
       });
-      kcFocusNames = kcs.map((kc) => kc.label);
+      kcFocusNames = kcs.map((kc: { label: string }) => kc.label);
     }
 
     // 4. Build prompts
@@ -167,8 +167,10 @@ export class QuestionGenerationService {
         });
 
         lessonChunks = pages
-          .filter((p) => p.contentMdx && p.contentMdx.trim().length > 0)
-          .map((p) => ({
+          .filter(
+            (p: { contentMdx: string | null }) => p.contentMdx && p.contentMdx.trim().length > 0,
+          )
+          .map((p: { title: string; contentMdx: string | null }) => ({
             title: p.title,
             content: p.contentMdx!,
           }));
@@ -331,25 +333,30 @@ IMPORTANT: Every question object MUST include the "type" field with one of: "MCQ
       ];
       const chunkIds = materialChunks.map((c) => c.id);
 
-      return questions.map((q: any) => ({
-        type: this.normalizeQuestionType(q, input.types),
-        stem: q.stem || '',
-        options: q.options || undefined,
-        structuredAnswer: q.structuredAnswer || undefined,
-        explanation: q.explanation || '',
-        tags: {
-          difficulty: q.tags?.difficulty || q.difficulty || 'medium',
-          bloomsLevel: q.tags?.bloomsLevel || q.bloomsLevel || 'understand',
-          kcNames: q.tags?.kcNames || q.kcNames || [],
-          curriculumOutcomeRefs: q.tags?.curriculumOutcomeRefs || undefined,
-        },
-        provenance: {
-          sourceMode: input.sourceMode,
-          sourceIds: q.provenance?.sourceIds || sourceIds,
-          chunkIds: q.provenance?.chunkIds || chunkIds,
-          citations: q.provenance?.citations || undefined,
-        },
-      }));
+      return questions.reduce<GeneratedQuestion[]>((acc, q: any) => {
+        const type = this.normalizeQuestionType(q, input.types);
+        if (!type) return acc;
+        acc.push({
+          type,
+          stem: q.stem || '',
+          options: q.options || undefined,
+          structuredAnswer: q.structuredAnswer || undefined,
+          explanation: q.explanation || '',
+          tags: {
+            difficulty: q.tags?.difficulty || q.difficulty || 'medium',
+            bloomsLevel: q.tags?.bloomsLevel || q.bloomsLevel || 'understand',
+            kcNames: q.tags?.kcNames || q.kcNames || [],
+            curriculumOutcomeRefs: q.tags?.curriculumOutcomeRefs || undefined,
+          },
+          provenance: {
+            sourceMode: input.sourceMode,
+            sourceIds: q.provenance?.sourceIds || sourceIds,
+            chunkIds: q.provenance?.chunkIds || chunkIds,
+            citations: q.provenance?.citations || undefined,
+          },
+        });
+        return acc;
+      }, []);
     } catch (err: any) {
       this.logger.error(`Failed to parse question generation response: ${err.message}`);
       return [];
@@ -365,14 +372,17 @@ IMPORTANT: Every question object MUST include the "type" field with one of: "MCQ
    * MCQ_SINGLE | MCQ_MULTI | STRUCTURED, falling back to heuristic
    * detection based on the question shape and the requested types.
    */
-  private normalizeQuestionType(q: any, requestedTypes: string[]): string | undefined {
+  private normalizeQuestionType(
+    q: any,
+    requestedTypes: string[],
+  ): 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED' | undefined {
     const raw: string | undefined = q.type ?? q.questionType ?? q.question_type;
 
     if (raw) {
       const t = raw.toUpperCase().replace(/[\s-]+/g, '_');
 
       // Direct canonical match
-      if (['MCQ_SINGLE', 'MCQ_MULTI', 'STRUCTURED'].includes(t)) return t;
+      if (t === 'MCQ_SINGLE' || t === 'MCQ_MULTI' || t === 'STRUCTURED') return t;
 
       // Common LLM aliases
       if (t.includes('SINGLE') || t === 'MCQ' || t === 'MULTIPLE_CHOICE') return 'MCQ_SINGLE';
@@ -397,7 +407,8 @@ IMPORTANT: Every question object MUST include the "type" field with one of: "MCQ
     }
 
     // Last resort: if only one type was requested, assume that type
-    if (requestedTypes.length === 1) return requestedTypes[0];
+    if (requestedTypes.length === 1)
+      return requestedTypes[0] as 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
 
     return undefined;
   }
@@ -519,8 +530,8 @@ IMPORTANT: Every question object MUST include the "type" field with one of: "MCQ
     });
 
     const allKcs = [
-      ...existingKcs.map((kc) => ({ id: kc.id, name: kc.label })),
-      ...proposedKcs.map((kc) => ({ id: kc.id, name: kc.name })),
+      ...existingKcs.map((kc: { id: string; label: string }) => ({ id: kc.id, name: kc.label })),
+      ...proposedKcs.map((kc: { id: string; name: string }) => ({ id: kc.id, name: kc.name })),
     ];
 
     return kcNames.map((name) => {

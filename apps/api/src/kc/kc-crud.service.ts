@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class KcCrudService {
@@ -37,7 +36,14 @@ export class KcCrudService {
   /** Update a proposed KC */
   async update(
     id: string,
-    dto: { name?: string; description?: string; status?: string; confidenceLevel?: string; topicId?: string | null; subtopicId?: string | null },
+    dto: {
+      name?: string;
+      description?: string;
+      status?: string;
+      confidenceLevel?: string;
+      topicId?: string | null;
+      subtopicId?: string | null;
+    },
   ) {
     const kc = await this.prisma.proposedKC.findUnique({ where: { id } });
     if (!kc) throw new NotFoundException(`ProposedKC ${id} not found`);
@@ -89,10 +95,7 @@ export class KcCrudService {
     const sourceEvidence = (source.evidence as any) || {};
 
     const mergedBlockIds = [
-      ...new Set([
-        ...(targetEvidence.blockIds || []),
-        ...(sourceEvidence.blockIds || []),
-      ]),
+      ...new Set([...(targetEvidence.blockIds || []), ...(sourceEvidence.blockIds || [])]),
     ];
 
     // Merge pageIds
@@ -105,7 +108,7 @@ export class KcCrudService {
         evidence: {
           pageId: targetEvidence.pageId || sourceEvidence.pageId,
           blockIds: mergedBlockIds,
-        } as unknown as Prisma.InputJsonValue,
+        } as unknown as any,
         pageIds: mergedPageIds,
       },
     });

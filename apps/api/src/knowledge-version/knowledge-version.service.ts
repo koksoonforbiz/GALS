@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   KcSnapshot,
@@ -59,9 +53,9 @@ export class KnowledgeVersionService {
           changeSummary,
           source,
           authorId: authorId || null,
-          snapshotKcs: kcs as unknown as Prisma.InputJsonValue,
-          snapshotEdges: edges as unknown as Prisma.InputJsonValue,
-          snapshotMaps: maps as unknown as Prisma.InputJsonValue,
+          snapshotKcs: kcs as unknown as any,
+          snapshotEdges: edges as unknown as any,
+          snapshotMaps: maps as unknown as any,
         },
       });
 
@@ -99,7 +93,7 @@ export class KnowledgeVersionService {
       },
     });
 
-    return versions.map((v) => ({
+    return versions.map((v: any) => ({
       id: v.id,
       version: v.version,
       changeSummary: v.changeSummary,
@@ -156,11 +150,7 @@ export class KnowledgeVersionService {
   /**
    * Diff between a specific version and the current live state.
    */
-  async diffFromCurrent(
-    courseId: string,
-    userId: string,
-    versionId: string,
-  ): Promise<VersionDiff> {
+  async diffFromCurrent(courseId: string, userId: string, versionId: string): Promise<VersionDiff> {
     await this.verifyCourseAccess(courseId, userId);
 
     const version = await this.prisma.knowledgeVersion.findUnique({
@@ -202,7 +192,7 @@ export class KnowledgeVersionService {
     const targetMaps = version.snapshotMaps as unknown as MappingSnapshot[];
 
     // Execute restore in a transaction
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: any) => {
       // 1. Delete all current mappings (depends on KCs, so delete first)
       await tx.kcContentMapping.deleteMany({ where: { courseId } });
 
@@ -224,7 +214,7 @@ export class KnowledgeVersionService {
             confidenceLevel: kc.confidenceLevel,
             createdBy: kc.createdBy,
             relatedToKCId: null, // Will set in second pass
-            evidence: kc.evidence as unknown as Prisma.InputJsonValue,
+            evidence: kc.evidence as unknown as any,
             pageIds: kc.pageIds,
           },
         });
@@ -317,14 +307,22 @@ export class KnowledgeVersionService {
   ): {
     added: T[];
     removed: T[];
-    modified: Array<{ id: string; name?: string; changes: Array<{ field: string; from: unknown; to: unknown }> }>;
+    modified: Array<{
+      id: string;
+      name?: string;
+      changes: Array<{ field: string; from: unknown; to: unknown }>;
+    }>;
   } {
     const fromMap = new Map(from.map((e) => [e.id, e]));
     const toMap = new Map(to.map((e) => [e.id, e]));
 
     const added: T[] = [];
     const removed: T[] = [];
-    const modified: Array<{ id: string; name?: string; changes: Array<{ field: string; from: unknown; to: unknown }> }> = [];
+    const modified: Array<{
+      id: string;
+      name?: string;
+      changes: Array<{ field: string; from: unknown; to: unknown }>;
+    }> = [];
 
     // Find added (in "to" but not in "from")
     for (const [id, entity] of toMap) {
@@ -379,7 +377,7 @@ export class KnowledgeVersionService {
         pageIds: true,
       },
     });
-    return kcs.map((kc) => ({
+    return kcs.map((kc: any) => ({
       id: kc.id,
       name: kc.name,
       description: kc.description,

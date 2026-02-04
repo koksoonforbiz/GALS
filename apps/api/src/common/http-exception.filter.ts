@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
-import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 export interface StandardErrorResponse {
   statusCode: number;
@@ -84,7 +84,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     // 3. Prisma known request errors
-    if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    if (exception instanceof PrismaClientKnownRequestError) {
       if (exception.code === 'P2002') {
         const target = (exception.meta?.target as string[]) ?? [];
         return {

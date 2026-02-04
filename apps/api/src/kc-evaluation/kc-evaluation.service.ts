@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   StartKcEvaluationInput,
@@ -51,7 +45,7 @@ export class KcEvaluationService {
         courseId: input.courseId,
         userId: input.userId,
         status: 'RUNNING',
-        scope: input.scope as unknown as Prisma.InputJsonValue,
+        scope: input.scope as unknown as any,
         depth: input.depth,
         startedAt: new Date(),
       },
@@ -108,12 +102,15 @@ export class KcEvaluationService {
           summary: emptySummary(),
           kcFindings: [],
           pageFindings: [],
-          recommendations: [{
-            type: 'MAP_OUTCOMES',
-            target: 'Course',
-            rationale: 'No approved Knowledge Components found. Approve KCs in KC Studio before running KC-aware evaluation.',
-            priority: 'high',
-          }],
+          recommendations: [
+            {
+              type: 'MAP_OUTCOMES',
+              target: 'Course',
+              rationale:
+                'No approved Knowledge Components found. Approve KCs in KC Studio before running KC-aware evaluation.',
+              priority: 'high',
+            },
+          ],
           metadata: {
             courseId: input.courseId,
             depth: input.depth,
@@ -140,12 +137,7 @@ export class KcEvaluationService {
       );
 
       // 4. Generate recommendations
-      const recommendations = this.generateRecommendations(
-        kcFindings,
-        allPageFindings,
-        kcs,
-        pages,
-      );
+      const recommendations = this.generateRecommendations(kcFindings, allPageFindings, kcs, pages);
 
       // 5. Compute summary
       const summary = this.computeSummary(kcFindings, allPageFindings, recommendations);
@@ -186,9 +178,7 @@ export class KcEvaluationService {
     const pageIdSet = new Set(pages.map((p) => p.id));
 
     return kcs.map((kc) => {
-      const kcMappings = mappings.filter(
-        (m) => m.kcId === kc.id && pageIdSet.has(m.pageId),
-      );
+      const kcMappings = mappings.filter((m) => m.kcId === kc.id && pageIdSet.has(m.pageId));
       const highCount = kcMappings.filter((m) => m.strength === 'HIGH').length;
       const medCount = kcMappings.filter((m) => m.strength === 'MEDIUM').length;
       const lowCount = kcMappings.filter((m) => m.strength === 'LOW').length;
@@ -359,9 +349,7 @@ export class KcEvaluationService {
 
       // Count new KCs (not yet seen on any prior page)
       const newKCs = pageKcIds.filter((id) => !introducedKCs.has(id));
-      const newKcNames = newKCs
-        .map((id) => kcMap.get(id))
-        .filter(Boolean) as KcInfo[];
+      const newKcNames = newKCs.map((id) => kcMap.get(id)).filter(Boolean) as KcInfo[];
 
       if (newKCs.length > NEW_KC_THRESHOLD) {
         pageIssues.push({
@@ -538,8 +526,8 @@ export class KcEvaluationService {
   private generateRecommendations(
     kcFindings: KcFinding[],
     pageFindings: PageFinding[],
-    kcs: KcInfo[],
-    pages: PageInfo[],
+    _kcs: KcInfo[],
+    _pages: PageInfo[],
   ): Recommendation[] {
     const recs: Recommendation[] = [];
 
@@ -625,9 +613,7 @@ export class KcEvaluationService {
 
     // Deduplicate and sort by priority
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-    return recs.sort(
-      (a, b) => priorityOrder[a.priority] - priorityOrder[b.priority],
-    );
+    return recs.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
   }
 
   private computeSummary(
@@ -646,9 +632,12 @@ export class KcEvaluationService {
     for (const pf of pageFindings) {
       if (pf.issues.some((i) => i.type === 'PREREQ_VIOLATION')) prereqViolations++;
       if (pf.issues.some((i) => i.type === 'COGNITIVE_OVERLOAD')) overloadedPages++;
-      if (pf.issues.some((i) =>
-        i.type === 'OUTCOME_GAP' || i.type === 'OUTCOME_NO_KC' || i.type === 'KC_NO_OUTCOME',
-      )) {
+      if (
+        pf.issues.some(
+          (i) =>
+            i.type === 'OUTCOME_GAP' || i.type === 'OUTCOME_NO_KC' || i.type === 'KC_NO_OUTCOME',
+        )
+      ) {
         outcomeMismatches++;
       }
     }
@@ -667,7 +656,10 @@ export class KcEvaluationService {
 
   // ─── Data Gathering ─────────────────────────────────────
 
-  private async getPages(courseId: string, scope: { type: string; pageIds?: string[] }): Promise<PageInfo[]> {
+  private async getPages(
+    courseId: string,
+    scope: { type: string; pageIds?: string[] },
+  ): Promise<PageInfo[]> {
     const modules = await this.prisma.courseModule.findMany({
       where: { courseId },
       orderBy: { orderIndex: 'asc' },
@@ -745,7 +737,7 @@ export class KcEvaluationService {
       where: { courseId },
       include: { kc: { select: { name: true } } },
     });
-    return mappings.map((m) => ({
+    return mappings.map((m: any) => ({
       id: m.id,
       kcId: m.kcId,
       kcName: m.kc.name,
@@ -773,7 +765,7 @@ export class KcEvaluationService {
       where: { id: runId },
       data: {
         status: 'COMPLETED',
-        results: output as unknown as Prisma.InputJsonValue,
+        results: output as unknown as any,
         completedAt: new Date(),
       },
     });

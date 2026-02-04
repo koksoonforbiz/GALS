@@ -5,7 +5,6 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MathNormalizerService } from './math-normalizer.service';
 import {
@@ -92,7 +91,7 @@ export class EvaluationService {
         courseId: input.courseId,
         userId: input.userId,
         status: 'RUNNING',
-        config: input.config as unknown as unknown as Prisma.InputJsonValue,
+        config: input.config as unknown as unknown as any,
         startedAt: new Date(),
       },
     });
@@ -181,11 +180,15 @@ export class EvaluationService {
         const targetIssue = mathIssues[input.issueIndex];
         if (targetIssue) {
           // Match by original text + blockId from the stored math issues
-          const stored = result.mathIssues as unknown as Array<{ blockId: string; original: string }>;
+          const stored = result.mathIssues as unknown as Array<{
+            blockId: string;
+            original: string;
+          }>;
           const target = stored[input.issueIndex];
           if (target) {
             issuesToApply = allMathIssues.filter(
-              (i) => i.autoFixable && i.blockId === target.blockId && i.original === target.original,
+              (i) =>
+                i.autoFixable && i.blockId === target.blockId && i.original === target.original,
             );
           }
         }
@@ -196,7 +199,8 @@ export class EvaluationService {
         content = fixed;
         totalFixed += appliedCount;
         // Track which issues in the issues array were math_normalizer issues that got fixed
-        const issuesArr = (result.issues as unknown as Array<{ source?: string; autoFixable?: boolean }>) || [];
+        const issuesArr =
+          (result.issues as unknown as Array<{ source?: string; autoFixable?: boolean }>) || [];
         issuesArr.forEach((iss, idx) => {
           if (iss.source === 'math_normalizer' && iss.autoFixable) {
             if (input.issueIndex === undefined || input.issueIndex === idx) {
@@ -212,14 +216,18 @@ export class EvaluationService {
     // Instead of fragile string matching, we parse the BlockDocument JSON,
     // find the target block by blockId, and replace its data.html directly.
     if (input.fixTypes.includes('llm') || input.fixTypes.includes('formatting')) {
-      const llmIssues = (result.issues as unknown as Array<{
-        original?: string;
-        suggestedFix?: string | null;
-        blockId?: string;
-        source?: string;
-      }>) || [];
+      const llmIssues =
+        (result.issues as unknown as Array<{
+          original?: string;
+          suggestedFix?: string | null;
+          blockId?: string;
+          source?: string;
+        }>) || [];
 
-      let doc: { version: number; blocks: Array<{ id: string; type: string; data: { html?: string; [k: string]: unknown } }> } | null = null;
+      let doc: {
+        version: number;
+        blocks: Array<{ id: string; type: string; data: { html?: string; [k: string]: unknown } }>;
+      } | null = null;
       try {
         doc = JSON.parse(content);
       } catch {
@@ -227,7 +235,11 @@ export class EvaluationService {
       }
 
       if (doc && Array.isArray(doc.blocks)) {
-        const applyLlmFix = (issue: { original?: string; suggestedFix?: string | null; blockId?: string }): boolean => {
+        const applyLlmFix = (issue: {
+          original?: string;
+          suggestedFix?: string | null;
+          blockId?: string;
+        }): boolean => {
           if (!issue.suggestedFix) return false;
 
           const decodedFix = decodeHtmlEntities(issue.suggestedFix);
@@ -249,7 +261,11 @@ export class EvaluationService {
             const decodedOrig = decodeHtmlEntities(issue.original);
             // Check within each block's html for a match
             for (const block of doc!.blocks) {
-              if (block.data && typeof block.data.html === 'string' && block.data.html.includes(decodedOrig)) {
+              if (
+                block.data &&
+                typeof block.data.html === 'string' &&
+                block.data.html.includes(decodedOrig)
+              ) {
                 block.data.html = block.data.html.replace(decodedOrig, decodedFix);
                 return true;
               }
@@ -307,7 +323,7 @@ export class EvaluationService {
       where: { id: input.resultId },
       data: {
         fixesApplied: true,
-        issues: remainingIssues as unknown as Prisma.InputJsonValue,
+        issues: remainingIssues as unknown as any,
       },
     });
 
@@ -340,10 +356,10 @@ export class EvaluationService {
 
     return {
       courseTitle: course.title,
-      modules: modules.map((m) => ({
+      modules: modules.map((m: any) => ({
         id: m.id,
         title: m.title,
-        pages: m.items.map((item) => ({
+        pages: m.items.map((item: any) => ({
           id: item.id,
           title: item.title,
           hasContent: !!item.contentMdx,
@@ -386,9 +402,9 @@ export class EvaluationService {
               runId,
               itemId: page.id,
               itemTitle: page.title,
-              scores: evalResult.scores as unknown as Prisma.InputJsonValue,
-              issues: evalResult.issues as unknown as Prisma.InputJsonValue,
-              mathIssues: evalResult.mathIssues as unknown as unknown as Prisma.InputJsonValue,
+              scores: evalResult.scores as unknown as any,
+              issues: evalResult.issues as unknown as any,
+              mathIssues: evalResult.mathIssues as unknown as unknown as any,
             },
           });
 
@@ -428,7 +444,7 @@ export class EvaluationService {
         where: { id: runId },
         data: {
           status: 'COMPLETED',
-          summary: summary as unknown as Prisma.InputJsonValue,
+          summary: summary as unknown as any,
           completedAt: new Date(),
         },
       });

@@ -110,7 +110,7 @@ export class KcGraphService {
     const edges = this.parseEdgesResponse(llmResult);
 
     // 7. Validate edges — only allow edges between existing approved KCs
-    const kcIds = new Set(kcs.map((k) => k.id));
+    const kcIds = new Set(kcs.map((k: any) => k.id));
     const validEdges = edges.filter(
       (e) =>
         kcIds.has(e.fromKcId) &&
@@ -148,7 +148,9 @@ export class KcGraphService {
         });
         created++;
       } catch (err: any) {
-        this.logger.warn(`Failed to upsert edge ${edge.fromKcId} -> ${edge.toKcId}: ${err.message}`);
+        this.logger.warn(
+          `Failed to upsert edge ${edge.fromKcId} -> ${edge.toKcId}: ${err.message}`,
+        );
       }
     }
 
@@ -164,8 +166,12 @@ export class KcGraphService {
       this.prisma.proposedKC.findMany({
         where: { courseId, status: { not: 'ARCHIVED' } },
         select: {
-          id: true, name: true, status: true, description: true,
-          topicId: true, subtopicId: true,
+          id: true,
+          name: true,
+          status: true,
+          description: true,
+          topicId: true,
+          subtopicId: true,
           topic: { select: { id: true, title: true } },
           subtopic: { select: { id: true, title: true } },
         },
@@ -174,13 +180,17 @@ export class KcGraphService {
       this.prisma.kcEdge.findMany({
         where: { courseId },
         select: {
-          id: true, fromKcId: true, toKcId: true,
-          relationship: true, weight: true, createdBy: true,
+          id: true,
+          fromKcId: true,
+          toKcId: true,
+          relationship: true,
+          weight: true,
+          createdBy: true,
         },
       }),
     ]);
 
-    const nodes: GraphNode[] = kcs.map((kc) => ({
+    const nodes: GraphNode[] = kcs.map((kc: any) => ({
       id: kc.id,
       name: kc.name,
       status: kc.status,
@@ -198,7 +208,10 @@ export class KcGraphService {
   }
 
   private buildHierarchy(nodes: GraphNode[]): HierarchyGroup[] {
-    const topicMap = new Map<string | null, { topicName: string; subs: Map<string | null, { subName: string; kcIds: string[] }> }>();
+    const topicMap = new Map<
+      string | null,
+      { topicName: string; subs: Map<string | null, { subName: string; kcIds: string[] }> }
+    >();
 
     for (const n of nodes) {
       const tKey = n.topicId;
@@ -229,7 +242,13 @@ export class KcGraphService {
   /**
    * Add a manual edge.
    */
-  async addEdge(courseId: string, fromKcId: string, toKcId: string, relationship: string, weight: number) {
+  async addEdge(
+    courseId: string,
+    fromKcId: string,
+    toKcId: string,
+    relationship: string,
+    weight: number,
+  ) {
     if (fromKcId === toKcId) throw new BadRequestException('Cannot create self-loop');
 
     return this.prisma.kcEdge.create({
@@ -271,7 +290,9 @@ export class KcGraphService {
   /**
    * Get topological ordering of KCs (for learning path).
    */
-  async getTopologicalOrder(courseId: string): Promise<Array<{ id: string; name: string; level: number }>> {
+  async getTopologicalOrder(
+    courseId: string,
+  ): Promise<Array<{ id: string; name: string; level: number }>> {
     const graph = await this.getGraph(courseId);
 
     // Build adjacency and in-degree maps
@@ -343,7 +364,9 @@ export class KcGraphService {
     }
 
     // DFS-based cycle detection
-    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const WHITE = 0,
+      GRAY = 1,
+      BLACK = 2;
     const color = new Map<string, number>();
     const parent = new Map<string, string | null>();
     const cycles: string[][] = [];
@@ -385,10 +408,10 @@ export class KcGraphService {
   async saveLayout(courseId: string, layout: GraphLayoutData): Promise<{ saved: boolean }> {
     await this.prisma.kcGraphLayout.upsert({
       where: { courseId },
-      update: { layoutJson: layout as unknown as import('@prisma/client').Prisma.InputJsonValue },
+      update: { layoutJson: layout as unknown as any },
       create: {
         courseId,
-        layoutJson: layout as unknown as import('@prisma/client').Prisma.InputJsonValue,
+        layoutJson: layout as unknown as any,
       },
     });
     return { saved: true };
@@ -532,7 +555,9 @@ export class KcGraphService {
     return false;
   }
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getLlmCredentials(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },

@@ -74,8 +74,11 @@ export class KcNormalizationService {
     });
 
     // Pre-compute similarity map for non-archived KCs
-    const activeKcs = kcs.filter((k) => k.status !== 'ARCHIVED');
-    const similarityMap = new Map<string, Array<{ id: string; name: string; similarity: number }>>();
+    const activeKcs = kcs.filter((k: any) => k.status !== 'ARCHIVED');
+    const similarityMap = new Map<
+      string,
+      Array<{ id: string; name: string; similarity: number }>
+    >();
 
     for (let i = 0; i < activeKcs.length; i++) {
       const a = activeKcs[i]!;
@@ -94,7 +97,7 @@ export class KcNormalizationService {
       similarityMap.set(a.id, similars.slice(0, 5));
     }
 
-    return kcs.map((kc) => {
+    return kcs.map((kc: any) => {
       const pageCount = kc.pageIds.length;
       let coverageStatus: KcHealthIndicator['coverageStatus'];
       if (pageCount === 0) coverageStatus = 'uncovered';
@@ -144,8 +147,7 @@ export class KcNormalizationService {
     // Substring bonus: if one name fully contains the other
     const normA = nameA.toLowerCase().trim();
     const normB = nameB.toLowerCase().trim();
-    const substringBonus =
-      normA.includes(normB) || normB.includes(normA) ? 0.2 : 0;
+    const substringBonus = normA.includes(normB) || normB.includes(normA) ? 0.2 : 0;
 
     return Math.min(1, jaccard + substringBonus);
   }

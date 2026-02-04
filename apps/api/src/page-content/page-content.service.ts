@@ -78,15 +78,24 @@ export class PageContentService {
 
     const mod = await this.prisma.courseModule.findUnique({
       where: { id: input.moduleId },
-      select: { title: true, items: { orderBy: { orderIndex: 'asc' }, select: { id: true, title: true, learningOutcomes: true } } },
+      select: {
+        title: true,
+        items: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, title: true, learningOutcomes: true },
+        },
+      },
     });
     if (!mod) throw new NotFoundException('Module not found');
 
-    const selectedSourceNames = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
+    const selectedSourceNames = await this.resolveSourceNames(
+      input.courseId,
+      input.selectedSourceIds,
+    );
 
     // Build suggested prompt for the first page (or aggregate for bulk)
     if (input.pageIds.length === 1) {
-      const pageItem = mod.items.find((i) => i.id === input.pageIds[0]);
+      const pageItem = mod.items.find((i: any) => i.id === input.pageIds[0]);
       if (!pageItem) throw new NotFoundException('Page not found');
       const pageContext: PageContext = {
         courseTitle: course.title,
@@ -94,19 +103,23 @@ export class PageContentService {
         moduleTitle: mod.title,
         pageTitle: pageItem.title,
         learningOutcomes: (pageItem.learningOutcomes as string[]) || [],
-        siblingPageTitles: mod.items.map((i) => i.title),
-        pageIndex: mod.items.findIndex((i) => i.id === pageItem.id),
+        siblingPageTitles: mod.items.map((i: any) => i.title),
+        pageIndex: mod.items.findIndex((i: any) => i.id === pageItem.id),
       };
       return {
-        suggestedPrompt: buildSuggestedPrompt(pageContext, selectedSourceNames, input.scopePreference),
+        suggestedPrompt: buildSuggestedPrompt(
+          pageContext,
+          selectedSourceNames,
+          input.scopePreference,
+        ),
       };
     }
 
     // Bulk: suggest prompt covering all selected pages
-    const selectedPages = mod.items.filter((i) => input.pageIds.includes(i.id));
-    const pageTitles = selectedPages.map((p) => p.title);
+    const selectedPages = mod.items.filter((i: any) => input.pageIds.includes(i.id));
+    const pageTitles = selectedPages.map((p: any) => p.title);
     return {
-      suggestedPrompt: `Generate detailed lesson content for each of the following ${pageTitles.length} pages in the module "${mod.title}" of course "${course.title}":\n\n${pageTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\nUse ${selectedSourceNames.length > 0 ? `the ${selectedSourceNames.length} selected source(s)` : 'all available course materials'} (scope: ${input.scopePreference}).\n\nFor each page, include clear explanations, worked examples, common misconceptions, and quick comprehension checks.`,
+      suggestedPrompt: `Generate detailed lesson content for each of the following ${pageTitles.length} pages in the module "${mod.title}" of course "${course.title}":\n\n${pageTitles.map((t: any, i: number) => `${i + 1}. ${t}`).join('\n')}\n\nUse ${selectedSourceNames.length > 0 ? `the ${selectedSourceNames.length} selected source(s)` : 'all available course materials'} (scope: ${input.scopePreference}).\n\nFor each page, include clear explanations, worked examples, common misconceptions, and quick comprehension checks.`,
     };
   }
 
@@ -130,12 +143,15 @@ export class PageContentService {
       where: { id: input.moduleId },
       select: {
         title: true,
-        items: { orderBy: { orderIndex: 'asc' }, select: { id: true, title: true, learningOutcomes: true, estimatedMinutes: true } },
+        items: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, title: true, learningOutcomes: true, estimatedMinutes: true },
+        },
       },
     });
     if (!mod) throw new NotFoundException('Module not found');
 
-    const pageItem = mod.items.find((i) => i.id === input.pageId);
+    const pageItem = mod.items.find((i: any) => i.id === input.pageId);
     if (!pageItem) throw new NotFoundException('Page not found');
 
     const pageContext: PageContext = {
@@ -145,8 +161,8 @@ export class PageContentService {
       pageTitle: pageItem.title,
       learningOutcomes: (pageItem.learningOutcomes as string[]) || [],
       estimatedMinutes: pageItem.estimatedMinutes ?? undefined,
-      siblingPageTitles: mod.items.map((i) => i.title),
-      pageIndex: mod.items.findIndex((i) => i.id === pageItem.id),
+      siblingPageTitles: mod.items.map((i: any) => i.title),
+      pageIndex: mod.items.findIndex((i: any) => i.id === pageItem.id),
     };
 
     // 3. Create job
@@ -202,9 +218,17 @@ export class PageContentService {
       }
 
       // 7. Build prompts
-      const selectedSourceNames = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
+      const selectedSourceNames = await this.resolveSourceNames(
+        input.courseId,
+        input.selectedSourceIds,
+      );
       const systemPrompt = buildPageContentSystemPrompt(input.strictSources);
-      const userPrompt = buildPageContentUserPrompt(pageContext, chunks, input.adminPrompt, selectedSourceNames);
+      const userPrompt = buildPageContentUserPrompt(
+        pageContext,
+        chunks,
+        input.adminPrompt,
+        selectedSourceNames,
+      );
 
       // 8. Call LLM
       const llmResult = await this.callOpenAiApi(
@@ -277,9 +301,7 @@ export class PageContentService {
           generationJobId: job.id,
           userId: input.userId,
         })
-        .catch((err) =>
-          this.logger.error(`KC suggestion background task failed: ${err.message}`),
-        );
+        .catch((err) => this.logger.error(`KC suggestion background task failed: ${err.message}`));
 
       return {
         pageId: input.pageId,
@@ -418,12 +440,14 @@ export class PageContentService {
       where: { courseId, id: { in: sourceIds } },
       select: { id: true, title: true, filename: true },
     });
-    return docs.map((d) => ({ sourceId: d.id, name: d.title || d.filename }));
+    return docs.map((d: any) => ({ sourceId: d.id, name: d.title || d.filename }));
   }
 
   // ─── Private: LLM ─────────────────────────────────────
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getLlmCredentials(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },

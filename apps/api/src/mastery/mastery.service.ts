@@ -15,10 +15,7 @@ export class MasteryService {
   /**
    * Called after any grading (auto or manual) to update KC evidence and mastery.
    */
-  async updateMasteryAfterGrading(
-    gradingResultId: string,
-    attemptId: string,
-  ): Promise<void> {
+  async updateMasteryAfterGrading(gradingResultId: string, attemptId: string): Promise<void> {
     // Load the grading result + attempt + question + question KCs
     const gradingResult = await this.prisma.gradingResult.findUnique({
       where: { id: gradingResultId },
@@ -67,25 +64,19 @@ export class MasteryService {
       });
 
       if (existing) {
-        const newP =
-          EMA_ALPHA * fractionalScore +
-          (1 - EMA_ALPHA) * existing.probabilityKnown;
+        const newP = EMA_ALPHA * fractionalScore + (1 - EMA_ALPHA) * existing.probabilityKnown;
 
         await this.prisma.userMastery.update({
           where: { id: existing.id },
           data: {
             probabilityKnown: newP,
             totalAttempts: { increment: 1 },
-            correctAttempts: isCorrect
-              ? { increment: 1 }
-              : existing.correctAttempts,
+            correctAttempts: isCorrect ? { increment: 1 } : existing.correctAttempts,
             lastAttemptAt: now,
           },
         });
       } else {
-        const newP =
-          EMA_ALPHA * fractionalScore +
-          (1 - EMA_ALPHA) * INITIAL_PROBABILITY;
+        const newP = EMA_ALPHA * fractionalScore + (1 - EMA_ALPHA) * INITIAL_PROBABILITY;
 
         await this.prisma.userMastery.create({
           data: {
@@ -157,10 +148,7 @@ export class MasteryService {
   /**
    * Get weakest KCs for a student.
    */
-  async getWeakKcs(
-    studentId: string,
-    limit = 5,
-  ): Promise<KcMasteryItem[]> {
+  async getWeakKcs(studentId: string, limit = 5): Promise<KcMasteryItem[]> {
     const masteries = await this.prisma.userMastery.findMany({
       where: {
         userId: studentId,
@@ -173,7 +161,7 @@ export class MasteryService {
       take: limit,
     });
 
-    return masteries.map((m) => ({
+    return masteries.map((m: any) => ({
       kcId: m.kcId,
       code: m.kc.code,
       label: m.kc.label,
@@ -213,12 +201,10 @@ export class MasteryService {
     }
 
     if (targetMasteries.length === 0) {
-      throw new NotFoundException(
-        'No mastery data found. Complete some assessments first.',
-      );
+      throw new NotFoundException('No mastery data found. Complete some assessments first.');
     }
 
-    const targetKcIds = targetMasteries.map((m) => m.kcId);
+    const targetKcIds = targetMasteries.map((m: any) => m.kcId);
 
     // 2. Find questions tagged with those KCs
     const questionKcs = await this.prisma.questionKc.findMany({
@@ -241,7 +227,7 @@ export class MasteryService {
       where: { studentId },
       select: { courseId: true },
     });
-    const enrolledCourseIds = new Set(enrollments.map((e) => e.courseId));
+    const enrolledCourseIds = new Set(enrollments.map((e: any) => e.courseId));
 
     // Filter to enrolled courses + deduplicate questions
     const questionMap = new Map<string, (typeof questionKcs)[0]['question']>();
@@ -268,8 +254,7 @@ export class MasteryService {
       data: {
         courseId,
         title: `Revision Worksheet — ${new Date().toLocaleDateString()}`,
-        description:
-          'Auto-generated revision worksheet targeting your weakest knowledge areas.',
+        description: 'Auto-generated revision worksheet targeting your weakest knowledge areas.',
         questions: {
           create: selectedQuestions.map((q, index) => ({
             questionId: q.id,
