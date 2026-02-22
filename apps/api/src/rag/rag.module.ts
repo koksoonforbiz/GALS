@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma';
 import { BlobModule } from '../blob';
 import { RagService } from './rag.service';
 import { LlmService } from './llm.service';
+import { AnthropicService } from './anthropic.service';
 import { RagController } from './rag.controller';
 
 @Module({
@@ -15,7 +16,7 @@ import { RagController } from './rag.controller';
     }),
   ],
   controllers: [RagController],
-  providers: [RagService, LlmService],
-  exports: [RagService, LlmService],
+  providers: [RagService, LlmService, AnthropicService],
+  exports: [RagService, LlmService, AnthropicService],
 })
 export class RagModule {}

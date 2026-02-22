@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import BlockRenderer from '../../components/editor/BlockRenderer';
+import { useTextSelection } from '../../hooks/useTextSelection';
+import { TextSelectionTooltip } from '../../components/TextSelectionTooltip';
+import { LearningInterventionModal } from '../../components/LearningInterventionModal';
 
 interface ModuleItem {
   id: string;
@@ -41,6 +44,24 @@ export function StudentCourseViewPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [savedSelectedText, setSavedSelectedText] = useState('');
+
+  // Ref for the content area to track text selection
+  const contentRef = useRef<HTMLDivElement>(null);
+  const { selectedText, selectionRect, clearSelection } = useTextSelection(contentRef);
+
+  const handleOpenModal = () => {
+    // Save the selected text before opening modal (in case selection clears)
+    setSavedSelectedText(selectedText);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSavedSelectedText('');
+    clearSelection();
+  };
 
   useEffect(() => {
     const fetch = async () => {
@@ -145,7 +166,7 @@ export function StudentCourseViewPage() {
             {!selectedItem ? (
               <p className="text-gray-400">Select an item from the left.</p>
             ) : selectedItem.type === 'PAGE' ? (
-              <div>
+              <div ref={contentRef}>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
                 {selectedItem.contentMdx ? (
                   <BlockRenderer content={selectedItem.contentMdx} />
@@ -211,6 +232,23 @@ export function StudentCourseViewPage() {
           </div>
         </div>
       )}
+
+      {/* Text Selection Tooltip - shows when text is selected in PAGE content */}
+      {selectedText && selectionRect && !isModalOpen && (
+        <TextSelectionTooltip
+          selectionRect={selectionRect}
+          onClick={handleOpenModal}
+        />
+      )}
+
+      {/* Learning Intervention Modal */}
+      <LearningInterventionModal
+        selectedText={savedSelectedText || selectedText}
+        courseId={courseId || ''}
+        contentId={selectedItemId || ''}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+      />
     </div>
   );
 }

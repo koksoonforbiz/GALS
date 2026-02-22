@@ -106,6 +106,10 @@ model User {
   uploadedDocuments SourceDocument[] @relation("UploadedDocuments")
   createdDrafts     ContentDraft[]   @relation("CreatedDrafts")
 
+  // Learning interventions
+  learningInterventions  LearningIntervention[]
+  spacedRepetitionCards  SpacedRepetitionCard[]
+
   @@map("users")
 }
 
@@ -798,4 +802,103 @@ model KcEvaluationRun {
   @@index([courseId])
   @@index([userId])
   @@map("kc_evaluation_runs")
+}
+
+// ─── Learning Interventions ─────────────────────────────
+
+enum InterventionType {
+  PRACTICE_TESTING
+  DISTRIBUTED_PRACTICE
+  STEPWISE_LEARNING
+  INTERROGATIVE_ELABORATION
+}
+
+model LearningIntervention {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  courseId         String           @map("course_id") @db.Uuid
+  contentId        String           @map("content_id") @db.Uuid
+  selectedText     String           @db.Text @map("selected_text")
+  interventionType InterventionType @map("intervention_type")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  practiceTests         PracticeTest[]
+  stepwiseSessions      StepwiseSession[]
+  elaborationSessions   ElaborationSession[]
+  spacedRepetitionCards SpacedRepetitionCard[]
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([contentId])
+  @@map("learning_interventions")
+}
+
+model PracticeTest {
+  id             String    @id @default(uuid()) @db.Uuid
+  interventionId String    @map("intervention_id") @db.Uuid
+  questions      Json      // Array of {question, type, options?, correctAnswer, explanation}
+  userAnswers    Json?     @map("user_answers") // Array of {questionIndex, answer, isCorrect, submittedAt}
+  score          Float?
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  intervention LearningIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+
+  @@index([interventionId])
+  @@map("practice_tests")
+}
+
+model SpacedRepetitionCard {
+  id             String    @id @default(uuid()) @db.Uuid
+  interventionId String    @map("intervention_id") @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  front          String    @db.Text
+  back           String    @db.Text
+  ease           Float     @default(2.5)
+  interval       Int       @default(1)
+  repetitions    Int       @default(0)
+  nextReviewAt   DateTime  @default(now()) @map("next_review_at") @db.Timestamptz
+  lastReviewedAt DateTime? @map("last_reviewed_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  intervention LearningIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([interventionId])
+  @@index([userId])
+  @@index([nextReviewAt])
+  @@map("spaced_repetition_cards")
+}
+
+model StepwiseSession {
+  id             String    @id @default(uuid()) @db.Uuid
+  interventionId String    @map("intervention_id") @db.Uuid
+  steps          Json      // Array of {stepNumber, title, content, comprehensionCheck}
+  currentStep    Int       @default(0) @map("current_step")
+  userResponses  Json?     @map("user_responses") // Array of {stepNumber, response, feedback}
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  intervention LearningIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+
+  @@index([interventionId])
+  @@map("stepwise_sessions")
+}
+
+model ElaborationSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  interventionId   String    @map("intervention_id") @db.Uuid
+  questions        Json      // Array of {question, type: "why" | "how", keyPoints}
+  userElaborations Json?     @map("user_elaborations") // Array of {questionIndex, elaboration, aiFeedback, score}
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  intervention LearningIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+
+  @@index([interventionId])
+  @@map("elaboration_sessions")
 }

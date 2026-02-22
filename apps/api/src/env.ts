@@ -51,6 +51,10 @@ const EnvSchema = z.object({
     .url('BLOB_STORAGE_PUBLIC_ENDPOINT must be a valid URL if provided')
     .optional()
     .describe('Public URL for blob storage (optional, for pre-signed URLs)'),
+  ANTHROPIC_API_KEY: z
+    .string()
+    .optional()
+    .describe('Anthropic API key for Claude-based learning interventions (optional)'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
