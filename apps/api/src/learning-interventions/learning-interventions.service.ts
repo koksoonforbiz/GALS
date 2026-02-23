@@ -273,7 +273,7 @@ export class LearningInterventionsService {
     }
 
     // 2. Get the questions with correct answers
-    const questions = practiceTest.questions as PracticeTestQuestionFull[];
+    const questions = practiceTest.questions as unknown as PracticeTestQuestionFull[];
 
     // 3. Grade each answer
     const results: Array<{
@@ -361,7 +361,7 @@ export class LearningInterventionsService {
       throw new NotFoundException('Practice test not found');
     }
 
-    const questions = practiceTest.questions as PracticeTestQuestionFull[];
+    const questions = practiceTest.questions as unknown as PracticeTestQuestionFull[];
 
     // Only return correct answers if the test has been completed
     const questionsForResponse = practiceTest.completedAt
@@ -517,7 +517,7 @@ export class LearningInterventionsService {
     }
 
     // 2. Get the question and key points
-    const questions = session.questions as ElaborationQuestion[];
+    const questions = session.questions as unknown as ElaborationQuestion[];
     const question = questions[dto.questionIndex];
 
     if (!question) {
@@ -554,7 +554,7 @@ export class LearningInterventionsService {
     }
 
     // 4. Update the session's userElaborations array
-    const existingElaborations = (session.userElaborations as UserElaborationEntry[]) || [];
+    const existingElaborations = (session.userElaborations as unknown as UserElaborationEntry[]) || [];
 
     // Find existing entry for this question (for revisions)
     const existingIndex = existingElaborations.findIndex(
@@ -625,8 +625,8 @@ export class LearningInterventionsService {
     }
 
     // 2. Get elaborations and calculate summary
-    const elaborations = (session.userElaborations as UserElaborationEntry[]) || [];
-    const questions = session.questions as ElaborationQuestion[];
+    const elaborations = (session.userElaborations as unknown as UserElaborationEntry[]) || [];
+    const questions = session.questions as unknown as ElaborationQuestion[];
 
     const ratings = {
       strong: 0,
@@ -699,8 +699,8 @@ export class LearningInterventionsService {
       throw new NotFoundException('Elaboration session not found');
     }
 
-    const questions = session.questions as ElaborationQuestion[];
-    const elaborations = (session.userElaborations as UserElaborationEntry[]) || [];
+    const questions = session.questions as unknown as ElaborationQuestion[];
+    const elaborations = (session.userElaborations as unknown as UserElaborationEntry[]) || [];
 
     const questionsForStudent: ElaborationQuestionForStudent[] = questions.map((q) => ({
       question: q.question,
@@ -847,7 +847,7 @@ export class LearningInterventionsService {
     }
 
     // 2. Get the step
-    const steps = session.steps as LearningStep[];
+    const steps = session.steps as unknown as LearningStep[];
     const step = steps.find((s) => s.stepNumber === dto.stepNumber);
 
     if (!step) {
@@ -886,7 +886,7 @@ export class LearningInterventionsService {
     }
 
     // 4. Update the session's userResponses array
-    const existingResponses = (session.userResponses as UserStepResponse[]) || [];
+    const existingResponses = (session.userResponses as unknown as UserStepResponse[]) || [];
 
     // Find existing entry for this step (for retries)
     const existingIndex = existingResponses.findIndex((r) => r.stepNumber === dto.stepNumber);
@@ -968,8 +968,8 @@ export class LearningInterventionsService {
       `Advanced session ${sessionId} to step ${newCurrentStep}${isComplete ? ' (completed)' : ''}`,
     );
 
-    const steps = updatedSession.steps as LearningStep[];
-    const userResponses = (updatedSession.userResponses as UserStepResponse[]) || [];
+    const steps = updatedSession.steps as unknown as LearningStep[];
+    const userResponses = (updatedSession.userResponses as unknown as UserStepResponse[]) || [];
 
     return {
       sessionId: updatedSession.id,
@@ -1005,7 +1005,7 @@ export class LearningInterventionsService {
     }
 
     // 2. Calculate statistics
-    const userResponses = (session.userResponses as UserStepResponse[]) || [];
+    const userResponses = (session.userResponses as unknown as UserStepResponse[]) || [];
 
     // Count steps where the first response was correct
     const responsesByStep = new Map<number, UserStepResponse[]>();
@@ -1067,8 +1067,8 @@ export class LearningInterventionsService {
       throw new NotFoundException('Stepwise session not found');
     }
 
-    const steps = session.steps as LearningStep[];
-    const userResponses = (session.userResponses as UserStepResponse[]) || [];
+    const steps = session.steps as unknown as LearningStep[];
+    const userResponses = (session.userResponses as unknown as UserStepResponse[]) || [];
 
     return {
       sessionId: session.id,

@@ -880,6 +880,9 @@ model StepwiseSession {
   id             String    @id @default(uuid()) @db.Uuid
   interventionId String    @map("intervention_id") @db.Uuid
   steps          Json      // Array of {stepNumber, title, content, comprehensionCheck}
+  summary        String?   @db.Text
+  totalSteps     Int       @default(0) @map("total_steps")
+  sourceText     String?   @map("source_text") @db.Text
   currentStep    Int       @default(0) @map("current_step")
   userResponses  Json?     @map("user_responses") // Array of {stepNumber, response, feedback}
   completedAt    DateTime? @map("completed_at") @db.Timestamptz
@@ -895,6 +898,7 @@ model ElaborationSession {
   id               String    @id @default(uuid()) @db.Uuid
   interventionId   String    @map("intervention_id") @db.Uuid
   questions        Json      // Array of {question, type: "why" | "how", keyPoints}
+  sourceText       String?   @map("source_text") @db.Text
   userElaborations Json?     @map("user_elaborations") // Array of {questionIndex, elaboration, aiFeedback, score}
   completedAt      DateTime? @map("completed_at") @db.Timestamptz
   createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
