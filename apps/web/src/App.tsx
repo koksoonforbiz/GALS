@@ -27,6 +27,7 @@ import { AttemptPage } from './pages/student/AttemptPage';
 import { CatalogPage } from './pages/student/CatalogPage';
 import { MyCoursesPage } from './pages/student/MyCoursesPage';
 import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
+import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
 
 function App() {
   return (
@@ -175,6 +176,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['student']}>
                     <StudentCourseViewPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/review-queue"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <ReviewQueuePage />
                   </RoleRoute>
                 }
               />

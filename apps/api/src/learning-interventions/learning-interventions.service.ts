@@ -48,6 +48,25 @@ import {
   StepwiseLearningResponse,
   StepCheckEvaluationResponse,
 } from './prompts/stepwise-learning.prompt';
+import {
+  buildDistributedPracticePrompt,
+  FlashcardResponse,
+} from './prompts/distributed-practice.prompt';
+import {
+  GenerateCardsDto,
+  ReviewCardDto,
+  CardGenerationResult,
+  DueCardsResult,
+  ReviewResult,
+  CardStats,
+  Flashcard,
+  DueCard,
+} from './dto/distributed-practice.dto';
+import {
+  calculateNextReview,
+  QUALITY_MAP,
+  getInitialSM2Values,
+} from './utils/sm2-algorithm';
 
 @Injectable()
 export class LearningInterventionsService {
@@ -1060,7 +1079,332 @@ export class LearningInterventionsService {
     };
   }
 
+  // ─── Distributed Practice (Spaced Repetition) Methods ─────────────────────
+
+  /**
+   * Generate flashcards from selected text
+   */
+  async generateCards(userId: string, dto: GenerateCardsDto): Promise<CardGenerationResult> {
+    // 1. Check if Anthropic is available
+    if (!this.anthropic.isAvailable()) {
+      throw new BadRequestException('AI service not configured. Please contact administrator.');
+    }
+
+    // 2. Create the learning intervention record
+    const intervention = await this.prisma.learningIntervention.create({
+      data: {
+        userId,
+        courseId: dto.courseId,
+        contentId: dto.contentId,
+        selectedText: dto.selectedText,
+        interventionType: 'DISTRIBUTED_PRACTICE',
+      },
+    });
+
+    // 3. Build prompt and call Anthropic
+    const cardCount = dto.cardCount || 5;
+    const prompt = buildDistributedPracticePrompt(dto.selectedText, cardCount);
+
+    let cardsData: FlashcardResponse;
+    try {
+      const response = await this.anthropic.generateStructuredResponse<FlashcardResponse>(
+        {
+          systemPrompt: prompt.system,
+          userPrompt: prompt.user,
+          maxTokens: 4096,
+        },
+        {
+          courseId: dto.courseId,
+          userId,
+          action: 'distributed_practice_generate',
+        },
+      );
+
+      cardsData = this.validateAndNormalizeFlashcards(response.data, cardCount);
+    } catch (error: any) {
+      // Retry once on failure
+      this.logger.warn(`First attempt failed, retrying: ${error.message}`);
+      try {
+        const response = await this.anthropic.generateStructuredResponse<FlashcardResponse>(
+          {
+            systemPrompt: prompt.system,
+            userPrompt: prompt.user,
+            maxTokens: 4096,
+          },
+          {
+            courseId: dto.courseId,
+            userId,
+            action: 'distributed_practice_generate_retry',
+          },
+        );
+
+        cardsData = this.validateAndNormalizeFlashcards(response.data, cardCount);
+      } catch (retryError: any) {
+        this.logger.error(`Retry also failed: ${retryError.message}`);
+        // Clean up the intervention record
+        await this.prisma.learningIntervention.delete({
+          where: { id: intervention.id },
+        });
+        throw new BadRequestException('Failed to generate flashcards. Please try again.');
+      }
+    }
+
+    // 4. Create SpacedRepetitionCard records for each card
+    const initialValues = getInitialSM2Values();
+    const nextReviewAt = new Date();
+    nextReviewAt.setDate(nextReviewAt.getDate() + 1); // First review tomorrow
+
+    const createdCards: Flashcard[] = [];
+    for (const card of cardsData.cards) {
+      const createdCard = await this.prisma.spacedRepetitionCard.create({
+        data: {
+          interventionId: intervention.id,
+          userId,
+          front: card.front,
+          back: card.back,
+          ease: initialValues.ease,
+          interval: initialValues.interval,
+          repetitions: initialValues.repetitions,
+          nextReviewAt,
+        },
+      });
+
+      createdCards.push({
+        id: createdCard.id,
+        front: createdCard.front,
+        back: createdCard.back,
+      });
+    }
+
+    this.logger.log(
+      `Generated ${createdCards.length} flashcards for intervention ${intervention.id}`,
+    );
+
+    return {
+      interventionId: intervention.id,
+      cards: createdCards,
+      totalCreated: createdCards.length,
+    };
+  }
+
+  /**
+   * Get cards due for review
+   */
+  async getDueCards(
+    userId: string,
+    limit: number = 20,
+    courseId?: string,
+  ): Promise<DueCardsResult> {
+    const now = new Date();
+
+    // Build the where clause
+    const where: any = {
+      userId,
+      nextReviewAt: { lte: now },
+    };
+
+    // If courseId provided, filter through intervention relation
+    if (courseId) {
+      where.intervention = { courseId };
+    }
+
+    const dueCards = await this.prisma.spacedRepetitionCard.findMany({
+      where,
+      orderBy: { nextReviewAt: 'asc' },
+      take: limit,
+      include: {
+        intervention: {
+          include: {
+            course: true,
+          },
+        },
+      },
+    });
+
+    // Get total due count
+    const totalDue = await this.prisma.spacedRepetitionCard.count({ where });
+
+    const cards: DueCard[] = dueCards.map((card) => ({
+      id: card.id,
+      front: card.front,
+      back: card.back,
+      interval: card.interval,
+      repetitions: card.repetitions,
+      courseId: card.intervention.courseId,
+      courseName: card.intervention.course?.title,
+    }));
+
+    return {
+      dueCards: cards,
+      totalDue,
+    };
+  }
+
+  /**
+   * Submit a card review with quality rating
+   */
+  async reviewCard(
+    userId: string,
+    cardId: string,
+    dto: ReviewCardDto,
+  ): Promise<ReviewResult> {
+    // 1. Fetch the card
+    const card = await this.prisma.spacedRepetitionCard.findUnique({
+      where: { id: cardId },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    if (card.userId !== userId) {
+      throw new NotFoundException('Card not found');
+    }
+
+    // 2. Map quality string to SM-2 quality score
+    const quality = QUALITY_MAP[dto.quality];
+
+    // 3. Calculate next review using SM-2 algorithm
+    const result = calculateNextReview(quality, {
+      ease: card.ease,
+      interval: card.interval,
+      repetitions: card.repetitions,
+    });
+
+    // 4. Update the card
+    await this.prisma.spacedRepetitionCard.update({
+      where: { id: cardId },
+      data: {
+        ease: result.ease,
+        interval: result.interval,
+        repetitions: result.repetitions,
+        nextReviewAt: result.nextReviewAt,
+        lastReviewedAt: new Date(),
+      },
+    });
+
+    this.logger.log(
+      `Reviewed card ${cardId}: quality=${dto.quality}, next review in ${result.interval} days`,
+    );
+
+    return {
+      nextReviewAt: result.nextReviewAt.toISOString(),
+      interval: result.interval,
+      ease: result.ease,
+    };
+  }
+
+  /**
+   * Get card statistics for the user
+   */
+  async getStats(userId: string): Promise<CardStats> {
+    const now = new Date();
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    const endOfWeek = new Date(now);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    // Get all cards for the user
+    const allCards = await this.prisma.spacedRepetitionCard.findMany({
+      where: { userId },
+      select: {
+        ease: true,
+        repetitions: true,
+        nextReviewAt: true,
+      },
+    });
+
+    const totalCards = allCards.length;
+
+    // Count cards due today
+    const dueToday = allCards.filter(
+      (card) => card.nextReviewAt <= endOfToday,
+    ).length;
+
+    // Count cards due this week
+    const dueThisWeek = allCards.filter(
+      (card) => card.nextReviewAt <= endOfWeek,
+    ).length;
+
+    // Calculate average ease
+    const averageEase =
+      totalCards > 0
+        ? allCards.reduce((sum, card) => sum + card.ease, 0) / totalCards
+        : 2.5;
+
+    // Count cards by stage
+    const cardsByStage = {
+      new: allCards.filter((card) => card.repetitions === 0).length,
+      learning: allCards.filter(
+        (card) => card.repetitions >= 1 && card.repetitions <= 2,
+      ).length,
+      mature: allCards.filter((card) => card.repetitions >= 3).length,
+    };
+
+    // For streak tracking, we would need a separate table to track daily reviews
+    // For now, return 0 as placeholder
+    const longestStreak = 0;
+
+    return {
+      totalCards,
+      dueToday,
+      dueThisWeek,
+      averageEase: Math.round(averageEase * 100) / 100,
+      longestStreak,
+      cardsByStage,
+    };
+  }
+
+  /**
+   * Delete a card
+   */
+  async deleteCard(userId: string, cardId: string): Promise<void> {
+    const card = await this.prisma.spacedRepetitionCard.findUnique({
+      where: { id: cardId },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    if (card.userId !== userId) {
+      throw new NotFoundException('Card not found');
+    }
+
+    await this.prisma.spacedRepetitionCard.delete({
+      where: { id: cardId },
+    });
+
+    this.logger.log(`Deleted card ${cardId}`);
+  }
+
   // ─── Private Helper Methods ───────────────────────────────
+
+  /**
+   * Validate and normalize flashcards from LLM response
+   */
+  private validateAndNormalizeFlashcards(
+    data: any,
+    expectedCount: number,
+  ): FlashcardResponse {
+    if (!data.cards || !Array.isArray(data.cards) || data.cards.length === 0) {
+      throw new Error('Invalid cards array from LLM');
+    }
+
+    const cards = data.cards.slice(0, expectedCount).map((c: any, idx: number) => {
+      if (!c.front || !c.back) {
+        throw new Error(`Invalid card at index ${idx}`);
+      }
+
+      return {
+        front: String(c.front).trim(),
+        back: String(c.back).trim(),
+      };
+    });
+
+    return { cards };
+  }
 
   /**
    * Validate and normalize stepwise learning response from LLM

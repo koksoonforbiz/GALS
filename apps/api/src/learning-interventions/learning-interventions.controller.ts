@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -32,6 +33,12 @@ import {
   SubmitStepCheckDto,
   SubmitStepCheckSchema,
 } from './dto/stepwise-learning.dto';
+import {
+  GenerateCardsDto,
+  GenerateCardsSchema,
+  ReviewCardDto,
+  ReviewCardSchema,
+} from './dto/distributed-practice.dto';
 
 interface RequestUser {
   id: string;
@@ -237,5 +244,65 @@ export class LearningInterventionsController {
     @Param('sessionId') sessionId: string,
   ) {
     return this.learningInterventionsService.getStepwiseSession(req.user.id, sessionId);
+  }
+
+  // ─── Distributed Practice (Spaced Repetition) Endpoints ─────────────────────
+
+  /**
+   * Generate flashcards from selected text
+   */
+  @Post('distributed-practice/generate')
+  @UsePipes(new ZodValidationPipe(GenerateCardsSchema))
+  async generateCards(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateCardsDto,
+  ) {
+    return this.learningInterventionsService.generateCards(req.user.id, dto);
+  }
+
+  /**
+   * Get cards due for review
+   */
+  @Get('distributed-practice/due')
+  async getDueCards(
+    @Request() req: { user: RequestUser },
+    @Query('limit') limit?: string,
+    @Query('courseId') courseId?: string,
+  ) {
+    const parsedLimit = limit ? parseInt(limit, 10) : 20;
+    return this.learningInterventionsService.getDueCards(req.user.id, parsedLimit, courseId);
+  }
+
+  /**
+   * Get card statistics
+   */
+  @Get('distributed-practice/stats')
+  async getStats(@Request() req: { user: RequestUser }) {
+    return this.learningInterventionsService.getStats(req.user.id);
+  }
+
+  /**
+   * Submit a card review
+   */
+  @Patch('distributed-practice/cards/:cardId/review')
+  @UsePipes(new ZodValidationPipe(ReviewCardSchema))
+  async reviewCard(
+    @Request() req: { user: RequestUser },
+    @Param('cardId') cardId: string,
+    @Body() dto: ReviewCardDto,
+  ) {
+    return this.learningInterventionsService.reviewCard(req.user.id, cardId, dto);
+  }
+
+  /**
+   * Delete a card
+   */
+  @Delete('distributed-practice/cards/:cardId')
+  async deleteCard(
+    @Request() req: { user: RequestUser },
+    @Param('cardId') cardId: string,
+  ) {
+    await this.learningInterventionsService.deleteCard(req.user.id, cardId);
+    return { success: true };
   }
 }
