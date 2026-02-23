@@ -231,10 +231,7 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
   const handleExportJson = () => {
     if (!activeRun) return;
     const token = localStorage.getItem('token');
-    window.open(
-      `/api${base}/runs/${activeRun.id}/export-json?token=${token}`,
-      '_blank',
-    );
+    window.open(`/api${base}/runs/${activeRun.id}/export-json?token=${token}`, '_blank');
   };
 
   const handleExportPdf = () => {
@@ -276,13 +273,19 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
               onClick={handleExportJson}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
-              Export JSON<span className="ml-1 inline-flex"><InfoTooltip text="Download coverage analysis data as a JSON file." /></span>
+              Export JSON
+              <span className="ml-1 inline-flex">
+                <InfoTooltip text="Download coverage analysis data as a JSON file." />
+              </span>
             </button>
             <button
               onClick={handleExportPdf}
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
-              Export PDF<span className="ml-1 inline-flex"><InfoTooltip text="Generate a printable coverage analysis report." /></span>
+              Export PDF
+              <span className="ml-1 inline-flex">
+                <InfoTooltip text="Generate a printable coverage analysis report." />
+              </span>
             </button>
           </div>
         )}
@@ -311,7 +314,9 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
           {error}
-          <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
+          <button onClick={() => setError(null)} className="ml-2 underline">
+            dismiss
+          </button>
         </div>
       )}
 
@@ -330,7 +335,8 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
               rows={12}
             />
             <p className="text-xs text-gray-400 mt-1">
-              The system will extract learning outcomes, map them to Knowledge Components, and analyze coverage gaps.
+              The system will extract learning outcomes, map them to Knowledge Components, and
+              analyze coverage gaps.
             </p>
           </div>
           <div className="flex gap-2">
@@ -339,7 +345,10 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
               disabled={running || !syllabusText.trim()}
               className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
             >
-              {running ? 'Analyzing...' : 'Analyze Coverage'}<span className="ml-1 inline-flex"><InfoTooltip text="Use AI to extract curriculum outcomes from your syllabus and analyze coverage gaps. Triggers an LLM call." /></span>
+              {running ? 'Analyzing...' : 'Analyze Coverage'}
+              <span className="ml-1 inline-flex">
+                <InfoTooltip text="Use AI to extract curriculum outcomes from your syllabus and analyze coverage gaps. Triggers an LLM call." />
+              </span>
             </button>
           </div>
 
@@ -391,20 +400,10 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
       )}
 
       {/* ─── Coverage Matrix View ─── */}
-      {view === 'matrix' && results && (
-        <MatrixView
-          results={results}
-          outcomes={outcomes}
-        />
-      )}
+      {view === 'matrix' && results && <MatrixView results={results} outcomes={outcomes} />}
 
       {/* ─── Timeline View ─── */}
-      {view === 'timeline' && results && (
-        <TimelineView
-          results={results}
-          outcomes={outcomes}
-        />
-      )}
+      {view === 'timeline' && results && <TimelineView results={results} outcomes={outcomes} />}
 
       {/* ─── History View ─── */}
       {view === 'history' && (
@@ -420,11 +419,15 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
                 onClick={() => loadRun(r.id)}
               >
                 <div>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                    r.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                    r.status === 'FAILED' ? 'bg-red-100 text-red-700' :
-                    'bg-yellow-100 text-yellow-700'
-                  }`}>
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                      r.status === 'COMPLETED'
+                        ? 'bg-green-100 text-green-700'
+                        : r.status === 'FAILED'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                    }`}
+                  >
                     {r.status}
                   </span>
                   <span className="ml-2 text-sm text-gray-600">
@@ -445,8 +448,6 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
 
 function ResultsView({
   results,
-  outcomes,
-  maps,
   onReanalyze,
   running,
 }: {
@@ -462,14 +463,46 @@ function ResultsView({
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <SummaryCard label="Coverage" value={`${s.coveragePercent}%`} color={s.coveragePercent >= 80 ? 'green' : s.coveragePercent >= 50 ? 'yellow' : 'red'} />
-        <SummaryCard label="Outcomes" value={`${s.mappedOutcomes}/${s.totalOutcomes}`} color="blue" />
-        <SummaryCard label="Unmapped" value={s.unmappedOutcomeCount} color={s.unmappedOutcomeCount > 0 ? 'red' : 'green'} />
-        <SummaryCard label="Weak" value={s.weaklyMappedOutcomeCount} color={s.weaklyMappedOutcomeCount > 0 ? 'yellow' : 'green'} />
-        <SummaryCard label="Orphan KCs" value={s.orphanKCs} color={s.orphanKCs > 0 ? 'yellow' : 'green'} />
-        <SummaryCard label="KCs Linked" value={`${s.kcsWithOutcomeLink}/${s.totalApprovedKCs}`} color="blue" />
-        <SummaryCard label="Overrep. KCs" value={s.overrepresentedKCCount} color={s.overrepresentedKCCount > 0 ? 'yellow' : 'green'} />
-        <SummaryCard label="Late KCs" value={s.lateIntroducedKCCount} color={s.lateIntroducedKCCount > 0 ? 'red' : 'green'} />
+        <SummaryCard
+          label="Coverage"
+          value={`${s.coveragePercent}%`}
+          color={s.coveragePercent >= 80 ? 'green' : s.coveragePercent >= 50 ? 'yellow' : 'red'}
+        />
+        <SummaryCard
+          label="Outcomes"
+          value={`${s.mappedOutcomes}/${s.totalOutcomes}`}
+          color="blue"
+        />
+        <SummaryCard
+          label="Unmapped"
+          value={s.unmappedOutcomeCount}
+          color={s.unmappedOutcomeCount > 0 ? 'red' : 'green'}
+        />
+        <SummaryCard
+          label="Weak"
+          value={s.weaklyMappedOutcomeCount}
+          color={s.weaklyMappedOutcomeCount > 0 ? 'yellow' : 'green'}
+        />
+        <SummaryCard
+          label="Orphan KCs"
+          value={s.orphanKCs}
+          color={s.orphanKCs > 0 ? 'yellow' : 'green'}
+        />
+        <SummaryCard
+          label="KCs Linked"
+          value={`${s.kcsWithOutcomeLink}/${s.totalApprovedKCs}`}
+          color="blue"
+        />
+        <SummaryCard
+          label="Overrep. KCs"
+          value={s.overrepresentedKCCount}
+          color={s.overrepresentedKCCount > 0 ? 'yellow' : 'green'}
+        />
+        <SummaryCard
+          label="Late KCs"
+          value={s.lateIntroducedKCCount}
+          color={s.lateIntroducedKCCount > 0 ? 'red' : 'green'}
+        />
       </div>
 
       {/* Coverage bar */}
@@ -481,8 +514,11 @@ function ResultsView({
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div
             className={`h-3 rounded-full transition-all ${
-              s.coveragePercent >= 80 ? 'bg-green-500' :
-              s.coveragePercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+              s.coveragePercent >= 80
+                ? 'bg-green-500'
+                : s.coveragePercent >= 50
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
             }`}
             style={{ width: `${s.coveragePercent}%` }}
           />
@@ -496,7 +532,10 @@ function ResultsView({
           disabled={running}
           className="text-xs px-3 py-1.5 bg-teal-100 text-teal-700 rounded hover:bg-teal-200 disabled:opacity-50"
         >
-          {running ? 'Re-analyzing...' : 'Re-analyze (after edits)'}<span className="ml-1 inline-flex"><InfoTooltip text="Re-run coverage analysis after manual outcome or mapping edits. Triggers an LLM call." /></span>
+          {running ? 'Re-analyzing...' : 'Re-analyze (after edits)'}
+          <span className="ml-1 inline-flex">
+            <InfoTooltip text="Re-run coverage analysis after manual outcome or mapping edits. Triggers an LLM call." />
+          </span>
         </button>
       </div>
 
@@ -508,7 +547,10 @@ function ResultsView({
           </h4>
           <div className="space-y-1">
             {results.unmappedOutcomes.map((u) => (
-              <div key={u.outcomeId} className="p-2 bg-red-50 border border-red-200 rounded text-xs">
+              <div
+                key={u.outcomeId}
+                className="p-2 bg-red-50 border border-red-200 rounded text-xs"
+              >
                 <span className="font-mono font-bold text-red-700">{u.outcomeCode}</span>
                 <span className="ml-2 text-gray-700">{u.description}</span>
               </div>
@@ -525,14 +567,19 @@ function ResultsView({
           </h4>
           <div className="space-y-1">
             {results.weaklyMappedOutcomes.map((w) => (
-              <div key={w.outcomeId} className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <div
+                key={w.outcomeId}
+                className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs"
+              >
                 <div>
                   <span className="font-mono font-bold text-yellow-700">{w.outcomeCode}</span>
                   <span className="ml-2 text-gray-700">{w.description}</span>
                 </div>
                 <div className="mt-1 text-gray-500">
                   Best confidence: {Math.round(w.bestConfidence * 100)}% — KCs:{' '}
-                  {w.linkedKCs.map((k) => `${k.kcName} (${Math.round(k.confidence * 100)}%)`).join(', ')}
+                  {w.linkedKCs
+                    .map((k) => `${k.kcName} (${Math.round(k.confidence * 100)}%)`)
+                    .join(', ')}
                 </div>
               </div>
             ))}
@@ -548,7 +595,10 @@ function ResultsView({
           </h4>
           <div className="space-y-1">
             {results.overrepresentedKCs.map((o) => (
-              <div key={o.kcId} className="p-2 bg-orange-50 border border-orange-200 rounded text-xs">
+              <div
+                key={o.kcId}
+                className="p-2 bg-orange-50 border border-orange-200 rounded text-xs"
+              >
                 <span className="font-bold text-orange-700">{o.kcName}</span>
                 <span className="ml-2 text-gray-600">
                   linked to {o.outcomeCount} outcomes, appears on {o.pageCount} page(s)
@@ -567,7 +617,10 @@ function ResultsView({
           </h4>
           <div className="space-y-1">
             {results.lateIntroducedKCs.map((l) => (
-              <div key={l.kcId} className="p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+              <div
+                key={l.kcId}
+                className="p-2 bg-purple-50 border border-purple-200 rounded text-xs"
+              >
                 <span className="font-bold text-purple-700">{l.kcName}</span>
                 <p className="mt-1 text-gray-600">{l.expectedEarlierBecause}</p>
               </div>
@@ -584,12 +637,19 @@ function ResultsView({
           </h4>
           <div className="space-y-1">
             {results.recommendations.map((r, i) => (
-              <div key={i} className="p-2 bg-white border border-gray-200 rounded text-xs flex items-start gap-2">
-                <span className={`shrink-0 px-1.5 py-0.5 rounded font-medium text-[10px] ${
-                  r.priority === 'high' ? 'bg-red-100 text-red-700' :
-                  r.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>
+              <div
+                key={i}
+                className="p-2 bg-white border border-gray-200 rounded text-xs flex items-start gap-2"
+              >
+                <span
+                  className={`shrink-0 px-1.5 py-0.5 rounded font-medium text-[10px] ${
+                    r.priority === 'high'
+                      ? 'bg-red-100 text-red-700'
+                      : r.priority === 'medium'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
                   {r.priority}
                 </span>
                 <span className="shrink-0 px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-mono">
@@ -673,9 +733,7 @@ function MatrixView({
                     key={kc.id}
                     className="p-2 border border-gray-200 text-center"
                     style={{
-                      backgroundColor: cell
-                        ? confidenceColor(cell.confidence)
-                        : '#f9fafb',
+                      backgroundColor: cell ? confidenceColor(cell.confidence) : '#f9fafb',
                     }}
                     title={
                       cell
@@ -684,9 +742,7 @@ function MatrixView({
                     }
                   >
                     {cell ? (
-                      <span className="font-medium">
-                        {Math.round(cell.confidence * 100)}%
-                      </span>
+                      <span className="font-medium">{Math.round(cell.confidence * 100)}%</span>
                     ) : (
                       <span className="text-gray-300">-</span>
                     )}
@@ -699,16 +755,20 @@ function MatrixView({
       </table>
       <div className="mt-3 flex gap-4 text-[10px] text-gray-500">
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.9) }} /> High (90%+)
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.9) }} />{' '}
+          High (90%+)
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.7) }} /> Medium (70-89%)
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.7) }} />{' '}
+          Medium (70-89%)
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.5) }} /> Weak (50-69%)
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.5) }} />{' '}
+          Weak (50-69%)
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.35) }} /> Very Weak (&lt;50%)
+          <span className="w-3 h-3 rounded" style={{ backgroundColor: confidenceColor(0.35) }} />{' '}
+          Very Weak (&lt;50%)
         </span>
       </div>
     </div>
@@ -753,8 +813,7 @@ function TimelineView({
                   className="w-5 rounded-t transition-all"
                   style={{
                     height: `${Math.max(4, pct)}px`,
-                    backgroundColor:
-                      entry.newOutcomesCovered.length > 0 ? '#14b8a6' : '#d1d5db',
+                    backgroundColor: entry.newOutcomesCovered.length > 0 ? '#14b8a6' : '#d1d5db',
                   }}
                 />
                 <span className="text-[8px] text-gray-400 mt-0.5 transform -rotate-45 origin-top-left whitespace-nowrap">
@@ -797,8 +856,8 @@ function TimelineView({
               )}
               {entry.outcomeIds.length > 0 && (
                 <div className="mt-1 text-gray-500">
-                  Covers: {entry.outcomeIds.map((id) => outcomeMap.get(id)?.code || id).join(', ')}
-                  {' '}| KCs: {entry.kcIds.length}
+                  Covers: {entry.outcomeIds.map((id) => outcomeMap.get(id)?.code || id).join(', ')}{' '}
+                  | KCs: {entry.kcIds.length}
                 </div>
               )}
             </div>
@@ -846,14 +905,19 @@ function buildPdfHtml(results: CoverageResults, outcomes: SyllabusOutcome[]): st
   const outcomeRows = outcomes
     .map((o) => {
       const maps = results.coverageMatrix.filter((c) => c.outcomeId === o.id);
-      const status = maps.length === 0 ? 'UNMAPPED' : maps.some((m) => m.confidence >= 0.7) ? 'MAPPED' : 'WEAK';
-      const kcs = maps.map((m) => `${m.kcName} (${Math.round(m.confidence * 100)}%)`).join(', ') || '-';
+      const status =
+        maps.length === 0 ? 'UNMAPPED' : maps.some((m) => m.confidence >= 0.7) ? 'MAPPED' : 'WEAK';
+      const kcs =
+        maps.map((m) => `${m.kcName} (${Math.round(m.confidence * 100)}%)`).join(', ') || '-';
       return `<tr><td>${o.code}</td><td>${o.description}</td><td>${status}</td><td>${kcs}</td></tr>`;
     })
     .join('');
 
   const recRows = results.recommendations
-    .map((r) => `<tr><td>${r.priority.toUpperCase()}</td><td>${r.type}</td><td>${r.rationale}</td></tr>`)
+    .map(
+      (r) =>
+        `<tr><td>${r.priority.toUpperCase()}</td><td>${r.type}</td><td>${r.rationale}</td></tr>`,
+    )
     .join('');
 
   return `<!DOCTYPE html><html><head><title>Curriculum Coverage Report</title>

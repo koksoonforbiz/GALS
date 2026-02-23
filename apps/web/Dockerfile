@@ -17,7 +17,7 @@ COPY apps/web/package.json apps/web/.npmrc ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN pnpm install
 COPY --from=shared-build /repo/packages/shared /shared
-RUN pnpm add /shared
+RUN pnpm add /shared && pnpm install
 COPY apps/web/ .
 EXPOSE 5173
 CMD ["pnpm", "exec", "vite", "--host"]
@@ -27,7 +27,7 @@ COPY apps/web/package.json apps/web/.npmrc ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN pnpm install
 COPY --from=shared-build /repo/packages/shared /shared
-RUN pnpm add /shared
+RUN pnpm add /shared && pnpm install
 COPY apps/web/ .
 RUN pnpm run build
 
