@@ -1218,11 +1218,7 @@ export class LearningInterventionsService {
       orderBy: { nextReviewAt: 'asc' },
       take: limit,
       include: {
-        intervention: {
-          include: {
-            course: true,
-          },
-        },
+        intervention: true,
       },
     });
 
@@ -1236,7 +1232,6 @@ export class LearningInterventionsService {
       interval: card.interval,
       repetitions: card.repetitions,
       courseId: card.intervention.courseId,
-      courseName: card.intervention.course?.title,
     }));
 
     return {
