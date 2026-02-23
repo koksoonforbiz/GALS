@@ -295,6 +295,17 @@ export class LearningInterventionsController {
   }
 
   /**
+   * Preview next review intervals for each rating option
+   */
+  @Get('distributed-practice/cards/:cardId/preview')
+  async previewRatings(
+    @Request() req: { user: RequestUser },
+    @Param('cardId') cardId: string,
+  ) {
+    return this.learningInterventionsService.previewRatings(req.user.id, cardId);
+  }
+
+  /**
    * Delete a card
    */
   @Delete('distributed-practice/cards/:cardId')

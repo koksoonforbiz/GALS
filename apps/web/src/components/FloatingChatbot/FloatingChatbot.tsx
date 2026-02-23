@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePageContext } from '../../contexts/PageContext';
+import { api } from '../../lib/api';
 import { PracticeTestingView } from '../PracticeTestingView';
 import { InterrogativeElaborationView } from '../InterrogativeElaborationView';
 import { StepwiseLearningView } from '../StepwiseLearningView';
@@ -60,15 +61,28 @@ export function FloatingChatbot() {
   // Stepwise session persistence
   const [stepwiseSessionId, setStepwiseSessionId] = useState<string | null>(null);
 
+  // Due cards count for badge
+  const [dueCount, setDueCount] = useState(0);
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load saved stepwise session on mount
+  // Load saved stepwise session and due count on mount
   useEffect(() => {
     const savedSessionId = localStorage.getItem('chatbot_stepwise_session');
     if (savedSessionId) {
       setStepwiseSessionId(savedSessionId);
     }
+
+    // Fetch due cards count
+    api
+      .get<{ dueToday: number }>('/learning-interventions/distributed-practice/stats')
+      .then((stats) => {
+        setDueCount(stats.dueToday);
+      })
+      .catch(() => {
+        // Ignore errors - badge just won't show
+      });
   }, []);
 
   // Save selected text when an intervention is started
@@ -181,6 +195,12 @@ export function FloatingChatbot() {
             d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
           />
         </svg>
+        {/* Due cards badge */}
+        {dueCount > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+            {dueCount > 99 ? '99+' : dueCount}
+          </span>
+        )}
       </button>
     );
   }
@@ -192,9 +212,14 @@ export function FloatingChatbot() {
       <div className="fixed bottom-6 right-6 z-50">
         <button
           onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-2 bg-white border border-gray-200 rounded-full shadow-lg px-4 py-2 hover:bg-gray-50 transition-colors"
+          className="relative flex items-center gap-2 bg-white border border-gray-200 rounded-full shadow-lg px-4 py-2 hover:bg-gray-50 transition-colors"
         >
           <span className="text-sm font-medium text-gray-700">Learning Assistant</span>
+          {dueCount > 0 && (
+            <span className="min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+              {dueCount > 99 ? '99+' : dueCount}
+            </span>
+          )}
           <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>

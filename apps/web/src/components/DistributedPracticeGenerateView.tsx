@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 
@@ -40,11 +40,12 @@ export function DistributedPracticeGenerateView({
   const [flipped, setFlipped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletedCardIds, setDeletedCardIds] = useState<Set<string>>(new Set());
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   // Start generation on mount
-  useState(() => {
+  useEffect(() => {
     generateCards();
-  });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function generateCards() {
     setState('loading');
@@ -108,11 +109,21 @@ export function DistributedPracticeGenerateView({
   const visibleCards = cards.filter((c) => !deletedCardIds.has(c.id));
   const currentCard = visibleCards[currentCardIndex];
 
+  // ─── Back to Chat Handler ─────────────────────────────────
+  const handleBack = () => {
+    // Show confirmation if we have cards (generation in progress or completed)
+    if (state === 'preview' && visibleCards.length > 0) {
+      setShowExitConfirm(true);
+    } else {
+      onBack();
+    }
+  };
+
   // ─── Back to Chat Header ─────────────────────────────────
   const BackHeader = () => (
     <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gray-200">
       <button
-        onClick={onBack}
+        onClick={handleBack}
         className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -123,6 +134,37 @@ export function DistributedPracticeGenerateView({
       <span className="text-sm font-medium text-gray-700">Distributed Practice</span>
     </div>
   );
+
+  // ─── Exit Confirmation Dialog ───────────────────────────
+  if (showExitConfirm) {
+    return (
+      <div className="w-full">
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="text-amber-500 text-3xl mb-3">!</div>
+          <p className="text-sm text-gray-700 text-center mb-1 font-medium">
+            Leave card creation?
+          </p>
+          <p className="text-xs text-gray-500 text-center mb-4">
+            Your cards have been saved and will appear in the Review Queue.
+          </p>
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={() => setShowExitConfirm(false)}
+              className="flex-1 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              Stay
+            </button>
+            <button
+              onClick={onBack}
+              className="flex-1 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Loading state
   if (state === 'loading') {

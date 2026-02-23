@@ -64,6 +64,7 @@ import {
 } from './dto/distributed-practice.dto';
 import {
   calculateNextReview,
+  calculatePreviewIntervals,
   QUALITY_MAP,
   getInitialSM2Values,
 } from './utils/sm2-algorithm';
@@ -1381,6 +1382,32 @@ export class LearningInterventionsService {
     });
 
     this.logger.log(`Deleted card ${cardId}`);
+  }
+
+  /**
+   * Preview the next review intervals for each rating option
+   */
+  async previewRatings(
+    userId: string,
+    cardId: string,
+  ): Promise<{ again: number; hard: number; good: number; easy: number }> {
+    const card = await this.prisma.spacedRepetitionCard.findUnique({
+      where: { id: cardId },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Card not found');
+    }
+
+    if (card.userId !== userId) {
+      throw new NotFoundException('Card not found');
+    }
+
+    return calculatePreviewIntervals({
+      ease: card.ease,
+      interval: card.interval,
+      repetitions: card.repetitions,
+    });
   }
 
   // ─── Private Helper Methods ───────────────────────────────
