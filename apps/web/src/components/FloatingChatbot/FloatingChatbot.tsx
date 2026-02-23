@@ -57,8 +57,19 @@ export function FloatingChatbot() {
   const [inputValue, setInputValue] = useState('');
   const [savedSelectedText, setSavedSelectedText] = useState<string | null>(null);
 
+  // Stepwise session persistence
+  const [stepwiseSessionId, setStepwiseSessionId] = useState<string | null>(null);
+
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load saved stepwise session on mount
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem('chatbot_stepwise_session');
+    if (savedSessionId) {
+      setStepwiseSessionId(savedSessionId);
+    }
+  }, []);
 
   // Save selected text when an intervention is started
   const handleStartIntervention = (interventionMode: ChatbotMode) => {
@@ -68,12 +79,28 @@ export function FloatingChatbot() {
 
   // Return to chat mode
   const handleBackToChat = () => {
+    // Clear stepwise session if leaving stepwise learning
+    if (mode === 'stepwise-learning') {
+      localStorage.removeItem('chatbot_stepwise_session');
+      setStepwiseSessionId(null);
+    }
     setMode('chat');
     setSavedSelectedText(null);
   };
 
+  // Handle stepwise session start (for localStorage persistence)
+  const handleStepwiseSessionStart = (sessionId: string) => {
+    localStorage.setItem('chatbot_stepwise_session', sessionId);
+    setStepwiseSessionId(sessionId);
+  };
+
   // Complete intervention
   const handleInterventionComplete = () => {
+    // Clear stepwise session if completing stepwise learning
+    if (mode === 'stepwise-learning') {
+      localStorage.removeItem('chatbot_stepwise_session');
+      setStepwiseSessionId(null);
+    }
     setMode('chat');
     setSavedSelectedText(null);
     clearSelectedText();
@@ -314,6 +341,8 @@ export function FloatingChatbot() {
                 pageType={pageType}
                 onComplete={handleInterventionComplete}
                 onBack={handleBackToChat}
+                resumeSessionId={stepwiseSessionId}
+                onSessionStart={handleStepwiseSessionStart}
               />
             )}
             {mode === 'distributed-practice' && activeText && (

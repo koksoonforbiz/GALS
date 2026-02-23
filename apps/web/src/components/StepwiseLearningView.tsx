@@ -69,6 +69,8 @@ interface StepwiseLearningViewProps {
   pageType?: string; // "lesson", "quiz", "reading", etc.
   onComplete: () => void;
   onBack: () => void;
+  resumeSessionId?: string | null; // If resuming a previous session
+  onSessionStart?: (sessionId: string) => void; // Callback when session starts (for localStorage)
 }
 
 // ─── Component ─────────────────────────────────────────────
@@ -80,6 +82,8 @@ export function StepwiseLearningView({
   pageType,
   onComplete,
   onBack,
+  resumeSessionId,
+  onSessionStart,
 }: StepwiseLearningViewProps) {
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +92,7 @@ export function StepwiseLearningView({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [steps, setSteps] = useState<LearningStep[]>([]);
   const [_summary, setSummary] = useState('');
-  void _summary; // Used for resume functionality
+  void _summary; // Stored for resume functionality, not directly rendered
   const [currentStep, setCurrentStep] = useState(0);
   const [userResponses, setUserResponses] = useState<Map<number, UserStepResponse>>(new Map());
 
@@ -102,10 +106,65 @@ export function StepwiseLearningView({
   // Completion summary
   const [completionSummary, setCompletionSummary] = useState<StepwiseSummary | null>(null);
 
-  // ─── Generate Steps on Mount ─────────────────────────────
+  // Exit confirmation
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  // Resume banner
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
+
+  // ─── Initialize on Mount (Generate or Resume) ────────────
   useEffect(() => {
-    generateSteps();
+    if (resumeSessionId) {
+      resumeSession(resumeSessionId);
+    } else {
+      generateSteps();
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Resume Session ─────────────────────────────────────
+  const resumeSession = async (sessionIdToResume: string) => {
+    setState('loading');
+    setError(null);
+
+    try {
+      const response = await api.get<StepwiseSessionResult>(
+        `/learning-interventions/stepwise-learning/${sessionIdToResume}`,
+      );
+
+      if (response.completed) {
+        // Session already completed, start fresh
+        generateSteps();
+        return;
+      }
+
+      setSessionId(response.sessionId);
+      setSteps(response.steps);
+      setSummary(response.summary);
+      setCurrentStep(response.currentStep);
+
+      // Restore user responses
+      const responsesMap = new Map<number, UserStepResponse>();
+      response.userResponses.forEach((r) => {
+        responsesMap.set(r.stepNumber, r);
+      });
+      setUserResponses(responsesMap);
+
+      setCurrentResponse('');
+      setCurrentFeedback(null);
+      setShowHint(false);
+
+      // Show resume banner briefly
+      if (response.currentStep > 0) {
+        setShowResumeBanner(true);
+        setTimeout(() => setShowResumeBanner(false), 3000);
+      }
+
+      setState('stepping');
+    } catch {
+      // Session not found or error, start fresh
+      generateSteps();
+    }
+  };
 
   const generateSteps = async () => {
     setState('loading');
@@ -131,6 +190,11 @@ export function StepwiseLearningView({
       setCurrentFeedback(null);
       setShowHint(false);
       setState('stepping');
+
+      // Notify parent for localStorage persistence
+      if (onSessionStart) {
+        onSessionStart(response.sessionId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate steps');
       setState('error');
@@ -239,10 +303,19 @@ export function StepwiseLearningView({
   };
 
   // ─── Back to Chat Header ─────────────────────────────────
+  const handleBack = () => {
+    // Show confirmation if mid-session (has steps but not complete)
+    if (state === 'stepping' || state === 'checking' || state === 'feedback') {
+      setShowExitConfirm(true);
+    } else {
+      onBack();
+    }
+  };
+
   const BackHeader = () => (
     <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gray-200">
       <button
-        onClick={onBack}
+        onClick={handleBack}
         className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -253,6 +326,35 @@ export function StepwiseLearningView({
       <span className="text-sm font-medium text-gray-700">Stepwise Learning</span>
     </div>
   );
+
+  // ─── Exit Confirmation Dialog ───────────────────────────
+  if (showExitConfirm) {
+    return (
+      <div className="w-full">
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="text-amber-500 text-3xl mb-3">!</div>
+          <p className="text-sm text-gray-700 text-center mb-1 font-medium">
+            Leave stepwise learning?
+          </p>
+          <p className="text-xs text-gray-500 text-center mb-4">Your progress will be lost.</p>
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={() => setShowExitConfirm(false)}
+              className="flex-1 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              Stay
+            </button>
+            <button
+              onClick={onBack}
+              className="flex-1 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Render Based on State ───────────────────────────────
 
@@ -311,6 +413,15 @@ export function StepwiseLearningView({
       <div className="w-full">
         <BackHeader />
         <div className="space-y-4">
+          {/* Resume Banner */}
+          {showResumeBanner && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
+              <p className="text-xs text-blue-700">
+                Resuming from Step {currentStep + 1}...
+              </p>
+            </div>
+          )}
+
           {/* Stepper Progress */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-1">
