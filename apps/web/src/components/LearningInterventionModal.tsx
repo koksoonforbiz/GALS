@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PracticeTestingView } from './PracticeTestingView';
 
 type InterventionType =
   | 'PRACTICE_TESTING'
@@ -48,16 +49,12 @@ const INTERVENTION_BUTTONS: Array<{
 
 export function LearningInterventionModal({
   selectedText,
-  courseId: _courseId, // Will be used in later stages
-  contentId: _contentId, // Will be used in later stages
+  courseId,
+  contentId,
   isOpen,
   onClose,
 }: LearningInterventionModalProps) {
-  // Suppress unused variable warnings for props used in later stages
-  void _courseId;
-  void _contentId;
-  const [activeIntervention, setActiveIntervention] =
-    useState<InterventionType | null>(null);
+  const [activeIntervention, setActiveIntervention] = useState<InterventionType | null>(null);
 
   if (!isOpen) return null;
 
@@ -78,29 +75,19 @@ export function LearningInterventionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={handleClose}
-      />
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
 
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Learning Intervention
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-900">Learning Intervention</h2>
           <button
             onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
             aria-label="Close"
           >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -127,13 +114,9 @@ export function LearningInterventionModal({
               </button>
             </div>
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-32 overflow-y-auto">
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                {selectedText}
-              </p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedText}</p>
             </div>
-            <p className="mt-1 text-xs text-gray-400">
-              {selectedText.length} characters selected
-            </p>
+            <p className="mt-1 text-xs text-gray-400">{selectedText.length} characters selected</p>
           </div>
 
           {/* Intervention Selection */}
@@ -154,13 +137,9 @@ export function LearningInterventionModal({
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xl">{intervention.icon}</span>
-                    <span className="font-medium text-gray-900">
-                      {intervention.label}
-                    </span>
+                    <span className="font-medium text-gray-900">{intervention.label}</span>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    {intervention.description}
-                  </p>
+                  <p className="text-xs text-gray-500">{intervention.description}</p>
                 </button>
               ))}
             </div>
@@ -168,21 +147,37 @@ export function LearningInterventionModal({
 
           {/* Active Intervention Content Area */}
           {activeIntervention && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-6">
-              <div className="text-center text-gray-500">
-                {activeIntervention === 'PRACTICE_TESTING' && (
-                  <p>Practice Testing coming in Stage 2...</p>
-                )}
-                {activeIntervention === 'DISTRIBUTED_PRACTICE' && (
+            <div
+              className={
+                activeIntervention === 'PRACTICE_TESTING'
+                  ? ''
+                  : 'bg-gray-50 border border-gray-200 rounded-lg p-6'
+              }
+            >
+              {activeIntervention === 'PRACTICE_TESTING' && (
+                <PracticeTestingView
+                  selectedText={selectedText}
+                  courseId={courseId}
+                  contentId={contentId}
+                  onComplete={handleClose}
+                  onBack={() => setActiveIntervention(null)}
+                />
+              )}
+              {activeIntervention === 'DISTRIBUTED_PRACTICE' && (
+                <div className="text-center text-gray-500">
                   <p>Distributed Practice coming in Stage 3...</p>
-                )}
-                {activeIntervention === 'STEPWISE_LEARNING' && (
+                </div>
+              )}
+              {activeIntervention === 'STEPWISE_LEARNING' && (
+                <div className="text-center text-gray-500">
                   <p>Stepwise Learning coming in Stage 4...</p>
-                )}
-                {activeIntervention === 'INTERROGATIVE_ELABORATION' && (
+                </div>
+              )}
+              {activeIntervention === 'INTERROGATIVE_ELABORATION' && (
+                <div className="text-center text-gray-500">
                   <p>Interrogative Elaboration coming in Stage 5...</p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>
