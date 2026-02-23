@@ -32,6 +32,22 @@ import {
   ElaborationEvaluationResponse,
   ElaborationQuestion,
 } from './prompts/interrogative-elaboration.prompt';
+import {
+  GenerateStepwiseDto,
+  SubmitStepCheckDto,
+  GenerateStepwiseResponse,
+  StepCheckResult,
+  StepwiseSessionResult,
+  StepwiseSummary,
+  LearningStep,
+  UserStepResponse,
+} from './dto/stepwise-learning.dto';
+import {
+  buildStepwiseLearningPrompt,
+  buildStepCheckPrompt,
+  StepwiseLearningResponse,
+  StepCheckEvaluationResponse,
+} from './prompts/stepwise-learning.prompt';
 
 @Injectable()
 export class LearningInterventionsService {
@@ -680,7 +696,418 @@ export class LearningInterventionsService {
     };
   }
 
+  // ─── Stepwise Learning Methods ─────────────────────────────
+
+  /**
+   * Generate stepwise learning content from selected text
+   */
+  async generateSteps(
+    userId: string,
+    dto: GenerateStepwiseDto,
+  ): Promise<GenerateStepwiseResponse> {
+    // 1. Check if Anthropic is available
+    if (!this.anthropic.isAvailable()) {
+      throw new BadRequestException('AI service not configured. Please contact administrator.');
+    }
+
+    // 2. Create the learning intervention record
+    const intervention = await this.prisma.learningIntervention.create({
+      data: {
+        userId,
+        courseId: dto.courseId,
+        contentId: dto.contentId,
+        selectedText: dto.selectedText,
+        interventionType: 'STEPWISE_LEARNING',
+      },
+    });
+
+    // 3. Build prompt and call Anthropic
+    const prompt = buildStepwiseLearningPrompt(dto.selectedText);
+
+    let stepsData: StepwiseLearningResponse;
+    try {
+      const response = await this.anthropic.generateStructuredResponse<StepwiseLearningResponse>(
+        {
+          systemPrompt: prompt.system,
+          userPrompt: prompt.user,
+          maxTokens: 4096,
+        },
+        {
+          courseId: dto.courseId,
+          userId,
+          action: 'stepwise_generate',
+        },
+      );
+
+      stepsData = this.validateAndNormalizeSteps(response.data);
+    } catch (error: any) {
+      // Retry once on failure
+      this.logger.warn(`First attempt failed, retrying: ${error.message}`);
+      try {
+        const response = await this.anthropic.generateStructuredResponse<StepwiseLearningResponse>(
+          {
+            systemPrompt: prompt.system,
+            userPrompt: prompt.user,
+            maxTokens: 4096,
+          },
+          {
+            courseId: dto.courseId,
+            userId,
+            action: 'stepwise_generate_retry',
+          },
+        );
+
+        stepsData = this.validateAndNormalizeSteps(response.data);
+      } catch (retryError: any) {
+        this.logger.error(`Retry also failed: ${retryError.message}`);
+        // Clean up the intervention record
+        await this.prisma.learningIntervention.delete({
+          where: { id: intervention.id },
+        });
+        throw new BadRequestException('Failed to generate steps. Please try again.');
+      }
+    }
+
+    // 4. Create the stepwise session record
+    const session = await this.prisma.stepwiseSession.create({
+      data: {
+        interventionId: intervention.id,
+        steps: stepsData.steps as any,
+        summary: stepsData.summary,
+        totalSteps: stepsData.steps.length,
+        currentStep: 0,
+        userResponses: [],
+        sourceText: dto.selectedText,
+      },
+    });
+
+    this.logger.log(
+      `Generated stepwise session ${session.id} with ${stepsData.steps.length} steps`,
+    );
+
+    return {
+      interventionId: intervention.id,
+      sessionId: session.id,
+      steps: stepsData.steps,
+      summary: stepsData.summary,
+      totalSteps: stepsData.steps.length,
+      currentStep: 0,
+    };
+  }
+
+  /**
+   * Check a comprehension response for a step
+   */
+  async checkStepResponse(
+    userId: string,
+    sessionId: string,
+    dto: SubmitStepCheckDto,
+  ): Promise<StepCheckResult> {
+    // 1. Fetch the session
+    const session = await this.prisma.stepwiseSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.completedAt) {
+      throw new BadRequestException('Session already completed');
+    }
+
+    // 2. Get the step
+    const steps = session.steps as LearningStep[];
+    const step = steps.find((s) => s.stepNumber === dto.stepNumber);
+
+    if (!step) {
+      throw new BadRequestException(`Invalid step number: ${dto.stepNumber}`);
+    }
+
+    // 3. Call Anthropic for evaluation
+    const checkPrompt = buildStepCheckPrompt({
+      stepTitle: step.title,
+      stepContent: step.content,
+      question: step.comprehensionCheck.question,
+      sampleAnswer: step.comprehensionCheck.sampleAnswer,
+      userResponse: dto.userResponse,
+    });
+
+    let evaluation: StepCheckEvaluationResponse;
+    try {
+      const response =
+        await this.anthropic.generateStructuredResponse<StepCheckEvaluationResponse>(
+          {
+            systemPrompt: checkPrompt.system,
+            userPrompt: checkPrompt.user,
+            maxTokens: 1024,
+          },
+          {
+            courseId: session.intervention.courseId,
+            userId,
+            action: 'stepwise_check',
+          },
+        );
+
+      evaluation = this.validateStepCheckEvaluation(response.data);
+    } catch (error: any) {
+      this.logger.error(`Step check evaluation failed: ${error.message}`);
+      throw new BadRequestException('Failed to check response. Please try again.');
+    }
+
+    // 4. Update the session's userResponses array
+    const existingResponses = (session.userResponses as UserStepResponse[]) || [];
+
+    // Find existing entry for this step (for retries)
+    const existingIndex = existingResponses.findIndex((r) => r.stepNumber === dto.stepNumber);
+
+    const newEntry: UserStepResponse = {
+      stepNumber: dto.stepNumber,
+      response: dto.userResponse,
+      feedback: evaluation.feedback,
+      isCorrect: evaluation.isCorrect,
+      submittedAt: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      // Replace existing entry (retry)
+      existingResponses[existingIndex] = newEntry;
+    } else {
+      // Add new entry
+      existingResponses.push(newEntry);
+    }
+
+    await this.prisma.stepwiseSession.update({
+      where: { id: sessionId },
+      data: {
+        userResponses: existingResponses as any,
+      },
+    });
+
+    this.logger.log(
+      `Checked step ${dto.stepNumber} for session ${sessionId}: ${evaluation.isCorrect ? 'correct' : 'incorrect'}`,
+    );
+
+    return {
+      isCorrect: evaluation.isCorrect,
+      feedback: evaluation.feedback,
+      encouragement: evaluation.encouragement,
+    };
+  }
+
+  /**
+   * Advance to the next step
+   */
+  async advanceStep(userId: string, sessionId: string): Promise<StepwiseSessionResult> {
+    // 1. Fetch the session
+    const session = await this.prisma.stepwiseSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.completedAt) {
+      throw new BadRequestException('Session already completed');
+    }
+
+    // 2. Increment currentStep
+    const newCurrentStep = session.currentStep + 1;
+
+    // 3. Check if we've reached the end
+    const isComplete = newCurrentStep >= session.totalSteps;
+
+    // 4. Update the session
+    const updatedSession = await this.prisma.stepwiseSession.update({
+      where: { id: sessionId },
+      data: {
+        currentStep: newCurrentStep,
+        completedAt: isComplete ? new Date() : null,
+      },
+    });
+
+    this.logger.log(
+      `Advanced session ${sessionId} to step ${newCurrentStep}${isComplete ? ' (completed)' : ''}`,
+    );
+
+    const steps = updatedSession.steps as LearningStep[];
+    const userResponses = (updatedSession.userResponses as UserStepResponse[]) || [];
+
+    return {
+      sessionId: updatedSession.id,
+      interventionId: updatedSession.interventionId,
+      steps,
+      summary: updatedSession.summary,
+      totalSteps: updatedSession.totalSteps,
+      currentStep: updatedSession.currentStep,
+      userResponses,
+      completed: !!updatedSession.completedAt,
+      sourceText: updatedSession.sourceText,
+    };
+  }
+
+  /**
+   * Complete a stepwise session
+   */
+  async completeStepwiseSession(userId: string, sessionId: string): Promise<StepwiseSummary> {
+    // 1. Fetch the session
+    const session = await this.prisma.stepwiseSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    // 2. Calculate statistics
+    const userResponses = (session.userResponses as UserStepResponse[]) || [];
+
+    // Count steps where the first response was correct
+    const responsesByStep = new Map<number, UserStepResponse[]>();
+    for (const resp of userResponses) {
+      const existing = responsesByStep.get(resp.stepNumber) || [];
+      existing.push(resp);
+      responsesByStep.set(resp.stepNumber, existing);
+    }
+
+    let correctOnFirstTry = 0;
+    for (const [, responses] of responsesByStep) {
+      // Sort by submission time and check if first was correct
+      const sorted = responses.sort(
+        (a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime(),
+      );
+      if (sorted[0]?.isCorrect) {
+        correctOnFirstTry++;
+      }
+    }
+
+    // 3. Mark session as completed if not already
+    if (!session.completedAt) {
+      await this.prisma.stepwiseSession.update({
+        where: { id: sessionId },
+        data: {
+          completedAt: new Date(),
+        },
+      });
+    }
+
+    this.logger.log(`Completed stepwise session ${sessionId}`);
+
+    return {
+      sessionId,
+      totalSteps: session.totalSteps,
+      correctOnFirstTry,
+      completed: true,
+      summary: session.summary,
+      userResponses,
+    };
+  }
+
+  /**
+   * Get a stepwise session by ID (for resuming)
+   */
+  async getStepwiseSession(userId: string, sessionId: string): Promise<StepwiseSessionResult> {
+    const session = await this.prisma.stepwiseSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    const steps = session.steps as LearningStep[];
+    const userResponses = (session.userResponses as UserStepResponse[]) || [];
+
+    return {
+      sessionId: session.id,
+      interventionId: session.interventionId,
+      steps,
+      summary: session.summary,
+      totalSteps: session.totalSteps,
+      currentStep: session.currentStep,
+      userResponses,
+      completed: !!session.completedAt,
+      sourceText: session.sourceText,
+    };
+  }
+
   // ─── Private Helper Methods ───────────────────────────────
+
+  /**
+   * Validate and normalize stepwise learning response from LLM
+   */
+  private validateAndNormalizeSteps(data: any): StepwiseLearningResponse {
+    if (!data.steps || !Array.isArray(data.steps) || data.steps.length === 0) {
+      throw new Error('Invalid steps array from LLM');
+    }
+
+    const steps: LearningStep[] = data.steps.map((s: any, idx: number) => {
+      if (!s.title || !s.content || !s.comprehensionCheck) {
+        throw new Error(`Invalid step at index ${idx}`);
+      }
+
+      const cc = s.comprehensionCheck;
+      if (!cc.question || !cc.hint || !cc.sampleAnswer) {
+        throw new Error(`Invalid comprehension check at step ${idx}`);
+      }
+
+      return {
+        stepNumber: s.stepNumber || idx + 1,
+        title: String(s.title),
+        content: String(s.content),
+        comprehensionCheck: {
+          question: String(cc.question),
+          hint: String(cc.hint),
+          sampleAnswer: String(cc.sampleAnswer),
+        },
+      };
+    });
+
+    return {
+      steps,
+      summary: String(data.summary || 'Review complete.'),
+    };
+  }
+
+  /**
+   * Validate step check evaluation response
+   */
+  private validateStepCheckEvaluation(data: any): StepCheckEvaluationResponse {
+    return {
+      isCorrect: Boolean(data.isCorrect),
+      feedback: String(data.feedback || 'No feedback provided.'),
+      encouragement: String(data.encouragement || 'Keep going!'),
+    };
+  }
 
   /**
    * Validate and normalize elaboration questions from LLM response

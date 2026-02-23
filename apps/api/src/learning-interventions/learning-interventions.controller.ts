@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -25,6 +26,12 @@ import {
   SubmitElaborationDto,
   SubmitElaborationSchema,
 } from './dto/interrogative-elaboration.dto';
+import {
+  GenerateStepwiseDto,
+  GenerateStepwiseSchema,
+  SubmitStepCheckDto,
+  SubmitStepCheckSchema,
+} from './dto/stepwise-learning.dto';
 
 interface RequestUser {
   id: string;
@@ -170,5 +177,65 @@ export class LearningInterventionsController {
     @Param('sessionId') sessionId: string,
   ) {
     return this.learningInterventionsService.getElaborationSession(req.user.id, sessionId);
+  }
+
+  // ─── Stepwise Learning Endpoints ─────────────────────────────
+
+  /**
+   * Generate stepwise learning content from selected text
+   */
+  @Post('stepwise-learning/generate')
+  @UsePipes(new ZodValidationPipe(GenerateStepwiseSchema))
+  async generateSteps(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateStepwiseDto,
+  ) {
+    return this.learningInterventionsService.generateSteps(req.user.id, dto);
+  }
+
+  /**
+   * Check a comprehension response for a step
+   */
+  @Post('stepwise-learning/:sessionId/check')
+  @UsePipes(new ZodValidationPipe(SubmitStepCheckSchema))
+  async checkStepResponse(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+    @Body() dto: SubmitStepCheckDto,
+  ) {
+    return this.learningInterventionsService.checkStepResponse(req.user.id, sessionId, dto);
+  }
+
+  /**
+   * Advance to the next step
+   */
+  @Patch('stepwise-learning/:sessionId/advance')
+  async advanceStep(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.learningInterventionsService.advanceStep(req.user.id, sessionId);
+  }
+
+  /**
+   * Complete a stepwise session
+   */
+  @Post('stepwise-learning/:sessionId/complete')
+  async completeStepwiseSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.learningInterventionsService.completeStepwiseSession(req.user.id, sessionId);
+  }
+
+  /**
+   * Get a stepwise session by ID (for resuming)
+   */
+  @Get('stepwise-learning/:sessionId')
+  async getStepwiseSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.learningInterventionsService.getStepwiseSession(req.user.id, sessionId);
   }
 }
