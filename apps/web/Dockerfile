@@ -14,20 +14,18 @@ RUN pnpm run build
 
 FROM base AS development
 COPY apps/web/package.json apps/web/.npmrc ./
-RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
-RUN pnpm install
 COPY --from=shared-build /repo/packages/shared /shared
-RUN pnpm add /shared && pnpm install
+RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"file:\/shared"/g' package.json
+RUN pnpm install
 COPY apps/web/ .
 EXPOSE 5173
 CMD ["pnpm", "exec", "vite", "--host"]
 
 FROM base AS build
 COPY apps/web/package.json apps/web/.npmrc ./
-RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
-RUN pnpm install
 COPY --from=shared-build /repo/packages/shared /shared
-RUN pnpm add /shared && pnpm install
+RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"file:\/shared"/g' package.json
+RUN pnpm install
 COPY apps/web/ .
 RUN pnpm run build
 
