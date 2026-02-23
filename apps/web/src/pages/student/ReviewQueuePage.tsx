@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { usePageContext } from '../../contexts/PageContext';
 
 interface DueCard {
   id: string;
@@ -45,6 +46,7 @@ interface ReviewSessionState {
 
 export function ReviewQueuePage() {
   const navigate = useNavigate();
+  const { setPageContext } = usePageContext();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<CardStats | null>(null);
   const [dueCards, setDueCards] = useState<DueCard[]>([]);
@@ -82,6 +84,16 @@ export function ReviewQueuePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Set page context for review queue
+  useEffect(() => {
+    setPageContext({
+      pageType: 'review-queue',
+      courseId: null,
+      contentId: null,
+      contentTitle: 'Review Queue',
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRating(rating: QualityRating) {
     const currentCard = dueCards[currentCardIndex];

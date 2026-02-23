@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
 import {
   connectSocket,
@@ -114,6 +115,7 @@ export function AttemptPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setPageContext } = usePageContext();
 
   /* ---- core state ---- */
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -171,6 +173,21 @@ export function AttemptPage() {
 
     fetchAttempt();
   }, [attemptId]);
+
+  /* ================================================================ */
+  /*  Page Context for Floating Chatbot                                */
+  /* ================================================================ */
+
+  useEffect(() => {
+    if (attempt) {
+      setPageContext({
+        pageType: 'quiz',
+        courseId: null, // Assessment doesn't have course context directly
+        contentId: attempt.assessmentId,
+        contentTitle: `Question: ${attempt.question.prompt.slice(0, 50)}...`,
+      });
+    }
+  }, [attempt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ================================================================ */
   /*  WebSocket for grade updates                                      */

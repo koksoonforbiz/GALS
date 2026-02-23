@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import { usePageContext } from '../../contexts/PageContext';
 
 interface AssessmentQuestion {
   id: string;
@@ -28,11 +29,22 @@ interface Attempt {
 
 export function StudentAssessmentsPage() {
   const navigate = useNavigate();
+  const { setPageContext } = usePageContext();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+
+  // Set page context for assessments page
+  useEffect(() => {
+    setPageContext({
+      pageType: 'assessments',
+      courseId: null,
+      contentId: null,
+      contentTitle: 'Assessments',
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchData = async () => {

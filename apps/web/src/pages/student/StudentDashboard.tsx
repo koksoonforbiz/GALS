@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
 
 interface Enrollment {
@@ -38,12 +39,23 @@ interface Assessment {
 export function StudentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { setPageContext } = usePageContext();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [masteryData, setMasteryData] = useState<MasteryByTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [masteryLoading, setMasteryLoading] = useState(true);
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
   const [worksheetError, setWorksheetError] = useState<string | null>(null);
+
+  // Set page context for dashboard
+  useEffect(() => {
+    setPageContext({
+      pageType: 'dashboard',
+      courseId: null,
+      contentId: null,
+      contentTitle: 'Dashboard',
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetchData = async () => {

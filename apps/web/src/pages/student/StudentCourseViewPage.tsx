@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import BlockRenderer from '../../components/editor/BlockRenderer';
+import { usePageContext } from '../../contexts/PageContext';
 
 interface ModuleItem {
   id: string;
@@ -37,10 +38,34 @@ export function StudentCourseViewPage() {
   const { courseId } = useParams<{ courseId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setPageContext } = usePageContext();
 
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Find selected item across all modules (for page context)
+  const getSelectedItem = (): ModuleItem | null => {
+    if (!course) return null;
+    for (const mod of course.modules) {
+      const found = mod.items.find((i) => i.id === selectedItemId);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  // Update page context when course or selected item changes
+  useEffect(() => {
+    if (course && selectedItemId) {
+      const item = getSelectedItem();
+      setPageContext({
+        pageType: item?.type === 'PAGE' ? 'lesson' : item?.type === 'PDF' ? 'reading' : 'lesson',
+        courseId: course.id,
+        contentId: selectedItemId,
+        contentTitle: item?.title || course.title,
+      });
+    }
+  }, [course?.id, selectedItemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const fetch = async () => {
