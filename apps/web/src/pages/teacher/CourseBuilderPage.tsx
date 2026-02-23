@@ -181,7 +181,7 @@ export function CourseBuilderPage() {
       const formData = new FormData();
       formData.append('file', file);
       const token = localStorage.getItem('token');
-      const res = await fetch(`/api/courses/${courseId}/documents`, {
+      const res = await fetch(`/courses/${courseId}/documents`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
