@@ -19,6 +19,12 @@ import {
   SubmitPracticeTestAnswersDto,
   SubmitPracticeTestAnswersSchema,
 } from './dto/practice-testing.dto';
+import {
+  GenerateElaborationDto,
+  GenerateElaborationSchema,
+  SubmitElaborationDto,
+  SubmitElaborationSchema,
+} from './dto/interrogative-elaboration.dto';
 
 interface RequestUser {
   id: string;
@@ -115,5 +121,54 @@ export class LearningInterventionsController {
     @Param('practiceTestId') practiceTestId: string,
   ) {
     return this.learningInterventionsService.getPracticeTest(req.user.id, practiceTestId);
+  }
+
+  // ─── Interrogative Elaboration Endpoints ─────────────────────
+
+  /**
+   * Generate elaboration questions from selected text
+   */
+  @Post('interrogative-elaboration/generate')
+  @UsePipes(new ZodValidationPipe(GenerateElaborationSchema))
+  async generateElaborationQuestions(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateElaborationDto,
+  ) {
+    return this.learningInterventionsService.generateElaborationQuestions(req.user.id, dto);
+  }
+
+  /**
+   * Evaluate a learner's elaboration
+   */
+  @Post('interrogative-elaboration/:sessionId/evaluate')
+  @UsePipes(new ZodValidationPipe(SubmitElaborationSchema))
+  async evaluateElaboration(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+    @Body() dto: SubmitElaborationDto,
+  ) {
+    return this.learningInterventionsService.evaluateElaboration(req.user.id, sessionId, dto);
+  }
+
+  /**
+   * Complete an elaboration session
+   */
+  @Post('interrogative-elaboration/:sessionId/complete')
+  async completeElaborationSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.learningInterventionsService.completeElaborationSession(req.user.id, sessionId);
+  }
+
+  /**
+   * Get an elaboration session by ID
+   */
+  @Get('interrogative-elaboration/:sessionId')
+  async getElaborationSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.learningInterventionsService.getElaborationSession(req.user.id, sessionId);
   }
 }

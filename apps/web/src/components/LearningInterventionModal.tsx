@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PracticeTestingView } from './PracticeTestingView';
+import { InterrogativeElaborationView } from './InterrogativeElaborationView';
 
 type InterventionType =
   | 'PRACTICE_TESTING'
@@ -149,7 +150,8 @@ export function LearningInterventionModal({
           {activeIntervention && (
             <div
               className={
-                activeIntervention === 'PRACTICE_TESTING'
+                activeIntervention === 'PRACTICE_TESTING' ||
+                activeIntervention === 'INTERROGATIVE_ELABORATION'
                   ? ''
                   : 'bg-gray-50 border border-gray-200 rounded-lg p-6'
               }
@@ -165,18 +167,22 @@ export function LearningInterventionModal({
               )}
               {activeIntervention === 'DISTRIBUTED_PRACTICE' && (
                 <div className="text-center text-gray-500">
-                  <p>Distributed Practice coming in Stage 3...</p>
+                  <p>Distributed Practice coming in Stage 4...</p>
                 </div>
               )}
               {activeIntervention === 'STEPWISE_LEARNING' && (
                 <div className="text-center text-gray-500">
-                  <p>Stepwise Learning coming in Stage 4...</p>
+                  <p>Stepwise Learning coming in Stage 5...</p>
                 </div>
               )}
               {activeIntervention === 'INTERROGATIVE_ELABORATION' && (
-                <div className="text-center text-gray-500">
-                  <p>Interrogative Elaboration coming in Stage 5...</p>
-                </div>
+                <InterrogativeElaborationView
+                  selectedText={selectedText}
+                  courseId={courseId}
+                  contentId={contentId}
+                  onComplete={handleClose}
+                  onBack={() => setActiveIntervention(null)}
+                />
               )}
             </div>
           )}

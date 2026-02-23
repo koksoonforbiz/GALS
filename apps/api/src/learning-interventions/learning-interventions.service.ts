@@ -12,9 +12,26 @@ import {
   PracticeTestResult,
 } from './dto/practice-testing.dto';
 import {
+  GenerateElaborationDto,
+  SubmitElaborationDto,
+  GenerateElaborationResponse,
+  ElaborationEvaluationResult,
+  ElaborationSummary,
+  ElaborationSessionResult,
+  ElaborationQuestionForStudent,
+  UserElaborationEntry,
+} from './dto/interrogative-elaboration.dto';
+import {
   buildPracticeTestingPrompt,
   PracticeTestResponse,
 } from './prompts/practice-testing.prompt';
+import {
+  buildElaborationQuestionsPrompt,
+  buildElaborationEvaluationPrompt,
+  ElaborationQuestionsResponse,
+  ElaborationEvaluationResponse,
+  ElaborationQuestion,
+} from './prompts/interrogative-elaboration.prompt';
 
 @Injectable()
 export class LearningInterventionsService {
@@ -332,7 +349,379 @@ export class LearningInterventionsService {
     };
   }
 
+  // ─── Interrogative Elaboration Methods ─────────────────────
+
+  /**
+   * Generate elaboration questions from selected text
+   */
+  async generateElaborationQuestions(
+    userId: string,
+    dto: GenerateElaborationDto,
+  ): Promise<GenerateElaborationResponse> {
+    // 1. Check if Anthropic is available
+    if (!this.anthropic.isAvailable()) {
+      throw new BadRequestException('AI service not configured. Please contact administrator.');
+    }
+
+    // 2. Create the learning intervention record
+    const intervention = await this.prisma.learningIntervention.create({
+      data: {
+        userId,
+        courseId: dto.courseId,
+        contentId: dto.contentId,
+        selectedText: dto.selectedText,
+        interventionType: 'INTERROGATIVE_ELABORATION',
+      },
+    });
+
+    // 3. Build prompt and call Anthropic
+    const prompt = buildElaborationQuestionsPrompt(dto.selectedText, dto.questionCount);
+
+    let questions: ElaborationQuestion[];
+    try {
+      const response = await this.anthropic.generateStructuredResponse<ElaborationQuestionsResponse>(
+        {
+          systemPrompt: prompt.system,
+          userPrompt: prompt.user,
+          maxTokens: 4096,
+        },
+        {
+          courseId: dto.courseId,
+          userId,
+          action: 'elaboration_generate',
+        },
+      );
+
+      questions = this.validateAndNormalizeElaborationQuestions(response.data.questions);
+    } catch (error: any) {
+      // Retry once on failure
+      this.logger.warn(`First attempt failed, retrying: ${error.message}`);
+      try {
+        const response = await this.anthropic.generateStructuredResponse<ElaborationQuestionsResponse>(
+          {
+            systemPrompt: prompt.system,
+            userPrompt: prompt.user,
+            maxTokens: 4096,
+          },
+          {
+            courseId: dto.courseId,
+            userId,
+            action: 'elaboration_generate_retry',
+          },
+        );
+
+        questions = this.validateAndNormalizeElaborationQuestions(response.data.questions);
+      } catch (retryError: any) {
+        this.logger.error(`Retry also failed: ${retryError.message}`);
+        // Clean up the intervention record
+        await this.prisma.learningIntervention.delete({
+          where: { id: intervention.id },
+        });
+        throw new BadRequestException('Failed to generate questions. Please try again.');
+      }
+    }
+
+    // 4. Create the elaboration session record
+    const session = await this.prisma.elaborationSession.create({
+      data: {
+        interventionId: intervention.id,
+        questions: questions as any,
+        sourceText: dto.selectedText,
+        userElaborations: [],
+      },
+    });
+
+    this.logger.log(
+      `Generated elaboration session ${session.id} with ${questions.length} questions`,
+    );
+
+    // 5. Return questions (including keyPoints for frontend evaluation calls)
+    const questionsForStudent: ElaborationQuestionForStudent[] = questions.map((q) => ({
+      question: q.question,
+      type: q.type,
+      keyPoints: q.keyPoints,
+    }));
+
+    return {
+      interventionId: intervention.id,
+      sessionId: session.id,
+      questions: questionsForStudent,
+      sourceText: dto.selectedText,
+    };
+  }
+
+  /**
+   * Evaluate a learner's elaboration
+   */
+  async evaluateElaboration(
+    userId: string,
+    sessionId: string,
+    dto: SubmitElaborationDto,
+  ): Promise<ElaborationEvaluationResult> {
+    // 1. Fetch the session
+    const session = await this.prisma.elaborationSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (session.completedAt) {
+      throw new BadRequestException('Session already completed');
+    }
+
+    // 2. Get the question and key points
+    const questions = session.questions as ElaborationQuestion[];
+    const question = questions[dto.questionIndex];
+
+    if (!question) {
+      throw new BadRequestException(`Invalid question index: ${dto.questionIndex}`);
+    }
+
+    // 3. Call Anthropic for evaluation
+    const evalPrompt = buildElaborationEvaluationPrompt({
+      question: question.question,
+      userElaboration: dto.elaboration,
+      keyPoints: question.keyPoints,
+      sourceText: session.sourceText,
+    });
+
+    let evaluation: ElaborationEvaluationResponse;
+    try {
+      const response = await this.anthropic.generateStructuredResponse<ElaborationEvaluationResponse>(
+        {
+          systemPrompt: evalPrompt.system,
+          userPrompt: evalPrompt.user,
+          maxTokens: 2048,
+        },
+        {
+          courseId: session.intervention.courseId,
+          userId,
+          action: 'elaboration_evaluate',
+        },
+      );
+
+      evaluation = this.validateElaborationEvaluation(response.data);
+    } catch (error: any) {
+      this.logger.error(`Elaboration evaluation failed: ${error.message}`);
+      throw new BadRequestException('Failed to evaluate elaboration. Please try again.');
+    }
+
+    // 4. Update the session's userElaborations array
+    const existingElaborations = (session.userElaborations as UserElaborationEntry[]) || [];
+
+    // Find existing entry for this question (for revisions)
+    const existingIndex = existingElaborations.findIndex(
+      (e) => e.questionIndex === dto.questionIndex,
+    );
+
+    const newEntry: UserElaborationEntry = {
+      questionIndex: dto.questionIndex,
+      elaboration: dto.elaboration,
+      rating: evaluation.rating,
+      feedback: evaluation.feedback,
+      addressedPoints: evaluation.addressedPoints,
+      missedPoints: evaluation.missedPoints,
+      modelElaboration: evaluation.modelElaboration,
+      submittedAt: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      // Replace existing entry (revision)
+      existingElaborations[existingIndex] = newEntry;
+    } else {
+      // Add new entry
+      existingElaborations.push(newEntry);
+    }
+
+    await this.prisma.elaborationSession.update({
+      where: { id: sessionId },
+      data: {
+        userElaborations: existingElaborations as any,
+      },
+    });
+
+    this.logger.log(
+      `Evaluated elaboration for session ${sessionId}, question ${dto.questionIndex}: ${evaluation.rating}`,
+    );
+
+    return {
+      questionIndex: dto.questionIndex,
+      rating: evaluation.rating,
+      addressedPoints: evaluation.addressedPoints,
+      missedPoints: evaluation.missedPoints,
+      feedback: evaluation.feedback,
+      modelElaboration: evaluation.modelElaboration,
+    };
+  }
+
+  /**
+   * Complete an elaboration session
+   */
+  async completeElaborationSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<ElaborationSummary> {
+    // 1. Fetch the session
+    const session = await this.prisma.elaborationSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    // 2. Get elaborations and calculate summary
+    const elaborations = (session.userElaborations as UserElaborationEntry[]) || [];
+    const questions = session.questions as ElaborationQuestion[];
+
+    const ratings = {
+      strong: 0,
+      developing: 0,
+      needsImprovement: 0,
+    };
+
+    for (const elab of elaborations) {
+      if (elab.rating === 'Strong') ratings.strong++;
+      else if (elab.rating === 'Developing') ratings.developing++;
+      else ratings.needsImprovement++;
+    }
+
+    // 3. Generate overall message
+    let overallMessage: string;
+    const totalAnswered = elaborations.length;
+    const totalQuestions = questions.length;
+
+    if (totalAnswered === 0) {
+      overallMessage = 'No questions were answered.';
+    } else if (ratings.strong >= totalAnswered * 0.75) {
+      overallMessage = 'Excellent work! Your elaborations show deep understanding of the material.';
+    } else if (ratings.strong + ratings.developing >= totalAnswered * 0.75) {
+      overallMessage = 'Good progress! You demonstrated solid understanding with room for deeper exploration.';
+    } else if (ratings.needsImprovement > totalAnswered * 0.5) {
+      overallMessage = 'Keep practicing! Reviewing the source material and trying again will help deepen your understanding.';
+    } else {
+      overallMessage = 'Nice effort! Continue building on your understanding by revisiting key concepts.';
+    }
+
+    // 4. Mark session as completed
+    await this.prisma.elaborationSession.update({
+      where: { id: sessionId },
+      data: {
+        completedAt: new Date(),
+      },
+    });
+
+    this.logger.log(`Completed elaboration session ${sessionId}`);
+
+    return {
+      sessionId,
+      totalQuestions,
+      completed: true,
+      ratings,
+      overallMessage,
+      elaborations,
+    };
+  }
+
+  /**
+   * Get an elaboration session by ID
+   */
+  async getElaborationSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<ElaborationSessionResult> {
+    const session = await this.prisma.elaborationSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        intervention: true,
+      },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (session.intervention.userId !== userId) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    const questions = session.questions as ElaborationQuestion[];
+    const elaborations = (session.userElaborations as UserElaborationEntry[]) || [];
+
+    const questionsForStudent: ElaborationQuestionForStudent[] = questions.map((q) => ({
+      question: q.question,
+      type: q.type,
+      keyPoints: q.keyPoints,
+    }));
+
+    return {
+      sessionId: session.id,
+      interventionId: session.interventionId,
+      questions: questionsForStudent,
+      sourceText: session.sourceText,
+      elaborations,
+      completed: !!session.completedAt,
+    };
+  }
+
   // ─── Private Helper Methods ───────────────────────────────
+
+  /**
+   * Validate and normalize elaboration questions from LLM response
+   */
+  private validateAndNormalizeElaborationQuestions(questions: any[]): ElaborationQuestion[] {
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new Error('Invalid questions array from LLM');
+    }
+
+    return questions.map((q, idx) => {
+      if (!q.question || !q.type || !Array.isArray(q.keyPoints)) {
+        throw new Error(`Invalid elaboration question at index ${idx}`);
+      }
+
+      return {
+        question: String(q.question),
+        type: q.type === 'why' ? 'why' : 'how',
+        keyPoints: q.keyPoints.map(String),
+      };
+    });
+  }
+
+  /**
+   * Validate elaboration evaluation response
+   */
+  private validateElaborationEvaluation(data: any): ElaborationEvaluationResponse {
+    const validRatings = ['Strong', 'Developing', 'Needs Improvement'];
+    if (!validRatings.includes(data.rating)) {
+      data.rating = 'Developing'; // Default if invalid
+    }
+
+    return {
+      rating: data.rating,
+      addressedPoints: Array.isArray(data.addressedPoints)
+        ? data.addressedPoints.map(String)
+        : [],
+      missedPoints: Array.isArray(data.missedPoints) ? data.missedPoints.map(String) : [],
+      feedback: String(data.feedback || 'No feedback provided.'),
+      modelElaboration: String(data.modelElaboration || ''),
+    };
+  }
 
   /**
    * Validate and normalize questions from LLM response
