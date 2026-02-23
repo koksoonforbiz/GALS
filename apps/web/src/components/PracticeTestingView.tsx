@@ -37,6 +37,7 @@ interface PracticeTestingViewProps {
   selectedText: string;
   courseId: string;
   contentId: string;
+  pageType?: string; // "lesson", "quiz", "reading", etc.
   onComplete: () => void;
   onBack: () => void;
 }
@@ -47,9 +48,11 @@ export function PracticeTestingView({
   selectedText,
   courseId,
   contentId,
+  pageType,
   onComplete,
   onBack,
 }: PracticeTestingViewProps) {
+  void pageType; // Reserved for future context-aware behavior
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -162,33 +165,47 @@ export function PracticeTestingView({
     }
   };
 
+  // ─── Back to Chat Header ─────────────────────────────────
+  const BackHeader = () => (
+    <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gray-200">
+      <button
+        onClick={onBack}
+        className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to chat
+      </button>
+      <span className="text-sm font-medium text-gray-700">Practice Testing</span>
+    </div>
+  );
+
   // ─── Render Based on State ───────────────────────────────
 
   if (state === 'loading') {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
-        <p className="text-gray-600">
-          {questions.length === 0
-            ? 'Generating questions from your selected text...'
-            : 'Submitting your answers...'}
-        </p>
+      <div className="w-full">
+        <BackHeader />
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mb-4" />
+          <p className="text-gray-600 text-sm text-center">
+            {questions.length === 0
+              ? 'Generating questions from your selected text...'
+              : 'Submitting your answers...'}
+          </p>
+        </div>
       </div>
     );
   }
 
   if (state === 'error') {
     return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <div className="text-red-500 text-5xl mb-4">⚠️</div>
-        <p className="text-gray-700 mb-4">{error}</p>
-        <div className="flex gap-3">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-          >
-            Go Back
-          </button>
+      <div className="w-full">
+        <BackHeader />
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="text-red-500 text-4xl mb-4">!</div>
+          <p className="text-gray-700 mb-4 text-sm text-center">{error}</p>
           <button
             onClick={generateQuestions}
             className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
@@ -205,70 +222,65 @@ export function PracticeTestingView({
     if (!question) return null;
 
     return (
-      <div className="space-y-6">
-        {/* Progress Bar */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 transition-all duration-300"
-              style={{
-                width: `${((currentQuestionIndex + 1) / questions.length) * 100}%`,
-              }}
-            />
-          </div>
-          <span className="text-sm text-gray-500 whitespace-nowrap">
-            Question {currentQuestionIndex + 1} of {questions.length}
-          </span>
-        </div>
-
-        {/* Question */}
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <p className="text-lg text-gray-900 mb-6">{question.question}</p>
-
-          {question.type === 'mcq' && question.options ? (
-            <div className="space-y-3">
-              {question.options.map((option, idx) => {
-                const letter = option.charAt(0);
-                const isSelected = currentAnswer === letter;
-
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentAnswer(letter)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      isSelected
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                );
-              })}
+      <div className="w-full">
+        <BackHeader />
+        <div className="space-y-4">
+          {/* Progress Bar */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-600 transition-all duration-300"
+                style={{
+                  width: `${((currentQuestionIndex + 1) / questions.length) * 100}%`,
+                }}
+              />
             </div>
-          ) : (
-            <textarea
-              value={currentAnswer}
-              onChange={(e) => setCurrentAnswer(e.target.value)}
-              placeholder="Type your answer here..."
-              className="w-full p-4 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-              rows={4}
-            />
-          )}
-        </div>
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {currentQuestionIndex + 1}/{questions.length}
+            </span>
+          </div>
 
-        {/* Actions */}
-        <div className="flex justify-between">
-          <button
-            onClick={onBack}
-            className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800"
-          >
-            Cancel
-          </button>
+          {/* Question */}
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <p className="text-sm text-gray-900 mb-4">{question.question}</p>
+
+            {question.type === 'mcq' && question.options ? (
+              <div className="space-y-2">
+                {question.options.map((option, idx) => {
+                  const letter = option.charAt(0);
+                  const isSelected = currentAnswer === letter;
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentAnswer(letter)}
+                      className={`w-full text-left p-3 rounded-lg border-2 transition-all text-sm ${
+                        isSelected
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <textarea
+                value={currentAnswer}
+                onChange={(e) => setCurrentAnswer(e.target.value)}
+                placeholder="Type your answer here..."
+                className="w-full p-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                rows={3}
+              />
+            )}
+          </div>
+
+          {/* Actions */}
           <button
             onClick={handleSubmitAnswer}
             disabled={!currentAnswer.trim()}
-            className={`px-6 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
+            className={`w-full py-2 text-sm font-medium text-white rounded-lg transition-colors ${
               currentAnswer.trim()
                 ? 'bg-blue-600 hover:bg-blue-700'
                 : 'bg-gray-300 cursor-not-allowed'
@@ -289,44 +301,43 @@ export function PracticeTestingView({
     const userAnswer = answers.get(currentQuestionIndex) || currentAnswer;
 
     return (
-      <div className="space-y-6">
-        {/* Progress Bar */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 transition-all duration-300"
-              style={{
-                width: `${((currentQuestionIndex + 1) / questions.length) * 100}%`,
-              }}
-            />
+      <div className="w-full">
+        <BackHeader />
+        <div className="space-y-4">
+          {/* Progress Bar */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-600 transition-all duration-300"
+                style={{
+                  width: `${((currentQuestionIndex + 1) / questions.length) * 100}%`,
+                }}
+              />
+            </div>
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {currentQuestionIndex + 1}/{questions.length}
+            </span>
           </div>
-          <span className="text-sm text-gray-500 whitespace-nowrap">
-            Question {currentQuestionIndex + 1} of {questions.length}
-          </span>
-        </div>
 
-        {/* Answer Recorded */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-2xl">✅</span>
-            <span className="font-medium text-blue-800">Answer Recorded</span>
+          {/* Answer Recorded */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xl">ok</span>
+              <span className="font-medium text-blue-800 text-sm">Answer Recorded</span>
+            </div>
+            <p className="text-gray-700 mb-2 text-sm">
+              <strong>Q:</strong> {question?.question}
+            </p>
+            <p className="text-gray-700 text-sm">
+              <strong>A:</strong> {userAnswer}
+            </p>
+            <p className="text-xs text-gray-500 mt-3">Feedback after all questions.</p>
           </div>
-          <p className="text-gray-700 mb-2">
-            <strong>Question:</strong> {question?.question}
-          </p>
-          <p className="text-gray-700">
-            <strong>Your Answer:</strong> {userAnswer}
-          </p>
-          <p className="text-sm text-gray-500 mt-4">
-            You'll see detailed feedback after completing all questions.
-          </p>
-        </div>
 
-        {/* Actions */}
-        <div className="flex justify-end">
+          {/* Actions */}
           <button
             onClick={handleContinueAfterReview}
-            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            className="w-full py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
           >
             {currentQuestionIndex === questions.length - 1 ? 'See Results' : 'Next Question'}
           </button>
@@ -338,98 +349,103 @@ export function PracticeTestingView({
   if (state === 'complete' && finalResults) {
     const { score, totalQuestions, percentage, results } = finalResults;
 
-    // Determine score emoji/color
-    let scoreEmoji = '🎉';
+    // Determine score color
     let scoreColor = 'text-green-600';
     if (percentage < 50) {
-      scoreEmoji = '📚';
       scoreColor = 'text-orange-600';
     } else if (percentage < 80) {
-      scoreEmoji = '👍';
       scoreColor = 'text-blue-600';
     }
 
     return (
-      <div className="space-y-6">
-        {/* Score Summary */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-8 text-center">
-          <div className="text-5xl mb-4">{scoreEmoji}</div>
-          <h3 className={`text-3xl font-bold ${scoreColor} mb-2`}>
-            {score}/{totalQuestions}
-          </h3>
-          <p className="text-gray-600">
-            You scored <strong>{percentage}%</strong>
-          </p>
+      <div className="w-full">
+        <BackHeader />
+        <div className="space-y-4">
+          {/* Score Summary */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 text-center">
+            <h3 className={`text-2xl font-bold ${scoreColor} mb-1`}>
+              {score}/{totalQuestions}
+            </h3>
+            <p className="text-gray-600 text-sm">
+              You scored <strong>{percentage}%</strong>
+            </p>
 
-          {/* Progress Ring */}
-          <div className="mt-6 flex justify-center">
-            <div className="relative w-24 h-24">
-              <svg className="w-full h-full transform -rotate-90">
-                <circle cx="48" cy="48" r="40" stroke="#e5e7eb" strokeWidth="8" fill="none" />
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="40"
-                  stroke={percentage >= 80 ? '#22c55e' : percentage >= 50 ? '#3b82f6' : '#f97316'}
-                  strokeWidth="8"
-                  fill="none"
-                  strokeDasharray={`${(percentage / 100) * 251.2} 251.2`}
-                  className="transition-all duration-500"
-                />
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-700">{percentage}%</span>
+            {/* Progress Ring */}
+            <div className="mt-4 flex justify-center">
+              <div className="relative w-16 h-16">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle cx="32" cy="32" r="28" stroke="#e5e7eb" strokeWidth="6" fill="none" />
+                  <circle
+                    cx="32"
+                    cy="32"
+                    r="28"
+                    stroke={percentage >= 80 ? '#22c55e' : percentage >= 50 ? '#3b82f6' : '#f97316'}
+                    strokeWidth="6"
+                    fill="none"
+                    strokeDasharray={`${(percentage / 100) * 175.9} 175.9`}
+                    className="transition-all duration-500"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-sm font-bold text-gray-700">{percentage}%</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Detailed Results */}
-        <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Question Review</h4>
-          {results.map((result, idx) => {
-            const question = questions[result.questionIndex];
-            return (
-              <div
-                key={idx}
-                className={`border rounded-lg p-4 ${
-                  result.isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="text-xl">{result.isCorrect ? '✅' : '❌'}</span>
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900 mb-2">{question?.question}</p>
-                    <p className="text-sm text-gray-600">
-                      <strong>Your answer:</strong> {result.userAnswer}
-                    </p>
-                    {!result.isCorrect && (
-                      <p className="text-sm text-green-700 mt-1">
-                        <strong>Correct answer:</strong> {result.correctAnswer}
+          {/* Detailed Results (scrollable) */}
+          <div className="space-y-3 max-h-60 overflow-y-auto">
+            <h4 className="font-medium text-gray-900 text-sm sticky top-0 bg-white">
+              Question Review
+            </h4>
+            {results.map((result, idx) => {
+              const question = questions[result.questionIndex];
+              return (
+                <div
+                  key={idx}
+                  className={`border rounded-lg p-3 ${
+                    result.isCorrect ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm">{result.isCorrect ? 'Y' : 'X'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 text-xs mb-1 line-clamp-2">
+                        {question?.question}
                       </p>
-                    )}
-                    <p className="text-sm text-gray-500 mt-2 italic">{result.explanation}</p>
+                      <p className="text-xs text-gray-600">
+                        <strong>You:</strong> {result.userAnswer}
+                      </p>
+                      {!result.isCorrect && (
+                        <p className="text-xs text-green-700 mt-1">
+                          <strong>Correct:</strong> {result.correctAnswer}
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1 italic line-clamp-2">
+                        {result.explanation}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Actions */}
-        <div className="flex justify-between pt-4">
-          <button
-            onClick={generateQuestions}
-            className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800"
-          >
-            Try Again
-          </button>
-          <button
-            onClick={onComplete}
-            className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-          >
-            Done
-          </button>
+          {/* Actions */}
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={generateQuestions}
+              className="flex-1 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={onComplete}
+              className="flex-1 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     );

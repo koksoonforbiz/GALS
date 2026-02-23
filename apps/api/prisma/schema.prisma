@@ -107,8 +107,9 @@ model User {
   createdDrafts     ContentDraft[]   @relation("CreatedDrafts")
 
   // Learning interventions
-  learningInterventions  LearningIntervention[]
-  spacedRepetitionCards  SpacedRepetitionCard[]
+  learningInterventions   LearningIntervention[]
+  spacedRepetitionCards   SpacedRepetitionCard[]
+  chatbotConversations    ChatbotConversation[]
 
   @@map("users")
 }
@@ -820,6 +821,7 @@ model LearningIntervention {
   contentId        String           @map("content_id") @db.Uuid
   selectedText     String           @db.Text @map("selected_text")
   interventionType InterventionType @map("intervention_type")
+  pageType         String?          @map("page_type") // "lesson", "quiz", "reading", "dashboard", etc.
   createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -901,4 +903,21 @@ model ElaborationSession {
 
   @@index([interventionId])
   @@map("elaboration_sessions")
+}
+
+model ChatbotConversation {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  courseId  String?  @map("course_id") @db.Uuid
+  contentId String?  @map("content_id") @db.Uuid
+  pageType  String?  @map("page_type") // "lesson", "quiz", "reading", "dashboard", etc.
+  messages  Json     // Array of {role: "user" | "assistant", content: string, timestamp: string}
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([courseId])
+  @@map("chatbot_conversations")
 }
