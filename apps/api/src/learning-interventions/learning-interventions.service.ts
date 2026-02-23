@@ -529,7 +529,7 @@ export class LearningInterventionsService {
       question: question.question,
       userElaboration: dto.elaboration,
       keyPoints: question.keyPoints,
-      sourceText: session.sourceText,
+      sourceText: session.sourceText ?? '',
     });
 
     let evaluation: ElaborationEvaluationResponse;
@@ -712,7 +712,7 @@ export class LearningInterventionsService {
       sessionId: session.id,
       interventionId: session.interventionId,
       questions: questionsForStudent,
-      sourceText: session.sourceText,
+      sourceText: session.sourceText ?? '',
       elaborations,
       completed: !!session.completedAt,
     };
@@ -975,12 +975,12 @@ export class LearningInterventionsService {
       sessionId: updatedSession.id,
       interventionId: updatedSession.interventionId,
       steps,
-      summary: updatedSession.summary,
+      summary: updatedSession.summary ?? '',
       totalSteps: updatedSession.totalSteps,
       currentStep: updatedSession.currentStep,
       userResponses,
       completed: !!updatedSession.completedAt,
-      sourceText: updatedSession.sourceText,
+      sourceText: updatedSession.sourceText ?? '',
     };
   }
 
@@ -1043,7 +1043,7 @@ export class LearningInterventionsService {
       totalSteps: session.totalSteps,
       correctOnFirstTry,
       completed: true,
-      summary: session.summary,
+      summary: session.summary ?? '',
       userResponses,
     };
   }
@@ -1074,12 +1074,12 @@ export class LearningInterventionsService {
       sessionId: session.id,
       interventionId: session.interventionId,
       steps,
-      summary: session.summary,
+      summary: session.summary ?? '',
       totalSteps: session.totalSteps,
       currentStep: session.currentStep,
       userResponses,
       completed: !!session.completedAt,
-      sourceText: session.sourceText,
+      sourceText: session.sourceText ?? '',
     };
   }
 
