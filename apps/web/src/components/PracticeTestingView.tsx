@@ -52,7 +52,6 @@ export function PracticeTestingView({
   onComplete,
   onBack,
 }: PracticeTestingViewProps) {
-  void pageType; // Reserved for future context-aware behavior
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +85,7 @@ export function PracticeTestingView({
           selectedText,
           courseId,
           contentId,
+          pageType,
           questionCount: 5,
         },
       );
@@ -166,10 +166,21 @@ export function PracticeTestingView({
   };
 
   // ─── Back to Chat Header ─────────────────────────────────
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  const handleBack = () => {
+    // Show confirmation if mid-quiz (has questions but not complete)
+    if (state === 'quiz' || state === 'reviewing') {
+      setShowExitConfirm(true);
+    } else {
+      onBack();
+    }
+  };
+
   const BackHeader = () => (
     <div className="flex items-center gap-2 pb-3 mb-4 border-b border-gray-200">
       <button
-        onClick={onBack}
+        onClick={handleBack}
         className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -180,6 +191,33 @@ export function PracticeTestingView({
       <span className="text-sm font-medium text-gray-700">Practice Testing</span>
     </div>
   );
+
+  // ─── Exit Confirmation Dialog ─────────────────────────────
+  if (showExitConfirm) {
+    return (
+      <div className="w-full">
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="text-amber-500 text-3xl mb-3">!</div>
+          <p className="text-sm text-gray-700 text-center mb-1 font-medium">Leave practice test?</p>
+          <p className="text-xs text-gray-500 text-center mb-4">Your progress will be lost.</p>
+          <div className="flex gap-2 w-full">
+            <button
+              onClick={() => setShowExitConfirm(false)}
+              className="flex-1 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+            >
+              Stay
+            </button>
+            <button
+              onClick={onBack}
+              className="flex-1 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600"
+            >
+              Leave
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Render Based on State ───────────────────────────────
 

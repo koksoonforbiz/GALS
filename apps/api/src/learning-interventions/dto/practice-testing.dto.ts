@@ -7,6 +7,7 @@ export const GeneratePracticeTestSchema = z.object({
   selectedText: z.string().min(20, 'Selected text must be at least 20 characters'),
   courseId: z.string().uuid(),
   contentId: z.string().uuid(),
+  pageType: z.string().optional(),
   questionCount: z
     .number()
     .int()

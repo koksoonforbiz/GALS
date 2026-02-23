@@ -301,6 +301,7 @@ export function FloatingChatbot() {
                 selectedText={activeText}
                 courseId={courseId || ''}
                 contentId={contentId || ''}
+                pageType={pageType}
                 onComplete={handleInterventionComplete}
                 onBack={handleBackToChat}
               />
@@ -310,6 +311,7 @@ export function FloatingChatbot() {
                 selectedText={activeText}
                 courseId={courseId || ''}
                 contentId={contentId || ''}
+                pageType={pageType}
                 onComplete={handleInterventionComplete}
                 onBack={handleBackToChat}
               />

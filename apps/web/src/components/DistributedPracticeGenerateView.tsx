@@ -33,7 +33,6 @@ export function DistributedPracticeGenerateView({
   onComplete,
   onBack,
 }: DistributedPracticeGenerateViewProps) {
-  void pageType; // Reserved for future context-aware behavior
   const navigate = useNavigate();
   const [state, setState] = useState<ViewState>('loading');
   const [cards, setCards] = useState<Flashcard[]>([]);
@@ -58,6 +57,7 @@ export function DistributedPracticeGenerateView({
           selectedText,
           courseId,
           contentId,
+          pageType,
           cardCount: 5,
         },
       );

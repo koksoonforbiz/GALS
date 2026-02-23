@@ -81,7 +81,6 @@ export function StepwiseLearningView({
   onComplete,
   onBack,
 }: StepwiseLearningViewProps) {
-  void pageType; // Reserved for future context-aware behavior
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -119,6 +118,7 @@ export function StepwiseLearningView({
           selectedText,
           courseId,
           contentId,
+          pageType,
         },
       );
 

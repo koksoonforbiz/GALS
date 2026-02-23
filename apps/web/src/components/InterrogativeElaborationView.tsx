@@ -70,7 +70,6 @@ export function InterrogativeElaborationView({
   onComplete,
   onBack,
 }: InterrogativeElaborationViewProps) {
-  void pageType; // Reserved for future context-aware behavior
   const [state, setState] = useState<ViewState>('loading');
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +110,7 @@ export function InterrogativeElaborationView({
           selectedText,
           courseId,
           contentId,
+          pageType,
           questionCount: 4,
         },
       );

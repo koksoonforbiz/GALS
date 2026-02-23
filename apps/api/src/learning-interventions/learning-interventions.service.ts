@@ -166,6 +166,7 @@ export class LearningInterventionsService {
         contentId: dto.contentId,
         selectedText: dto.selectedText,
         interventionType: 'PRACTICE_TESTING',
+        pageType: dto.pageType,
       },
     });
 
@@ -406,6 +407,7 @@ export class LearningInterventionsService {
         contentId: dto.contentId,
         selectedText: dto.selectedText,
         interventionType: 'INTERROGATIVE_ELABORATION',
+        pageType: dto.pageType,
       },
     });
 
@@ -737,6 +739,7 @@ export class LearningInterventionsService {
         contentId: dto.contentId,
         selectedText: dto.selectedText,
         interventionType: 'STEPWISE_LEARNING',
+        pageType: dto.pageType,
       },
     });
 
@@ -1098,6 +1101,7 @@ export class LearningInterventionsService {
         contentId: dto.contentId,
         selectedText: dto.selectedText,
         interventionType: 'DISTRIBUTED_PRACTICE',
+        pageType: dto.pageType,
       },
     });
 
