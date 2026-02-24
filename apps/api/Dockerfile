@@ -8,14 +8,14 @@ COPY tsconfig.base.json ./
 WORKDIR /repo/packages/shared
 COPY packages/shared/package.json ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
-RUN pnpm install
+RUN pnpm install --shamefully-hoist
 COPY packages/shared/ ./
 RUN pnpm run build
 
 FROM base AS deps
 COPY apps/api/package.json ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
-RUN pnpm install
+RUN pnpm install --shamefully-hoist
 COPY --from=shared-build /repo/packages/shared /shared
 RUN pnpm add /shared
 
@@ -38,7 +38,7 @@ FROM base AS development
 ENV NODE_ENV=development
 COPY apps/api/package.json ./
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
-RUN pnpm install
+RUN pnpm install --shamefully-hoist
 COPY --from=shared-build /repo/packages/shared /shared
 RUN pnpm add /shared
 COPY apps/api/ .
