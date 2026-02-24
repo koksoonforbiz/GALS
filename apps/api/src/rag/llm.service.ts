@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
@@ -158,11 +158,7 @@ export class LlmService {
     let notEnoughInfo = false;
 
     if (input.strictSource) {
-      const validation = this.ragService.validateCitations(
-        result.content,
-        citations,
-        input.chunks,
-      );
+      const validation = this.ragService.validateCitations(result.content, citations, input.chunks);
       strictSourceValid = validation.valid;
 
       if (
@@ -241,11 +237,7 @@ export class LlmService {
     let notEnoughInfo = false;
 
     if (input.strictSource) {
-      const validation = this.ragService.validateCitations(
-        result.content,
-        citations,
-        input.chunks,
-      );
+      const validation = this.ragService.validateCitations(result.content, citations, input.chunks);
       strictSourceValid = validation.valid;
       notEnoughInfo =
         result.content.includes('NOT_ENOUGH_INFO') ||
@@ -261,7 +253,7 @@ export class LlmService {
         createdById: input.userId,
         title: input.title,
         contentMdx: result.content,
-        citations: citations as any,
+        citations: citations as unknown as import('@prisma/client').Prisma.InputJsonValue,
         status: 'DRAFT',
       },
     });
@@ -366,7 +358,7 @@ export class LlmService {
     });
   }
 
-  async rejectDraft(draftId: string, userId: string) {
+  async rejectDraft(draftId: string, _userId: string) {
     const draft = await this.prisma.contentDraft.findUnique({ where: { id: draftId } });
     if (!draft) throw new NotFoundException(`Draft ${draftId} not found`);
 
@@ -398,6 +390,17 @@ export class LlmService {
         draft: { select: { id: true, title: true } },
       },
     });
+  }
+
+  // ─── Public LLM Call (for other modules like Learning Interventions) ──
+
+  async callLlmForUser(
+    userId: string,
+    systemPrompt: string,
+    userPrompt: string,
+  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+    const credentials = await this.getUserApiKey(userId);
+    return this.callLlm(systemPrompt, userPrompt, credentials);
   }
 
   // ─── Private Helpers ───────────────────────────────────
@@ -463,7 +466,7 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    const sourceMatch = userPrompt.match(/Source \d+[\s\S]*?(?=---|\z)/g);
+    const sourceMatch = userPrompt.match(/Source \d+[\s\S]*?(?=---|$)/g);
     const questionMatch = userPrompt.match(/Question:\s*(.*)/);
     const generateMatch = userPrompt.match(/Generate course content for:\s*"([^"]+)"/);
     const instructionsMatch = userPrompt.match(/Teacher instructions:\s*([\s\S]*?)$/);
@@ -489,11 +492,7 @@ export class LlmService {
     };
   }
 
-  private buildTemplateContent(
-    title: string,
-    instructions: string,
-    sources: string[],
-  ): string {
+  private buildTemplateContent(title: string, instructions: string, sources: string[]): string {
     if (sources.length === 0) {
       return `> **NOT_ENOUGH_INFO**: No source documents available to generate content for "${title}". Please upload reference materials and try again.`;
     }
@@ -631,7 +630,7 @@ Rules:
       });
   }
 
-  private noSourcesResponse(input: GenerateRagAnswerInput): LlmResponse {
+  private noSourcesResponse(_input: GenerateRagAnswerInput): LlmResponse {
     return {
       answer:
         '> **NOT_ENOUGH_INFO**: No source documents have been indexed for this course. Please upload reference materials in the Sources tab first.',
@@ -653,8 +652,8 @@ Rules:
     promptTokens: number;
     completionTokens: number;
     durationMs: number;
-    inputPayload?: any;
-    outputPayload?: any;
+    inputPayload?: import('@prisma/client').Prisma.InputJsonValue;
+    outputPayload?: import('@prisma/client').Prisma.InputJsonValue;
     errorMessage?: string;
   }) {
     try {

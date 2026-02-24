@@ -41,6 +41,19 @@ enum EventStatus {
   failed
 }
 
+enum InterventionType {
+  PRACTICE_TESTING
+  DISTRIBUTED_PRACTICE
+  STEPWISE_LEARNING
+  INTERROGATIVE_ELABORATION
+}
+
+enum InterventionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
 enum CourseStatus {
   DRAFT
   PUBLISHED
@@ -103,6 +116,8 @@ model User {
   masteries         UserMastery[]
   uploadedDocuments SourceDocument[] @relation("UploadedDocuments")
   createdDrafts     ContentDraft[]   @relation("CreatedDrafts")
+  learningInterventions      LearningIntervention[]
+  savedInterventionReviews   SavedInterventionReview[]
 
   @@map("users")
 }
@@ -792,4 +807,52 @@ model KcEvaluationRun {
   @@index([courseId])
   @@index([userId])
   @@map("kc_evaluation_runs")
+}
+
+// ─── Learning Interventions ─────────────────────────────
+
+model LearningIntervention {
+  id            String             @id @default(uuid()) @db.Uuid
+  userId        String             @map("user_id") @db.Uuid
+  courseId       String             @map("course_id") @db.Uuid
+  contentId     String?            @map("content_id") @db.Uuid
+  pageType      String?            @map("page_type")
+  type          InterventionType
+  status        InterventionStatus @default(IN_PROGRESS)
+  selectedText  String             @map("selected_text") @db.Text
+  sessionData   Json?              @map("session_data")
+  completedAt   DateTime?          @map("completed_at") @db.Timestamptz
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  savedReviews  SavedInterventionReview[]
+
+  @@index([userId])
+  @@index([courseId])
+  @@map("learning_interventions")
+}
+
+model SavedInterventionReview {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  interventionId   String           @map("intervention_id") @db.Uuid
+  interventionType InterventionType @map("intervention_type")
+  courseId          String           @map("course_id") @db.Uuid
+  contentId        String?          @map("content_id") @db.Uuid
+  pageType         String?          @map("page_type")
+  title            String
+  selectedText     String           @map("selected_text") @db.Text
+  savedData        Json             @map("saved_data")
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intervention     LearningIntervention  @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([interventionId])
+  @@index([courseId])
+  @@map("saved_intervention_reviews")
 }
