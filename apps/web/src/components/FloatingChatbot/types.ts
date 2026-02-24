@@ -44,3 +44,11 @@ export interface SavedReviewsResponse {
   limit: number;
   totalPages: number;
 }
+
+export interface SaveForReviewInput {
+  interventionId: string;
+  interventionType: InterventionType;
+  title: string;
+  selectedText: string;
+  savedData: Record<string, unknown>;
+}

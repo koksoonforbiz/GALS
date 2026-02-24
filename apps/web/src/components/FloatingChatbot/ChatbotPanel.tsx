@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePageContext } from '../../contexts/PageContext';
+import { api } from '../../lib/api';
 import { ReviewTabView } from './ReviewTabView';
-import type { ChatbotMode, ChatMessage } from './types';
+import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
   lesson: 'Lesson',
@@ -19,12 +20,38 @@ interface ChatbotPanelProps {
 }
 
 export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: ChatbotPanelProps) {
-  const { pageType, contentTitle, selectedText, clearSelectedText } = usePageContext();
+  const { pageType, courseId, contentId, contentTitle, selectedText, clearSelectedText } =
+    usePageContext();
 
   const [mode, setMode] = useState<ChatbotMode>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // ─── Save-for-Review Handler ──────────────────────────────
+  const handleSaveForReview = useCallback(
+    async (data: SaveForReviewInput) => {
+      setSaveStatus('saving');
+      try {
+        await api.post('/learning-interventions/saved-reviews', {
+          ...data,
+          courseId: courseId || '',
+          contentId: contentId || undefined,
+          pageType,
+        });
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } catch {
+        setSaveStatus('error');
+        setTimeout(() => setSaveStatus('idle'), 3000);
+      }
+    },
+    [courseId, contentId, pageType],
+  );
+
+  // Expose handleSaveForReview for future intervention views (suppressing unused warning)
+  void handleSaveForReview;
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -202,6 +229,23 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
               onClick={() => handleInterventionClick('interrogative-elaboration')}
             />
           </div>
+        </div>
+      )}
+
+      {/* Save status indicator */}
+      {saveStatus !== 'idle' && (
+        <div
+          className={`px-3 py-1 text-xs text-center ${
+            saveStatus === 'saving'
+              ? 'bg-blue-50 text-blue-600'
+              : saveStatus === 'saved'
+                ? 'bg-green-50 text-green-600'
+                : 'bg-red-50 text-red-600'
+          }`}
+        >
+          {saveStatus === 'saving' && 'Saving to Review Tab...'}
+          {saveStatus === 'saved' && 'Saved to Review Tab!'}
+          {saveStatus === 'error' && 'Failed to save. Try again.'}
         </div>
       )}
 

@@ -259,14 +259,10 @@ function ReviewDetailView({
           </div>
         </div>
 
-        {/* Saved data preview */}
+        {/* Saved data - type-specific rendering */}
         <div className="mb-3">
           <div className="text-xs font-medium text-gray-600 mb-1">Interaction Data</div>
-          <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 max-h-48 overflow-y-auto">
-            <pre className="whitespace-pre-wrap break-words">
-              {JSON.stringify(review.savedData, null, 2)}
-            </pre>
-          </div>
+          <SavedDataRenderer type={review.interventionType} data={review.savedData} />
         </div>
 
         {/* Notes */}
@@ -332,6 +328,169 @@ function ReviewDetailView({
           Delete
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Type-specific Saved Data Renderers ──────────────────
+
+function SavedDataRenderer({
+  type,
+  data,
+}: {
+  type: InterventionType;
+  data: Record<string, unknown>;
+}) {
+  switch (type) {
+    case 'PRACTICE_TESTING':
+      return <PracticeTestRenderer data={data} />;
+    case 'STEPWISE_LEARNING':
+      return <StepwiseRenderer data={data} />;
+    case 'DISTRIBUTED_PRACTICE':
+      return <FlashcardRenderer data={data} />;
+    case 'INTERROGATIVE_ELABORATION':
+      return <ElaborationRenderer data={data} />;
+    default:
+      return (
+        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 max-h-48 overflow-y-auto">
+          <pre className="whitespace-pre-wrap break-words">{JSON.stringify(data, null, 2)}</pre>
+        </div>
+      );
+  }
+}
+
+interface PracticeQuestion {
+  question?: string;
+  answer?: string;
+  userAnswer?: string;
+  correct?: boolean;
+}
+
+function PracticeTestRenderer({ data }: { data: Record<string, unknown> }) {
+  const questions = Array.isArray(data.questions) ? (data.questions as PracticeQuestion[]) : [];
+  const score = typeof data.score === 'number' ? data.score : null;
+
+  if (questions.length === 0) {
+    return <FallbackJson data={data} />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {score !== null && (
+        <div className="text-xs font-medium text-gray-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+          Score: {score}%
+        </div>
+      )}
+      {questions.map((q, i) => (
+        <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2">
+          <div className="font-medium text-gray-800 mb-1">
+            Q{i + 1}: {q.question}
+          </div>
+          {q.userAnswer && (
+            <div className={`mb-0.5 ${q.correct === false ? 'text-red-600' : 'text-green-700'}`}>
+              Your answer: {q.userAnswer} {q.correct === true && '\u2713'}
+              {q.correct === false && '\u2717'}
+            </div>
+          )}
+          {q.answer && <div className="text-gray-500">Correct answer: {q.answer}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface StepwiseStep {
+  title?: string;
+  content?: string;
+  completed?: boolean;
+}
+
+function StepwiseRenderer({ data }: { data: Record<string, unknown> }) {
+  const steps = Array.isArray(data.steps) ? (data.steps as StepwiseStep[]) : [];
+
+  if (steps.length === 0) {
+    return <FallbackJson data={data} />;
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {steps.map((step, i) => (
+        <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2 flex gap-2">
+          <span className={`shrink-0 ${step.completed ? 'text-green-600' : 'text-gray-400'}`}>
+            {step.completed ? '\u2713' : `${i + 1}.`}
+          </span>
+          <div className="min-w-0">
+            {step.title && <div className="font-medium text-gray-800">{step.title}</div>}
+            {step.content && <div className="text-gray-600 mt-0.5">{step.content}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface Flashcard {
+  front?: string;
+  back?: string;
+}
+
+function FlashcardRenderer({ data }: { data: Record<string, unknown> }) {
+  const cards = Array.isArray(data.cards) ? (data.cards as Flashcard[]) : [];
+
+  if (cards.length === 0) {
+    return <FallbackJson data={data} />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {cards.map((card, i) => (
+        <div key={i} className="text-xs border border-gray-200 rounded overflow-hidden">
+          <div className="bg-blue-50 px-2 py-1.5 font-medium text-gray-800">
+            {card.front || `Card ${i + 1}`}
+          </div>
+          <div className="bg-white px-2 py-1.5 text-gray-600 border-t border-gray-100">
+            {card.back || '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+interface ElaborationItem {
+  question?: string;
+  elaboration?: string;
+  feedback?: string;
+}
+
+function ElaborationRenderer({ data }: { data: Record<string, unknown> }) {
+  const items = Array.isArray(data.questions) ? (data.questions as ElaborationItem[]) : [];
+
+  if (items.length === 0) {
+    return <FallbackJson data={data} />;
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item, i) => (
+        <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2">
+          {item.question && <div className="font-medium text-gray-800 mb-1">{item.question}</div>}
+          {item.elaboration && (
+            <div className="text-gray-700 mb-1 pl-2 border-l-2 border-blue-300">
+              {item.elaboration}
+            </div>
+          )}
+          {item.feedback && <div className="text-gray-500 italic">{item.feedback}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FallbackJson({ data }: { data: Record<string, unknown> }) {
+  return (
+    <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 max-h-48 overflow-y-auto">
+      <pre className="whitespace-pre-wrap break-words">{JSON.stringify(data, null, 2)}</pre>
     </div>
   );
 }
