@@ -76,6 +76,8 @@ services:
       target: development
     ports:
       - "5173:5173"
+    environment:
+      DOCKER_ENV: "1"
     networks:
       - local-dev
     depends_on:
@@ -84,6 +86,7 @@ services:
     volumes:
       - ./apps/web/src:/app/src
       - ./apps/web/index.html:/app/index.html
+      - ./apps/web/vite.config.ts:/app/vite.config.ts
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5173 || exit 1"]
       interval: 10s
