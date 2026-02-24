@@ -34,7 +34,6 @@ interface Attempt {
   studentId: string;
   status: string;
   textResponse: string | null;
-  drawingBlobUrl: string | null;
   currentScore: number | null;
   submittedAt: string | null;
   question: Question;

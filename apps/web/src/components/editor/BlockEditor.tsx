@@ -17,11 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import type { Block, BlockType, BlockDataMap } from './block-types';
-import {
-  createBlock,
-  parseBlockDocument,
-  serializeBlockDocument,
-} from './block-types';
+import { createBlock, parseBlockDocument, serializeBlockDocument } from './block-types';
 
 import TextBlock from './blocks/TextBlock';
 import ImageBlock from './blocks/ImageBlock';
@@ -76,8 +72,9 @@ function SortableBlock({
   onDuplicate: (id: string) => void;
   readOnly?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: block.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -117,14 +114,23 @@ function SortableBlock({
         <div className="absolute -right-1 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <span className="text-[10px] text-gray-400 mr-1">{BLOCK_LABELS[block.type]}</span>
           {block.metadata?.generatedBy === 'ai' && (
-            <span className="text-[9px] px-1 py-0.5 bg-violet-100 text-violet-600 rounded mr-1">AI</span>
+            <span className="text-[9px] px-1 py-0.5 bg-violet-100 text-violet-600 rounded mr-1">
+              AI
+            </span>
           )}
           <button
             onClick={() => onDuplicate(block.id)}
             className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
             title="Duplicate block"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <rect x="9" y="9" width="13" height="13" rx="2" />
               <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
             </svg>
@@ -134,7 +140,14 @@ function SortableBlock({
             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
             title="Delete block"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -144,19 +157,39 @@ function SortableBlock({
       {/* Block content */}
       <div className="ml-0">
         {block.type === 'text' && (
-          <TextBlock data={block.data as BlockDataMap['text']} onChange={handleChange} readOnly={readOnly} />
+          <TextBlock
+            data={block.data as BlockDataMap['text']}
+            onChange={handleChange}
+            readOnly={readOnly}
+          />
         )}
         {block.type === 'image' && (
-          <ImageBlock data={block.data as BlockDataMap['image']} onChange={handleChange} readOnly={readOnly} />
+          <ImageBlock
+            data={block.data as BlockDataMap['image']}
+            onChange={handleChange}
+            readOnly={readOnly}
+          />
         )}
         {block.type === 'video' && (
-          <VideoBlock data={block.data as BlockDataMap['video']} onChange={handleChange} readOnly={readOnly} />
+          <VideoBlock
+            data={block.data as BlockDataMap['video']}
+            onChange={handleChange}
+            readOnly={readOnly}
+          />
         )}
         {block.type === 'diagram' && (
-          <DiagramBlock data={block.data as BlockDataMap['diagram']} onChange={handleChange} readOnly={readOnly} />
+          <DiagramBlock
+            data={block.data as BlockDataMap['diagram']}
+            onChange={handleChange}
+            readOnly={readOnly}
+          />
         )}
         {block.type === 'callout' && (
-          <CalloutBlock data={block.data as BlockDataMap['callout']} onChange={handleChange} readOnly={readOnly} />
+          <CalloutBlock
+            data={block.data as BlockDataMap['callout']}
+            onChange={handleChange}
+            readOnly={readOnly}
+          />
         )}
         {block.type === 'divider' && <DividerBlock />}
       </div>
@@ -275,9 +308,10 @@ export default function BlockEditor({
         prev.map((b) => {
           if (b.id !== id) return b;
           // Human edit clears AI metadata
-          const metadata = b.metadata?.generatedBy === 'ai'
-            ? { ...b.metadata, generatedBy: 'human' as const, editedAt: new Date().toISOString() }
-            : b.metadata;
+          const metadata =
+            b.metadata?.generatedBy === 'ai'
+              ? { ...b.metadata, generatedBy: 'human' as const, editedAt: new Date().toISOString() }
+              : b.metadata;
           return { ...b, data, metadata };
         }),
       );
@@ -300,7 +334,7 @@ export default function BlockEditor({
         const idx = prev.findIndex((b) => b.id === id);
         if (idx === -1) return prev;
         const original = prev[idx];
-        const copy = createBlock(original.type, { ...original.data } as never);
+        const copy = createBlock(original!.type, { ...original!.data } as never);
         const next = [...prev];
         next.splice(idx + 1, 0, copy);
         return next;
@@ -333,7 +367,7 @@ export default function BlockEditor({
         if (oldIdx === -1 || newIdx === -1) return prev;
         const next = [...prev];
         const [moved] = next.splice(oldIdx, 1);
-        next.splice(newIdx, 0, moved);
+        next.splice(newIdx, 0, moved!);
         return next;
       });
       triggerSave();
@@ -384,52 +418,51 @@ export default function BlockEditor({
       )}
 
       {/* Block list (edit mode) */}
-      {!preview && <div className="px-10 py-4 min-h-[200px]">
-        {/* Top add-block */}
-        {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={0} />}
+      {!preview && (
+        <div className="px-10 py-4 min-h-[200px]">
+          {/* Top add-block */}
+          {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={0} />}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={blocks.map((b) => b.id)}
-            strategy={verticalListSortingStrategy}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            {blocks.map((block, idx) => (
-              <div key={block.id}>
-                <SortableBlock
-                  block={block}
-                  onUpdate={updateBlock}
-                  onDelete={deleteBlock}
-                  onDuplicate={duplicateBlock}
-                  readOnly={readOnly}
-                />
-                {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={idx + 1} />}
-              </div>
-            ))}
-          </SortableContext>
-        </DndContext>
-
-        {blocks.length === 0 && !readOnly && (
-          <div className="text-center py-8">
-            <p className="text-sm text-gray-400 mb-3">This page has no content yet.</p>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              {BLOCK_MENU.map((item) => (
-                <button
-                  key={item.type}
-                  onClick={() => addBlock(item.type, 0)}
-                  className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 flex items-center gap-1"
-                >
-                  <span className="text-xs">{item.icon}</span>
-                  {item.label}
-                </button>
+            <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              {blocks.map((block, idx) => (
+                <div key={block.id}>
+                  <SortableBlock
+                    block={block}
+                    onUpdate={updateBlock}
+                    onDelete={deleteBlock}
+                    onDuplicate={duplicateBlock}
+                    readOnly={readOnly}
+                  />
+                  {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={idx + 1} />}
+                </div>
               ))}
+            </SortableContext>
+          </DndContext>
+
+          {blocks.length === 0 && !readOnly && (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-400 mb-3">This page has no content yet.</p>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {BLOCK_MENU.map((item) => (
+                  <button
+                    key={item.type}
+                    onClick={() => addBlock(item.type, 0)}
+                    className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600 flex items-center gap-1"
+                  >
+                    <span className="text-xs">{item.icon}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </div>}
+          )}
+        </div>
+      )}
     </div>
   );
 }

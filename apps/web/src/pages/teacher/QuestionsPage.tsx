@@ -5,7 +5,7 @@ import { apiFetch } from '../../lib/api';
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type QuestionType = 'text' | 'drawing' | 'mixed' | 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
+type QuestionType = 'text' | 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
 type BloomsLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
 type QuestionStatus = 'draft' | 'approved' | 'archived';
 
@@ -70,8 +70,6 @@ interface EditorState {
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'text', label: 'Text' },
-  { value: 'drawing', label: 'Drawing' },
-  { value: 'mixed', label: 'Mixed' },
   { value: 'MCQ_SINGLE', label: 'MCQ (Single)' },
   { value: 'MCQ_MULTI', label: 'MCQ (Multi)' },
   { value: 'STRUCTURED', label: 'Structured' },
@@ -117,8 +115,6 @@ function uid(): string {
 
 const TYPE_COLORS: Record<QuestionType, string> = {
   text: 'bg-blue-100 text-blue-800',
-  drawing: 'bg-purple-100 text-purple-800',
-  mixed: 'bg-green-100 text-green-800',
   MCQ_SINGLE: 'bg-amber-100 text-amber-800',
   MCQ_MULTI: 'bg-orange-100 text-orange-800',
   STRUCTURED: 'bg-teal-100 text-teal-800',
@@ -492,9 +488,7 @@ export function QuestionsPage() {
     if (!window.confirm(`Archive ${selected.size} selected questions?`)) return;
     try {
       await Promise.all(
-        Array.from(selected).map((id) =>
-          apiFetch(`/questions/${id}/archive`, { method: 'POST' }),
-        ),
+        Array.from(selected).map((id) => apiFetch(`/questions/${id}/archive`, { method: 'POST' })),
       );
       setSelected(new Set());
       await fetchQuestions();
@@ -507,9 +501,7 @@ export function QuestionsPage() {
     if (!window.confirm(`Delete ${selected.size} selected questions permanently?`)) return;
     try {
       await Promise.all(
-        Array.from(selected).map((id) =>
-          apiFetch(`/questions/${id}`, { method: 'DELETE' }),
-        ),
+        Array.from(selected).map((id) => apiFetch(`/questions/${id}`, { method: 'DELETE' })),
       );
       setSelected(new Set());
       await fetchQuestions();
@@ -568,11 +560,7 @@ export function QuestionsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <svg
-          className="animate-spin h-8 w-8 text-blue-600"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
+        <svg className="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
           <circle
             className="opacity-25"
             cx="12"
@@ -710,9 +698,7 @@ export function QuestionsPage() {
       {/* ---------- BULK ACTION BAR ---------- */}
       {selected.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-blue-800">
-            {selected.size} selected
-          </span>
+          <span className="text-sm font-medium text-blue-800">{selected.size} selected</span>
           <button
             onClick={() => {
               setBulkStatusValue('draft');
@@ -762,10 +748,22 @@ export function QuestionsPage() {
       <div className="space-y-3">
         {questions.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-lg border border-gray-200">
-            <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M12 21a9 9 0 100-18 9 9 0 000 18z" />
+            <svg
+              className="mx-auto h-12 w-12 text-gray-300"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M12 21a9 9 0 100-18 9 9 0 000 18z"
+              />
             </svg>
-            <p className="mt-3 text-gray-500">No questions found. Create your first question or adjust your filters.</p>
+            <p className="mt-3 text-gray-500">
+              No questions found. Create your first question or adjust your filters.
+            </p>
           </div>
         ) : (
           questions.map((q) => {
@@ -790,23 +788,25 @@ export function QuestionsPage() {
                   <div className="flex-1 min-w-0">
                     {/* Badges row */}
                     <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[q.type] || 'bg-gray-100 text-gray-700'}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[q.type] || 'bg-gray-100 text-gray-700'}`}
+                      >
                         {QUESTION_TYPES.find((t) => t.value === q.type)?.label ?? q.type}
                       </span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[q.status] || 'bg-gray-100 text-gray-700'}`}>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[q.status] || 'bg-gray-100 text-gray-700'}`}
+                      >
                         {q.status}
                       </span>
                       <DifficultyStars value={q.difficulty ?? 0} />
                       {q.bloomsLevel && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${BLOOMS_COLORS[q.bloomsLevel] || 'bg-gray-100 text-gray-700'}`}>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${BLOOMS_COLORS[q.bloomsLevel] || 'bg-gray-100 text-gray-700'}`}
+                        >
                           {q.bloomsLevel}
                         </span>
                       )}
-                      {course && (
-                        <span className="text-xs text-gray-500">
-                          {course.title}
-                        </span>
-                      )}
+                      {course && <span className="text-xs text-gray-500">{course.title}</span>}
                       <span className="text-xs text-gray-400 ml-auto shrink-0">
                         v{q.version} | {q.maxScore} pts
                       </span>
@@ -820,7 +820,10 @@ export function QuestionsPage() {
                   </div>
 
                   {/* 3-dot menu */}
-                  <div className="relative shrink-0" ref={menuOpenId === q.id ? menuRef : undefined}>
+                  <div
+                    className="relative shrink-0"
+                    ref={menuOpenId === q.id ? menuRef : undefined}
+                  >
                     <button
                       onClick={() => setMenuOpenId(menuOpenId === q.id ? null : q.id)}
                       className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
@@ -866,8 +869,8 @@ export function QuestionsPage() {
       </div>
 
       {/* ============================================================ */}
-      /*  QUESTION EDITOR DRAWER                                        */
-      /* ============================================================ */}
+      {/*  QUESTION EDITOR DRAWER                                        */}
+      {/* ============================================================ */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 flex justify-end">
           {/* backdrop */}
@@ -879,7 +882,10 @@ export function QuestionsPage() {
               <h3 className="text-lg font-semibold text-gray-900">
                 {editingId ? 'Edit Question' : 'Create Question'}
               </h3>
-              <button onClick={closeDrawer} className="text-gray-400 hover:text-gray-600 text-xl leading-none">
+              <button
+                onClick={closeDrawer}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
                 &times;
               </button>
             </div>
@@ -982,7 +988,11 @@ export function QuestionsPage() {
                     className="w-full mt-1"
                   />
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    <span>1</span>
+                    <span>2</span>
+                    <span>3</span>
+                    <span>4</span>
+                    <span>5</span>
                   </div>
                 </div>
               </div>
@@ -991,7 +1001,8 @@ export function QuestionsPage() {
               {isMcq(editor.type) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Options {editor.type === 'MCQ_SINGLE' ? '(select one correct)' : '(select all correct)'}
+                    Options{' '}
+                    {editor.type === 'MCQ_SINGLE' ? '(select one correct)' : '(select all correct)'}
                   </label>
                   <div className="space-y-2">
                     {editor.options.map((opt) => (
@@ -1007,7 +1018,11 @@ export function QuestionsPage() {
                           title={opt.isCorrect ? 'Correct' : 'Mark as correct'}
                         >
                           <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            <path
+                              fillRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                              clipRule="evenodd"
+                            />
                           </svg>
                         </button>
                         <input
@@ -1022,8 +1037,18 @@ export function QuestionsPage() {
                           onClick={() => removeOption(opt.id)}
                           className="shrink-0 text-red-400 hover:text-red-600"
                         >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
                           </svg>
                         </button>
                       </div>
@@ -1041,7 +1066,9 @@ export function QuestionsPage() {
 
               {/* Bloom's Level */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bloom's Level</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bloom's Level
+                </label>
                 <select
                   value={editor.bloomsLevel}
                   onChange={(e) => updateEditor('bloomsLevel', e.target.value as BloomsLevel | '')}
@@ -1079,7 +1106,9 @@ export function QuestionsPage() {
 
               {/* Tags */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tags (comma-separated)
+                </label>
                 <input
                   type="text"
                   value={editor.tags}
@@ -1135,8 +1164,8 @@ export function QuestionsPage() {
       )}
 
       {/* ============================================================ */}
-      /*  BULK IMPORT MODAL                                             */
-      /* ============================================================ */}
+      {/*  BULK IMPORT MODAL                                             */}
+      {/* ============================================================ */}
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setImportOpen(false)} />
@@ -1194,8 +1223,8 @@ export function QuestionsPage() {
       )}
 
       {/* ============================================================ */}
-      /*  BULK STATUS MODAL                                             */
-      /* ============================================================ */}
+      {/*  BULK STATUS MODAL                                             */}
+      {/* ============================================================ */}
       {bulkStatusOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/30" onClick={() => setBulkStatusOpen(false)} />

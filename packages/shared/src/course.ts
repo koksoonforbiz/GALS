@@ -21,10 +21,17 @@ export const TopicSchema = z.object({
 });
 export type Topic = z.infer<typeof TopicSchema>;
 
-export const QuestionType = z.enum(['text', 'drawing', 'mixed', 'MCQ_SINGLE', 'MCQ_MULTI', 'STRUCTURED']);
+export const QuestionType = z.enum(['text', 'MCQ_SINGLE', 'MCQ_MULTI', 'STRUCTURED']);
 export type QuestionType = z.infer<typeof QuestionType>;
 
-export const BloomsLevel = z.enum(['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create']);
+export const BloomsLevel = z.enum([
+  'remember',
+  'understand',
+  'apply',
+  'analyze',
+  'evaluate',
+  'create',
+]);
 export type BloomsLevel = z.infer<typeof BloomsLevel>;
 
 export const MCQOptionSchema = z.object({

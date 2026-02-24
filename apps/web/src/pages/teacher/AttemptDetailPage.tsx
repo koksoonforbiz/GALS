@@ -45,7 +45,6 @@ interface Attempt {
   studentId: string;
   status: string;
   textResponse: string | null;
-  drawingBlobUrl: string | null;
   currentScore: number | null;
   submittedAt: string | null;
   createdAt: string;
@@ -158,16 +157,6 @@ export function AttemptDetailPage() {
           <p className="text-gray-900 whitespace-pre-wrap">{attempt.textResponse}</p>
         ) : (
           <p className="text-gray-400 italic">No text response</p>
-        )}
-        {attempt.drawingBlobUrl && (
-          <div className="mt-3">
-            <p className="text-sm text-gray-500 mb-1">Drawing:</p>
-            <img
-              src={attempt.drawingBlobUrl}
-              alt="Student drawing"
-              className="max-w-full h-auto border rounded bg-white"
-            />
-          </div>
         )}
       </div>
 

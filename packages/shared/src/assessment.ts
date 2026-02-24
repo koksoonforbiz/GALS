@@ -11,8 +11,6 @@ export const AttemptSchema = z.object({
   status: AttemptStatus,
   textResponse: z.string().nullable(),
   selectedOptionIds: z.array(z.string()).nullable().optional(),
-  drawingBlobUrl: z.string().nullable(),
-  workingBlobUrl: z.string().nullable().optional(),
   currentScore: z.number().nullable().optional(),
   autoFeedback: z.string().nullable().optional(),
   submittedAt: z.string().datetime().nullable(),
@@ -37,7 +35,6 @@ export const GradingEventSchema = z.object({
   questionId: z.string().uuid(),
   studentId: z.string().uuid(),
   textResponse: z.string().nullable(),
-  drawingBlobUrl: z.string().nullable(),
   maxScore: z.number().positive(),
 });
 export type GradingEvent = z.infer<typeof GradingEventSchema>;
@@ -84,21 +81,6 @@ export const CreateAssessmentSchema = z.object({
 });
 export type CreateAssessment = z.infer<typeof CreateAssessmentSchema>;
 
-// Stroke schema for drawing canvas
-export const StrokePointSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  pressure: z.number().optional(),
-});
-export type StrokePoint = z.infer<typeof StrokePointSchema>;
-
-export const StrokeSchema = z.object({
-  points: z.array(StrokePointSchema),
-  color: z.string(),
-  width: z.number(),
-});
-export type Stroke = z.infer<typeof StrokeSchema>;
-
 // Attempt DTOs
 export const CreateAttemptSchema = z
   .object({
@@ -113,20 +95,12 @@ export type CreateAttempt = z.infer<typeof CreateAttemptSchema>;
 export const UpdateAttemptSchema = z.object({
   textResponse: z.string().nullable().optional(),
   selectedOptionIds: z.array(z.string()).nullable().optional(),
-  strokesJson: z.array(StrokeSchema).nullable().optional(),
-  drawingBlobUrl: z.string().nullable().optional(),
-  workingStrokes: z.array(StrokeSchema).nullable().optional(),
-  workingBlobUrl: z.string().nullable().optional(),
 });
 export type UpdateAttempt = z.infer<typeof UpdateAttemptSchema>;
 
 export const SubmitAttemptSchema = z.object({
   textResponse: z.string().nullable().optional(),
   selectedOptionIds: z.array(z.string()).nullable().optional(),
-  strokesJson: z.array(StrokeSchema).nullable().optional(),
-  drawingBlobUrl: z.string().nullable().optional(),
-  workingStrokes: z.array(StrokeSchema).nullable().optional(),
-  workingBlobUrl: z.string().nullable().optional(),
 });
 export type SubmitAttempt = z.infer<typeof SubmitAttemptSchema>;
 

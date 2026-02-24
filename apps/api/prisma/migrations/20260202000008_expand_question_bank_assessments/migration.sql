@@ -41,6 +41,4 @@ ALTER TABLE "assessment_questions" ADD COLUMN "section" TEXT;
 
 -- Expand Attempt table
 ALTER TABLE "attempts" ADD COLUMN "selected_option_ids" JSONB;
-ALTER TABLE "attempts" ADD COLUMN "working_strokes" JSONB;
-ALTER TABLE "attempts" ADD COLUMN "working_blob_url" TEXT;
 ALTER TABLE "attempts" ADD COLUMN "auto_feedback" TEXT;

@@ -25,7 +25,6 @@ export const GradeSubmissionPayloadSchema = z.object({
   questionId: z.string().uuid(),
   studentId: z.string().uuid(),
   textResponse: z.string().nullable(),
-  drawingBlobUrl: z.string().nullable(),
   maxScore: z.number().positive(),
   rubricJson: z.unknown().nullable(),
 });

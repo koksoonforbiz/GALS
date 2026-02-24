@@ -2,7 +2,7 @@
  * Read-only renderer for block-based lesson content.
  * Used on the student-facing view.
  */
-import { useMemo, useEffect, useRef, useCallback, useState } from 'react';
+import { useMemo, useEffect, useRef, useCallback } from 'react';
 import katex from 'katex';
 import mermaid from 'mermaid';
 import type { Block, BlockDocument, CalloutVariant } from './block-types';
@@ -24,7 +24,10 @@ function processHtmlMath(raw: string): string {
     /<span[^>]*data-inline-math[^>]*latex="([^"]*)"[^>]*>[\s\S]*?<\/span>/g,
     (_, latex) => {
       try {
-        return katex.renderToString(decodeHTMLEntities(latex), { throwOnError: false, displayMode: false });
+        return katex.renderToString(decodeHTMLEntities(latex), {
+          throwOnError: false,
+          displayMode: false,
+        });
       } catch {
         return latex;
       }
@@ -57,8 +60,16 @@ function TextRenderer({ html }: { html: string }) {
   );
 }
 
-function ImageRenderer({ src, caption, alt, size, align }: {
-  src: string; caption: string; alt: string;
+function ImageRenderer({
+  src,
+  caption,
+  alt,
+  size,
+  align,
+}: {
+  src: string;
+  caption: string;
+  alt: string;
   size: 'small' | 'medium' | 'full';
   align: 'left' | 'center' | 'right';
 }) {
@@ -77,7 +88,9 @@ function ImageRenderer({ src, caption, alt, size, align }: {
 
 function VideoRenderer({ url, startTime }: { url: string; startTime: number }) {
   const embedUrl = useMemo(() => {
-    const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    const ytMatch = url.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/,
+    );
     if (ytMatch) {
       const t = startTime > 0 ? `&start=${startTime}` : '';
       return `https://www.youtube.com/embed/${ytMatch[1]}?rel=0${t}`;
@@ -117,7 +130,8 @@ function DiagramRenderer({ code }: { code: string }) {
       const { svg } = await mermaid.render(id, code);
       if (containerRef.current) containerRef.current.innerHTML = svg;
     } catch {
-      if (containerRef.current) containerRef.current.innerHTML = '<p class="text-sm text-red-500">Diagram error</p>';
+      if (containerRef.current)
+        containerRef.current.innerHTML = '<p class="text-sm text-red-500">Diagram error</p>';
     }
   }, [code]);
 
@@ -128,11 +142,38 @@ function DiagramRenderer({ code }: { code: string }) {
   return <div ref={containerRef} className="flex justify-center p-4" />;
 }
 
-const CALLOUT_STYLES: Record<CalloutVariant, { icon: string; bg: string; border: string; text: string; label: string }> = {
-  tip: { icon: '💡', bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900', label: 'Tip' },
-  warning: { icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900', label: 'Warning' },
-  'exam-hint': { icon: '📝', bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-900', label: 'Exam Hint' },
-  'common-mistake': { icon: '❌', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-900', label: 'Common Mistake' },
+const CALLOUT_STYLES: Record<
+  CalloutVariant,
+  { icon: string; bg: string; border: string; text: string; label: string }
+> = {
+  tip: {
+    icon: '💡',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-900',
+    label: 'Tip',
+  },
+  warning: {
+    icon: '⚠️',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-900',
+    label: 'Warning',
+  },
+  'exam-hint': {
+    icon: '📝',
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+    text: 'text-purple-900',
+    label: 'Exam Hint',
+  },
+  'common-mistake': {
+    icon: '❌',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    text: 'text-red-900',
+    label: 'Common Mistake',
+  },
 };
 
 function CalloutRenderer({ variant, html }: { variant: CalloutVariant; html: string }) {
@@ -143,7 +184,10 @@ function CalloutRenderer({ variant, html }: { variant: CalloutVariant; html: str
         <span className="text-base">{s.icon}</span>
         <span className={`text-xs font-semibold ${s.text}`}>{s.label}</span>
       </div>
-      <div className={`px-3 py-2 prose prose-sm max-w-none ${s.text}`} dangerouslySetInnerHTML={{ __html: html }} />
+      <div
+        className={`px-3 py-2 prose prose-sm max-w-none ${s.text}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </div>
   );
 }
@@ -155,7 +199,13 @@ function renderBlock(block: Block) {
     case 'text':
       return <TextRenderer html={(block.data as { html: string }).html} />;
     case 'image': {
-      const d = block.data as { src: string; caption: string; alt: string; size: 'small' | 'medium' | 'full'; align: 'left' | 'center' | 'right' };
+      const d = block.data as {
+        src: string;
+        caption: string;
+        alt: string;
+        size: 'small' | 'medium' | 'full';
+        align: 'left' | 'center' | 'right';
+      };
       return d.src ? <ImageRenderer {...d} /> : null;
     }
     case 'video': {

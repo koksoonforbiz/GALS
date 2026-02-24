@@ -131,9 +131,7 @@ export function AssessmentsPage() {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchAssessments(), fetchCourses()]).finally(() =>
-      setLoading(false),
-    );
+    Promise.all([fetchAssessments(), fetchCourses()]).finally(() => setLoading(false));
   }, [fetchAssessments, fetchCourses]);
 
   /* fetch question bank for a course */
@@ -308,14 +306,12 @@ export function AssessmentsPage() {
 
   const handleMoveQuestion = async (index: number, direction: 'up' | 'down') => {
     if (!activeAssessment) return;
-    const sorted = [...activeAssessment.questions].sort(
-      (a, b) => a.orderIndex - b.orderIndex,
-    );
+    const sorted = [...activeAssessment.questions].sort((a, b) => a.orderIndex - b.orderIndex);
     const swap = direction === 'up' ? index - 1 : index + 1;
     if (swap < 0 || swap >= sorted.length) return;
 
     const ids = sorted.map((q) => q.questionId);
-    [ids[index], ids[swap]] = [ids[swap], ids[index]];
+    [ids[index], ids[swap]] = [ids[swap]!, ids[index]!];
 
     try {
       await apiFetch(`/assessments/${activeAssessment.id}/reorder`, {
@@ -334,13 +330,10 @@ export function AssessmentsPage() {
   ) => {
     if (!activeAssessment) return;
     try {
-      await apiFetch(
-        `/assessments/${activeAssessment.id}/questions/${questionId}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify(patch),
-        },
-      );
+      await apiFetch(`/assessments/${activeAssessment.id}/questions/${questionId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
+      });
       await refreshActive(activeAssessment.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update question');
@@ -380,9 +373,7 @@ export function AssessmentsPage() {
   const modeBadge = (mode: string) => (
     <span
       className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-        mode === 'test'
-          ? 'bg-red-100 text-red-700'
-          : 'bg-blue-100 text-blue-700'
+        mode === 'test' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
       }`}
     >
       {mode === 'test' ? 'Test' : 'Practice'}
@@ -419,7 +410,10 @@ export function AssessmentsPage() {
     return (
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => { resetCreateForm(); setView('list'); }}
+          onClick={() => {
+            resetCreateForm();
+            setView('list');
+          }}
           className="mb-4 text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1"
         >
           &larr; Back to assessments
@@ -427,11 +421,12 @@ export function AssessmentsPage() {
 
         <h2 className="text-2xl font-bold text-gray-900 mb-6">Create Assessment</h2>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-        )}
+        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
-        <form onSubmit={handleCreate} className="space-y-5 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <form
+          onSubmit={handleCreate}
+          className="space-y-5 bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+        >
           {/* Course */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
@@ -443,7 +438,9 @@ export function AssessmentsPage() {
             >
               <option value="">Select a course</option>
               {courses.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
               ))}
             </select>
           </div>
@@ -463,7 +460,9 @@ export function AssessmentsPage() {
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description (optional)
+            </label>
             <textarea
               value={createDesc}
               onChange={(e) => setCreateDesc(e.target.value)}
@@ -547,7 +546,10 @@ export function AssessmentsPage() {
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
-              onClick={() => { resetCreateForm(); setView('list'); }}
+              onClick={() => {
+                resetCreateForm();
+                setView('list');
+              }}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50"
             >
               Cancel
@@ -579,7 +581,10 @@ export function AssessmentsPage() {
         {/* Top bar */}
         <div className="flex items-center justify-between mb-5">
           <button
-            onClick={() => { setActiveAssessment(null); setView('list'); }}
+            onClick={() => {
+              setActiveAssessment(null);
+              setView('list');
+            }}
             className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1"
           >
             &larr; Back to assessments
@@ -604,9 +609,7 @@ export function AssessmentsPage() {
           </div>
         </div>
 
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-        )}
+        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
         {/* Settings panel (collapsible) */}
         {showSettings && (
@@ -728,7 +731,9 @@ export function AssessmentsPage() {
               )}
               <div className="flex items-center gap-4 text-xs text-gray-500">
                 <span>Course: {activeAssessment.course.title}</span>
-                <span>{sortedQuestions.length} question{sortedQuestions.length !== 1 ? 's' : ''}</span>
+                <span>
+                  {sortedQuestions.length} question{sortedQuestions.length !== 1 ? 's' : ''}
+                </span>
                 <span>{totalPoints(sortedQuestions)} pts total</span>
                 {activeAssessment.settings.timeLimit && (
                   <span>{activeAssessment.settings.timeLimit} min</span>
@@ -818,8 +823,18 @@ export function AssessmentsPage() {
                       className="mt-1 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                       title="Remove question"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -848,7 +863,9 @@ export function AssessmentsPage() {
                   >
                     <option value="">All types</option>
                     {bankTypes.map((t) => (
-                      <option key={t} value={t}>{t}</option>
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
                     ))}
                   </select>
                 )}
@@ -866,7 +883,9 @@ export function AssessmentsPage() {
                       <div
                         key={q.id}
                         className={`p-3 flex items-start gap-2 ${
-                          alreadyAdded ? 'bg-gray-50 opacity-60' : 'hover:bg-blue-50/50 cursor-pointer'
+                          alreadyAdded
+                            ? 'bg-gray-50 opacity-60'
+                            : 'hover:bg-blue-50/50 cursor-pointer'
                         }`}
                         onClick={() => !alreadyAdded && handleAddQuestion(q.id)}
                       >
@@ -880,9 +899,16 @@ export function AssessmentsPage() {
                           <p className="text-sm text-gray-700 truncate">{q.prompt}</p>
                         </div>
                         {alreadyAdded ? (
-                          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">Added</span>
+                          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+                            Added
+                          </span>
                         ) : (
-                          <span className="text-blue-500 mt-1 text-lg leading-none" title="Add question">+</span>
+                          <span
+                            className="text-blue-500 mt-1 text-lg leading-none"
+                            title="Add question"
+                          >
+                            +
+                          </span>
                         )}
                       </div>
                     );
@@ -905,16 +931,18 @@ export function AssessmentsPage() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Assessments</h2>
         <button
-          onClick={() => { resetCreateForm(); setError(null); setView('create'); }}
+          onClick={() => {
+            resetCreateForm();
+            setError(null);
+            setView('create');
+          }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
           + Create Assessment
         </button>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>
-      )}
+      {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
 
       {assessments.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
@@ -945,7 +973,9 @@ export function AssessmentsPage() {
                 )}
                 <div className="flex items-center gap-3 text-xs text-gray-400 mb-4">
                   <span>{a.course.title}</span>
-                  <span>{a.questions.length} question{a.questions.length !== 1 ? 's' : ''}</span>
+                  <span>
+                    {a.questions.length} question{a.questions.length !== 1 ? 's' : ''}
+                  </span>
                   <span>{formatDate(a.createdAt)}</span>
                 </div>
               </div>
@@ -974,7 +1004,12 @@ export function AssessmentsPage() {
                   title="Delete"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                    />
                   </svg>
                 </button>
               </div>

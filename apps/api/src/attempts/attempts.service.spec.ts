@@ -1,9 +1,5 @@
 import { AttemptsService } from './attempts.service';
-import {
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { EventTopics } from '@ats/shared';
 
 // ─── Helpers ────────────────────────────────────────────
@@ -39,11 +35,7 @@ function createMockMasteryService() {
   return { updateMasteryAfterGrading: jest.fn().mockResolvedValue(undefined) };
 }
 
-function createService(
-  prisma: any,
-  eventBus: any,
-  masteryService: any,
-): AttemptsService {
+function createService(prisma: any, eventBus: any, masteryService: any): AttemptsService {
   return new AttemptsService(prisma, eventBus, masteryService);
 }
 
@@ -95,9 +87,9 @@ describe('AttemptsService', () => {
     it('should throw NotFoundException if assessment has no questions', async () => {
       prisma.assessmentQuestion.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.create(studentId, { assessmentId: 'assess-1' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.create(studentId, { assessmentId: 'assess-1' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if student not enrolled (assessment)', async () => {
@@ -108,9 +100,9 @@ describe('AttemptsService', () => {
       });
       prisma.enrollment.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.create(studentId, { assessmentId: 'assess-1' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create(studentId, { assessmentId: 'assess-1' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should create attempt with questionId', async () => {
@@ -139,9 +131,9 @@ describe('AttemptsService', () => {
     it('should throw NotFoundException if question not found', async () => {
       prisma.question.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.create(studentId, { questionId: 'bad-id' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.create(studentId, { questionId: 'bad-id' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if student not enrolled (question)', async () => {
@@ -153,15 +145,13 @@ describe('AttemptsService', () => {
       });
       prisma.enrollment.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.create(studentId, { questionId: 'q1' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create(studentId, { questionId: 'q1' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw BadRequestException if neither assessmentId nor questionId', async () => {
-      await expect(
-        service.create(studentId, {} as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.create(studentId, {} as any)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -199,33 +189,23 @@ describe('AttemptsService', () => {
       });
     });
 
-    it('should update workingStrokes', async () => {
-      const strokes = [{ x: 1, y: 2 }];
-      await service.update('att-1', studentId, { workingStrokes: strokes });
-
-      expect(prisma.attempt.update).toHaveBeenCalledWith({
-        where: { id: 'att-1' },
-        data: expect.objectContaining({ workingStrokes: strokes }),
-      });
-    });
-
     it('should throw NotFoundException if attempt not found', async () => {
       prisma.attempt.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.update('bad-id', studentId, { textResponse: 'X' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('bad-id', studentId, { textResponse: 'X' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
-    it('should throw ForbiddenException if not the student\'s attempt', async () => {
+    it("should throw ForbiddenException if not the student's attempt", async () => {
       prisma.attempt.findUnique.mockResolvedValue({
         ...existingAttempt,
         studentId: 'other-student',
       });
 
-      await expect(
-        service.update('att-1', studentId, { textResponse: 'X' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update('att-1', studentId, { textResponse: 'X' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should throw BadRequestException if attempt is not in_progress', async () => {
@@ -234,9 +214,9 @@ describe('AttemptsService', () => {
         status: 'submitted',
       });
 
-      await expect(
-        service.update('att-1', studentId, { textResponse: 'X' }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.update('att-1', studentId, { textResponse: 'X' })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -266,7 +246,7 @@ describe('AttemptsService', () => {
         status: 'in_progress',
         textResponse: null,
         selectedOptionIds: null,
-        drawingBlobUrl: null,
+
         question: mcqQuestion,
       };
 
@@ -342,7 +322,7 @@ describe('AttemptsService', () => {
         status: 'in_progress',
         textResponse: null,
         selectedOptionIds: null,
-        drawingBlobUrl: null,
+
         question: mcqMultiQuestion,
       };
 
@@ -451,7 +431,7 @@ describe('AttemptsService', () => {
         status: 'in_progress',
         textResponse: null,
         selectedOptionIds: null,
-        drawingBlobUrl: null,
+
         question: shortAnswerQuestion,
       };
 
@@ -490,12 +470,10 @@ describe('AttemptsService', () => {
       it('should throw NotFoundException for non-existent attempt', async () => {
         prisma.attempt.findUnique.mockResolvedValue(null);
 
-        await expect(
-          service.submit('bad-id', 'student-1', {}),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.submit('bad-id', 'student-1', {})).rejects.toThrow(NotFoundException);
       });
 
-      it('should throw ForbiddenException if not the student\'s attempt', async () => {
+      it("should throw ForbiddenException if not the student's attempt", async () => {
         prisma.attempt.findUnique.mockResolvedValue({
           id: 'att-1',
           studentId: 'other-student',
@@ -503,9 +481,7 @@ describe('AttemptsService', () => {
           question: { type: 'SHORT_ANSWER', maxScore: 10, options: null },
         });
 
-        await expect(
-          service.submit('att-1', 'student-1', {}),
-        ).rejects.toThrow(ForbiddenException);
+        await expect(service.submit('att-1', 'student-1', {})).rejects.toThrow(ForbiddenException);
       });
 
       it('should throw BadRequestException if attempt already submitted', async () => {
@@ -516,9 +492,7 @@ describe('AttemptsService', () => {
           question: { type: 'SHORT_ANSWER', maxScore: 10, options: null },
         });
 
-        await expect(
-          service.submit('att-1', 'student-1', {}),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.submit('att-1', 'student-1', {})).rejects.toThrow(BadRequestException);
       });
 
       it('should throw BadRequestException if attempt already graded', async () => {
@@ -529,9 +503,7 @@ describe('AttemptsService', () => {
           question: { type: 'SHORT_ANSWER', maxScore: 10, options: null },
         });
 
-        await expect(
-          service.submit('att-1', 'student-1', {}),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.submit('att-1', 'student-1', {})).rejects.toThrow(BadRequestException);
       });
     });
   });
@@ -592,10 +564,7 @@ describe('AttemptsService', () => {
         feedback: 'Good',
       });
 
-      expect(masteryService.updateMasteryAfterGrading).toHaveBeenCalledWith(
-        'gr-1',
-        'att-1',
-      );
+      expect(masteryService.updateMasteryAfterGrading).toHaveBeenCalledWith('gr-1', 'att-1');
     });
 
     it('should publish GRADE_COMPLETED event', async () => {

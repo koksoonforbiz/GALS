@@ -11,8 +11,7 @@ import { test, expect } from '@playwright/test';
  * 2. Registers a new student (tests registration flow)
  * 3. Logs in as the seeded student (who has an enrollment and assessment)
  * 4. Starts an assessment
- * 5. Draws a stroke on the canvas
- * 6. Fills in a text answer
+ * 5. Fills in a text answer
  * 7. Submits
  * 8. Waits for the auto-grader to grade the submission
  */
@@ -76,26 +75,12 @@ test.describe('Happy path: student assessment flow', () => {
     await page.waitForLoadState('networkidle');
 
     // Click Start or Continue on the first assessment
-    const actionButton = page
-      .getByRole('button', { name: /Start|Continue/ })
-      .first();
+    const actionButton = page.getByRole('button', { name: /Start|Continue/ }).first();
     await expect(actionButton).toBeVisible({ timeout: 10_000 });
     await actionButton.click();
 
     // Wait for attempt page to load
     await expect(page).toHaveURL(/\/student\/attempt\//, { timeout: 10_000 });
-
-    // Draw a stroke on the canvas (if visible)
-    const canvas = page.locator('canvas').first();
-    if (await canvas.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      const box = await canvas.boundingBox();
-      if (box) {
-        await page.mouse.move(box.x + 50, box.y + 50);
-        await page.mouse.down();
-        await page.mouse.move(box.x + 150, box.y + 150, { steps: 10 });
-        await page.mouse.up();
-      }
-    }
 
     // Type a text response (if textarea is visible)
     const textarea = page.locator('textarea').first();
@@ -111,9 +96,7 @@ test.describe('Happy path: student assessment flow', () => {
     await submitButton.click();
 
     // Wait for submission status — should see "Grading in progress"
-    await expect(
-      page.getByText(/submitted|Grading in progress/i),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/submitted|Grading in progress/i)).toBeVisible({ timeout: 15_000 });
 
     // Wait for grade to complete (worker auto-grades via event queue)
     await expect(page.getByText(/Grading Complete/i)).toBeVisible({

@@ -78,7 +78,7 @@ $$6CO_2 + 6H_2O \\xrightarrow{light} C_6H_{12}O_6 + 6O_2$$
 **Your answer should include:**
 - The main inputs and outputs
 - The role of chlorophyll`,
-        type: 'mixed',
+        type: 'text',
         maxScore: 10,
         rubricJson: {
           answer_key: ['photosynthesis', 'the process of photosynthesis'],

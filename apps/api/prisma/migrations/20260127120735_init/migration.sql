@@ -2,7 +2,7 @@
 CREATE TYPE "UserRole" AS ENUM ('student', 'teacher', 'admin');
 
 -- CreateEnum
-CREATE TYPE "QuestionType" AS ENUM ('text', 'drawing', 'mixed');
+CREATE TYPE "QuestionType" AS ENUM ('text');
 
 -- CreateEnum
 CREATE TYPE "AttemptStatus" AS ENUM ('in_progress', 'submitted', 'grading', 'graded');
@@ -79,7 +79,6 @@ CREATE TABLE "attempts" (
     "question_id" UUID NOT NULL,
     "status" "AttemptStatus" NOT NULL DEFAULT 'in_progress',
     "text_response" TEXT,
-    "drawing_blob_url" TEXT,
     "submitted_at" TIMESTAMPTZ,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ NOT NULL,

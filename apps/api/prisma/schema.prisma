@@ -17,8 +17,6 @@ enum UserRole {
 
 enum QuestionType {
   text
-  drawing
-  mixed
   MCQ_SINGLE
   MCQ_MULTI
   STRUCTURED
@@ -226,10 +224,6 @@ model Attempt {
   status           AttemptStatus @default(in_progress)
   textResponse     String?       @map("text_response")
   selectedOptionIds Json?        @map("selected_option_ids")  // string[] for MCQ answers
-  strokesJson      Json?         @map("strokes_json")
-  drawingBlobUrl   String?       @map("drawing_blob_url")
-  workingStrokes   Json?         @map("working_strokes")      // working/scratch canvas strokes (all types)
-  workingBlobUrl   String?       @map("working_blob_url")     // exported PNG of working
   currentScore     Float?        @map("current_score")
   autoFeedback     String?       @map("auto_feedback")        // auto-generated feedback for MCQ
   submittedAt      DateTime?     @map("submitted_at") @db.Timestamptz

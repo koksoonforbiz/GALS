@@ -9,7 +9,6 @@ import {
   disconnectSocket,
 } from '../../lib/socket';
 import { MDXRenderer } from '../../components/MDXRenderer';
-import { DrawingCanvas, Stroke, strokesToPNGBlob } from '../../components/DrawingCanvas';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -23,7 +22,7 @@ interface Option {
 
 interface Question {
   id: string;
-  type: 'text' | 'drawing' | 'mixed' | 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
+  type: 'text' | 'MCQ_SINGLE' | 'MCQ_MULTI' | 'STRUCTURED';
   prompt: string;
   maxScore: number;
   options: Option[] | null;
@@ -45,10 +44,7 @@ interface Attempt {
   assessmentId: string;
   status: 'in_progress' | 'submitted' | 'grading' | 'graded';
   textResponse: string | null;
-  strokesJson: Stroke[] | null;
   selectedOptionIds: string[] | null;
-  workingStrokes: Stroke[] | null;
-  workingBlobUrl: string | null;
   autoFeedback: string | null;
   currentScore: number | null;
   submittedAt: string | null;
@@ -62,30 +58,6 @@ interface Attempt {
 /* ------------------------------------------------------------------ */
 
 const AUTOSAVE_INTERVAL = 10000; // 10 seconds
-
-/* ------------------------------------------------------------------ */
-/*  Helper: upload a blob and return the URL                           */
-/* ------------------------------------------------------------------ */
-
-async function uploadBlob(blob: Blob, filename: string): Promise<string | undefined> {
-  const formData = new FormData();
-  formData.append('file', blob, filename);
-
-  const result = await fetch(
-    `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/blobs/upload`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      body: formData,
-    },
-  );
-
-  if (result.ok) {
-    const { url } = await result.json();
-    return url as string;
-  }
-  return undefined;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Status badge                                                       */
@@ -122,17 +94,15 @@ export function AttemptPage() {
 
   /* ---- response state ---- */
   const [textResponse, setTextResponse] = useState('');
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
-  const [workingStrokes, setWorkingStrokes] = useState<Stroke[]>([]);
 
   /* ---- UI state ---- */
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [gradingStatus, setGradingStatus] = useState<'idle' | 'pending' | 'completed'>('idle');
-  const [gradeResult, setGradeResult] = useState<GradingResult | null>(null);
-  const [scratchOpen, setScratchOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_gradeResult, setGradeResult] = useState<GradingResult | null>(null);
 
   const autosaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -148,13 +118,7 @@ export function AttemptPage() {
         const data = await apiFetch<Attempt>(`/attempts/${attemptId}`);
         setAttempt(data);
         setTextResponse(data.textResponse || '');
-        setStrokes(data.strokesJson || []);
         setSelectedOptionIds(data.selectedOptionIds || []);
-        setWorkingStrokes(data.workingStrokes || []);
-
-        if (data.workingStrokes && data.workingStrokes.length > 0) {
-          setScratchOpen(true);
-        }
 
         if (data.status === 'graded' && data.gradingResults.length > 0) {
           setGradingStatus('completed');
@@ -214,9 +178,7 @@ export function AttemptPage() {
         method: 'PATCH',
         body: JSON.stringify({
           textResponse: textResponse || null,
-          strokesJson: strokes.length > 0 ? strokes : null,
           selectedOptionIds: selectedOptionIds.length > 0 ? selectedOptionIds : null,
-          workingStrokes: workingStrokes.length > 0 ? workingStrokes : null,
         }),
       });
       setLastSaved(new Date());
@@ -225,7 +187,7 @@ export function AttemptPage() {
     } finally {
       setSaving(false);
     }
-  }, [attemptId, attempt, textResponse, strokes, selectedOptionIds, workingStrokes]);
+  }, [attemptId, attempt, textResponse, selectedOptionIds]);
 
   /* ================================================================ */
   /*  Autosave every 10s                                               */
@@ -247,7 +209,7 @@ export function AttemptPage() {
         clearTimeout(autosaveTimeoutRef.current);
       }
     };
-  }, [textResponse, strokes, selectedOptionIds, workingStrokes, attempt, saveProgress]);
+  }, [textResponse, selectedOptionIds, attempt, saveProgress]);
 
   /* ================================================================ */
   /*  Submit attempt                                                   */
@@ -260,33 +222,11 @@ export function AttemptPage() {
     setError(null);
 
     try {
-      // Upload drawing blob if strokes exist
-      let drawingBlobUrl: string | undefined;
-      if (strokes.length > 0) {
-        const pngBlob = await strokesToPNGBlob(strokes, 800, 400);
-        if (pngBlob) {
-          drawingBlobUrl = await uploadBlob(pngBlob, `attempt-${attemptId}-drawing.png`);
-        }
-      }
-
-      // Upload working canvas blob if working strokes exist
-      let workingBlobUrl: string | undefined;
-      if (workingStrokes.length > 0) {
-        const workingBlob = await strokesToPNGBlob(workingStrokes, 800, 300);
-        if (workingBlob) {
-          workingBlobUrl = await uploadBlob(workingBlob, `attempt-${attemptId}-working.png`);
-        }
-      }
-
       const response = await apiFetch<Attempt>(`/attempts/${attemptId}/submit`, {
         method: 'POST',
         body: JSON.stringify({
           textResponse: textResponse || null,
           selectedOptionIds: selectedOptionIds.length > 0 ? selectedOptionIds : null,
-          strokesJson: strokes.length > 0 ? strokes : null,
-          drawingBlobUrl,
-          workingStrokes: workingStrokes.length > 0 ? workingStrokes : null,
-          workingBlobUrl,
         }),
       });
 
@@ -305,8 +245,7 @@ export function AttemptPage() {
       }
 
       // For MCQ types show auto-grade result immediately if present
-      const isMCQ =
-        attempt.question.type === 'MCQ_SINGLE' || attempt.question.type === 'MCQ_MULTI';
+      const isMCQ = attempt.question.type === 'MCQ_SINGLE' || attempt.question.type === 'MCQ_MULTI';
       if (isMCQ && response && 'autoFeedback' in response) {
         setAttempt((prev) =>
           prev
@@ -375,11 +314,7 @@ export function AttemptPage() {
   const isEditable = attempt.status === 'in_progress';
   const isGraded = attempt.status === 'graded';
   const isMCQ = question.type === 'MCQ_SINGLE' || question.type === 'MCQ_MULTI';
-  const showTextInput =
-    question.type === 'text' ||
-    question.type === 'mixed' ||
-    question.type === 'STRUCTURED';
-  const showDrawing = question.type === 'drawing' || question.type === 'mixed';
+  const showTextInput = question.type === 'text' || question.type === 'STRUCTURED';
 
   /* ================================================================ */
   /*  Sub-renders                                                      */
@@ -514,47 +449,6 @@ export function AttemptPage() {
     );
   };
 
-  const renderScratchWork = () => {
-    const hasWorkingStrokes = workingStrokes.length > 0 || (attempt.workingStrokes && attempt.workingStrokes.length > 0);
-    // In review mode, only show if there are working strokes
-    if (!isEditable && !hasWorkingStrokes) return null;
-
-    return (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-        <button
-          type="button"
-          onClick={() => setScratchOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-6 py-4 text-left"
-        >
-          <h2 className="text-lg font-semibold text-gray-900">Scratch Work</h2>
-          <svg
-            className={`w-5 h-5 text-gray-500 transition-transform ${scratchOpen ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-
-        {scratchOpen && (
-          <div className="px-6 pb-6">
-            <p className="text-sm text-gray-500 mb-3">
-              Use this canvas for rough work. It is saved automatically but not graded.
-            </p>
-            <DrawingCanvas
-              width={800}
-              height={300}
-              initialStrokes={workingStrokes}
-              onStrokesChange={isEditable ? setWorkingStrokes : undefined}
-              readOnly={!isEditable}
-            />
-          </div>
-        )}
-      </div>
-    );
-  };
-
   /* ================================================================ */
   /*  Main render                                                      */
   /* ================================================================ */
@@ -635,24 +529,7 @@ export function AttemptPage() {
             />
           </div>
         )}
-
-        {/* Drawing canvas */}
-        {showDrawing && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Drawing</label>
-            <DrawingCanvas
-              width={800}
-              height={400}
-              initialStrokes={strokes}
-              onStrokesChange={isEditable ? setStrokes : undefined}
-              readOnly={!isEditable}
-            />
-          </div>
-        )}
       </div>
-
-      {/* Scratch Work panel -- available for ALL question types */}
-      {renderScratchWork()}
 
       {/* Actions */}
       {isEditable && (

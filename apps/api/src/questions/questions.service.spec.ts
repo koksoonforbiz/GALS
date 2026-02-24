@@ -1,9 +1,5 @@
 import { QuestionsService } from './questions.service';
-import {
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 
 // ─── Helpers ────────────────────────────────────────────
 
@@ -54,7 +50,7 @@ describe('QuestionsService', () => {
     const baseDto = {
       courseId: 'course-1',
       prompt: 'What is 2+2?',
-      type: 'SHORT_ANSWER' as const,
+      type: 'STRUCTURED' as const,
       maxScore: 10,
     };
 
@@ -110,25 +106,19 @@ describe('QuestionsService', () => {
     it('should throw BadRequestException if no courseId or topicId', async () => {
       const dto = { ...baseDto, courseId: undefined };
 
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should throw ForbiddenException if teacher does not own course', async () => {
       prisma.course.findUnique.mockResolvedValue({ teacherId: 'other-teacher' });
 
-      await expect(service.create(teacherId, baseDto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.create(teacherId, baseDto)).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException if course does not exist', async () => {
       prisma.course.findUnique.mockResolvedValue(null);
 
-      await expect(service.create(teacherId, baseDto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.create(teacherId, baseDto)).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException if teacher does not own topic course', async () => {
@@ -138,9 +128,7 @@ describe('QuestionsService', () => {
       });
 
       const dto = { ...baseDto, courseId: undefined, topicId: 'topic-1' };
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(ForbiddenException);
     });
 
     // MCQ validations
@@ -155,9 +143,7 @@ describe('QuestionsService', () => {
         ],
       };
 
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should allow MCQ_SINGLE with exactly 1 correct option', async () => {
@@ -196,9 +182,7 @@ describe('QuestionsService', () => {
         options: [],
       };
 
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should validate MCQ_MULTI requires at least 1 correct option', async () => {
@@ -211,9 +195,7 @@ describe('QuestionsService', () => {
         ],
       };
 
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should allow MCQ_MULTI with at least 1 correct option', async () => {
@@ -238,9 +220,7 @@ describe('QuestionsService', () => {
         options: [],
       };
 
-      await expect(service.create(teacherId, dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create(teacherId, dto)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -354,10 +334,7 @@ describe('QuestionsService', () => {
     const teacherId = 'teacher-1';
 
     beforeEach(() => {
-      prisma.course.findMany.mockResolvedValue([
-        { id: 'course-1' },
-        { id: 'course-2' },
-      ]);
+      prisma.course.findMany.mockResolvedValue([{ id: 'course-1' }, { id: 'course-2' }]);
       prisma.question.findMany.mockResolvedValue([{ id: 'q1' }]);
     });
 
@@ -391,9 +368,9 @@ describe('QuestionsService', () => {
     });
 
     it('should throw ForbiddenException if filtering by unowned courseId', async () => {
-      await expect(
-        service.findAll(teacherId, { courseId: 'not-owned' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.findAll(teacherId, { courseId: 'not-owned' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should apply filters', async () => {
@@ -445,7 +422,7 @@ describe('QuestionsService', () => {
     const existingQuestion = {
       id: 'q1',
       prompt: 'Old prompt',
-      type: 'SHORT_ANSWER',
+      type: 'STRUCTURED',
       courseId: 'course-1',
       topicId: null,
       version: 1,
@@ -478,9 +455,9 @@ describe('QuestionsService', () => {
     it('should throw NotFoundException for non-existent question', async () => {
       prisma.question.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.update('bad-id', teacherId, { prompt: 'X' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('bad-id', teacherId, { prompt: 'X' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if teacher does not own question', async () => {
@@ -489,9 +466,9 @@ describe('QuestionsService', () => {
         course: { teacherId: 'other-teacher' },
       });
 
-      await expect(
-        service.update('q1', teacherId, { prompt: 'X' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update('q1', teacherId, { prompt: 'X' })).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should update KC join table when kcIds are provided', async () => {
@@ -553,9 +530,7 @@ describe('QuestionsService', () => {
     it('should throw NotFoundException for non-existent question', async () => {
       prisma.question.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove('bad-id', teacherId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.remove('bad-id', teacherId)).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException if teacher does not own question', async () => {
@@ -565,9 +540,7 @@ describe('QuestionsService', () => {
         topic: null,
       });
 
-      await expect(service.remove('q1', teacherId)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.remove('q1', teacherId)).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -579,15 +552,16 @@ describe('QuestionsService', () => {
 
     beforeEach(() => {
       prisma.course.findUnique.mockResolvedValue({ teacherId });
-      prisma.question.create.mockResolvedValueOnce({ id: 'q1' })
+      prisma.question.create
+        .mockResolvedValueOnce({ id: 'q1' })
         .mockResolvedValueOnce({ id: 'q2' });
       prisma.questionKc.createMany.mockResolvedValue({ count: 0 });
     });
 
     it('should verify course ownership then create each question', async () => {
       const questions = [
-        { prompt: 'Q1', type: 'SHORT_ANSWER' as const, maxScore: 5 },
-        { prompt: 'Q2', type: 'SHORT_ANSWER' as const, maxScore: 10 },
+        { prompt: 'Q1', type: 'STRUCTURED' as const, maxScore: 5 },
+        { prompt: 'Q2', type: 'STRUCTURED' as const, maxScore: 10 },
       ];
 
       const result = await service.bulkImport(teacherId, courseId, questions as any);
@@ -600,9 +574,7 @@ describe('QuestionsService', () => {
     it('should throw ForbiddenException if teacher does not own course', async () => {
       prisma.course.findUnique.mockResolvedValue({ teacherId: 'other' });
 
-      await expect(
-        service.bulkImport(teacherId, courseId, []),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.bulkImport(teacherId, courseId, [])).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -618,11 +590,7 @@ describe('QuestionsService', () => {
       ]);
       prisma.question.updateMany.mockResolvedValue({ count: 2 });
 
-      const result = await service.bulkUpdateStatus(
-        teacherId,
-        ['q1', 'q2'],
-        'active',
-      );
+      const result = await service.bulkUpdateStatus(teacherId, ['q1', 'q2'], 'active');
 
       expect(result).toEqual({ updated: 2 });
       expect(prisma.question.updateMany).toHaveBeenCalledWith({
@@ -632,11 +600,13 @@ describe('QuestionsService', () => {
     });
 
     it('should throw NotFoundException if any question not found', async () => {
-      prisma.question.findMany.mockResolvedValue([{ id: 'q1', course: { teacherId }, topic: null }]);
+      prisma.question.findMany.mockResolvedValue([
+        { id: 'q1', course: { teacherId }, topic: null },
+      ]);
 
-      await expect(
-        service.bulkUpdateStatus(teacherId, ['q1', 'q2'], 'active'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.bulkUpdateStatus(teacherId, ['q1', 'q2'], 'active')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if teacher does not own a question', async () => {
@@ -645,9 +615,9 @@ describe('QuestionsService', () => {
         { id: 'q2', course: { teacherId: 'other' }, topic: null },
       ]);
 
-      await expect(
-        service.bulkUpdateStatus(teacherId, ['q1', 'q2'], 'active'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.bulkUpdateStatus(teacherId, ['q1', 'q2'], 'active')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should accept ownership through topic.course', async () => {
@@ -673,7 +643,7 @@ describe('QuestionsService', () => {
       topicId: null,
       prompt: 'Original',
       stem: null,
-      type: 'SHORT_ANSWER',
+      type: 'STRUCTURED',
       maxScore: 10,
       rubricJson: null,
       options: null,
@@ -723,9 +693,7 @@ describe('QuestionsService', () => {
     it('should throw NotFoundException for non-existent question', async () => {
       prisma.question.findUnique.mockResolvedValue(null);
 
-      await expect(service.duplicate('bad-id', teacherId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.duplicate('bad-id', teacherId)).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException if teacher does not own question', async () => {
@@ -734,9 +702,7 @@ describe('QuestionsService', () => {
         course: { ...original.course, teacherId: 'other-teacher' },
       });
 
-      await expect(service.duplicate('q1', teacherId)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.duplicate('q1', teacherId)).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -765,9 +731,7 @@ describe('QuestionsService', () => {
     it('should throw NotFoundException for non-existent question', async () => {
       prisma.question.findUnique.mockResolvedValue(null);
 
-      await expect(service.archive('bad-id', teacherId)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.archive('bad-id', teacherId)).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException if teacher does not own question', async () => {
@@ -777,9 +741,7 @@ describe('QuestionsService', () => {
         topic: null,
       });
 
-      await expect(service.archive('q1', teacherId)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.archive('q1', teacherId)).rejects.toThrow(ForbiddenException);
     });
   });
 });

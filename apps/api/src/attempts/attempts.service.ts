@@ -193,10 +193,6 @@ export class AttemptsService {
     dto: {
       textResponse?: string | null;
       selectedOptionIds?: string[] | null;
-      strokesJson?: unknown;
-      drawingBlobUrl?: string | null;
-      workingStrokes?: unknown;
-      workingBlobUrl?: string | null;
     },
   ) {
     const attempt = await this.prisma.attempt.findUnique({
@@ -220,12 +216,6 @@ export class AttemptsService {
     if (dto.selectedOptionIds !== undefined) {
       data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
     }
-    if (dto.strokesJson !== undefined) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
-    if (dto.drawingBlobUrl !== undefined) data.drawingBlobUrl = dto.drawingBlobUrl;
-    if (dto.workingStrokes !== undefined) {
-      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
-    }
-    if (dto.workingBlobUrl !== undefined) data.workingBlobUrl = dto.workingBlobUrl;
 
     return this.prisma.attempt.update({
       where: { id },
@@ -261,12 +251,6 @@ export class AttemptsService {
     if (dto.selectedOptionIds) {
       data.selectedOptionIds = dto.selectedOptionIds as unknown as Prisma.InputJsonValue;
     }
-    if (dto.strokesJson) data.strokesJson = dto.strokesJson as Prisma.InputJsonValue;
-    if (dto.drawingBlobUrl) data.drawingBlobUrl = dto.drawingBlobUrl;
-    if (dto.workingStrokes) {
-      data.workingStrokes = dto.workingStrokes as Prisma.InputJsonValue;
-    }
-    if (dto.workingBlobUrl) data.workingBlobUrl = dto.workingBlobUrl;
 
     const updated = await this.prisma.attempt.update({
       where: { id },
@@ -276,7 +260,11 @@ export class AttemptsService {
     // Auto-grade MCQ questions immediately
     const qType = attempt.question.type;
     if (qType === 'MCQ_SINGLE' || qType === 'MCQ_MULTI') {
-      await this.autoGradeMCQ(id, attempt.question, dto.selectedOptionIds || (attempt.selectedOptionIds as string[] | null));
+      await this.autoGradeMCQ(
+        id,
+        attempt.question,
+        dto.selectedOptionIds || (attempt.selectedOptionIds as string[] | null),
+      );
       return this.findOne(id);
     }
 
@@ -286,7 +274,6 @@ export class AttemptsService {
       questionId: attempt.questionId,
       studentId: attempt.studentId,
       textResponse: dto.textResponse ?? attempt.textResponse,
-      drawingBlobUrl: dto.drawingBlobUrl ?? attempt.drawingBlobUrl,
       maxScore: attempt.question.maxScore,
       rubricJson: attempt.question.rubricJson,
     };
@@ -301,7 +288,13 @@ export class AttemptsService {
    */
   private async autoGradeMCQ(
     attemptId: string,
-    question: { id: string; type: string; options: unknown; correctOptionId: string | null; maxScore: number },
+    question: {
+      id: string;
+      type: string;
+      options: unknown;
+      correctOptionId: string | null;
+      maxScore: number;
+    },
     selectedOptionIds: string[] | null,
   ) {
     const options = (question.options || []) as MCQOption[];
@@ -310,7 +303,8 @@ export class AttemptsService {
     let feedback = '';
 
     if (question.type === 'MCQ_SINGLE') {
-      const correctOption = options.find((o) => o.isCorrect) || options.find((o) => o.id === question.correctOptionId);
+      const correctOption =
+        options.find((o) => o.isCorrect) || options.find((o) => o.id === question.correctOptionId);
       if (correctOption && selected.length === 1 && selected[0] === correctOption.id) {
         score = question.maxScore;
         feedback = 'Correct!';
@@ -322,7 +316,6 @@ export class AttemptsService {
       }
     } else if (question.type === 'MCQ_MULTI') {
       const correctIds = new Set(options.filter((o) => o.isCorrect).map((o) => o.id));
-      const selectedSet = new Set(selected);
       const correctSelected = selected.filter((id) => correctIds.has(id)).length;
       const incorrectSelected = selected.filter((id) => !correctIds.has(id)).length;
       const totalCorrect = correctIds.size;
@@ -390,10 +383,7 @@ export class AttemptsService {
       where: {
         status: { in: ['submitted', 'grading', 'graded'] },
         question: {
-          OR: [
-            { topic: { course: { teacherId } } },
-            { course: { teacherId } },
-          ],
+          OR: [{ topic: { course: { teacherId } } }, { course: { teacherId } }],
         },
       },
       include: {
@@ -437,7 +427,8 @@ export class AttemptsService {
       throw new NotFoundException(`Attempt ${id} not found`);
     }
 
-    const courseTeacherId = attempt.question.topic?.course?.teacherId || attempt.question.course?.teacherId;
+    const courseTeacherId =
+      attempt.question.topic?.course?.teacherId || attempt.question.course?.teacherId;
     if (courseTeacherId !== teacherId) {
       throw new ForbiddenException('You can only grade attempts in your own courses');
     }
