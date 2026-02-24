@@ -81,9 +81,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    working_dir: /app/apps/web
     volumes:
-      - ./apps/web/src:/app/src
-      - ./apps/web/index.html:/app/index.html
+      - ./:/app
+      - /app/node_modules
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5173 || exit 1"]
       interval: 10s
