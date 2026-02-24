@@ -2,12 +2,9 @@
  * Read-only renderer for block-based lesson content.
  * Used on the student-facing view.
  */
-import { useMemo, useEffect, useRef, useCallback } from 'react';
+import { useMemo } from 'react';
 import katex from 'katex';
-import mermaid from 'mermaid';
 import type { Block, BlockDocument, CalloutVariant } from './block-types';
-
-mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
 
 // ─── Helpers ──────────────────────────────────────────
 
@@ -118,28 +115,12 @@ function VideoRenderer({ url, startTime }: { url: string; startTime: number }) {
   );
 }
 
-let _mermaidCounter = 0;
-
-function DiagramRenderer({ code }: { code: string }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const renderMermaid = useCallback(async () => {
-    if (!containerRef.current || !code.trim()) return;
-    try {
-      const id = `mermaid-render-${++_mermaidCounter}`;
-      const { svg } = await mermaid.render(id, code);
-      if (containerRef.current) containerRef.current.innerHTML = svg;
-    } catch {
-      if (containerRef.current)
-        containerRef.current.innerHTML = '<p class="text-sm text-red-500">Diagram error</p>';
-    }
-  }, [code]);
-
-  useEffect(() => {
-    renderMermaid();
-  }, [renderMermaid]);
-
-  return <div ref={containerRef} className="flex justify-center p-4" />;
+function DiagramPlaceholder() {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-sm text-gray-400">
+      Diagram block (Mermaid support removed)
+    </div>
+  );
 }
 
 const CALLOUT_STYLES: Record<
@@ -213,7 +194,7 @@ function renderBlock(block: Block) {
       return d.url ? <VideoRenderer {...d} /> : null;
     }
     case 'diagram':
-      return <DiagramRenderer code={(block.data as { code: string }).code} />;
+      return <DiagramPlaceholder />;
     case 'callout': {
       const d = block.data as { variant: CalloutVariant; html: string };
       return <CalloutRenderer variant={d.variant} html={d.html} />;
