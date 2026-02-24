@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import mermaid from 'mermaid';
 import type { DiagramBlockData } from '../block-types';
 
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-});
+let mermaidInstance: (typeof import('mermaid'))['default'] | null = null;
+
+async function getMermaid() {
+  if (!mermaidInstance) {
+    const m = await import('mermaid');
+    mermaidInstance = m.default;
+    mermaidInstance.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  }
+  return mermaidInstance;
+}
 
 interface Props {
   data: DiagramBlockData;
@@ -30,8 +34,9 @@ export default function DiagramBlock({ data, onChange, readOnly }: Props) {
       return;
     }
     try {
+      const m = await getMermaid();
       const id = `mermaid-${++renderCounter}`;
-      const { svg } = await mermaid.render(id, code);
+      const { svg } = await m.render(id, code);
       setSvgHtml(svg);
       setError('');
     } catch (err) {
@@ -59,10 +64,7 @@ export default function DiagramBlock({ data, onChange, readOnly }: Props) {
 
   if (readOnly || !editing) {
     return (
-      <div
-        className="relative group"
-        onClick={() => !readOnly && setEditing(true)}
-      >
+      <div className="relative group" onClick={() => !readOnly && setEditing(true)}>
         {svgHtml ? (
           <div
             ref={previewRef}

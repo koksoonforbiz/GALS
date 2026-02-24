@@ -4,10 +4,18 @@
  */
 import { useMemo, useEffect, useRef, useCallback } from 'react';
 import katex from 'katex';
-import mermaid from 'mermaid';
 import type { Block, BlockDocument, CalloutVariant } from './block-types';
 
-mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+let mermaidInstance: (typeof import('mermaid'))['default'] | null = null;
+
+async function getMermaid() {
+  if (!mermaidInstance) {
+    const m = await import('mermaid');
+    mermaidInstance = m.default;
+    mermaidInstance.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  }
+  return mermaidInstance;
+}
 
 // ─── Helpers ──────────────────────────────────────────
 
@@ -126,8 +134,9 @@ function DiagramRenderer({ code }: { code: string }) {
   const renderMermaid = useCallback(async () => {
     if (!containerRef.current || !code.trim()) return;
     try {
+      const m = await getMermaid();
       const id = `mermaid-render-${++_mermaidCounter}`;
-      const { svg } = await mermaid.render(id, code);
+      const { svg } = await m.render(id, code);
       if (containerRef.current) containerRef.current.innerHTML = svg;
     } catch {
       if (containerRef.current)
