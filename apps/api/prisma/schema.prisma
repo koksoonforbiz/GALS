@@ -118,6 +118,7 @@ model User {
   createdDrafts     ContentDraft[]   @relation("CreatedDrafts")
   learningInterventions      LearningIntervention[]
   savedInterventionReviews   SavedInterventionReview[]
+  teacherPromptConfigs       InterventionPromptConfig[] @relation("teacherPromptConfigs")
 
   @@map("users")
 }
@@ -855,4 +856,20 @@ model SavedInterventionReview {
   @@index([interventionId])
   @@index([courseId])
   @@map("saved_intervention_reviews")
+}
+
+model InterventionPromptConfig {
+  id               String           @id @default(cuid())
+  courseId          String           @map("course_id") @db.Uuid
+  interventionType InterventionType @map("intervention_type")
+  teacherId        String           @map("teacher_id") @db.Uuid
+  systemPrompt     String           @map("system_prompt") @db.Text
+  isCustom         Boolean          @default(true) @map("is_custom")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  teacher          User             @relation("teacherPromptConfigs", fields: [teacherId], references: [id])
+
+  @@unique([courseId, interventionType])
+  @@map("intervention_prompt_configs")
 }

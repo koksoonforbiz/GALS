@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -11,8 +12,13 @@ import {
   Request,
 } from '@nestjs/common';
 import { LearningInterventionsService } from './learning-interventions.service';
-import { JwtAuthGuard } from '../auth';
-import { CreateSavedReviewDto, UpdateSavedReviewDto } from './dto';
+import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import type {
+  CreateSavedReviewDto,
+  UpdateSavedReviewDto,
+  GeneratePracticeTestDto,
+  SubmitPracticeTestAnswersDto,
+} from './dto';
 import type { InterventionType } from '@prisma/client';
 
 interface RequestUser {
@@ -24,6 +30,99 @@ interface RequestUser {
 @UseGuards(JwtAuthGuard)
 export class LearningInterventionsController {
   constructor(private readonly service: LearningInterventionsService) {}
+
+  // ─── Prompt Config (Teacher Only) ─────────────────────────
+
+  @Get('prompt-config/:courseId')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  getAllPromptConfigs(@Param('courseId') courseId: string) {
+    return this.service.getAllPromptConfigs(courseId);
+  }
+
+  @Get('prompt-config/:courseId/:interventionType')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  getPromptConfig(
+    @Param('courseId') courseId: string,
+    @Param('interventionType') interventionType: InterventionType,
+  ) {
+    return this.service.getPromptConfig(courseId, interventionType);
+  }
+
+  @Put('prompt-config/:courseId/:interventionType')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  updatePromptConfig(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Param('interventionType') interventionType: InterventionType,
+    @Body() body: { systemPrompt: string },
+  ) {
+    return this.service.updatePromptConfig(
+      courseId,
+      interventionType,
+      req.user.id,
+      body.systemPrompt,
+    );
+  }
+
+  @Delete('prompt-config/:courseId/:interventionType')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  deletePromptConfig(
+    @Param('courseId') courseId: string,
+    @Param('interventionType') interventionType: InterventionType,
+  ) {
+    return this.service.deletePromptConfig(courseId, interventionType);
+  }
+
+  @Post('prompt-config/preview')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  previewPrompt(
+    @Request() req: { user: RequestUser },
+    @Body()
+    body: {
+      systemPrompt: string;
+      sampleText: string;
+      interventionType: InterventionType;
+    },
+  ) {
+    return this.service.previewPrompt(
+      req.user.id,
+      body.systemPrompt,
+      body.sampleText,
+      body.interventionType,
+    );
+  }
+
+  // ─── Practice Testing ─────────────────────────────────────
+
+  @Post('practice-testing/generate')
+  generatePracticeTest(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GeneratePracticeTestDto,
+  ) {
+    return this.service.generatePracticeTest(req.user.id, dto);
+  }
+
+  @Post('practice-testing/:interventionId/submit')
+  submitPracticeTestAnswers(
+    @Request() req: { user: RequestUser },
+    @Param('interventionId') interventionId: string,
+    @Body() dto: SubmitPracticeTestAnswersDto,
+  ) {
+    return this.service.submitPracticeTestAnswers(req.user.id, interventionId, dto);
+  }
+
+  @Get('practice-testing/:interventionId')
+  getPracticeTest(
+    @Request() req: { user: RequestUser },
+    @Param('interventionId') interventionId: string,
+  ) {
+    return this.service.getPracticeTest(req.user.id, interventionId);
+  }
 
   // ─── Saved Reviews ───────────────────────────────────────
 

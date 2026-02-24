@@ -20,7 +20,14 @@ import LearningPathPanel from '../../components/LearningPathPanel';
 
 // ─── Tab Types ──────────────────────────────────────────
 
-type TopTabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'knowledge' | 'publish' | 'settings';
+type TopTabKey =
+  | 'overview'
+  | 'content'
+  | 'sources'
+  | 'evaluate'
+  | 'knowledge'
+  | 'publish'
+  | 'settings';
 type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
 type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
 
@@ -32,7 +39,7 @@ const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
   'kc-eval': { top: 'knowledge', sub: 'evaluate' },
   'kc-versions': { top: 'knowledge', sub: 'versions' },
   'learning-path': { top: 'knowledge', sub: 'learning-path' },
-  'coverage': { top: 'evaluate', sub: 'coverage' },
+  coverage: { top: 'evaluate', sub: 'coverage' },
   'publish-gate': { top: 'publish' },
 };
 
@@ -110,7 +117,8 @@ export function CourseBuilderPage() {
     if (redirect) {
       setActiveTab(redirect.top);
       if (redirect.top === 'evaluate' && redirect.sub) setEvalSubTab(redirect.sub as EvalSubTab);
-      if (redirect.top === 'knowledge' && redirect.sub) setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
+      if (redirect.top === 'knowledge' && redirect.sub)
+        setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
       return;
     }
     setActiveTab(key as TopTabKey);
@@ -593,7 +601,6 @@ export function CourseBuilderPage() {
     { key: 'evaluate', label: 'KC Evaluate' },
     { key: 'versions', label: 'Versions' },
   ];
-
 
   return (
     <div>
@@ -1263,50 +1270,36 @@ export function CourseBuilderPage() {
       {/* ─── Evaluate Tab (sub-tabs) ─── */}
       {activeTab === 'evaluate' && courseId && (
         <>
-          {evalSubTab === 'content-eval' && (
-            <EvaluationCenterPage courseId={courseId} embedded />
-          )}
-          {evalSubTab === 'kc-eval' && (
-            <KcEvaluationDashboard courseId={courseId} />
-          )}
-          {evalSubTab === 'coverage' && (
-            <CurriculumCoveragePanel courseId={courseId} />
-          )}
+          {evalSubTab === 'content-eval' && <EvaluationCenterPage courseId={courseId} embedded />}
+          {evalSubTab === 'kc-eval' && <KcEvaluationDashboard courseId={courseId} />}
+          {evalSubTab === 'coverage' && <CurriculumCoveragePanel courseId={courseId} />}
         </>
       )}
 
       {/* ─── Knowledge Tab (sub-tabs) ─── */}
       {activeTab === 'knowledge' && courseId && (
         <>
-          {knowledgeSubTab === 'studio' && (
-            <KcStudioPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'graph' && (
-            <KcGraphStudioPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'learning-path' && (
-            <LearningPathPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'mappings' && (
-            <KcMappingPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'evaluate' && (
-            <KcEvaluationDashboard courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'versions' && (
-            <KnowledgeVersionPanel courseId={courseId} />
-          )}
+          {knowledgeSubTab === 'studio' && <KcStudioPanel courseId={courseId} />}
+          {knowledgeSubTab === 'graph' && <KcGraphStudioPanel courseId={courseId} />}
+          {knowledgeSubTab === 'learning-path' && <LearningPathPanel courseId={courseId} />}
+          {knowledgeSubTab === 'mappings' && <KcMappingPanel courseId={courseId} />}
+          {knowledgeSubTab === 'evaluate' && <KcEvaluationDashboard courseId={courseId} />}
+          {knowledgeSubTab === 'versions' && <KnowledgeVersionPanel courseId={courseId} />}
         </>
       )}
 
       {/* ─── Publish Tab ─── */}
-      {activeTab === 'publish' && courseId && (
-        <PublishGatePanel courseId={courseId} />
-      )}
+      {activeTab === 'publish' && courseId && <PublishGatePanel courseId={courseId} />}
 
       {/* ─── Settings Tab ─── */}
       {activeTab === 'settings' && (
         <div className="max-w-md space-y-4">
+          <button
+            onClick={() => navigate(`/teacher/courses/${courseId}/prompts`)}
+            className="w-full px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-left"
+          >
+            Learning Intervention Prompts
+          </button>
           <button
             onClick={handleDuplicate}
             className="w-full px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-left"
