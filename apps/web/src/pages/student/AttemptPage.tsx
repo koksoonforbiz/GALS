@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
 import {
   connectSocket,
@@ -86,6 +87,7 @@ export function AttemptPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setPageContext } = usePageContext();
 
   /* ---- core state ---- */
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -135,6 +137,18 @@ export function AttemptPage() {
 
     fetchAttempt();
   }, [attemptId]);
+
+  // Update page context when attempt loads
+  useEffect(() => {
+    if (attempt) {
+      setPageContext({
+        pageType: 'quiz',
+        courseId: null,
+        contentId: attempt.assessmentId || attempt.id,
+        contentTitle: attempt.question.prompt.slice(0, 60),
+      });
+    }
+  }, [attempt, setPageContext]);
 
   /* ================================================================ */
   /*  WebSocket for grade updates                                      */

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { usePageContext } from '../../contexts/PageContext';
 import BlockRenderer from '../../components/editor/BlockRenderer';
 
 interface ModuleItem {
@@ -38,9 +39,30 @@ export function StudentCourseViewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const { setPageContext } = usePageContext();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Update page context when course or selected item changes
+  useEffect(() => {
+    if (course && selectedItemId) {
+      const item = course.modules.flatMap((m) => m.items).find((i) => i.id === selectedItemId);
+      setPageContext({
+        pageType: 'lesson',
+        courseId: course.id,
+        contentId: selectedItemId,
+        contentTitle: item?.title || course.title,
+      });
+    } else if (course) {
+      setPageContext({
+        pageType: 'lesson',
+        courseId: course.id,
+        contentId: null,
+        contentTitle: course.title,
+      });
+    }
+  }, [course, selectedItemId, setPageContext]);
 
   useEffect(() => {
     const fetch = async () => {
