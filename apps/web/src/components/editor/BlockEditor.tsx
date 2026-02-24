@@ -1,20 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 import type { Block, BlockType, BlockDataMap } from './block-types';
 import { createBlock, parseBlockDocument, serializeBlockDocument } from './block-types';
@@ -57,54 +41,71 @@ const BLOCK_LABELS: Record<BlockType, string> = {
   divider: 'Divider',
 };
 
-// ─── Sortable Block Wrapper ──────────────────────────
+// ─── Block Wrapper ───────────────────────────────────
 
-function SortableBlock({
+function BlockWrapper({
   block,
+  index,
+  total,
   onUpdate,
   onDelete,
   onDuplicate,
+  onMoveUp,
+  onMoveDown,
   readOnly,
 }: {
   block: Block;
+  index: number;
+  total: number;
   onUpdate: (id: string, data: BlockDataMap[BlockType]) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onMoveUp: (id: string) => void;
+  onMoveDown: (id: string) => void;
   readOnly?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: block.id,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
   const handleChange = useCallback(
     (data: BlockDataMap[BlockType]) => onUpdate(block.id, data),
     [block.id, onUpdate],
   );
 
   return (
-    <div ref={setNodeRef} style={style} className="group relative">
-      {/* Block chrome (drag handle + actions) */}
+    <div className="group relative">
+      {/* Block chrome (move buttons + actions) */}
       {!readOnly && (
         <div className="absolute -left-8 top-1 flex flex-col items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <button
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 p-1"
-            title="Drag to reorder"
+            onClick={() => onMoveUp(block.id)}
+            disabled={index === 0}
+            className="text-gray-400 hover:text-gray-600 p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move up"
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-              <circle cx="3" cy="2" r="1" />
-              <circle cx="9" cy="2" r="1" />
-              <circle cx="3" cy="6" r="1" />
-              <circle cx="9" cy="6" r="1" />
-              <circle cx="3" cy="10" r="1" />
-              <circle cx="9" cy="10" r="1" />
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onMoveDown(block.id)}
+            disabled={index === total - 1}
+            className="text-gray-400 hover:text-gray-600 p-0.5 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move down"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
         </div>
@@ -267,11 +268,6 @@ export default function BlockEditor({
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
-
   // Autosave
   const triggerSave = useCallback(() => {
     if (readOnly) return;
@@ -357,17 +353,27 @@ export default function BlockEditor({
     [triggerSave],
   );
 
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
+  const moveBlockUp = useCallback(
+    (id: string) => {
       setBlocks((prev) => {
-        const oldIdx = prev.findIndex((b) => b.id === active.id);
-        const newIdx = prev.findIndex((b) => b.id === over.id);
-        if (oldIdx === -1 || newIdx === -1) return prev;
+        const idx = prev.findIndex((b) => b.id === id);
+        if (idx <= 0) return prev;
         const next = [...prev];
-        const [moved] = next.splice(oldIdx, 1);
-        next.splice(newIdx, 0, moved!);
+        [next[idx - 1], next[idx]] = [next[idx]!, next[idx - 1]!];
+        return next;
+      });
+      triggerSave();
+    },
+    [triggerSave],
+  );
+
+  const moveBlockDown = useCallback(
+    (id: string) => {
+      setBlocks((prev) => {
+        const idx = prev.findIndex((b) => b.id === id);
+        if (idx === -1 || idx >= prev.length - 1) return prev;
+        const next = [...prev];
+        [next[idx], next[idx + 1]] = [next[idx + 1]!, next[idx]!];
         return next;
       });
       triggerSave();
@@ -423,26 +429,22 @@ export default function BlockEditor({
           {/* Top add-block */}
           {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={0} />}
 
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-              {blocks.map((block, idx) => (
-                <div key={block.id}>
-                  <SortableBlock
-                    block={block}
-                    onUpdate={updateBlock}
-                    onDelete={deleteBlock}
-                    onDuplicate={duplicateBlock}
-                    readOnly={readOnly}
-                  />
-                  {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={idx + 1} />}
-                </div>
-              ))}
-            </SortableContext>
-          </DndContext>
+          {blocks.map((block, idx) => (
+            <div key={block.id}>
+              <BlockWrapper
+                block={block}
+                index={idx}
+                total={blocks.length}
+                onUpdate={updateBlock}
+                onDelete={deleteBlock}
+                onDuplicate={duplicateBlock}
+                onMoveUp={moveBlockUp}
+                onMoveDown={moveBlockDown}
+                readOnly={readOnly}
+              />
+              {!readOnly && <AddBlockMenu onAdd={addBlock} insertIndex={idx + 1} />}
+            </div>
+          ))}
 
           {blocks.length === 0 && !readOnly && (
             <div className="text-center py-8">
