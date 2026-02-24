@@ -13,6 +13,7 @@ COPY packages/shared/ ./
 RUN pnpm run build
 
 FROM base AS development
+WORKDIR /app/apps/web
 COPY apps/web/package.json apps/web/.npmrc ./
 COPY --from=shared-build /repo/packages/shared /shared
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i 's/"workspace:\*"/"file:\/shared"/g' package.json

@@ -85,6 +85,7 @@ services:
     volumes:
       - ./:/app
       - /app/node_modules
+      - /app/apps/web/node_modules
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5173 || exit 1"]
       interval: 10s
