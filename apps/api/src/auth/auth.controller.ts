@@ -34,6 +34,12 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('change-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async changePassword(@Body() body: { token: string; newPassword: string }) {
+    return this.authService.changePassword(body.token, body.newPassword);
+  }
+
   @Get('me')
   @SkipThrottle()
   @UseGuards(JwtAuthGuard)
