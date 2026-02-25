@@ -28,6 +28,7 @@ interface GradedAnswer {
   correctAnswer: string;
   correct: boolean;
   explanation: string;
+  feedback?: string;
   options?: string[];
 }
 
@@ -172,7 +173,10 @@ export function PracticeTestingView({
         <p className="text-sm text-gray-600">Generating questions from your selected text...</p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
         <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
-          <div className="bg-blue-500 h-1.5 rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+          <div
+            className="bg-blue-500 h-1.5 rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]"
+            style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }}
+          />
         </div>
         <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
@@ -286,7 +290,9 @@ export function PracticeTestingView({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Score Header */}
       <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-        <div className="mb-1 flex justify-center"><Trophy size={22} className="text-yellow-500" /></div>
+        <div className="mb-1 flex justify-center">
+          <Trophy size={22} className="text-yellow-500" />
+        </div>
         <div className="text-sm font-semibold text-gray-800">Practice Test Complete!</div>
         <div className="text-lg font-bold text-blue-600 mt-1">
           {correctCount}/{totalQuestions} ({score}%)
@@ -341,7 +347,11 @@ export function PracticeTestingView({
                 {!r.correct && (
                   <div className="text-green-700">Correct answer: {r.correctAnswer}</div>
                 )}
-                <div className="text-gray-500 italic">{r.explanation}</div>
+                {r.feedback ? (
+                  <div className="text-gray-600 bg-gray-50 rounded p-2 mt-1">{r.feedback}</div>
+                ) : (
+                  <div className="text-gray-500 italic">{r.explanation}</div>
+                )}
               </div>
             )}
           </div>

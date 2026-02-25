@@ -23,7 +23,10 @@ import type {
 } from './dto';
 import { RagService } from '../rag/rag.service';
 import { DEFAULT_PROMPTS } from './prompts/default-prompts';
-import { buildPracticeTestingPrompt } from './prompts/practice-testing.prompt';
+import {
+  buildPracticeTestingPrompt,
+  buildPracticeAnswerCheckPrompt,
+} from './prompts/practice-testing.prompt';
 import {
   buildQuestionSuggestionPrompt,
   buildElaborationAnswerPrompt,
@@ -65,6 +68,7 @@ interface GradedAnswer {
   correctAnswer: string;
   correct: boolean;
   explanation: string;
+  feedback?: string;
   options?: string[];
 }
 
@@ -413,23 +417,51 @@ export class LearningInterventionsService {
       throw new BadRequestException('Invalid practice test data');
     }
 
-    // Grade answers
-    const results: GradedAnswer[] = questions.map((q, index) => {
-      const submission = dto.answers.find((a) => a.questionIndex === index);
-      const userAnswer = submission?.answer || '';
-      const correct = this.gradeAnswer(q, userAnswer);
+    const teacherId = await this.getCourseTeacherIdWithApiKey(intervention.courseId);
 
-      return {
-        questionIndex: index,
-        question: q.question,
-        type: q.type,
-        userAnswer,
-        correctAnswer: q.correctAnswer,
-        correct,
-        explanation: q.explanation,
-        options: q.options,
-      };
-    });
+    // Grade answers — MCQs deterministically, short answers via LLM
+    const results: GradedAnswer[] = await Promise.all(
+      questions.map(async (q, index) => {
+        const submission = dto.answers.find((a) => a.questionIndex === index);
+        const userAnswer = submission?.answer || '';
+
+        if (q.type === 'short_answer' && userAnswer.trim()) {
+          // LLM-based grading for open-ended answers
+          const llmResult = await this.gradeShortAnswerWithLlm(
+            teacherId,
+            userId,
+            intervention.courseId,
+            q,
+            userAnswer,
+            intervention.selectedText || '',
+          );
+          return {
+            questionIndex: index,
+            question: q.question,
+            type: q.type,
+            userAnswer,
+            correctAnswer: q.correctAnswer,
+            correct: llmResult.isCorrect,
+            explanation: q.explanation,
+            feedback: llmResult.feedback,
+            options: q.options,
+          };
+        }
+
+        // MCQ or empty answer — use deterministic grading
+        const correct = this.gradeAnswer(q, userAnswer);
+        return {
+          questionIndex: index,
+          question: q.question,
+          type: q.type,
+          userAnswer,
+          correctAnswer: q.correctAnswer,
+          correct,
+          explanation: q.explanation,
+          options: q.options,
+        };
+      }),
+    );
 
     const correctCount = results.filter((r) => r.correct).length;
     const score = Math.round((correctCount / questions.length) * 100);
@@ -1550,6 +1582,52 @@ export class LearningInterventionsService {
     return answerLower.includes(correctLower) || correctLower.includes(answerLower);
   }
 
+  /**
+   * Grade a short-answer question using LLM evaluation.
+   * Falls back to keyword-based grading if the LLM call fails.
+   */
+  private async gradeShortAnswerWithLlm(
+    teacherId: string,
+    userId: string,
+    courseId: string,
+    question: PracticeQuestion,
+    userAnswer: string,
+    sourceText: string,
+  ): Promise<{ isCorrect: boolean; feedback: string }> {
+    try {
+      const { system, user } = buildPracticeAnswerCheckPrompt({
+        question: question.question,
+        correctAnswer: question.correctAnswer,
+        keywords: question.keywords || [],
+        userAnswer,
+        sourceText,
+      });
+
+      const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+        feature: 'practice_testing',
+        courseId,
+        triggeredByUserId: userId,
+      });
+
+      const parsed = this.parseLlmJson(result.content);
+      const data = parsed as Record<string, unknown>;
+
+      return {
+        isCorrect: Boolean(data?.isCorrect),
+        feedback: String(data?.feedback || ''),
+      };
+    } catch (err) {
+      this.logger.warn(
+        `LLM grading failed for short answer, falling back to keyword matching: ${err}`,
+      );
+      // Fallback to deterministic grading
+      return {
+        isCorrect: this.gradeAnswer(question, userAnswer),
+        feedback: '',
+      };
+    }
+  }
+
   // ─── Saved Reviews CRUD ──────────────────────────────────
 
   async createSavedReview(userId: string, dto: CreateSavedReviewDto) {
@@ -1695,7 +1773,10 @@ export class LearningInterventionsService {
 
   // ─── Chat ──────────────────────────────────────────────────
 
-  async chat(userId: string, dto: ChatRequestDto): Promise<{ reply: string; suggestedStrategy: string | null }> {
+  async chat(
+    userId: string,
+    dto: ChatRequestDto,
+  ): Promise<{ reply: string; suggestedStrategy: string | null }> {
     if (!dto.message || dto.message.trim().length < 2) {
       throw new BadRequestException('Message is too short');
     }
@@ -1707,9 +1788,9 @@ export class LearningInterventionsService {
     try {
       const chunks = await this.ragService.queryChunks(dto.courseId, dto.message, 3);
       if (chunks.length > 0) {
-        courseContext = '\n\nRelevant course material:\n' + chunks.map((c, i) =>
-          `[${i + 1}] ${c.content.slice(0, 500)}`
-        ).join('\n\n');
+        courseContext =
+          '\n\nRelevant course material:\n' +
+          chunks.map((c, i) => `[${i + 1}] ${c.content.slice(0, 500)}`).join('\n\n');
       }
     } catch {
       // RAG retrieval is best-effort; continue without it
@@ -1768,12 +1849,15 @@ ${courseContext}`;
       });
       reply = result.content;
     } catch {
-      reply = "I'm having trouble responding right now. Try selecting some text and using one of the learning strategies instead!";
+      reply =
+        "I'm having trouble responding right now. Try selecting some text and using one of the learning strategies instead!";
     }
 
     // Extract strategy suggestion if present
     let suggestedStrategy: string | null = null;
-    const strategyMatch = reply.match(/\[SUGGEST:(PRACTICE_TESTING|DISTRIBUTED_PRACTICE|STEPWISE_LEARNING|INTERROGATIVE_ELABORATION)\]/);
+    const strategyMatch = reply.match(
+      /\[SUGGEST:(PRACTICE_TESTING|DISTRIBUTED_PRACTICE|STEPWISE_LEARNING|INTERROGATIVE_ELABORATION)\]/,
+    );
     if (strategyMatch) {
       suggestedStrategy = strategyMatch[1]!;
       // Remove the tag from the visible reply
