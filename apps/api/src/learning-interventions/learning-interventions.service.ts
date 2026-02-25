@@ -295,7 +295,9 @@ export class LearningInterventionsService {
       .replace(/\{\{questionCount\}\}/g, '3')
       .replace(/\{\{cardCount\}\}/g, '3');
 
-    const result = await this.llmService.callLlmForUser(userId, resolvedSystem, userPrompt);
+    const result = await this.llmService.callLlmForUser(userId, resolvedSystem, userPrompt, {
+      feature: 'prompt_preview',
+    });
 
     return {
       output: result.content,
@@ -339,7 +341,11 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+          feature: 'practice_testing',
+          courseId: dto.courseId,
+          triggeredByUserId: userId,
+        });
         const parsed = this.parseLlmJson(result.content);
         questions = this.validatePracticeTestResponse(parsed);
         break;
@@ -529,7 +535,11 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+          feature: 'interrogative_elaboration',
+          courseId: dto.courseId,
+          triggeredByUserId: userId,
+        });
         const parsed = this.parseLlmJson(result.content);
         const validated = this.validateSuggestionResponse(parsed);
         suggestedQuestions = validated.suggestedQuestions;
@@ -611,7 +621,11 @@ export class LearningInterventionsService {
 
     let answer: string;
     try {
-      const result = await this.llmService.callLlmForUser(teacherId, system, user);
+      const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+        feature: 'interrogative_elaboration',
+        courseId: intervention.courseId,
+        triggeredByUserId: userId,
+      });
       answer = result.content;
     } catch {
       throw new BadRequestException('Failed to generate answer. Please try again.');
@@ -671,7 +685,11 @@ export class LearningInterventionsService {
           sourceText: sessionData.selectedText,
           conversation: sessionData.conversation,
         });
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+          feature: 'interrogative_elaboration',
+          courseId: intervention.courseId,
+          triggeredByUserId: userId,
+        });
         const parsed = this.parseLlmJson(result.content);
         summary = this.validateConversationSummary(parsed);
       } catch {
@@ -764,7 +782,11 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+          feature: 'stepwise_learning',
+          courseId: dto.courseId,
+          triggeredByUserId: userId,
+        });
         const parsed = this.parseLlmJson(result.content);
         const validated = this.validateStepwiseResponse(parsed);
         steps = validated.steps;
@@ -864,7 +886,11 @@ export class LearningInterventionsService {
     let encouragement = '';
 
     try {
-      const result = await this.llmService.callLlmForUser(teacherId, system, user);
+      const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+        feature: 'stepwise_learning',
+        courseId: intervention.courseId,
+        triggeredByUserId: userId,
+      });
       const parsed = this.parseLlmJson(result.content);
       const validated = this.validateStepCheckResponse(parsed);
       isCorrect = validated.isCorrect;
@@ -1084,7 +1110,11 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user, {
+          feature: 'distributed_practice',
+          courseId: dto.courseId,
+          triggeredByUserId: userId,
+        });
         const parsed = this.parseLlmJson(result.content);
         cards = this.validateFlashcardResponse(parsed);
         break;
@@ -1731,7 +1761,11 @@ ${courseContext}`;
 
     let reply: string;
     try {
-      const result = await this.llmService.callLlmForUser(teacherId, systemPrompt, userPrompt);
+      const result = await this.llmService.callLlmForUser(teacherId, systemPrompt, userPrompt, {
+        feature: 'chatbot',
+        courseId: dto.courseId,
+        triggeredByUserId: userId,
+      });
       reply = result.content;
     } catch {
       reply = "I'm having trouble responding right now. Try selecting some text and using one of the learning strategies instead!";

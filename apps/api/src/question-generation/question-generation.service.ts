@@ -233,7 +233,10 @@ export class QuestionGenerationService {
 
       // Call LLM
       const teacherId = job.teacherId;
-      const llmResult = await this.llmService.callLlmForUser(teacherId, systemPrompt, userPrompt);
+      const llmResult = await this.llmService.callLlmForUser(teacherId, systemPrompt, userPrompt, {
+        feature: 'question_generation',
+        courseId: job.courseId,
+      });
 
       // Parse response
       const parsed = this.parseLlmJson(llmResult.content);
@@ -421,7 +424,10 @@ export class QuestionGenerationService {
         'Generate NEW questions different from previously generated ones.',
       );
 
-    const llmResult = await this.llmService.callLlmForUser(job.teacherId, systemPrompt, userPrompt);
+    const llmResult = await this.llmService.callLlmForUser(job.teacherId, systemPrompt, userPrompt, {
+      feature: 'question_generation',
+      courseId: job.courseId,
+    });
 
     const parsed = this.parseLlmJson(llmResult.content) as { questions?: unknown[] };
     const newQuestions = (parsed.questions || []).map((q: any, i: number) => ({
@@ -485,6 +491,11 @@ export class QuestionGenerationService {
           apiKeyUserId,
           filledPrompt,
           `Grade this student answer:\n\n${dto.studentAnswer}`,
+          {
+            feature: 'open_ended_grading',
+            courseId: question.topicId ? undefined : undefined,
+            triggeredByUserId: dto.studentId,
+          },
         );
 
         const parsed = this.parseLlmJson(result.content) as Record<string, any>;

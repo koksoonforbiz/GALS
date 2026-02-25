@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
+import { calculateCost } from '../user-management/llm-cost-calculator';
 import * as crypto from 'crypto';
 
 interface GenerateRagAnswerInput {
@@ -195,6 +196,17 @@ export class LlmService {
       },
     });
 
+    // Log LLM usage for cost tracking
+    await this.logLlmUsage({
+      userId: input.userId,
+      courseId: input.courseId,
+      provider: credentials?.provider || 'template',
+      model: modelUsed,
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      feature: 'query_rag',
+    });
+
     return {
       answer: result.content,
       citations,
@@ -282,6 +294,17 @@ export class LlmService {
         strictSourceValid,
         notEnoughInfo,
       },
+    });
+
+    // Log LLM usage for cost tracking
+    await this.logLlmUsage({
+      userId: input.userId,
+      courseId: input.courseId,
+      provider: credentials?.provider || 'template',
+      model: modelUsed,
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      feature: 'content_generation',
     });
 
     return {
@@ -405,9 +428,63 @@ export class LlmService {
     userId: string,
     systemPrompt: string,
     userPrompt: string,
+    usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     const credentials = await this.getUserApiKey(userId);
-    return this.callLlm(systemPrompt, userPrompt, credentials);
+    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
+
+    if (usageContext) {
+      await this.logLlmUsage({
+        userId: usageContext.triggeredByUserId || userId,
+        courseId: usageContext.courseId,
+        provider: credentials?.provider || 'template',
+        model: credentials?.model || 'template',
+        inputTokens: result.promptTokens,
+        outputTokens: result.completionTokens,
+        feature: usageContext.feature,
+      });
+    }
+
+    return result;
+  }
+
+  async logLlmUsage(params: {
+    userId: string;
+    courseId?: string;
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    feature: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      const cost = await calculateCost(this.prisma, {
+        inputTokens: params.inputTokens,
+        outputTokens: params.outputTokens,
+        model: params.model,
+        provider: params.provider,
+      });
+
+      await this.prisma.llmUsageLog.create({
+        data: {
+          userId: params.userId,
+          courseId: params.courseId || null,
+          provider: params.provider,
+          model: params.model,
+          inputTokens: params.inputTokens,
+          outputTokens: params.outputTokens,
+          totalTokens: params.inputTokens + params.outputTokens,
+          inputCost: cost.inputCost,
+          outputCost: cost.outputCost,
+          totalCost: cost.totalCost,
+          feature: params.feature,
+          metadata: params.metadata as import('@prisma/client').Prisma.InputJsonValue ?? undefined,
+        },
+      });
+    } catch (err) {
+      this.logger.error('Failed to log LLM usage', err);
+    }
   }
 
   // ─── Private Helpers ───────────────────────────────────
