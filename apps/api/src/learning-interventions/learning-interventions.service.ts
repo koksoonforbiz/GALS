@@ -19,7 +19,9 @@ import type {
   SubmitStepCheckDto,
   GenerateCardsDto,
   ReviewCardDto,
+  ChatRequestDto,
 } from './dto';
+import { RagService } from '../rag/rag.service';
 import { DEFAULT_PROMPTS } from './prompts/default-prompts';
 import { buildPracticeTestingPrompt } from './prompts/practice-testing.prompt';
 import {
@@ -169,6 +171,7 @@ export class LearningInterventionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
+    private readonly ragService: RagService,
   ) {}
 
   // ─── Prompt Config ────────────────────────────────────────
@@ -1658,5 +1661,91 @@ export class LearningInterventionsService {
     await this.prisma.savedInterventionReview.delete({ where: { id } });
 
     return { deleted: true };
+  }
+
+  // ─── Chat ──────────────────────────────────────────────────
+
+  async chat(userId: string, dto: ChatRequestDto): Promise<{ reply: string; suggestedStrategy: string | null }> {
+    if (!dto.message || dto.message.trim().length < 2) {
+      throw new BadRequestException('Message is too short');
+    }
+
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
+
+    // Retrieve relevant course material via RAG (top 3 chunks)
+    let courseContext = '';
+    try {
+      const chunks = await this.ragService.queryChunks(dto.courseId, dto.message, 3);
+      if (chunks.length > 0) {
+        courseContext = '\n\nRelevant course material:\n' + chunks.map((c, i) =>
+          `[${i + 1}] ${c.content.slice(0, 500)}`
+        ).join('\n\n');
+      }
+    } catch {
+      // RAG retrieval is best-effort; continue without it
+    }
+
+    const systemPrompt = `You are a friendly and supportive learning assistant embedded in an educational platform. Your role is to help students understand their course material and guide them to use effective learning strategies.
+
+You have access to four learning strategies the student can use:
+- **Practice Testing**: Generate quiz questions from selected text to test knowledge retention
+- **Distributed Practice**: Create spaced-repetition flashcards for long-term memory
+- **Stepwise Learning**: Break complex text into guided steps with comprehension checks
+- **Interrogative Elaboration**: Explore "why" and "how" questions through dialogue
+
+Guidelines:
+- Answer the student's question helpfully using the course context provided below when relevant.
+- Keep responses concise (2-4 sentences) since this is a small chat widget.
+- When the student seems to be struggling with a concept, confused, or asking about a topic, suggest a relevant learning strategy. Include a recommendation in the LAST line using this exact format: [SUGGEST:STRATEGY_KEY] where STRATEGY_KEY is one of: PRACTICE_TESTING, DISTRIBUTED_PRACTICE, STEPWISE_LEARNING, INTERROGATIVE_ELABORATION.
+- Only suggest a strategy when it is genuinely relevant. Do NOT suggest one on every message.
+- When to suggest which strategy:
+  - PRACTICE_TESTING: when the student wants to test their understanding, review for exams, or check recall
+  - DISTRIBUTED_PRACTICE: when the student wants to memorize key terms, definitions, or facts for the long term
+  - STEPWISE_LEARNING: when the student is confused by complex or dense material and needs it broken down
+  - INTERROGATIVE_ELABORATION: when the student is curious about why or how something works and wants deeper understanding
+- If the student asks about something unrelated to the course, politely redirect them.
+${courseContext}`;
+
+    // Build user prompt with context
+    let userPrompt = '';
+
+    if (dto.selectedText) {
+      userPrompt += `[The student has selected this text on the page: "${dto.selectedText.slice(0, 300)}"]\n\n`;
+    }
+
+    if (dto.contentTitle) {
+      userPrompt += `[Currently viewing: ${dto.contentTitle}]\n\n`;
+    }
+
+    // Include conversation history (last 10 messages to keep context manageable)
+    const recentHistory = (dto.conversationHistory || []).slice(-10);
+    if (recentHistory.length > 0) {
+      userPrompt += 'Conversation so far:\n';
+      for (const msg of recentHistory) {
+        userPrompt += `${msg.role === 'user' ? 'Student' : 'Assistant'}: ${msg.content}\n`;
+      }
+      userPrompt += '\n';
+    }
+
+    userPrompt += `Student: ${dto.message}`;
+
+    let reply: string;
+    try {
+      const result = await this.llmService.callLlmForUser(teacherId, systemPrompt, userPrompt);
+      reply = result.content;
+    } catch {
+      reply = "I'm having trouble responding right now. Try selecting some text and using one of the learning strategies instead!";
+    }
+
+    // Extract strategy suggestion if present
+    let suggestedStrategy: string | null = null;
+    const strategyMatch = reply.match(/\[SUGGEST:(PRACTICE_TESTING|DISTRIBUTED_PRACTICE|STEPWISE_LEARNING|INTERROGATIVE_ELABORATION)\]/);
+    if (strategyMatch) {
+      suggestedStrategy = strategyMatch[1]!;
+      // Remove the tag from the visible reply
+      reply = reply.replace(strategyMatch[0], '').trim();
+    }
+
+    return { reply, suggestedStrategy };
   }
 }

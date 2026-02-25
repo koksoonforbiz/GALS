@@ -23,7 +23,15 @@ import {
   Layers,
   Footprints,
   MessageCircleQuestion,
+  Loader,
 } from 'lucide-react';
+
+const STRATEGY_META: Record<string, { label: string; mode: ChatbotMode; icon: React.ReactNode; description: string }> = {
+  PRACTICE_TESTING: { label: 'Practice Testing', mode: 'practice-testing', icon: <FlaskConical size={12} />, description: 'Test your knowledge with quiz questions' },
+  DISTRIBUTED_PRACTICE: { label: 'Distributed Practice', mode: 'distributed-practice', icon: <Layers size={12} />, description: 'Create flashcards for spaced repetition' },
+  STEPWISE_LEARNING: { label: 'Stepwise Learning', mode: 'stepwise-learning', icon: <Footprints size={12} />, description: 'Break it down into guided steps' },
+  INTERROGATIVE_ELABORATION: { label: 'Interrogative Elaboration', mode: 'interrogative-elaboration', icon: <MessageCircleQuestion size={12} />, description: 'Explore why and how through Q&A' },
+};
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
   lesson: 'Lesson',
@@ -49,6 +57,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   const [mode, setMode] = useState<ChatbotMode>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -87,8 +96,8 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const handleSend = async () => {
+    if (!inputValue.trim() || isSending) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -97,15 +106,59 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
       timestamp: new Date(),
     };
 
-    const assistantMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'assistant',
-      content: 'Chat coming soon. Select text and try a learning strategy!',
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInputValue('');
+    setIsSending(true);
+
+    if (!courseId) {
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Please navigate to a course first so I can help you with your learning!',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+      setIsSending(false);
+      return;
+    }
+
+    try {
+      const conversationHistory = messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      const result = await api.post<{ reply: string; suggestedStrategy: string | null }>(
+        '/learning-interventions/chat',
+        {
+          message: inputValue,
+          conversationHistory,
+          courseId,
+          pageType,
+          contentTitle: contentTitle || undefined,
+          selectedText: selectedText || undefined,
+        },
+      );
+
+      const assistantMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: result.reply,
+        timestamp: new Date(),
+        suggestedStrategy: result.suggestedStrategy || undefined,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: "Sorry, I couldn't process your message. Try selecting some text and using a learning strategy instead!",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleInterventionClick = (type: ChatbotMode) => {
@@ -308,23 +361,58 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           <div className="text-center text-gray-400 text-xs py-8">
             <div className="mb-2 flex justify-center"><GraduationCap size={28} className="text-gray-400" /></div>
             <p>Hi! I&apos;m your learning assistant.</p>
-            <p className="mt-1">Select text on the page and use a learning strategy below.</p>
+            <p className="mt-1">Ask me anything about your course material, or select text to use a learning strategy.</p>
           </div>
         ) : (
           messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
-                  msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                {msg.content}
+            <div key={msg.id}>
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
+                    msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
+              {/* Strategy suggestion card */}
+              {msg.suggestedStrategy && STRATEGY_META[msg.suggestedStrategy] && (
+                <div className="flex justify-start mt-1.5">
+                  <button
+                    onClick={() => {
+                      const meta = STRATEGY_META[msg.suggestedStrategy!];
+                      if (meta && selectedText && courseId) {
+                        setMode(meta.mode);
+                      }
+                    }}
+                    disabled={!selectedText || !courseId}
+                    className={`max-w-[80%] flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${
+                      selectedText && courseId
+                        ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer'
+                        : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {STRATEGY_META[msg.suggestedStrategy]!.icon}
+                    <div className="text-left">
+                      <div className="font-medium">Try: {STRATEGY_META[msg.suggestedStrategy]!.label}</div>
+                      <div className="text-[10px] opacity-75">
+                        {selectedText ? STRATEGY_META[msg.suggestedStrategy]!.description : 'Select text on the page first'}
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
             </div>
           ))
+        )}
+        {/* Typing indicator */}
+        {isSending && (
+          <div className="flex justify-start">
+            <div className="max-w-[80%] px-3 py-2 rounded-lg text-xs bg-gray-100 text-gray-500 flex items-center gap-1.5">
+              <Loader size={12} className="animate-spin" />
+              Thinking...
+            </div>
+          </div>
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -398,11 +486,12 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
               }
             }}
             placeholder="Type a message..."
-            className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
+            disabled={isSending}
+            className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 disabled:bg-gray-50"
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim()}
+            disabled={!inputValue.trim() || isSending}
             className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
           >
             <SendHorizontal size={14} />

@@ -24,6 +24,7 @@ import type {
   SubmitStepCheckDto,
   GenerateCardsDto,
   ReviewCardDto,
+  ChatRequestDto,
 } from './dto';
 import type { InterventionType } from '@prisma/client';
 
@@ -276,5 +277,12 @@ export class LearningInterventionsController {
   @Delete('saved-reviews/:id')
   deleteSavedReview(@Request() req: { user: RequestUser }, @Param('id') id: string) {
     return this.service.deleteSavedReview(req.user.id, id);
+  }
+
+  // ─── Chat ──────────────────────────────────────────────────
+
+  @Post('chat')
+  chat(@Request() req: { user: RequestUser }, @Body() dto: ChatRequestDto) {
+    return this.service.chat(req.user.id, dto);
   }
 }
