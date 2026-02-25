@@ -15,6 +15,8 @@ import type {
   SubmitPracticeTestAnswersDto,
   GenerateSuggestionsDto,
   AskQuestionDto,
+  GenerateStepwiseDto,
+  SubmitStepCheckDto,
 } from './dto';
 import { DEFAULT_PROMPTS } from './prompts/default-prompts';
 import { buildPracticeTestingPrompt } from './prompts/practice-testing.prompt';
@@ -23,6 +25,10 @@ import {
   buildElaborationAnswerPrompt,
   buildConversationSummaryPrompt,
 } from './prompts/interrogative-elaboration.prompt';
+import {
+  buildStepwiseLearningPrompt,
+  buildStepCheckPrompt,
+} from './prompts/stepwise-learning.prompt';
 
 // ─── Practice Testing Interfaces ─────────────────────────
 
@@ -86,6 +92,51 @@ interface SuggestionResult {
   interventionId: string;
   suggestedQuestions: SuggestedQuestion[];
   keyConcepts: string[];
+}
+
+// ─── Stepwise Learning Interfaces ────────────────────────
+
+interface StepwiseComprehensionCheck {
+  question: string;
+  hint: string;
+  sampleAnswer: string;
+}
+
+interface StepwiseStep {
+  stepNumber: number;
+  title: string;
+  content: string;
+  comprehensionCheck: StepwiseComprehensionCheck;
+}
+
+interface StepUserResponse {
+  response: string;
+  feedback: string;
+  isCorrect: boolean;
+  timestamp: string;
+}
+
+interface StepResult {
+  attempts: number;
+  passed: boolean;
+  userResponses: StepUserResponse[];
+}
+
+interface StepwiseSessionData {
+  steps: StepwiseStep[];
+  summary: string;
+  currentStep: number;
+  selectedText: string;
+  stepResults: Record<number, StepResult>;
+}
+
+interface StepCheckResponse {
+  isCorrect: boolean;
+  feedback: string;
+  encouragement: string;
+  attempts: number;
+  showAnswer: boolean;
+  sampleAnswer?: string;
 }
 
 interface ConversationSummary {
@@ -663,6 +714,329 @@ export class LearningInterventionsService {
     };
   }
 
+  // ─── Stepwise Learning ──────────────────────────────────
+
+  async generateSteps(
+    userId: string,
+    dto: GenerateStepwiseDto,
+  ): Promise<{
+    interventionId: string;
+    steps: Array<{ stepNumber: number; title: string }>;
+    totalSteps: number;
+  }> {
+    if (!dto.selectedText || dto.selectedText.trim().length < 20) {
+      throw new BadRequestException('Selected text must be at least 20 characters');
+    }
+
+    if (!dto.courseId) {
+      throw new BadRequestException('courseId is required');
+    }
+
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
+
+    const systemPrompt = await this.getSystemPrompt(dto.courseId, 'STEPWISE_LEARNING');
+    const { system, user } = buildStepwiseLearningPrompt(systemPrompt, dto.selectedText);
+
+    let steps: StepwiseStep[];
+    let summary = '';
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const parsed = this.parseLlmJson(result.content);
+        const validated = this.validateStepwiseResponse(parsed);
+        steps = validated.steps;
+        summary = validated.summary;
+        break;
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          this.logger.error('Stepwise learning generation failed after retries', err);
+          throw new BadRequestException('Failed to generate learning steps. Please try again.');
+        }
+        this.logger.warn(`Stepwise generation attempt ${attempts} failed, retrying...`);
+      }
+    }
+
+    const intervention = await this.prisma.learningIntervention.create({
+      data: {
+        userId,
+        courseId: dto.courseId,
+        contentId: dto.contentId || null,
+        pageType: dto.pageType || null,
+        type: 'STEPWISE_LEARNING',
+        status: 'IN_PROGRESS',
+        selectedText: dto.selectedText,
+        sessionData: {
+          steps: steps!,
+          summary,
+          currentStep: 1,
+          selectedText: dto.selectedText,
+          stepResults: {},
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      interventionId: intervention.id,
+      steps: steps!.map((s) => ({ stepNumber: s.stepNumber, title: s.title })),
+      totalSteps: steps!.length,
+    };
+  }
+
+  async checkStepResponse(
+    userId: string,
+    sessionId: string,
+    dto: SubmitStepCheckDto,
+  ): Promise<StepCheckResponse> {
+    if (!dto.userResponse || dto.userResponse.trim().length < 10) {
+      throw new BadRequestException('Response must be at least 10 characters');
+    }
+
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot interact with another user's session");
+    }
+
+    if (intervention.type !== 'STEPWISE_LEARNING') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    if (intervention.status === 'COMPLETED') {
+      throw new BadRequestException('Session already completed');
+    }
+
+    const sessionData = intervention.sessionData as unknown as StepwiseSessionData;
+    const step = sessionData.steps.find((s) => s.stepNumber === dto.stepNumber);
+
+    if (!step) {
+      throw new BadRequestException(`Step ${dto.stepNumber} not found`);
+    }
+
+    const existingResult = sessionData.stepResults[dto.stepNumber];
+    if (existingResult?.passed) {
+      throw new BadRequestException(`Step ${dto.stepNumber} already passed`);
+    }
+
+    const currentAttempts = (existingResult?.attempts || 0) + 1;
+    const maxAttemptsAllowed = 2;
+
+    const teacherId = await this.getCourseTeacherIdWithApiKey(intervention.courseId);
+
+    const { system, user } = buildStepCheckPrompt({
+      stepTitle: step.title,
+      stepContent: step.content,
+      question: step.comprehensionCheck.question,
+      sampleAnswer: step.comprehensionCheck.sampleAnswer,
+      userResponse: dto.userResponse,
+    });
+
+    let isCorrect = false;
+    let feedback = '';
+    let encouragement = '';
+
+    try {
+      const result = await this.llmService.callLlmForUser(teacherId, system, user);
+      const parsed = this.parseLlmJson(result.content);
+      const validated = this.validateStepCheckResponse(parsed);
+      isCorrect = validated.isCorrect;
+      feedback = validated.feedback;
+      encouragement = validated.encouragement;
+    } catch {
+      feedback = 'We had trouble evaluating your answer. Please try again.';
+      encouragement = 'Keep going!';
+    }
+
+    const showAnswer = !isCorrect && currentAttempts >= maxAttemptsAllowed;
+
+    const userResponse: StepUserResponse = {
+      response: dto.userResponse,
+      feedback,
+      isCorrect,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updatedResult: StepResult = {
+      attempts: currentAttempts,
+      passed: isCorrect,
+      userResponses: [...(existingResult?.userResponses || []), userResponse],
+    };
+
+    // If showing answer after max attempts, mark as passed so student can proceed
+    if (showAnswer) {
+      updatedResult.passed = true;
+    }
+
+    const updatedStepResults = {
+      ...sessionData.stepResults,
+      [dto.stepNumber]: updatedResult,
+    };
+
+    await this.prisma.learningIntervention.update({
+      where: { id: sessionId },
+      data: {
+        sessionData: {
+          ...sessionData,
+          stepResults: updatedStepResults,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      isCorrect,
+      feedback,
+      encouragement,
+      attempts: currentAttempts,
+      showAnswer,
+      sampleAnswer: showAnswer ? step.comprehensionCheck.sampleAnswer : undefined,
+    };
+  }
+
+  async advanceStep(
+    userId: string,
+    sessionId: string,
+  ): Promise<{ currentStep: number; totalSteps: number; step: StepwiseStep; completed: boolean }> {
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot interact with another user's session");
+    }
+
+    if (intervention.type !== 'STEPWISE_LEARNING') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    const sessionData = intervention.sessionData as unknown as StepwiseSessionData;
+    const currentResult = sessionData.stepResults[sessionData.currentStep];
+
+    if (!currentResult?.passed) {
+      throw new BadRequestException('Must pass the current step before advancing');
+    }
+
+    const nextStep = sessionData.currentStep + 1;
+    const totalSteps = sessionData.steps.length;
+    const completed = nextStep > totalSteps;
+
+    if (completed) {
+      await this.prisma.learningIntervention.update({
+        where: { id: sessionId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          sessionData: {
+            ...sessionData,
+            currentStep: totalSteps,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      return {
+        currentStep: totalSteps,
+        totalSteps,
+        step: sessionData.steps[totalSteps - 1]!,
+        completed: true,
+      };
+    }
+
+    await this.prisma.learningIntervention.update({
+      where: { id: sessionId },
+      data: {
+        sessionData: {
+          ...sessionData,
+          currentStep: nextStep,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      currentStep: nextStep,
+      totalSteps,
+      step: sessionData.steps[nextStep - 1]!,
+      completed: false,
+    };
+  }
+
+  async getStepwiseSession(userId: string, sessionId: string) {
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot access another user's session");
+    }
+
+    if (intervention.type !== 'STEPWISE_LEARNING') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    const sessionData = intervention.sessionData as unknown as StepwiseSessionData;
+
+    return {
+      interventionId: intervention.id,
+      status: intervention.status,
+      steps: sessionData.steps,
+      summary: sessionData.summary,
+      currentStep: sessionData.currentStep,
+      totalSteps: sessionData.steps.length,
+      stepResults: sessionData.stepResults,
+      completedAt: intervention.completedAt,
+    };
+  }
+
+  async completeStepwiseSession(userId: string, sessionId: string) {
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Stepwise session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot complete another user's session");
+    }
+
+    if (intervention.type !== 'STEPWISE_LEARNING') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    const sessionData = intervention.sessionData as unknown as StepwiseSessionData;
+    const stepsCompleted = Object.values(sessionData.stepResults).filter((r) => r.passed).length;
+
+    await this.prisma.learningIntervention.update({
+      where: { id: sessionId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    return {
+      summary: sessionData.summary,
+      totalSteps: sessionData.steps.length,
+      stepsCompleted,
+    };
+  }
+
   // ─── Private Helpers ──────────────────────────────────────
 
   /**
@@ -780,6 +1154,59 @@ export class LearningInterventionsService {
       depthRating: (['surface', 'moderate', 'deep'].includes(String(data?.depthRating || ''))
         ? String(data.depthRating)
         : 'surface') as ConversationSummary['depthRating'],
+    };
+  }
+
+  private validateStepwiseResponse(parsed: unknown): {
+    steps: StepwiseStep[];
+    summary: string;
+  } {
+    const data = parsed as { steps?: unknown[]; summary?: string };
+
+    if (!data?.steps || !Array.isArray(data.steps) || data.steps.length === 0) {
+      throw new Error('LLM response missing steps array');
+    }
+
+    const steps = data.steps.map((s: unknown, index: number) => {
+      const item = s as Record<string, unknown>;
+      if (!item.title || !item.content) {
+        throw new Error(`Invalid step structure at index ${index}`);
+      }
+
+      const check = item.comprehensionCheck as Record<string, unknown> | undefined;
+      if (!check?.question) {
+        throw new Error(`Missing comprehension check at step ${index}`);
+      }
+
+      return {
+        stepNumber: typeof item.stepNumber === 'number' ? item.stepNumber : index + 1,
+        title: String(item.title),
+        content: String(item.content),
+        comprehensionCheck: {
+          question: String(check.question),
+          hint: String(check.hint || ''),
+          sampleAnswer: String(check.sampleAnswer || ''),
+        },
+      };
+    });
+
+    return {
+      steps,
+      summary: String(data.summary || ''),
+    };
+  }
+
+  private validateStepCheckResponse(parsed: unknown): {
+    isCorrect: boolean;
+    feedback: string;
+    encouragement: string;
+  } {
+    const data = parsed as Record<string, unknown>;
+
+    return {
+      isCorrect: Boolean(data?.isCorrect),
+      feedback: String(data?.feedback || 'Unable to evaluate response.'),
+      encouragement: String(data?.encouragement || 'Keep going!'),
     };
   }
 

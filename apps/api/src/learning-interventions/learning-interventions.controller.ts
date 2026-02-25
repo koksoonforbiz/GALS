@@ -20,6 +20,8 @@ import type {
   SubmitPracticeTestAnswersDto,
   GenerateSuggestionsDto,
   AskQuestionDto,
+  GenerateStepwiseDto,
+  SubmitStepCheckDto,
 } from './dto';
 import type { InterventionType } from '@prisma/client';
 
@@ -156,6 +158,40 @@ export class LearningInterventionsController {
     @Param('sessionId') sessionId: string,
   ) {
     return this.service.getElaborationSession(req.user.id, sessionId);
+  }
+
+  // ─── Stepwise Learning ─────────────────────────────────
+
+  @Post('stepwise-learning/generate')
+  generateSteps(@Request() req: { user: RequestUser }, @Body() dto: GenerateStepwiseDto) {
+    return this.service.generateSteps(req.user.id, dto);
+  }
+
+  @Post('stepwise-learning/:sessionId/check')
+  checkStepResponse(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+    @Body() dto: SubmitStepCheckDto,
+  ) {
+    return this.service.checkStepResponse(req.user.id, sessionId, dto);
+  }
+
+  @Patch('stepwise-learning/:sessionId/advance')
+  advanceStep(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
+    return this.service.advanceStep(req.user.id, sessionId);
+  }
+
+  @Get('stepwise-learning/:sessionId')
+  getStepwiseSession(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
+    return this.service.getStepwiseSession(req.user.id, sessionId);
+  }
+
+  @Post('stepwise-learning/:sessionId/complete')
+  completeStepwiseSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.service.completeStepwiseSession(req.user.id, sessionId);
   }
 
   // ─── Saved Reviews ───────────────────────────────────────

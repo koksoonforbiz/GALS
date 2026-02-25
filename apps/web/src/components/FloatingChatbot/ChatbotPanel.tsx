@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { ReviewTabView } from './ReviewTabView';
 import { PracticeTestingView } from './interventions/PracticeTestingView';
 import { InterrogativeElaborationView } from './interventions/InterrogativeElaborationView';
+import { StepwiseLearningView } from './interventions/StepwiseLearningView';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
@@ -153,11 +154,53 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     );
   }
 
+  // ─── Stepwise Learning Mode ─────────────────────────────
+  if (mode === 'stepwise-learning') {
+    // Check for resumable session
+    let resumeSessionId: string | null = null;
+    try {
+      const stored = localStorage.getItem(`stepwise_session_${courseId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only resume if less than 24 hours old
+        if (parsed?.sessionId && Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+          resumeSessionId = parsed.sessionId;
+        } else {
+          localStorage.removeItem(`stepwise_session_${courseId}`);
+        }
+      }
+    } catch {
+      // ignore localStorage errors
+    }
+
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <PanelHeader
+          onMinimize={onMinimize}
+          onToggleMaximize={onToggleMaximize}
+          isMaximized={isMaximized}
+          onReviewTab={() => setMode('review-tab')}
+          isReviewTab={false}
+        />
+        <StepwiseLearningView
+          selectedText={selectedText || ''}
+          courseId={courseId || ''}
+          contentId={contentId}
+          pageType={pageType}
+          contentTitle={contentTitle || ''}
+          resumeSessionId={resumeSessionId}
+          onComplete={handleBackToChat}
+          onBack={handleBackToChat}
+          onSaveForReview={handleSaveForReview}
+        />
+      </div>
+    );
+  }
+
   // ─── Other Intervention Modes (Placeholder) ────────────
   if (mode !== 'chat') {
     const interventionLabels: Record<string, string> = {
       'distributed-practice': 'Distributed Practice',
-      'stepwise-learning': 'Stepwise Learning',
     };
 
     return (

@@ -399,32 +399,126 @@ function PracticeTestRenderer({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-interface StepwiseStep {
+interface StepwiseStepData {
+  stepNumber?: number;
   title?: string;
   content?: string;
-  completed?: boolean;
+  question?: string;
+  sampleAnswer?: string;
+}
+
+interface StepResultData {
+  attempts?: number;
+  passed?: boolean;
+  userResponses?: Array<{
+    response?: string;
+    feedback?: string;
+    isCorrect?: boolean;
+  }>;
 }
 
 function StepwiseRenderer({ data }: { data: Record<string, unknown> }) {
-  const steps = Array.isArray(data.steps) ? (data.steps as StepwiseStep[]) : [];
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+  const steps = Array.isArray(data.steps) ? (data.steps as StepwiseStepData[]) : [];
+  const stepResults = (data.stepResults || {}) as Record<string, StepResultData>;
+  const stepsCompleted = typeof data.stepsCompleted === 'number' ? data.stepsCompleted : 0;
+  const totalSteps = typeof data.totalSteps === 'number' ? data.totalSteps : steps.length;
+  const summaryText = typeof data.summary === 'string' ? data.summary : null;
 
   if (steps.length === 0) {
     return <FallbackJson data={data} />;
   }
 
   return (
-    <div className="space-y-1.5">
-      {steps.map((step, i) => (
-        <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2 flex gap-2">
-          <span className={`shrink-0 ${step.completed ? 'text-green-600' : 'text-gray-400'}`}>
-            {step.completed ? '\u2713' : `${i + 1}.`}
+    <div className="space-y-2">
+      {/* Stats bar */}
+      <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
+        <div className="flex items-center gap-3">
+          <span>
+            Steps: {stepsCompleted}/{totalSteps}
           </span>
-          <div className="min-w-0">
-            {step.title && <div className="font-medium text-gray-800">{step.title}</div>}
-            {step.content && <div className="text-gray-600 mt-0.5">{step.content}</div>}
-          </div>
         </div>
-      ))}
+        {summaryText && <div className="text-gray-700 mt-1">{summaryText}</div>}
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-1.5">
+        {steps.map((step, i) => {
+          const stepNum = step.stepNumber || i + 1;
+          const result = stepResults[String(stepNum)];
+          const isExpanded = expandedStep === i;
+          const passed = result?.passed;
+
+          return (
+            <div key={i} className="text-xs border border-gray-200 rounded overflow-hidden">
+              <button
+                onClick={() => setExpandedStep(isExpanded ? null : i)}
+                className="w-full text-left bg-gray-50 px-2 py-1.5 flex items-center gap-2 hover:bg-gray-100 transition-colors"
+              >
+                <span className={passed ? 'text-green-600' : 'text-gray-400'}>
+                  {passed ? '\u2713' : `${stepNum}.`}
+                </span>
+                <span className="flex-1 font-medium text-gray-800">{step.title}</span>
+                {result && (
+                  <span className="text-[10px] text-gray-400">
+                    {result.attempts} {(result.attempts || 0) === 1 ? 'attempt' : 'attempts'}
+                  </span>
+                )}
+                <span className="text-[10px] text-gray-400">
+                  {isExpanded ? '\u25B2' : '\u25BC'}
+                </span>
+              </button>
+
+              {isExpanded && (
+                <div className="px-2 py-2 space-y-2 bg-white">
+                  {step.content && (
+                    <div className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {step.content}
+                    </div>
+                  )}
+
+                  {step.question && (
+                    <div className="bg-blue-50 border border-blue-200 rounded p-1.5">
+                      <div className="font-medium text-blue-800 mb-0.5">Question:</div>
+                      <div className="text-blue-700">{step.question}</div>
+                    </div>
+                  )}
+
+                  {result?.userResponses && result.userResponses.length > 0 && (
+                    <div className="space-y-1">
+                      {result.userResponses.map((resp, ri) => (
+                        <div
+                          key={ri}
+                          className={`rounded p-1.5 ${
+                            resp.isCorrect
+                              ? 'bg-green-50 border border-green-200'
+                              : 'bg-red-50 border border-red-200'
+                          }`}
+                        >
+                          <div className="font-medium text-gray-700 mb-0.5">
+                            Attempt {ri + 1}: {resp.isCorrect ? '\u2713' : '\u2717'}
+                          </div>
+                          <div className="text-gray-600">{resp.response}</div>
+                          {resp.feedback && (
+                            <div className="text-gray-500 mt-0.5 italic">{resp.feedback}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {step.sampleAnswer && (
+                    <div className="bg-gray-50 border border-gray-200 rounded p-1.5">
+                      <span className="font-medium text-gray-600">Expected answer: </span>
+                      <span className="text-gray-700">{step.sampleAnswer}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
