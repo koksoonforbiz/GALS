@@ -7,9 +7,10 @@ interface PageContextType {
   courseId: string | null;
   contentId: string | null;
   contentTitle: string | null;
+  contentText: string | null;
   selectedText: string | null;
   setPageContext: (
-    ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle'>>,
+    ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle' | 'contentText'>>,
   ) => void;
   setSelectedText: (text: string | null) => void;
   clearSelectedText: () => void;
@@ -22,16 +23,18 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [courseId, setCourseId] = useState<string | null>(null);
   const [contentId, setContentId] = useState<string | null>(null);
   const [contentTitle, setContentTitle] = useState<string | null>(null);
+  const [contentText, setContentText] = useState<string | null>(null);
   const [selectedText, setSelectedTextState] = useState<string | null>(null);
 
   const setPageContext = useCallback(
     (
-      ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle'>>,
+      ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle' | 'contentText'>>,
     ) => {
       if (ctx.pageType !== undefined) setPageType(ctx.pageType);
       if (ctx.courseId !== undefined) setCourseId(ctx.courseId);
       if (ctx.contentId !== undefined) setContentId(ctx.contentId);
       if (ctx.contentTitle !== undefined) setContentTitle(ctx.contentTitle);
+      if (ctx.contentText !== undefined) setContentText(ctx.contentText);
     },
     [],
   );
@@ -64,6 +67,7 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         courseId,
         contentId,
         contentTitle,
+        contentText,
         selectedText,
         setPageContext,
         setSelectedText,

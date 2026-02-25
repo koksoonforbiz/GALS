@@ -53,6 +53,7 @@ export function StudentCourseViewPage() {
         courseId: course.id,
         contentId: selectedItemId,
         contentTitle: item?.title || course.title,
+        contentText: item?.type === 'PAGE' && item.contentMdx ? item.contentMdx : null,
       });
     } else if (course) {
       setPageContext({
@@ -60,6 +61,7 @@ export function StudentCourseViewPage() {
         courseId: course.id,
         contentId: null,
         contentTitle: course.title,
+        contentText: null,
       });
     }
   }, [course, selectedItemId, setPageContext]);

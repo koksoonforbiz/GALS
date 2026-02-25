@@ -49,7 +49,7 @@ interface ChatbotPanelProps {
 }
 
 export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: ChatbotPanelProps) {
-  const { pageType, courseId, contentId, contentTitle, selectedText, clearSelectedText } =
+  const { pageType, courseId, contentId, contentTitle, contentText, selectedText, setSelectedText, clearSelectedText } =
     usePageContext();
 
   const navigate = useNavigate();
@@ -60,6 +60,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   const [isSending, setIsSending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
+  const [pendingStrategy, setPendingStrategy] = useState<ChatbotMode | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Save-for-Review Handler ──────────────────────────────
@@ -162,8 +163,28 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   };
 
   const handleInterventionClick = (type: ChatbotMode) => {
-    if (!selectedText || !courseId) return;
-    setMode(type);
+    if (!courseId) return;
+    if (selectedText) {
+      // Text already selected, go directly to strategy
+      setMode(type);
+    } else {
+      // No text selected — show the choice prompt
+      setPendingStrategy(type);
+    }
+  };
+
+  const handleUseEntirePage = () => {
+    if (!pendingStrategy || !contentText) return;
+    setSelectedText(contentText);
+    // Small delay so context updates before the view renders
+    setTimeout(() => {
+      setMode(pendingStrategy);
+      setPendingStrategy(null);
+    }, 50);
+  };
+
+  const handleDismissPrompt = () => {
+    setPendingStrategy(null);
   };
 
   const handleBackToChat = () => {
@@ -381,13 +402,13 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
                   <button
                     onClick={() => {
                       const meta = STRATEGY_META[msg.suggestedStrategy!];
-                      if (meta && selectedText && courseId) {
-                        setMode(meta.mode);
+                      if (meta && courseId) {
+                        handleInterventionClick(meta.mode);
                       }
                     }}
-                    disabled={!selectedText || !courseId}
+                    disabled={!courseId}
                     className={`max-w-[80%] flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-colors ${
-                      selectedText && courseId
+                      courseId
                         ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer'
                         : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
                     }`}
@@ -396,7 +417,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
                     <div className="text-left">
                       <div className="font-medium">Try: {STRATEGY_META[msg.suggestedStrategy]!.label}</div>
                       <div className="text-[10px] opacity-75">
-                        {selectedText ? STRATEGY_META[msg.suggestedStrategy]!.description : 'Select text on the page first'}
+                        {STRATEGY_META[msg.suggestedStrategy]!.description}
                       </div>
                     </div>
                   </button>
@@ -417,8 +438,41 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Intervention buttons (show when text is selected) */}
-      {selectedText && (
+      {/* Choice prompt when strategy clicked without selected text */}
+      {pendingStrategy && (
+        <div className="px-3 py-2.5 border-t border-blue-200 bg-blue-50">
+          <div className="text-xs font-medium text-blue-800 mb-2">
+            How would you like to apply {STRATEGY_META[pendingStrategy]?.label || 'this strategy'}?
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {contentText && (
+              <button
+                onClick={handleUseEntirePage}
+                className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2"
+              >
+                <BookOpen size={14} />
+                <div>
+                  <div className="font-medium">Use entire page content</div>
+                  <div className="text-[10px] text-blue-500">Apply to the full lesson on this page</div>
+                </div>
+              </button>
+            )}
+            <button
+              onClick={handleDismissPrompt}
+              className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2"
+            >
+              <TextSelect size={14} />
+              <div>
+                <div className="font-medium">Select specific text first</div>
+                <div className="text-[10px] text-blue-500">Highlight text on the page, then try again</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Intervention buttons (always visible) */}
+      {!pendingStrategy && (
         <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
           <div className="text-xs text-gray-500 mb-1.5">Apply learning strategy:</div>
           {!courseId && (
