@@ -245,12 +245,7 @@ export class LearningInterventionsService {
       throw new BadRequestException('courseId is required');
     }
 
-    const hasKey = await this.llmService.hasApiKey(userId);
-    if (!hasKey) {
-      throw new BadRequestException(
-        'Please configure your OpenAI API key in Settings to use learning strategies.',
-      );
-    }
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
 
     const questionCount = Math.min(Math.max(dto.questionCount || 5, 1), 10);
 
@@ -271,7 +266,7 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(userId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user);
         const parsed = this.parseLlmJson(result.content);
         questions = this.validatePracticeTestResponse(parsed);
         break;
@@ -439,12 +434,7 @@ export class LearningInterventionsService {
       throw new BadRequestException('courseId is required');
     }
 
-    const hasKey = await this.llmService.hasApiKey(userId);
-    if (!hasKey) {
-      throw new BadRequestException(
-        'Please configure your OpenAI API key in Settings to use learning strategies.',
-      );
-    }
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
 
     const questionCount = Math.min(Math.max(dto.questionCount || 4, 2), 8);
 
@@ -465,7 +455,7 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(userId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user);
         const parsed = this.parseLlmJson(result.content);
         questions = this.validateElaborationResponse(parsed);
         break;
@@ -546,6 +536,8 @@ export class LearningInterventionsService {
 
     const question = questions[dto.questionIndex]!;
 
+    const teacherId = await this.getCourseTeacherIdWithApiKey(intervention.courseId);
+
     // Call LLM with the evaluation prompt (fixed, not teacher-customizable)
     const { system, user } = buildElaborationEvaluationPrompt({
       question: question.question,
@@ -561,7 +553,7 @@ export class LearningInterventionsService {
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        const result = await this.llmService.callLlmForUser(userId, system, user);
+        const result = await this.llmService.callLlmForUser(teacherId, system, user);
         const parsed = this.parseLlmJson(result.content);
         evaluation = this.validateElaborationEvaluation(parsed);
         break;
@@ -677,6 +669,30 @@ export class LearningInterventionsService {
   }
 
   // ─── Private Helpers ──────────────────────────────────────
+
+  /**
+   * Resolve the teacher who owns a course and verify they have an LLM API key.
+   * Learning interventions use the course teacher's API key, not the student's.
+   */
+  private async getCourseTeacherIdWithApiKey(courseId: string): Promise<string> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { teacherId: true },
+    });
+
+    if (!course) {
+      throw new NotFoundException('Course not found');
+    }
+
+    const hasKey = await this.llmService.hasApiKey(course.teacherId);
+    if (!hasKey) {
+      throw new BadRequestException(
+        'The course instructor has not configured an LLM API key. Please contact your instructor.',
+      );
+    }
+
+    return course.teacherId;
+  }
 
   private parseLlmJson(content: string): unknown {
     // Try to extract JSON from possibly markdown-wrapped response
