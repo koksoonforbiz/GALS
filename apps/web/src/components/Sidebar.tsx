@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useState, useEffect } from 'react';
 
 interface NavItem {
   to: string;
@@ -187,23 +188,62 @@ const studentNavItems: NavItem[] = [
   },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
+
 export function Sidebar() {
   const { user } = useAuth();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    } catch {
+      // ignore
+    }
+  }, [collapsed]);
 
   const navItems =
     user?.role === 'teacher' || user?.role === 'admin' ? teacherNavItems : studentNavItems;
 
   return (
-    <aside className="w-64 bg-gray-50 border-r border-gray-200 min-h-screen">
-      <nav className="p-4">
+    <aside
+      className={`${collapsed ? 'w-16' : 'w-64'} bg-gray-50 border-r border-gray-200 min-h-screen transition-all duration-200 flex flex-col`}
+    >
+      {/* Toggle button */}
+      <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-3 pb-1`}>
+        <button
+          onClick={() => setCollapsed((prev) => !prev)}
+          className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {collapsed ? (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      <nav className={collapsed ? 'px-2 pb-4' : 'px-4 pb-4'}>
         <ul className="space-y-1">
           {navItems.map((item) => (
             <li key={item.to}>
               <NavLink
                 to={item.to}
                 end={item.to === '/teacher' || item.to === '/student'}
+                title={collapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  `flex items-center ${collapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-blue-100 text-blue-700'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
@@ -211,7 +251,7 @@ export function Sidebar() {
                 }
               >
                 {item.icon}
-                {item.label}
+                {!collapsed && <span>{item.label}</span>}
               </NavLink>
             </li>
           ))}
