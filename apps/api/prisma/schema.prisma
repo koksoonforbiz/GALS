@@ -122,6 +122,13 @@ model User {
   llmProvider       String?  @map("llm_provider")       // e.g. "openai"
   encryptedApiKey   String?  @map("encrypted_api_key")
   llmModel          String?  @map("llm_model")          // e.g. "gpt-4o-mini"
+
+  // Onboarding fields
+  isTemporaryPassword Boolean   @default(false) @map("is_temporary_password")
+  invitedBy           String?   @map("invited_by") @db.Uuid
+  invitedAt           DateTime? @map("invited_at") @db.Timestamptz
+  passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz
+
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -138,6 +145,7 @@ model User {
   spacedRepetitionCards      SpacedRepetitionCard[]
   questionGenerationJobs     QuestionGenerationJob[]
   feedbackPromptConfigs      FeedbackPromptConfig[]     @relation("teacherFeedbackConfigs")
+  llmUsageLogs               LlmUsageLog[]
 
   @@map("users")
 }
@@ -533,6 +541,45 @@ model LlmAuditLog {
   @@index([userId])
   @@index([draftId])
   @@map("llm_audit_logs")
+}
+
+model LlmUsageLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  courseId          String?  @map("course_id") @db.Uuid
+  provider         String                                // "openai", "gemini"
+  model            String                                // "gpt-4o", "gemini-2.0-flash", etc.
+  inputTokens      Int      @map("input_tokens")
+  outputTokens     Int      @map("output_tokens")
+  totalTokens      Int      @map("total_tokens")
+  inputCost        Float    @map("input_cost")           // USD
+  outputCost       Float    @map("output_cost")          // USD
+  totalCost        Float    @map("total_cost")           // USD
+  feature          String                                // "course_generation", "practice_testing", etc.
+  metadata         Json?
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([createdAt])
+  @@map("llm_usage_logs")
+}
+
+model LlmModelPricing {
+  id               String   @id @default(uuid()) @db.Uuid
+  provider         String                                // "openai", "gemini"
+  model            String                                // "gpt-4o", "gpt-4o-mini", etc.
+  inputPricePer1k  Float    @map("input_price_per_1k")   // USD per 1,000 input tokens
+  outputPricePer1k Float    @map("output_price_per_1k")  // USD per 1,000 output tokens
+  isActive         Boolean  @default(true) @map("is_active")
+  effectiveFrom    DateTime @default(now()) @map("effective_from") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([provider, model, effectiveFrom])
+  @@map("llm_model_pricing")
 }
 
 // ─── Knowledge Components & Mastery ─────────────────────
