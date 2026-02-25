@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
-import { FlaskConical, Footprints, Layers, MessageCircleQuestion } from 'lucide-react';
+import { FlaskConical, Footprints, Layers, MessageCircleQuestion, Target, Cog, Compass, UserCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 interface PromptConfig {
@@ -36,11 +36,11 @@ const TYPE_ICONS: Record<string, ReactNode> = {
   INTERROGATIVE_ELABORATION: <MessageCircleQuestion size={20} />,
 };
 
-const FEEDBACK_ICONS: Record<string, string> = {
-  TASK: '\uD83D\uDCCB',
-  PROCESS: '\uD83D\uDD27',
-  SELF_REGULATION: '\uD83E\uDDE0',
-  SELF: '\uD83D\uDCAA',
+const FEEDBACK_ICONS: Record<string, ReactNode> = {
+  TASK: <Target size={20} />,
+  PROCESS: <Cog size={20} />,
+  SELF_REGULATION: <Compass size={20} />,
+  SELF: <UserCircle size={20} />,
 };
 
 export function PromptSettingsPage() {
@@ -505,8 +505,8 @@ export function PromptSettingsPage() {
                   checked={enabledLevels.includes(level)}
                   onChange={() => toggleLevel(level)}
                 />
-                <span className="text-sm">
-                  {FEEDBACK_ICONS[level]} {level.replace('_', '-').toLowerCase()}-level
+                <span className="text-sm flex items-center gap-1.5">
+                  <span className="text-gray-600">{FEEDBACK_ICONS[level]}</span> {level.replace('_', '-').toLowerCase()}-level
                   {level === 'TASK' && (
                     <span className="text-xs text-gray-400 ml-1">
                       (recommended — always include)
