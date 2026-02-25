@@ -8,6 +8,22 @@ import { InterrogativeElaborationView } from './interventions/InterrogativeElabo
 import { StepwiseLearningView } from './interventions/StepwiseLearningView';
 import { DistributedPracticeView } from './interventions/DistributedPracticeView';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
+import {
+  GraduationCap,
+  BookOpen,
+  TextSelect,
+  Clock,
+  BookMarked,
+  SendHorizontal,
+  Minus,
+  Maximize2,
+  Minimize2,
+  X,
+  FlaskConical,
+  Layers,
+  Footprints,
+  MessageCircleQuestion,
+} from 'lucide-react';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
   lesson: 'Lesson',
@@ -248,7 +264,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
 
       {/* Context indicator */}
       <div className="px-3 py-1.5 border-b border-gray-100 text-xs text-gray-500 bg-gray-50 flex items-center gap-1.5">
-        <span>&#128214;</span>
+        <BookOpen size={14} />
         <span>
           {PAGE_TYPE_LABELS[pageType] || 'Page'}
           {contentTitle ? `: ${contentTitle}` : ''}
@@ -258,8 +274,8 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
       {/* Selected text banner */}
       {selectedText && (
         <div className="px-3 py-1.5 border-b border-yellow-200 bg-yellow-50 flex items-center gap-2 text-xs">
-          <span className="text-gray-600 truncate flex-1">
-            <span>&#128203; </span>
+          <span className="text-gray-600 truncate flex-1 inline-flex items-center gap-1">
+            <TextSelect size={14} className="shrink-0" />
             &quot;{selectedText.slice(0, 60)}
             {selectedText.length > 60 ? '...' : ''}&quot;
           </span>
@@ -278,7 +294,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onClick={() => navigate('/student/review-queue')}
           className="w-full px-3 py-1.5 border-b border-blue-200 bg-blue-50 text-xs text-blue-700 hover:bg-blue-100 transition-colors text-left flex items-center gap-2"
         >
-          <span>&#128196;</span>
+          <Clock size={14} />
           <span>
             You have {dueCount} card{dueCount !== 1 ? 's' : ''} due!
           </span>
@@ -290,7 +306,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 text-xs py-8">
-            <div className="text-2xl mb-2">&#129302;</div>
+            <div className="mb-2 flex justify-center"><GraduationCap size={28} className="text-gray-400" /></div>
             <p>Hi! I&apos;m your learning assistant.</p>
             <p className="mt-1">Select text on the page and use a learning strategy below.</p>
           </div>
@@ -325,21 +341,25 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           <div className="flex flex-wrap gap-1.5">
             <InterventionButton
               label="Practice"
+              icon={<FlaskConical size={12} />}
               onClick={() => handleInterventionClick('practice-testing')}
               disabled={!courseId}
             />
             <InterventionButton
               label="Distributed"
+              icon={<Layers size={12} />}
               onClick={() => handleInterventionClick('distributed-practice')}
               disabled={!courseId}
             />
             <InterventionButton
               label="Step"
+              icon={<Footprints size={12} />}
               onClick={() => handleInterventionClick('stepwise-learning')}
               disabled={!courseId}
             />
             <InterventionButton
               label="Elab"
+              icon={<MessageCircleQuestion size={12} />}
               onClick={() => handleInterventionClick('interrogative-elaboration')}
               disabled={!courseId}
             />
@@ -383,9 +403,9 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           <button
             onClick={handleSend}
             disabled={!inputValue.trim()}
-            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
           >
-            &#10148;
+            <SendHorizontal size={14} />
           </button>
         </div>
       </div>
@@ -411,7 +431,7 @@ function PanelHeader({
   return (
     <div className="chatbot-drag-handle flex items-center justify-between px-3 py-2 bg-blue-600 text-white cursor-grab active:cursor-grabbing select-none rounded-t-lg">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <span>&#129302;</span>
+        <GraduationCap size={18} />
         <span>Learning Assistant</span>
       </div>
       <div className="flex items-center gap-1">
@@ -420,42 +440,42 @@ function PanelHeader({
             e.stopPropagation();
             onReviewTab();
           }}
-          className={`w-6 h-6 flex items-center justify-center rounded text-xs hover:bg-blue-500 transition-colors ${
+          className={`w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors ${
             isReviewTab ? 'bg-blue-500' : ''
           }`}
           title="My Reviews"
         >
-          &#128218;
+          <BookMarked size={14} />
         </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onMinimize();
           }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors text-xs"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
           title="Minimize"
         >
-          &#8212;
+          <Minus size={14} />
         </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onToggleMaximize();
           }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors text-xs"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
           title={isMaximized ? 'Restore' : 'Maximize'}
         >
-          {isMaximized ? '\u25A3' : '\u25A1'}
+          {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
         </button>
         <button
           onClick={(e) => {
             e.stopPropagation();
             onMinimize();
           }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors text-xs"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
           title="Close"
         >
-          &#215;
+          <X size={14} />
         </button>
       </div>
     </div>
@@ -464,10 +484,12 @@ function PanelHeader({
 
 function InterventionButton({
   label,
+  icon,
   onClick,
   disabled,
 }: {
   label: string;
+  icon?: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
 }) {
@@ -475,12 +497,13 @@ function InterventionButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+      className={`text-xs px-2.5 py-1 rounded-full transition-colors inline-flex items-center gap-1 ${
         disabled
           ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
           : 'bg-white border border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
       }`}
     >
+      {icon}
       {label}
     </button>
   );

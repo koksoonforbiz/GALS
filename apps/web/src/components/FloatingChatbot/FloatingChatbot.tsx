@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ChatbotPanel } from './ChatbotPanel';
 import { api } from '../../lib/api';
+import { MessageCircle } from 'lucide-react';
 
 const STORAGE_KEY = 'chatbot-position';
 const MIN_WIDTH = 320;
@@ -237,10 +238,10 @@ export function FloatingChatbot() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed z-[9999] bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all flex items-center justify-center text-2xl"
+        className="fixed z-[9999] bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 hover:shadow-xl transition-all flex items-center justify-center"
         title="Open Learning Assistant"
       >
-        &#128172;
+        <MessageCircle size={24} />
         {dueCount > 0 && (
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
             {dueCount > 99 ? '99+' : dueCount}

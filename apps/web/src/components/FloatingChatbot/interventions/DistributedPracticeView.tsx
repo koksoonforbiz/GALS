@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
+import { Layers, AlertTriangle, Inbox, Trash2 } from 'lucide-react';
 
 interface DistributedPracticeViewProps {
   selectedText: string;
@@ -130,9 +131,13 @@ export function DistributedPracticeView({
   if (phase === 'loading') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83C\uDCCF'}</div>
+        <Layers size={28} className="text-blue-500 mb-3 animate-pulse" />
         <p className="text-sm text-gray-600">Creating flashcards...</p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -141,7 +146,7 @@ export function DistributedPracticeView({
   if (phase === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3">{'\u26A0\uFE0F'}</div>
+        <AlertTriangle size={28} className="text-amber-500 mb-3" />
         <p className="text-sm text-red-600 mb-3">{errorMsg}</p>
         <div className="flex gap-2">
           <button
@@ -165,7 +170,7 @@ export function DistributedPracticeView({
   if (cards.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3">{'\uD83D\uDCED'}</div>
+        <Inbox size={28} className="text-gray-400 mb-3" />
         <p className="text-sm text-gray-600 mb-3">All cards have been removed.</p>
         <div className="flex gap-2">
           <button
@@ -287,9 +292,9 @@ export function DistributedPracticeView({
             <div className="text-center">
               <button
                 onClick={() => handleDeleteCard(currentCard.id)}
-                className="text-[10px] text-red-500 hover:text-red-700"
+                className="text-[10px] text-red-500 hover:text-red-700 inline-flex items-center gap-1"
               >
-                {'\uD83D\uDDD1'} Remove card
+                <Trash2 size={10} /> Remove card
               </button>
             </div>
           </>

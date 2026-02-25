@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
+import { MessageCircleQuestion, Trophy, AlertTriangle, Lightbulb, Loader } from 'lucide-react';
 
 interface InterrogativeElaborationViewProps {
   selectedText: string;
@@ -247,11 +248,15 @@ export function InterrogativeElaborationView({
   if (phase === 'loading') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83D\uDCA1'}</div>
+        <MessageCircleQuestion size={28} className="text-blue-500 mb-3 animate-pulse" />
         <p className="text-sm text-gray-600">
           Analyzing text and generating question suggestions...
         </p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -260,7 +265,7 @@ export function InterrogativeElaborationView({
   if (phase === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3">{'\u26A0\uFE0F'}</div>
+        <AlertTriangle size={28} className="text-amber-500 mb-3" />
         <p className="text-sm text-red-600 mb-3">{errorMsg}</p>
         <div className="flex gap-2">
           <button
@@ -284,8 +289,12 @@ export function InterrogativeElaborationView({
   if (phase === 'completing') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83E\uDDE0'}</div>
+        <Loader size={28} className="text-blue-500 mb-3 animate-spin" />
         <p className="text-sm text-gray-600">Generating conversation summary...</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -298,7 +307,7 @@ export function InterrogativeElaborationView({
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-          <div className="text-lg mb-1">{'\uD83C\uDF89'}</div>
+          <div className="mb-1 flex justify-center"><Trophy size={22} className="text-yellow-500" /></div>
           <div className="text-sm font-semibold text-gray-800">Great exploration!</div>
           <div className="text-xs text-gray-600 mt-1 flex items-center justify-center gap-3">
             <span>Questions: {summary.questionsAsked}</span>
@@ -407,7 +416,7 @@ export function InterrogativeElaborationView({
               onClick={() => setSuggestionsExpanded(!suggestionsExpanded)}
               className="w-full px-3 py-2 text-xs text-left text-gray-600 hover:bg-gray-50 flex items-center gap-1"
             >
-              {'\uD83D\uDCA1'} Suggestions
+              <Lightbulb size={12} className="inline" /> Suggestions
               <span className="text-[10px] text-gray-400 ml-1">
                 (tap to {suggestionsExpanded ? 'collapse' : 'expand'})
               </span>
@@ -418,7 +427,7 @@ export function InterrogativeElaborationView({
           ) : (
             <div className="px-3 pt-2 pb-1">
               <div className="text-xs font-medium text-gray-700 flex items-center gap-1">
-                {'\uD83D\uDCA1'} Suggested questions to ask:
+                <Lightbulb size={12} className="inline" /> Suggested questions to ask:
               </div>
             </div>
           )}

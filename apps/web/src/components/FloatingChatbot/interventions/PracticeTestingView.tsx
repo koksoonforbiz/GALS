@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
+import { FlaskConical, Trophy, AlertTriangle } from 'lucide-react';
 
 interface PracticeTestingViewProps {
   selectedText: string;
@@ -167,9 +168,13 @@ export function PracticeTestingView({
   if (phase === 'loading') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83E\uDDEA'}</div>
+        <FlaskConical size={28} className="text-blue-500 mb-3 animate-pulse" />
         <p className="text-sm text-gray-600">Generating questions from your selected text...</p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -178,7 +183,7 @@ export function PracticeTestingView({
   if (phase === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3">{'\u26A0\uFE0F'}</div>
+        <AlertTriangle size={28} className="text-amber-500 mb-3" />
         <p className="text-sm text-red-600 mb-3">{errorMsg}</p>
         <div className="flex gap-2">
           <button
@@ -281,7 +286,7 @@ export function PracticeTestingView({
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Score Header */}
       <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-        <div className="text-lg mb-1">{'\uD83C\uDF89'}</div>
+        <div className="mb-1 flex justify-center"><Trophy size={22} className="text-yellow-500" /></div>
         <div className="text-sm font-semibold text-gray-800">Practice Test Complete!</div>
         <div className="text-lg font-bold text-blue-600 mt-1">
           {correctCount}/{totalQuestions} ({score}%)

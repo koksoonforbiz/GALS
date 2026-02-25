@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
+import { Footprints, Trophy, AlertTriangle, Loader, HelpCircle } from 'lucide-react';
 
 interface StepwiseLearningViewProps {
   selectedText: string;
@@ -373,13 +374,17 @@ export function StepwiseLearningView({
   if (phase === 'loading') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83D\uDCDD'}</div>
+        <Footprints size={28} className="text-blue-500 mb-3 animate-pulse" />
         <p className="text-sm text-gray-600">
           {resumeSessionId
             ? 'Resuming your session...'
             : 'Breaking down the text into learning steps...'}
         </p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -388,7 +393,7 @@ export function StepwiseLearningView({
   if (phase === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3">{'\u26A0\uFE0F'}</div>
+        <AlertTriangle size={28} className="text-amber-500 mb-3" />
         <p className="text-sm text-red-600 mb-3">{errorMsg}</p>
         <div className="flex gap-2">
           <button
@@ -412,8 +417,12 @@ export function StepwiseLearningView({
   if (phase === 'completing') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-2xl mb-3 animate-pulse">{'\uD83E\uDDE0'}</div>
+        <Loader size={28} className="text-blue-500 mb-3 animate-spin" />
         <p className="text-sm text-gray-600">Wrapping up...</p>
+        <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
+          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+        </div>
+        <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
     );
   }
@@ -423,7 +432,7 @@ export function StepwiseLearningView({
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-          <div className="text-lg mb-1">{'\uD83C\uDF89'}</div>
+          <div className="mb-1 flex justify-center"><Trophy size={22} className="text-yellow-500" /></div>
           <div className="text-sm font-semibold text-gray-800">Great work!</div>
           <div className="text-xs text-gray-600 mt-1">
             Completed {completionData.stepsCompleted} of {completionData.totalSteps} steps
@@ -560,8 +569,8 @@ export function StepwiseLearningView({
 
             {/* Comprehension check */}
             <div className="border border-blue-200 bg-blue-50 rounded-lg p-2.5">
-              <div className="text-xs font-medium text-blue-800 mb-1">
-                {'\uD83E\uDD14'} Check your understanding
+              <div className="text-xs font-medium text-blue-800 mb-1 flex items-center gap-1">
+                <HelpCircle size={14} /> Check your understanding
               </div>
               <div className="text-xs text-blue-700 mb-2">
                 {currentStepData.comprehensionCheck.question}
