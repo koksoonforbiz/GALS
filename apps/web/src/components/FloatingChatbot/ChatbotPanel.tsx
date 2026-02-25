@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePageContext } from '../../contexts/PageContext';
 import { api } from '../../lib/api';
 import { ReviewTabView } from './ReviewTabView';
 import { PracticeTestingView } from './interventions/PracticeTestingView';
 import { InterrogativeElaborationView } from './interventions/InterrogativeElaborationView';
 import { StepwiseLearningView } from './interventions/StepwiseLearningView';
+import { DistributedPracticeView } from './interventions/DistributedPracticeView';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
@@ -26,10 +28,13 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   const { pageType, courseId, contentId, contentTitle, selectedText, clearSelectedText } =
     usePageContext();
 
+  const navigate = useNavigate();
+
   const [mode, setMode] = useState<ChatbotMode>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [dueCount, setDueCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Save-for-Review Handler ──────────────────────────────
@@ -52,6 +57,14 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     },
     [courseId, contentId, pageType],
   );
+
+  // Fetch due cards count
+  useEffect(() => {
+    api
+      .get<{ dueToday: number }>('/learning-interventions/distributed-practice/stats')
+      .then((stats) => setDueCount(stats.dueToday))
+      .catch(() => {});
+  }, [mode]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -197,12 +210,8 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     );
   }
 
-  // ─── Other Intervention Modes (Placeholder) ────────────
-  if (mode !== 'chat') {
-    const interventionLabels: Record<string, string> = {
-      'distributed-practice': 'Distributed Practice',
-    };
-
+  // ─── Distributed Practice Mode ──────────────────────────
+  if (mode === 'distributed-practice') {
     return (
       <div className="flex flex-col h-full bg-white">
         <PanelHeader
@@ -212,23 +221,16 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
-        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <div className="text-3xl mb-3">&#128679;</div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">{interventionLabels[mode]}</h3>
-          <p className="text-xs text-gray-500 mb-4 max-w-[250px]">
-            This learning strategy will be implemented in a future stage.
-          </p>
-          {selectedText && (
-            <div className="text-xs text-gray-600 bg-yellow-50 border border-yellow-200 rounded p-2 mb-4 max-h-20 overflow-y-auto w-full">
-              <span className="font-medium">Selected text: </span>
-              &quot;{selectedText.slice(0, 150)}
-              {selectedText.length > 150 ? '...' : ''}&quot;
-            </div>
-          )}
-          <button onClick={handleBackToChat} className="text-xs text-blue-600 hover:text-blue-800">
-            &larr; Back to chat
-          </button>
-        </div>
+        <DistributedPracticeView
+          selectedText={selectedText || ''}
+          courseId={courseId || ''}
+          contentId={contentId}
+          pageType={pageType}
+          contentTitle={contentTitle || ''}
+          onComplete={handleBackToChat}
+          onBack={handleBackToChat}
+          onSaveForReview={handleSaveForReview}
+        />
       </div>
     );
   }
@@ -268,6 +270,20 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
             Clear
           </button>
         </div>
+      )}
+
+      {/* Due cards banner */}
+      {dueCount > 0 && (
+        <button
+          onClick={() => navigate('/student/review-queue')}
+          className="w-full px-3 py-1.5 border-b border-blue-200 bg-blue-50 text-xs text-blue-700 hover:bg-blue-100 transition-colors text-left flex items-center gap-2"
+        >
+          <span>&#128196;</span>
+          <span>
+            You have {dueCount} card{dueCount !== 1 ? 's' : ''} due!
+          </span>
+          <span className="ml-auto text-blue-500">Go to Review Queue &rarr;</span>
+        </button>
       )}
 
       {/* Messages area */}

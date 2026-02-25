@@ -524,12 +524,14 @@ function StepwiseRenderer({ data }: { data: Record<string, unknown> }) {
 }
 
 interface Flashcard {
+  id?: string;
   front?: string;
   back?: string;
 }
 
 function FlashcardRenderer({ data }: { data: Record<string, unknown> }) {
   const cards = Array.isArray(data.cards) ? (data.cards as Flashcard[]) : [];
+  const totalCards = typeof data.totalCards === 'number' ? data.totalCards : cards.length;
 
   if (cards.length === 0) {
     return <FallbackJson data={data} />;
@@ -537,13 +539,18 @@ function FlashcardRenderer({ data }: { data: Record<string, unknown> }) {
 
   return (
     <div className="space-y-2">
+      <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1.5">
+        {totalCards} flashcards
+      </div>
       {cards.map((card, i) => (
         <div key={i} className="text-xs border border-gray-200 rounded overflow-hidden">
           <div className="bg-blue-50 px-2 py-1.5 font-medium text-gray-800">
+            <span className="text-[10px] text-blue-600 mr-1">Q:</span>
             {card.front || `Card ${i + 1}`}
           </div>
           <div className="bg-white px-2 py-1.5 text-gray-600 border-t border-gray-100">
-            {card.back || '—'}
+            <span className="text-[10px] text-gray-400 mr-1">A:</span>
+            {card.back || '\u2014'}
           </div>
         </div>
       ))}

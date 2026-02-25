@@ -6,3 +6,4 @@ export type {
 } from './generate-practice-test.dto';
 export type { GenerateSuggestionsDto, AskQuestionDto } from './interrogative-elaboration.dto';
 export type { GenerateStepwiseDto, SubmitStepCheckDto } from './stepwise-learning.dto';
+export type { GenerateCardsDto, ReviewCardDto } from './distributed-practice.dto';

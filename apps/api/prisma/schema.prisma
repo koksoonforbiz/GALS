@@ -119,6 +119,7 @@ model User {
   learningInterventions      LearningIntervention[]
   savedInterventionReviews   SavedInterventionReview[]
   teacherPromptConfigs       InterventionPromptConfig[] @relation("teacherPromptConfigs")
+  spacedRepetitionCards      SpacedRepetitionCard[]
 
   @@map("users")
 }
@@ -828,6 +829,7 @@ model LearningIntervention {
 
   user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   savedReviews  SavedInterventionReview[]
+  spacedRepetitionCards SpacedRepetitionCard[]
 
   @@index([userId])
   @@index([courseId])
@@ -872,4 +874,28 @@ model InterventionPromptConfig {
 
   @@unique([courseId, interventionType])
   @@map("intervention_prompt_configs")
+}
+
+model SpacedRepetitionCard {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  interventionId  String   @map("intervention_id") @db.Uuid
+  courseId         String   @map("course_id") @db.Uuid
+  front           String   @db.Text
+  back            String   @db.Text
+  ease            Float    @default(2.5)
+  interval        Int      @default(0)
+  repetitions     Int      @default(0)
+  nextReviewAt    DateTime @map("next_review_at") @db.Timestamptz
+  lastReviewedAt  DateTime? @map("last_reviewed_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intervention    LearningIntervention @relation(fields: [interventionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, nextReviewAt])
+  @@index([courseId])
+  @@index([interventionId])
+  @@map("spaced_repetition_cards")
 }

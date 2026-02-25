@@ -22,6 +22,8 @@ import type {
   AskQuestionDto,
   GenerateStepwiseDto,
   SubmitStepCheckDto,
+  GenerateCardsDto,
+  ReviewCardDto,
 } from './dto';
 import type { InterventionType } from '@prisma/client';
 
@@ -192,6 +194,46 @@ export class LearningInterventionsController {
     @Param('sessionId') sessionId: string,
   ) {
     return this.service.completeStepwiseSession(req.user.id, sessionId);
+  }
+
+  // ─── Distributed Practice ────────────────────────────────
+
+  @Post('distributed-practice/generate')
+  generateCards(@Request() req: { user: RequestUser }, @Body() dto: GenerateCardsDto) {
+    return this.service.generateCards(req.user.id, dto);
+  }
+
+  @Get('distributed-practice/due')
+  getDueCards(
+    @Request() req: { user: RequestUser },
+    @Query('limit') limit?: string,
+    @Query('courseId') courseId?: string,
+  ) {
+    return this.service.getDueCards(req.user.id, limit ? parseInt(limit, 10) : 20, courseId);
+  }
+
+  @Patch('distributed-practice/cards/:cardId/review')
+  reviewCard(
+    @Request() req: { user: RequestUser },
+    @Param('cardId') cardId: string,
+    @Body() dto: ReviewCardDto,
+  ) {
+    return this.service.reviewCard(req.user.id, cardId, dto);
+  }
+
+  @Get('distributed-practice/stats')
+  getCardStats(@Request() req: { user: RequestUser }) {
+    return this.service.getCardStats(req.user.id);
+  }
+
+  @Get('distributed-practice/cards/:cardId/preview')
+  previewCardRatings(@Request() req: { user: RequestUser }, @Param('cardId') cardId: string) {
+    return this.service.previewCardRatings(req.user.id, cardId);
+  }
+
+  @Delete('distributed-practice/cards/:cardId')
+  deleteCard(@Request() req: { user: RequestUser }, @Param('cardId') cardId: string) {
+    return this.service.deleteCard(req.user.id, cardId);
   }
 
   // ─── Saved Reviews ───────────────────────────────────────

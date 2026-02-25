@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ChatbotPanel } from './ChatbotPanel';
+import { api } from '../../lib/api';
 
 const STORAGE_KEY = 'chatbot-position';
 const MIN_WIDTH = 320;
@@ -54,6 +55,7 @@ export function FloatingChatbot() {
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState<Position>(loadPosition);
   const [preMaxPosition, setPreMaxPosition] = useState<Position | null>(null);
+  const [dueCount, setDueCount] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -75,6 +77,24 @@ export function FloatingChatbot() {
       savePosition(position);
     }
   }, [position, isMaximized]);
+
+  // Fetch due cards count periodically
+  useEffect(() => {
+    const fetchDueCount = async () => {
+      try {
+        const stats = await api.get<{ dueToday: number }>(
+          '/learning-interventions/distributed-practice/stats',
+        );
+        setDueCount(stats.dueToday);
+      } catch {
+        // silently fail — user may not be authenticated yet
+      }
+    };
+
+    void fetchDueCount();
+    const interval = setInterval(() => void fetchDueCount(), 5 * 60 * 1000); // refresh every 5 min
+    return () => clearInterval(interval);
+  }, []);
 
   // ─── Drag Handlers ──────────────────────────────────────
 
@@ -221,6 +241,11 @@ export function FloatingChatbot() {
         title="Open Learning Assistant"
       >
         &#128172;
+        {dueCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-5 h-5 flex items-center justify-center font-bold">
+            {dueCount > 99 ? '99+' : dueCount}
+          </span>
+        )}
       </button>
     );
   }
