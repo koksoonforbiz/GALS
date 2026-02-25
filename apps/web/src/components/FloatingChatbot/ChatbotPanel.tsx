@@ -24,6 +24,7 @@ import {
   Footprints,
   MessageCircleQuestion,
   Loader,
+  ArrowLeft,
 } from 'lucide-react';
 
 const STRATEGY_META: Record<string, { label: string; mode: ChatbotMode; icon: React.ReactNode; description: string }> = {
@@ -218,6 +219,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
+        <StrategyBackBar label="Practice Testing" onBack={handleBackToChat} />
         <PracticeTestingView
           selectedText={selectedText || ''}
           courseId={courseId || ''}
@@ -243,6 +245,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
+        <StrategyBackBar label="Interrogative Elaboration" onBack={handleBackToChat} />
         <InterrogativeElaborationView
           selectedText={selectedText || ''}
           courseId={courseId || ''}
@@ -285,6 +288,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
+        <StrategyBackBar label="Stepwise Learning" onBack={handleBackToChat} />
         <StepwiseLearningView
           selectedText={selectedText || ''}
           courseId={courseId || ''}
@@ -311,6 +315,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
+        <StrategyBackBar label="Distributed Practice" onBack={handleBackToChat} />
         <DistributedPracticeView
           selectedText={selectedText || ''}
           courseId={courseId || ''}
@@ -621,6 +626,22 @@ function PanelHeader({
           <X size={14} />
         </button>
       </div>
+    </div>
+  );
+}
+
+function StrategyBackBar({ label, onBack }: { label: string; onBack: () => void }) {
+  return (
+    <div className="px-3 py-1.5 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+      <button
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 transition-colors"
+      >
+        <ArrowLeft size={14} />
+        Back
+      </button>
+      <span className="text-xs text-gray-400">|</span>
+      <span className="text-xs font-medium text-gray-600">{label}</span>
     </div>
   );
 }
