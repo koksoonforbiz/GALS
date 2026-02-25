@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { FlaskConical, Footprints, Layers, MessageCircleQuestion } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 interface PromptConfig {
   interventionType: string;
@@ -15,11 +17,11 @@ interface PromptConfig {
   warning?: string | null;
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  PRACTICE_TESTING: '\uD83E\uDDEA',
-  STEPWISE_LEARNING: '\uD83D\uDCDD',
-  DISTRIBUTED_PRACTICE: '\uD83C\uDCCF',
-  INTERROGATIVE_ELABORATION: '\uD83D\uDCA1',
+const TYPE_ICONS: Record<string, ReactNode> = {
+  PRACTICE_TESTING: <FlaskConical size={20} />,
+  STEPWISE_LEARNING: <Footprints size={20} />,
+  DISTRIBUTED_PRACTICE: <Layers size={20} />,
+  INTERROGATIVE_ELABORATION: <MessageCircleQuestion size={20} />,
 };
 
 export function PromptSettingsPage() {
@@ -152,7 +154,7 @@ export function PromptSettingsPage() {
       <div className="space-y-4">
         {configs.map((config) => {
           const isExpanded = expandedType === config.interventionType;
-          const icon = TYPE_ICONS[config.interventionType] || '';
+          const icon = TYPE_ICONS[config.interventionType] || null;
           const hasChanges = editValues[config.interventionType] !== config.systemPrompt;
           const promptValue = editValues[config.interventionType] || '';
           const hasJsonWarning =
@@ -173,7 +175,7 @@ export function PromptSettingsPage() {
                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-xl">{icon}</span>
+                  <span className="text-gray-600">{icon}</span>
                   <div>
                     <div className="text-sm font-semibold text-gray-800">{config.label}</div>
                     <div className="text-xs text-gray-500">{config.description}</div>

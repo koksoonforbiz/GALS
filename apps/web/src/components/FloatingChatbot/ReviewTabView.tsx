@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
+import { FlaskConical, Footprints, Layers, MessageCircleQuestion } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type {
   InterventionType,
   SavedReviewListItem,
@@ -7,11 +9,11 @@ import type {
   SavedReviewsResponse,
 } from './types';
 
-const TYPE_LABELS: Record<InterventionType, { icon: string; label: string }> = {
-  PRACTICE_TESTING: { icon: '\uD83E\uDDEA', label: 'Practice Test' },
-  STEPWISE_LEARNING: { icon: '\uD83D\uDCDD', label: 'Stepwise Learning' },
-  DISTRIBUTED_PRACTICE: { icon: '\uD83C\uDCCF', label: 'Flashcards' },
-  INTERROGATIVE_ELABORATION: { icon: '\uD83D\uDCA1', label: 'Elaboration' },
+const TYPE_LABELS: Record<InterventionType, { icon: ReactNode; label: string }> = {
+  PRACTICE_TESTING: { icon: <FlaskConical size={12} />, label: 'Practice Test' },
+  STEPWISE_LEARNING: { icon: <Footprints size={12} />, label: 'Stepwise Learning' },
+  DISTRIBUTED_PRACTICE: { icon: <Layers size={12} />, label: 'Flashcards' },
+  INTERROGATIVE_ELABORATION: { icon: <MessageCircleQuestion size={12} />, label: 'Elaboration' },
 };
 
 const TYPE_OPTIONS: Array<{ value: InterventionType | 'ALL'; label: string }> = [
@@ -159,7 +161,7 @@ export function ReviewTabView({ onBack }: ReviewTabViewProps) {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-500 mb-1">
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                         {typeInfo.icon} {typeInfo.label}
                       </div>
                       <div className="text-sm font-medium text-gray-800 truncate">
@@ -239,7 +241,7 @@ function ReviewDetailView({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3">
         {/* Type badge */}
-        <div className="text-xs text-gray-500 mb-1">
+        <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
           {typeInfo.icon} {typeInfo.label}
         </div>
 
