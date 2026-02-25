@@ -18,6 +18,8 @@ import type {
   UpdateSavedReviewDto,
   GeneratePracticeTestDto,
   SubmitPracticeTestAnswersDto,
+  GenerateElaborationDto,
+  SubmitElaborationDto,
 } from './dto';
 import type { InterventionType } from '@prisma/client';
 
@@ -122,6 +124,41 @@ export class LearningInterventionsController {
     @Param('interventionId') interventionId: string,
   ) {
     return this.service.getPracticeTest(req.user.id, interventionId);
+  }
+
+  // ─── Interrogative Elaboration ───────────────────────────
+
+  @Post('interrogative-elaboration/generate')
+  generateElaborationQuestions(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateElaborationDto,
+  ) {
+    return this.service.generateElaborationQuestions(req.user.id, dto);
+  }
+
+  @Post('interrogative-elaboration/:sessionId/evaluate')
+  evaluateElaboration(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+    @Body() dto: SubmitElaborationDto,
+  ) {
+    return this.service.evaluateElaboration(req.user.id, sessionId, dto);
+  }
+
+  @Post('interrogative-elaboration/:sessionId/complete')
+  completeElaborationSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.service.completeElaborationSession(req.user.id, sessionId);
+  }
+
+  @Get('interrogative-elaboration/:sessionId')
+  getElaborationSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId') sessionId: string,
+  ) {
+    return this.service.getElaborationSession(req.user.id, sessionId);
   }
 
   // ─── Saved Reviews ───────────────────────────────────────

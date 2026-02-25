@@ -3,6 +3,7 @@ import { usePageContext } from '../../contexts/PageContext';
 import { api } from '../../lib/api';
 import { ReviewTabView } from './ReviewTabView';
 import { PracticeTestingView } from './interventions/PracticeTestingView';
+import { InterrogativeElaborationView } from './interventions/InterrogativeElaborationView';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
@@ -127,12 +128,36 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     );
   }
 
+  // ─── Interrogative Elaboration Mode ─────────────────────
+  if (mode === 'interrogative-elaboration') {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <PanelHeader
+          onMinimize={onMinimize}
+          onToggleMaximize={onToggleMaximize}
+          isMaximized={isMaximized}
+          onReviewTab={() => setMode('review-tab')}
+          isReviewTab={false}
+        />
+        <InterrogativeElaborationView
+          selectedText={selectedText || ''}
+          courseId={courseId || ''}
+          contentId={contentId}
+          pageType={pageType}
+          contentTitle={contentTitle || ''}
+          onComplete={handleBackToChat}
+          onBack={handleBackToChat}
+          onSaveForReview={handleSaveForReview}
+        />
+      </div>
+    );
+  }
+
   // ─── Other Intervention Modes (Placeholder) ────────────
   if (mode !== 'chat') {
     const interventionLabels: Record<string, string> = {
       'distributed-practice': 'Distributed Practice',
       'stepwise-learning': 'Stepwise Learning',
-      'interrogative-elaboration': 'Interrogative Elaboration',
     };
 
     return (

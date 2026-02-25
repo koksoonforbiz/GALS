@@ -13,9 +13,15 @@ import type {
   UpdateSavedReviewDto,
   GeneratePracticeTestDto,
   SubmitPracticeTestAnswersDto,
+  GenerateElaborationDto,
+  SubmitElaborationDto,
 } from './dto';
 import { DEFAULT_PROMPTS } from './prompts/default-prompts';
 import { buildPracticeTestingPrompt } from './prompts/practice-testing.prompt';
+import {
+  buildElaborationQuestionsPrompt,
+  buildElaborationEvaluationPrompt,
+} from './prompts/interrogative-elaboration.prompt';
 
 // ─── Practice Testing Interfaces ─────────────────────────
 
@@ -49,6 +55,41 @@ interface GradedResult {
   score: number;
   totalQuestions: number;
   results: GradedAnswer[];
+}
+
+// ─── Interrogative Elaboration Interfaces ───────────────
+
+interface ElaborationQuestion {
+  question: string;
+  type: 'why' | 'how';
+  keyPoints: string[];
+}
+
+interface ElaborationSessionData {
+  questions: ElaborationQuestion[];
+  selectedText: string;
+  userElaborations: Array<{
+    questionIndex: number;
+    elaboration: string;
+    rating: string;
+    addressedPoints: string[];
+    missedPoints: string[];
+    feedback: string;
+    modelElaboration: string;
+  }>;
+}
+
+interface ElaborationSessionResult {
+  interventionId: string;
+  questions: Array<{ question: string; type: string }>;
+}
+
+interface ElaborationEvaluation {
+  rating: string;
+  addressedPoints: string[];
+  missedPoints: string[];
+  feedback: string;
+  modelElaboration: string;
 }
 
 @Injectable()
@@ -377,6 +418,250 @@ export class LearningInterventionsService {
     };
   }
 
+  // ─── Interrogative Elaboration ───────────────────────────
+
+  async generateElaborationQuestions(
+    userId: string,
+    dto: GenerateElaborationDto,
+  ): Promise<ElaborationSessionResult> {
+    if (!dto.selectedText || dto.selectedText.trim().length < 20) {
+      throw new BadRequestException('Selected text must be at least 20 characters');
+    }
+
+    if (!dto.courseId) {
+      throw new BadRequestException('courseId is required');
+    }
+
+    const questionCount = Math.min(Math.max(dto.questionCount || 4, 2), 8);
+
+    // Get system prompt (custom or default)
+    const systemPrompt = await this.getSystemPrompt(dto.courseId, 'INTERROGATIVE_ELABORATION');
+
+    const { system, user } = buildElaborationQuestionsPrompt(
+      systemPrompt,
+      dto.selectedText,
+      questionCount,
+    );
+
+    // Call LLM with retry on malformed JSON
+    let questions: ElaborationQuestion[];
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const result = await this.llmService.callLlmForUser(userId, system, user);
+        const parsed = this.parseLlmJson(result.content);
+        questions = this.validateElaborationResponse(parsed);
+        break;
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          this.logger.error('Elaboration question generation failed after retries', err);
+          throw new BadRequestException(
+            'Failed to generate elaboration questions. Please try again.',
+          );
+        }
+        this.logger.warn(`Elaboration question generation attempt ${attempts} failed, retrying...`);
+      }
+    }
+
+    // Create LearningIntervention record
+    const intervention = await this.prisma.learningIntervention.create({
+      data: {
+        userId,
+        courseId: dto.courseId,
+        contentId: dto.contentId || null,
+        pageType: dto.pageType || null,
+        type: 'INTERROGATIVE_ELABORATION',
+        status: 'IN_PROGRESS',
+        selectedText: dto.selectedText,
+        sessionData: {
+          questions: questions!,
+          selectedText: dto.selectedText,
+          userElaborations: [],
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    // Return questions without key points (don't reveal expected answers)
+    return {
+      interventionId: intervention.id,
+      questions: questions!.map((q) => ({
+        question: q.question,
+        type: q.type,
+      })),
+    };
+  }
+
+  async evaluateElaboration(
+    userId: string,
+    sessionId: string,
+    dto: SubmitElaborationDto,
+  ): Promise<ElaborationEvaluation> {
+    if (!dto.elaboration || dto.elaboration.trim().length < 50) {
+      throw new BadRequestException('Elaboration must be at least 50 characters');
+    }
+
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException('Cannot submit elaboration for another user');
+    }
+
+    if (intervention.type !== 'INTERROGATIVE_ELABORATION') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
+    const questions = sessionData?.questions;
+
+    if (!questions || !Array.isArray(questions)) {
+      throw new BadRequestException('Invalid elaboration session data');
+    }
+
+    if (dto.questionIndex < 0 || dto.questionIndex >= questions.length) {
+      throw new BadRequestException('Invalid question index');
+    }
+
+    const question = questions[dto.questionIndex]!;
+
+    // Call LLM with the evaluation prompt (fixed, not teacher-customizable)
+    const { system, user } = buildElaborationEvaluationPrompt({
+      question: question.question,
+      userElaboration: dto.elaboration,
+      keyPoints: question.keyPoints,
+      sourceText: sessionData.selectedText,
+    });
+
+    let evaluation: ElaborationEvaluation;
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        const result = await this.llmService.callLlmForUser(userId, system, user);
+        const parsed = this.parseLlmJson(result.content);
+        evaluation = this.validateElaborationEvaluation(parsed);
+        break;
+      } catch (err) {
+        if (attempts >= maxAttempts) {
+          this.logger.error('Elaboration evaluation failed after retries', err);
+          throw new BadRequestException('Failed to evaluate elaboration. Please try again.');
+        }
+        this.logger.warn(`Elaboration evaluation attempt ${attempts} failed, retrying...`);
+      }
+    }
+
+    // Update session data with user's elaboration
+    const updatedElaborations = [...sessionData.userElaborations];
+    // Replace existing elaboration for this question (supports revision)
+    const existingIdx = updatedElaborations.findIndex((e) => e.questionIndex === dto.questionIndex);
+    const elaborationEntry = {
+      questionIndex: dto.questionIndex,
+      elaboration: dto.elaboration,
+      rating: evaluation!.rating,
+      addressedPoints: evaluation!.addressedPoints,
+      missedPoints: evaluation!.missedPoints,
+      feedback: evaluation!.feedback,
+      modelElaboration: evaluation!.modelElaboration,
+    };
+
+    if (existingIdx >= 0) {
+      updatedElaborations[existingIdx] = elaborationEntry;
+    } else {
+      updatedElaborations.push(elaborationEntry);
+    }
+
+    await this.prisma.learningIntervention.update({
+      where: { id: sessionId },
+      data: {
+        sessionData: {
+          ...sessionData,
+          userElaborations: updatedElaborations,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return evaluation!;
+  }
+
+  async completeElaborationSession(userId: string, sessionId: string) {
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot complete another user's session");
+    }
+
+    if (intervention.type !== 'INTERROGATIVE_ELABORATION') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    await this.prisma.learningIntervention.update({
+      where: { id: sessionId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
+
+    return {
+      interventionId: sessionId,
+      status: 'COMPLETED',
+      questions: sessionData.questions.map((q) => ({
+        question: q.question,
+        type: q.type,
+      })),
+      userElaborations: sessionData.userElaborations,
+    };
+  }
+
+  async getElaborationSession(userId: string, sessionId: string) {
+    const intervention = await this.prisma.learningIntervention.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!intervention) {
+      throw new NotFoundException('Elaboration session not found');
+    }
+
+    if (intervention.userId !== userId) {
+      throw new ForbiddenException("Cannot access another user's elaboration session");
+    }
+
+    if (intervention.type !== 'INTERROGATIVE_ELABORATION') {
+      throw new BadRequestException('Invalid intervention type');
+    }
+
+    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
+
+    return {
+      interventionId: intervention.id,
+      status: intervention.status,
+      questions: sessionData.questions.map((q) => ({
+        question: q.question,
+        type: q.type,
+      })),
+      userElaborations: sessionData.userElaborations,
+      completedAt: intervention.completedAt,
+    };
+  }
+
   // ─── Private Helpers ──────────────────────────────────────
 
   private parseLlmJson(content: string): unknown {
@@ -418,6 +703,45 @@ export class LearningInterventionsService {
         keywords: Array.isArray(item.keywords) ? item.keywords.map(String) : undefined,
       } as PracticeQuestion;
     });
+  }
+
+  private validateElaborationResponse(parsed: unknown): ElaborationQuestion[] {
+    const data = parsed as { questions?: unknown[] };
+
+    if (!data?.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
+      throw new Error('LLM response missing questions array');
+    }
+
+    return data.questions.map((q: unknown) => {
+      const item = q as Record<string, unknown>;
+      if (!item.question || !item.type) {
+        throw new Error('Invalid elaboration question structure in LLM response');
+      }
+
+      const type = String(item.type).toLowerCase();
+
+      return {
+        question: String(item.question),
+        type: type === 'how' ? 'how' : 'why',
+        keyPoints: Array.isArray(item.keyPoints) ? item.keyPoints.map(String) : [],
+      } as ElaborationQuestion;
+    });
+  }
+
+  private validateElaborationEvaluation(parsed: unknown): ElaborationEvaluation {
+    const data = parsed as Record<string, unknown>;
+
+    if (!data?.rating || !data?.feedback) {
+      throw new Error('Invalid elaboration evaluation response');
+    }
+
+    return {
+      rating: String(data.rating),
+      addressedPoints: Array.isArray(data.addressedPoints) ? data.addressedPoints.map(String) : [],
+      missedPoints: Array.isArray(data.missedPoints) ? data.missedPoints.map(String) : [],
+      feedback: String(data.feedback),
+      modelElaboration: String(data.modelElaboration || ''),
+    };
   }
 
   private gradeAnswer(question: PracticeQuestion, userAnswer: string): boolean {

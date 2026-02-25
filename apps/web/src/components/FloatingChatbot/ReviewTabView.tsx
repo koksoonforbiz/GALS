@@ -457,32 +457,149 @@ function FlashcardRenderer({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-interface ElaborationItem {
+interface ElaborationEntry {
   question?: string;
-  elaboration?: string;
+  questionType?: string;
+  userElaboration?: string;
+  rating?: string;
+  addressedPoints?: string[];
+  missedPoints?: string[];
   feedback?: string;
+  modelElaboration?: string;
+}
+
+interface ElaborationSummary {
+  strong?: number;
+  developing?: number;
+  needsImprovement?: number;
 }
 
 function ElaborationRenderer({ data }: { data: Record<string, unknown> }) {
-  const items = Array.isArray(data.questions) ? (data.questions as ElaborationItem[]) : [];
+  const elaborations = Array.isArray(data.elaborations)
+    ? (data.elaborations as ElaborationEntry[])
+    : [];
+  const summary = (data.overallSummary as ElaborationSummary) || null;
 
-  if (items.length === 0) {
-    return <FallbackJson data={data} />;
+  // Fallback for old format
+  if (elaborations.length === 0) {
+    const items = Array.isArray(data.questions)
+      ? (data.questions as { question?: string; elaboration?: string; feedback?: string }[])
+      : [];
+    if (items.length === 0) return <FallbackJson data={data} />;
+    return (
+      <div className="space-y-2">
+        {items.map((item, i) => (
+          <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2">
+            {item.question && <div className="font-medium text-gray-800 mb-1">{item.question}</div>}
+            {item.elaboration && (
+              <div className="text-gray-700 mb-1 pl-2 border-l-2 border-blue-300">
+                {item.elaboration}
+              </div>
+            )}
+            {item.feedback && <div className="text-gray-500 italic">{item.feedback}</div>}
+          </div>
+        ))}
+      </div>
+    );
   }
+
+  const ratingColors: Record<string, string> = {
+    Strong: 'bg-green-100 text-green-700',
+    Developing: 'bg-yellow-100 text-yellow-700',
+    'Needs Improvement': 'bg-red-100 text-red-700',
+  };
 
   return (
     <div className="space-y-2">
-      {items.map((item, i) => (
-        <div key={i} className="text-xs bg-gray-50 border border-gray-200 rounded p-2">
-          {item.question && <div className="font-medium text-gray-800 mb-1">{item.question}</div>}
-          {item.elaboration && (
-            <div className="text-gray-700 mb-1 pl-2 border-l-2 border-blue-300">
-              {item.elaboration}
+      {/* Summary bar */}
+      {summary && (
+        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 flex gap-2 flex-wrap">
+          {(summary.strong ?? 0) > 0 && (
+            <span className="text-green-700">{summary.strong} Strong</span>
+          )}
+          {(summary.developing ?? 0) > 0 && (
+            <span className="text-yellow-700">{summary.developing} Developing</span>
+          )}
+          {(summary.needsImprovement ?? 0) > 0 && (
+            <span className="text-red-700">{summary.needsImprovement} Needs Improvement</span>
+          )}
+        </div>
+      )}
+
+      {elaborations.map((item, i) => {
+        const colorClass = ratingColors[item.rating || ''] || 'bg-gray-100 text-gray-600';
+        return <ElaborationDetailCard key={i} item={item} index={i} colorClass={colorClass} />;
+      })}
+    </div>
+  );
+}
+
+function ElaborationDetailCard({
+  item,
+  index,
+  colorClass,
+}: {
+  item: ElaborationEntry;
+  index: number;
+  colorClass: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="text-xs border border-gray-200 rounded overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 text-left bg-gray-50 hover:bg-gray-100 transition-colors"
+      >
+        <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClass}`}>
+          {item.rating || '?'}
+        </span>
+        <span className="text-gray-800 flex-1 truncate">
+          Q{index + 1}
+          {item.questionType && (
+            <span className="text-gray-400 ml-1">({item.questionType.toUpperCase()})</span>
+          )}
+          {item.question ? `: ${item.question}` : ''}
+        </span>
+        <span className="text-gray-400 text-[10px]">{expanded ? '\u25B2' : '\u25BC'}</span>
+      </button>
+      {expanded && (
+        <div className="px-2 py-2 space-y-1.5 border-t border-gray-100">
+          {item.question && <div className="font-medium text-gray-800">{item.question}</div>}
+          {item.userElaboration && (
+            <div className="text-gray-700 pl-2 border-l-2 border-blue-300">
+              {item.userElaboration}
+            </div>
+          )}
+          {item.addressedPoints && item.addressedPoints.length > 0 && (
+            <div className="text-green-700">
+              {item.addressedPoints.map((p, j) => (
+                <div key={j} className="flex items-start gap-1">
+                  <span className="shrink-0">{'\u2705'}</span>
+                  <span>{p}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {item.missedPoints && item.missedPoints.length > 0 && (
+            <div className="text-orange-700">
+              {item.missedPoints.map((p, j) => (
+                <div key={j} className="flex items-start gap-1">
+                  <span className="shrink-0">{'\u2192'}</span>
+                  <span>{p}</span>
+                </div>
+              ))}
             </div>
           )}
           {item.feedback && <div className="text-gray-500 italic">{item.feedback}</div>}
+          {item.modelElaboration && (
+            <div className="bg-gray-50 border border-gray-200 rounded p-1.5 text-gray-600">
+              <span className="font-medium">Model answer: </span>
+              {item.modelElaboration}
+            </div>
+          )}
         </div>
-      ))}
+      )}
     </div>
   );
 }
