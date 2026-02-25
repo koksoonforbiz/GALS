@@ -157,11 +157,13 @@ export function PromptSettingsPage() {
           const icon = TYPE_ICONS[config.interventionType] || null;
           const hasChanges = editValues[config.interventionType] !== config.systemPrompt;
           const promptValue = editValues[config.interventionType] || '';
+          const lowerPrompt = promptValue.toLowerCase();
           const hasJsonWarning =
             promptValue.length > 0 &&
             !(
-              promptValue.toLowerCase().includes('json') &&
-              promptValue.toLowerCase().includes('format')
+              lowerPrompt.includes('json') ||
+              lowerPrompt.includes('"type"') ||
+              /\{\s*"/.test(promptValue)
             );
 
           return (
