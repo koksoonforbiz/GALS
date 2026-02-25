@@ -392,7 +392,12 @@ export class LlmService {
     });
   }
 
-  // ─── Public LLM Call (for other modules like Learning Interventions) ──
+  // ─── Public Helpers ──────────────────────────────────────
+
+  async hasApiKey(userId: string): Promise<boolean> {
+    const credentials = await this.getUserApiKey(userId);
+    return credentials !== null;
+  }
 
   async callLlmForUser(
     userId: string,

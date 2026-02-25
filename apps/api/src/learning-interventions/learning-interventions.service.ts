@@ -245,6 +245,13 @@ export class LearningInterventionsService {
       throw new BadRequestException('courseId is required');
     }
 
+    const hasKey = await this.llmService.hasApiKey(userId);
+    if (!hasKey) {
+      throw new BadRequestException(
+        'Please configure your OpenAI API key in Settings to use learning strategies.',
+      );
+    }
+
     const questionCount = Math.min(Math.max(dto.questionCount || 5, 1), 10);
 
     // Get system prompt (custom or default)
@@ -430,6 +437,13 @@ export class LearningInterventionsService {
 
     if (!dto.courseId) {
       throw new BadRequestException('courseId is required');
+    }
+
+    const hasKey = await this.llmService.hasApiKey(userId);
+    if (!hasKey) {
+      throw new BadRequestException(
+        'Please configure your OpenAI API key in Settings to use learning strategies.',
+      );
     }
 
     const questionCount = Math.min(Math.max(dto.questionCount || 4, 2), 8);
