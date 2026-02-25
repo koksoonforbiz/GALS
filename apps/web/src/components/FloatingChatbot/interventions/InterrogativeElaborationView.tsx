@@ -13,30 +13,39 @@ interface InterrogativeElaborationViewProps {
   onSaveForReview: (data: SaveForReviewInput) => void;
 }
 
-interface ElaborationQuestion {
+interface SuggestedQuestion {
   question: string;
   type: 'why' | 'how';
+  topic: string;
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
 }
 
-interface ElaborationEvaluation {
-  rating: string;
-  addressedPoints: string[];
-  missedPoints: string[];
-  feedback: string;
-  modelElaboration: string;
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  wasSuggested?: boolean;
 }
 
-interface QuestionResult {
-  elaboration: string;
-  evaluation: ElaborationEvaluation;
+interface ConversationSummary {
+  summary: string;
+  conceptsCovered: string[];
+  questionsAsked: number;
+  depthRating: 'surface' | 'moderate' | 'deep';
 }
 
-type Phase = 'loading' | 'question' | 'evaluating' | 'feedback' | 'complete' | 'error';
+type Phase = 'loading' | 'suggestions' | 'conversation' | 'completing' | 'complete' | 'error';
 
-const RATING_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  Strong: { bg: 'bg-green-100', text: 'text-green-700', label: 'Strong' },
-  Developing: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Developing' },
-  'Needs Improvement': { bg: 'bg-red-100', text: 'text-red-700', label: 'Needs Improvement' },
+const DEPTH_STYLES: Record<string, { color: string; label: string }> = {
+  surface: { color: 'text-red-600', label: 'Surface' },
+  moderate: { color: 'text-yellow-600', label: 'Moderate' },
+  deep: { color: 'text-green-600', label: 'Deep' },
+};
+
+const DIFFICULTY_STYLES: Record<string, string> = {
+  beginner: 'bg-green-50 text-green-700',
+  intermediate: 'bg-blue-50 text-blue-700',
+  advanced: 'bg-purple-50 text-purple-700',
 };
 
 export function InterrogativeElaborationView({
@@ -51,147 +60,168 @@ export function InterrogativeElaborationView({
 }: InterrogativeElaborationViewProps) {
   const [phase, setPhase] = useState<Phase>('loading');
   const [interventionId, setInterventionId] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<ElaborationQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [elaborationText, setElaborationText] = useState('');
-  const [results, setResults] = useState<Record<number, QuestionResult>>({});
-  const [showModelAnswer, setShowModelAnswer] = useState(false);
-  const [isRevising, setIsRevising] = useState(false);
-  const [previousAttempt, setPreviousAttempt] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<SuggestedQuestion[]>([]);
+  const [keyConcepts, setKeyConcepts] = useState<string[]>([]);
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [usedSuggestions, setUsedSuggestions] = useState<Set<number>>(new Set());
+  const [inputValue, setInputValue] = useState('');
+  const [isAsking, setIsAsking] = useState(false);
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+  const [summary, setSummary] = useState<ConversationSummary | null>(null);
   const [userNotes, setUserNotes] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialGenDone = useRef(false);
 
-  // Generate elaboration questions
+  // Auto-scroll to bottom when conversation updates
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversation, isAsking]);
+
+  // Generate suggested questions on mount
   const generate = useCallback(async () => {
     setPhase('loading');
     try {
       const result = await api.post<{
         interventionId: string;
-        questions: ElaborationQuestion[];
+        suggestedQuestions: SuggestedQuestion[];
+        keyConcepts: string[];
       }>('/learning-interventions/interrogative-elaboration/generate', {
         selectedText,
         courseId,
         contentId: contentId || undefined,
         pageType,
-        questionCount: 4,
+        questionCount: 6,
       });
       setInterventionId(result.interventionId);
-      setQuestions(result.questions);
-      setPhase('question');
+      setSuggestedQuestions(result.suggestedQuestions);
+      setKeyConcepts(result.keyConcepts);
+      setPhase('suggestions');
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to generate elaboration questions');
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to generate suggestions');
       setPhase('error');
     }
   }, [selectedText, courseId, contentId, pageType]);
 
-  // Only generate once on mount (not on every selectedText change)
   useEffect(() => {
     if (initialGenDone.current) return;
     initialGenDone.current = true;
     void generate();
   }, [generate]);
 
-  const handleSubmitElaboration = async () => {
-    if (!interventionId || elaborationText.trim().length < 50) return;
+  // Ask a question (from suggestion or typed)
+  const handleAskQuestion = async (question: string, suggestionIndex?: number) => {
+    if (!interventionId || !question.trim()) return;
 
-    setPhase('evaluating');
+    setIsAsking(true);
+
+    // Add user message immediately
+    const userMsg: ConversationMessage = {
+      role: 'user',
+      content: question,
+      timestamp: new Date().toISOString(),
+      wasSuggested: suggestionIndex !== undefined,
+    };
+    const updatedConvo = [...conversation, userMsg];
+    setConversation(updatedConvo);
+
+    if (suggestionIndex !== undefined) {
+      setUsedSuggestions((prev) => new Set(prev).add(suggestionIndex));
+    }
+
+    // Transition to conversation phase after first question
+    if (phase === 'suggestions') {
+      setPhase('conversation');
+      setSuggestionsExpanded(false);
+    }
+
+    setInputValue('');
+
     try {
-      const evaluation = await api.post<ElaborationEvaluation>(
-        `/learning-interventions/interrogative-elaboration/${interventionId}/evaluate`,
+      const result = await api.post<{ answer: string }>(
+        `/learning-interventions/interrogative-elaboration/${interventionId}/ask`,
         {
-          questionIndex: currentIndex,
-          elaboration: elaborationText,
+          question,
+          conversationHistory: updatedConvo.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
         },
       );
 
-      setResults((prev) => ({
-        ...prev,
-        [currentIndex]: {
-          elaboration: elaborationText,
-          evaluation,
-        },
-      }));
-      setPhase('feedback');
-      setShowModelAnswer(false);
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Failed to evaluate elaboration');
-      setPhase('error');
+      const assistantMsg: ConversationMessage = {
+        role: 'assistant',
+        content: result.answer,
+        timestamp: new Date().toISOString(),
+      };
+      setConversation((prev) => [...prev, assistantMsg]);
+    } catch {
+      const errorAssistant: ConversationMessage = {
+        role: 'assistant',
+        content: 'Sorry, I had trouble generating an answer. Please try asking again.',
+        timestamp: new Date().toISOString(),
+      };
+      setConversation((prev) => [...prev, errorAssistant]);
+    } finally {
+      setIsAsking(false);
     }
   };
 
-  const handleRevise = () => {
-    const currentResult = results[currentIndex];
-    if (currentResult) {
-      setPreviousAttempt(currentResult.elaboration);
-    }
-    setElaborationText('');
-    setIsRevising(true);
-    setPhase('question');
+  const handleSuggestionClick = (index: number) => {
+    const q = suggestedQuestions[index];
+    if (!q || usedSuggestions.has(index)) return;
+    void handleAskQuestion(q.question, index);
   };
 
-  const handleNext = () => {
-    if (currentIndex < questions.length - 1) {
-      setCurrentIndex((i) => i + 1);
-      setElaborationText('');
-      setIsRevising(false);
-      setPreviousAttempt('');
-      setShowModelAnswer(false);
-      setPhase('question');
-    } else {
-      // All questions done — complete
-      void completeSession();
-    }
+  const handleSubmitInput = () => {
+    if (!inputValue.trim() || inputValue.trim().length < 5) return;
+    void handleAskQuestion(inputValue.trim());
   };
 
-  const completeSession = async () => {
+  const handleWrapUp = async () => {
     if (!interventionId) return;
+    setPhase('completing');
     try {
-      await api.post(
+      const result = await api.post<ConversationSummary>(
         `/learning-interventions/interrogative-elaboration/${interventionId}/complete`,
       );
+      setSummary(result);
+      setPhase('complete');
     } catch {
-      // non-critical — session still usable
+      // Still show complete phase with fallback
+      setSummary({
+        summary: 'Session completed.',
+        conceptsCovered: keyConcepts.slice(0, 3),
+        questionsAsked: conversation.filter((m) => m.role === 'user').length,
+        depthRating: 'surface',
+      });
+      setPhase('complete');
     }
-    setPhase('complete');
   };
 
   const handleSave = () => {
-    if (!interventionId) return;
-
-    const elaborations = Object.entries(results).map(([idx, r]) => {
-      const i = Number(idx);
-      const q = questions[i]!;
-      return {
-        questionIndex: i,
-        question: q.question,
-        questionType: q.type,
-        userElaboration: r.elaboration,
-        rating: r.evaluation.rating,
-        addressedPoints: r.evaluation.addressedPoints,
-        missedPoints: r.evaluation.missedPoints,
-        feedback: r.evaluation.feedback,
-        modelElaboration: r.evaluation.modelElaboration,
-      };
-    });
-
-    const strong = elaborations.filter((e) => e.rating === 'Strong').length;
-    const developing = elaborations.filter((e) => e.rating === 'Developing').length;
-    const needsImprovement = elaborations.filter((e) => e.rating === 'Needs Improvement').length;
+    if (!interventionId || !summary) return;
 
     onSaveForReview({
       interventionId,
       interventionType: 'INTERROGATIVE_ELABORATION',
-      title: `Elaboration - ${contentTitle || 'Untitled'}`,
+      title: `Q&A Exploration - ${contentTitle || 'Untitled'}`,
       selectedText,
       savedData: {
-        questions: questions.map((q) => ({
-          question: q.question,
-          type: q.type,
+        suggestedQuestions,
+        conversation: conversation.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+          wasSuggested: msg.wasSuggested || false,
         })),
-        elaborations,
-        overallSummary: { strong, developing, needsImprovement },
+        summary: summary.summary,
+        conceptsCovered: summary.conceptsCovered,
+        questionsAsked: summary.questionsAsked,
+        depthRating: summary.depthRating,
+        keyConcepts,
         completedAt: new Date().toISOString(),
       },
     });
@@ -199,15 +229,17 @@ export function InterrogativeElaborationView({
   };
 
   const handleRetry = () => {
-    setQuestions([]);
-    setCurrentIndex(0);
-    setElaborationText('');
-    setResults({});
+    setSuggestedQuestions([]);
+    setKeyConcepts([]);
+    setConversation([]);
+    setUsedSuggestions(new Set());
+    setInputValue('');
+    setSummary(null);
     setSaved(false);
     setUserNotes('');
-    setIsRevising(false);
-    setPreviousAttempt('');
-    setShowModelAnswer(false);
+    setSuggestionsExpanded(true);
+    setShowAllSuggestions(false);
+    initialGenDone.current = false;
     void generate();
   };
 
@@ -216,7 +248,9 @@ export function InterrogativeElaborationView({
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
         <div className="text-2xl mb-3 animate-pulse">{'\uD83D\uDCA1'}</div>
-        <p className="text-sm text-gray-600">Generating elaboration questions...</p>
+        <p className="text-sm text-gray-600">
+          Analyzing text and generating question suggestions...
+        </p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
       </div>
     );
@@ -246,300 +280,285 @@ export function InterrogativeElaborationView({
     );
   }
 
-  // ─── Evaluating Phase ────────────────────────────────────
-  if (phase === 'evaluating') {
+  // ─── Completing Phase ───────────────────────────────────
+  if (phase === 'completing') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
         <div className="text-2xl mb-3 animate-pulse">{'\uD83E\uDDE0'}</div>
-        <p className="text-sm text-gray-600">Evaluating your response...</p>
-        <p className="text-xs text-gray-400 mt-2">Comparing against key points</p>
-      </div>
-    );
-  }
-
-  // ─── Question Phase ─────────────────────────────────────
-  if (phase === 'question') {
-    const q = questions[currentIndex]!;
-    if (!q) return null;
-    const charCount = elaborationText.length;
-    const isValid = charCount >= 50;
-
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center justify-between mb-1">
-            <button onClick={onBack} className="text-xs text-blue-600 hover:text-blue-800">
-              &larr; Back to chat
-            </button>
-            <span className="text-xs font-medium text-gray-600">Interrogative Elaboration</span>
-          </div>
-          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-            <span>
-              Question {currentIndex + 1} of {questions.length}
-            </span>
-            <span
-              className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${
-                q.type === 'why' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-              }`}
-            >
-              {q.type.toUpperCase()}
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-1.5">
-            <div
-              className="bg-blue-600 h-1.5 rounded-full transition-all"
-              style={{
-                width: `${((currentIndex + 1) / questions.length) * 100}%`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Question content */}
-        <div className="flex-1 overflow-y-auto p-3">
-          <p className="text-sm font-medium text-gray-800 mb-3">{q.question}</p>
-
-          {/* Previous attempt (revision mode) */}
-          {isRevising && previousAttempt && (
-            <div className="mb-3 text-xs bg-gray-50 border border-gray-200 rounded p-2">
-              <div className="text-gray-500 font-medium mb-1">Previous attempt:</div>
-              <div className="text-gray-600 italic">{previousAttempt}</div>
-            </div>
-          )}
-
-          <textarea
-            value={elaborationText}
-            onChange={(e) => setElaborationText(e.target.value)}
-            placeholder="Explain your reasoning in detail (min 50 characters)..."
-            className="w-full text-xs border border-gray-300 rounded-lg p-2 h-32 resize-none focus:outline-none focus:border-blue-400"
-          />
-          <div
-            className={`text-[10px] text-right mt-1 ${
-              isValid ? 'text-green-600' : 'text-gray-400'
-            }`}
-          >
-            {charCount}/50 characters
-          </div>
-        </div>
-
-        {/* Submit button */}
-        <div className="px-3 py-2 border-t border-gray-200">
-          <button
-            onClick={handleSubmitElaboration}
-            disabled={!isValid}
-            className="w-full text-xs bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-          >
-            Submit Elaboration
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── Feedback Phase ─────────────────────────────────────
-  if (phase === 'feedback') {
-    const currentResult = results[currentIndex];
-    if (!currentResult) return null;
-    const { evaluation } = currentResult;
-    const ratingStyle = RATING_STYLES[evaluation.rating] || RATING_STYLES['Developing']!;
-    const isLast = currentIndex === questions.length - 1;
-
-    return (
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
-          <div className="flex items-center justify-between mb-1">
-            <button onClick={onBack} className="text-xs text-blue-600 hover:text-blue-800">
-              &larr; Back to chat
-            </button>
-            <span className="text-xs font-medium text-gray-600">Interrogative Elaboration</span>
-          </div>
-          <div className="text-xs text-gray-500">
-            Question {currentIndex + 1} of {questions.length} - Feedback
-          </div>
-        </div>
-
-        {/* Feedback content */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {/* Rating badge */}
-          <div className="flex items-center gap-2">
-            <span
-              className={`px-2 py-1 rounded-full text-xs font-medium ${ratingStyle.bg} ${ratingStyle.text}`}
-            >
-              {evaluation.rating === 'Strong' && '\uD83D\uDFE2 '}
-              {evaluation.rating === 'Developing' && '\uD83D\uDFE1 '}
-              {evaluation.rating === 'Needs Improvement' && '\uD83D\uDD34 '}
-              {ratingStyle.label}
-            </span>
-          </div>
-
-          {/* Addressed points */}
-          {evaluation.addressedPoints.length > 0 && (
-            <div>
-              <div className="text-xs font-medium text-green-700 mb-1">Addressed:</div>
-              <ul className="space-y-0.5">
-                {evaluation.addressedPoints.map((p, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex items-start gap-1">
-                    <span className="text-green-600 shrink-0">{'\u2705'}</span>
-                    <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Missed points */}
-          {evaluation.missedPoints.length > 0 && (
-            <div>
-              <div className="text-xs font-medium text-orange-700 mb-1">To explore further:</div>
-              <ul className="space-y-0.5">
-                {evaluation.missedPoints.map((p, i) => (
-                  <li key={i} className="text-xs text-gray-700 flex items-start gap-1">
-                    <span className="text-orange-500 shrink-0">{'\u2192'}</span>
-                    <span>{p}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Feedback card */}
-          <div className="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-gray-700">
-            {evaluation.feedback}
-          </div>
-
-          {/* Model answer (collapsible) */}
-          <div>
-            <button
-              onClick={() => setShowModelAnswer(!showModelAnswer)}
-              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              {'\uD83D\uDCDD'} {showModelAnswer ? 'Hide' : 'See'} model answer
-              <span className="text-[10px]">{showModelAnswer ? '\u25B2' : '\u25BC'}</span>
-            </button>
-            {showModelAnswer && (
-              <div className="mt-1 bg-gray-50 border border-gray-200 rounded p-2 text-xs text-gray-600 italic">
-                {evaluation.modelElaboration}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="px-3 py-2 border-t border-gray-200 flex gap-2">
-          <button
-            onClick={handleRevise}
-            className="flex-1 text-xs text-gray-600 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            {'\u270F\uFE0F'} Revise
-          </button>
-          <button
-            onClick={handleNext}
-            className="flex-1 text-xs bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            {isLast ? 'Complete' : 'Next \u2192'}
-          </button>
-        </div>
+        <p className="text-sm text-gray-600">Generating conversation summary...</p>
       </div>
     );
   }
 
   // ─── Complete Phase ─────────────────────────────────────
-  const allResults = Object.entries(results);
-  const strong = allResults.filter(([, r]) => r.evaluation.rating === 'Strong').length;
-  const developing = allResults.filter(([, r]) => r.evaluation.rating === 'Developing').length;
-  const needsImprovement = allResults.filter(
-    ([, r]) => r.evaluation.rating === 'Needs Improvement',
-  ).length;
+  if (phase === 'complete' && summary) {
+    const depthStyle = DEPTH_STYLES[summary.depthRating] || DEPTH_STYLES['surface']!;
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
+          <div className="text-lg mb-1">{'\uD83C\uDF89'}</div>
+          <div className="text-sm font-semibold text-gray-800">Great exploration!</div>
+          <div className="text-xs text-gray-600 mt-1 flex items-center justify-center gap-3">
+            <span>Questions: {summary.questionsAsked}</span>
+            <span className={depthStyle.color}>Depth: {depthStyle.label}</span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {/* Summary */}
+          <div>
+            <div className="text-xs font-medium text-gray-600 mb-1">Summary</div>
+            <div className="text-xs text-gray-700 bg-blue-50 border border-blue-200 rounded p-2">
+              {summary.summary}
+            </div>
+          </div>
+
+          {/* Concepts */}
+          {summary.conceptsCovered.length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-gray-600 mb-1">Concepts covered</div>
+              <div className="flex flex-wrap gap-1">
+                {summary.conceptsCovered.map((c, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">
+              Add a note (optional)
+            </label>
+            <textarea
+              value={userNotes}
+              onChange={(e) => setUserNotes(e.target.value)}
+              placeholder="Reflect on what you learned..."
+              className="w-full text-xs border border-gray-300 rounded p-2 h-16 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="px-3 py-2 border-t border-gray-200 space-y-1.5">
+          <button
+            onClick={handleSave}
+            disabled={saved}
+            className={`w-full text-xs px-3 py-2 rounded-lg transition-colors ${
+              saved
+                ? 'bg-green-50 text-green-600 border border-green-200'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {saved ? '\u2713 Saved to My Reviews' : 'Save to My Reviews'}
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleRetry}
+              className="flex-1 text-xs text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={onComplete}
+              className="flex-1 text-xs text-blue-600 border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Suggestions & Conversation Phases ──────────────────
+  const visibleSuggestions = showAllSuggestions
+    ? suggestedQuestions
+    : suggestedQuestions.slice(0, 3);
+  const hasMore = suggestedQuestions.length > 3 && !showAllSuggestions;
+  const isInConversation = phase === 'conversation';
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Completion Header */}
-      <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-        <div className="text-lg mb-1">{'\uD83C\uDF89'}</div>
-        <div className="text-sm font-semibold text-gray-800">Elaboration Complete!</div>
-        <div className="text-xs text-gray-600 mt-1">
-          {strong > 0 && <span className="inline-block mr-2">{strong} Strong</span>}
-          {developing > 0 && <span className="inline-block mr-2">{developing} Developing</span>}
-          {needsImprovement > 0 && (
-            <span className="inline-block">{needsImprovement} Needs Improvement</span>
+      {/* Header */}
+      <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center justify-between mb-1">
+          <button onClick={onBack} className="text-xs text-blue-600 hover:text-blue-800">
+            &larr; Back to chat
+          </button>
+          <span className="text-xs font-medium text-gray-600">Interrogative Elaboration</span>
+        </div>
+      </div>
+
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Suggestions panel */}
+        <div className="border-b border-gray-100">
+          {isInConversation ? (
+            // Collapsed suggestions header
+            <button
+              onClick={() => setSuggestionsExpanded(!suggestionsExpanded)}
+              className="w-full px-3 py-2 text-xs text-left text-gray-600 hover:bg-gray-50 flex items-center gap-1"
+            >
+              {'\uD83D\uDCA1'} Suggestions
+              <span className="text-[10px] text-gray-400 ml-1">
+                (tap to {suggestionsExpanded ? 'collapse' : 'expand'})
+              </span>
+              <span className="ml-auto text-[10px] text-gray-400">
+                {suggestionsExpanded ? '\u25B2' : '\u25BC'}
+              </span>
+            </button>
+          ) : (
+            <div className="px-3 pt-2 pb-1">
+              <div className="text-xs font-medium text-gray-700 flex items-center gap-1">
+                {'\uD83D\uDCA1'} Suggested questions to ask:
+              </div>
+            </div>
+          )}
+
+          {/* Suggestion chips */}
+          {(!isInConversation || suggestionsExpanded) && (
+            <div className="px-3 pb-2 space-y-1.5">
+              {visibleSuggestions.map((q, i) => {
+                const isUsed = usedSuggestions.has(i);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestionClick(i)}
+                    disabled={isUsed || isAsking}
+                    className={`w-full text-left text-xs border rounded-lg p-2 transition-colors ${
+                      isUsed
+                        ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-default'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          q.type === 'why'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-green-100 text-green-700'
+                        } ${isUsed ? 'opacity-50' : ''}`}
+                      >
+                        {q.type.toUpperCase()}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={isUsed ? 'line-through' : ''}>{q.question}</div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[10px] text-gray-400">{q.topic}</span>
+                          <span
+                            className={`text-[10px] px-1 py-0 rounded ${DIFFICULTY_STYLES[q.difficulty] || ''}`}
+                          >
+                            {q.difficulty}
+                          </span>
+                        </div>
+                      </div>
+                      {isUsed && (
+                        <span className="text-[10px] text-gray-400 shrink-0">{'\u2713'} asked</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {hasMore && (
+                <button
+                  onClick={() => setShowAllSuggestions(true)}
+                  className="text-xs text-blue-600 hover:text-blue-800 px-1"
+                >
+                  {'\u25B8'} Show more suggestions ({suggestedQuestions.length - 3})
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Question summary */}
-        <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
-          {questions.map((q, i) => {
-            const r = results[i];
-            const rating = r?.evaluation.rating || '';
-            const dotColor =
-              rating === 'Strong'
-                ? 'bg-green-100 text-green-700'
-                : rating === 'Developing'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-red-100 text-red-700';
-            const typeBadge = q.type === 'why' ? 'WHY' : 'HOW';
+        {/* "Or type your own" divider (suggestions phase only) */}
+        {!isInConversation && (
+          <div className="px-3 py-2 text-center text-[10px] text-gray-400">
+            &mdash; or type your own question &mdash;
+          </div>
+        )}
 
-            return (
-              <div
-                key={i}
-                className={`text-[10px] px-2 py-1 rounded-full flex items-center gap-1 ${dotColor}`}
-              >
-                <span>Q{i + 1}</span>
-                <span className="opacity-70">({typeBadge})</span>
-                <span>
-                  {rating === 'Strong' && '\uD83D\uDFE2'}
-                  {rating === 'Developing' && '\uD83D\uDFE1'}
-                  {rating === 'Needs Improvement' && '\uD83D\uDD34'}
-                </span>
+        {/* Conversation messages */}
+        {isInConversation && (
+          <div className="px-3 py-2 space-y-2">
+            {conversation.map((msg, i) => (
+              <div key={i}>
+                <div className="text-[10px] text-gray-400 mb-0.5">
+                  {msg.role === 'user' ? 'You' : 'Tutor'}
+                  {msg.wasSuggested && <span className="ml-1 text-blue-400">(suggested)</span>}
+                </div>
+                <div
+                  className={`text-xs rounded-lg p-2 ${
+                    msg.role === 'user'
+                      ? 'bg-blue-50 border border-blue-200 text-gray-800'
+                      : 'bg-gray-50 border border-gray-200 text-gray-700'
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+
+            {/* Typing indicator */}
+            {isAsking && (
+              <div>
+                <div className="text-[10px] text-gray-400 mb-0.5">Tutor</div>
+                <div className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-2 text-gray-500 italic animate-pulse">
+                  Tutor is thinking...
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
-      {/* Notes input */}
-      <div className="flex-1 overflow-y-auto p-3">
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">
-            Add a note (optional)
-          </label>
-          <textarea
-            value={userNotes}
-            onChange={(e) => setUserNotes(e.target.value)}
-            placeholder="Reflect on what you learned..."
-            className="w-full text-xs border border-gray-300 rounded p-2 h-16 resize-none"
-          />
-        </div>
-      </div>
-
-      {/* Action buttons */}
+      {/* Input area */}
       <div className="px-3 py-2 border-t border-gray-200 space-y-1.5">
-        <button
-          onClick={handleSave}
-          disabled={saved}
-          className={`w-full text-xs px-3 py-2 rounded-lg transition-colors ${
-            saved
-              ? 'bg-green-50 text-green-600 border border-green-200'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {saved ? '\u2713 Saved to My Reviews' : 'Save to My Reviews'}
-        </button>
         <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmitInput();
+              }
+            }}
+            placeholder={isInConversation ? 'Ask a follow-up...' : 'Ask about this text...'}
+            disabled={isAsking}
+            className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 disabled:bg-gray-50"
+          />
           <button
-            onClick={handleRetry}
-            className="flex-1 text-xs text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={handleSubmitInput}
+            disabled={isAsking || !inputValue.trim() || inputValue.trim().length < 5}
+            className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
-            Try Again
-          </button>
-          <button
-            onClick={onComplete}
-            className="flex-1 text-xs text-blue-600 border border-blue-300 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-          >
-            Done
+            {'\u27A4'}
           </button>
         </div>
+
+        {/* Wrap up button (only when in conversation) */}
+        {isInConversation && conversation.length >= 2 && (
+          <button
+            onClick={handleWrapUp}
+            disabled={isAsking}
+            className="w-full text-xs text-gray-600 border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            {'\u2705'} I&apos;m done &mdash; wrap up
+          </button>
+        )}
       </div>
     </div>
   );

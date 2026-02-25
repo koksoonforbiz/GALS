@@ -18,8 +18,8 @@ import type {
   UpdateSavedReviewDto,
   GeneratePracticeTestDto,
   SubmitPracticeTestAnswersDto,
-  GenerateElaborationDto,
-  SubmitElaborationDto,
+  GenerateSuggestionsDto,
+  AskQuestionDto,
 } from './dto';
 import type { InterventionType } from '@prisma/client';
 
@@ -126,23 +126,20 @@ export class LearningInterventionsController {
     return this.service.getPracticeTest(req.user.id, interventionId);
   }
 
-  // ─── Interrogative Elaboration ───────────────────────────
+  // ─── Interrogative Elaboration (Conversational Q&A) ─────
 
   @Post('interrogative-elaboration/generate')
-  generateElaborationQuestions(
-    @Request() req: { user: RequestUser },
-    @Body() dto: GenerateElaborationDto,
-  ) {
-    return this.service.generateElaborationQuestions(req.user.id, dto);
+  generateSuggestions(@Request() req: { user: RequestUser }, @Body() dto: GenerateSuggestionsDto) {
+    return this.service.generateSuggestions(req.user.id, dto);
   }
 
-  @Post('interrogative-elaboration/:sessionId/evaluate')
-  evaluateElaboration(
+  @Post('interrogative-elaboration/:sessionId/ask')
+  askQuestion(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
-    @Body() dto: SubmitElaborationDto,
+    @Body() dto: AskQuestionDto,
   ) {
-    return this.service.evaluateElaboration(req.user.id, sessionId, dto);
+    return this.service.askQuestion(req.user.id, sessionId, dto);
   }
 
   @Post('interrogative-elaboration/:sessionId/complete')

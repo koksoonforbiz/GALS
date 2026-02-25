@@ -13,14 +13,15 @@ import type {
   UpdateSavedReviewDto,
   GeneratePracticeTestDto,
   SubmitPracticeTestAnswersDto,
-  GenerateElaborationDto,
-  SubmitElaborationDto,
+  GenerateSuggestionsDto,
+  AskQuestionDto,
 } from './dto';
 import { DEFAULT_PROMPTS } from './prompts/default-prompts';
 import { buildPracticeTestingPrompt } from './prompts/practice-testing.prompt';
 import {
-  buildElaborationQuestionsPrompt,
-  buildElaborationEvaluationPrompt,
+  buildQuestionSuggestionPrompt,
+  buildElaborationAnswerPrompt,
+  buildConversationSummaryPrompt,
 } from './prompts/interrogative-elaboration.prompt';
 
 // ─── Practice Testing Interfaces ─────────────────────────
@@ -59,37 +60,39 @@ interface GradedResult {
 
 // ─── Interrogative Elaboration Interfaces ───────────────
 
-interface ElaborationQuestion {
+interface SuggestedQuestion {
   question: string;
   type: 'why' | 'how';
-  keyPoints: string[];
+  topic: string;
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+}
+
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  wasSuggested?: boolean;
 }
 
 interface ElaborationSessionData {
-  questions: ElaborationQuestion[];
+  suggestedQuestions: SuggestedQuestion[];
+  keyConcepts: string[];
+  conversation: ConversationMessage[];
   selectedText: string;
-  userElaborations: Array<{
-    questionIndex: number;
-    elaboration: string;
-    rating: string;
-    addressedPoints: string[];
-    missedPoints: string[];
-    feedback: string;
-    modelElaboration: string;
-  }>;
+  questionsAsked: number;
 }
 
-interface ElaborationSessionResult {
+interface SuggestionResult {
   interventionId: string;
-  questions: Array<{ question: string; type: string }>;
+  suggestedQuestions: SuggestedQuestion[];
+  keyConcepts: string[];
 }
 
-interface ElaborationEvaluation {
-  rating: string;
-  addressedPoints: string[];
-  missedPoints: string[];
-  feedback: string;
-  modelElaboration: string;
+interface ConversationSummary {
+  summary: string;
+  conceptsCovered: string[];
+  questionsAsked: number;
+  depthRating: 'surface' | 'moderate' | 'deep';
 }
 
 @Injectable()
@@ -420,12 +423,12 @@ export class LearningInterventionsService {
     };
   }
 
-  // ─── Interrogative Elaboration ───────────────────────────
+  // ─── Interrogative Elaboration (Conversational Q&A) ─────
 
-  async generateElaborationQuestions(
+  async generateSuggestions(
     userId: string,
-    dto: GenerateElaborationDto,
-  ): Promise<ElaborationSessionResult> {
+    dto: GenerateSuggestionsDto,
+  ): Promise<SuggestionResult> {
     if (!dto.selectedText || dto.selectedText.trim().length < 20) {
       throw new BadRequestException('Selected text must be at least 20 characters');
     }
@@ -436,19 +439,20 @@ export class LearningInterventionsService {
 
     const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
 
-    const questionCount = Math.min(Math.max(dto.questionCount || 4, 2), 8);
+    const questionCount = Math.min(Math.max(dto.questionCount || 6, 3), 10);
 
     // Get system prompt (custom or default)
     const systemPrompt = await this.getSystemPrompt(dto.courseId, 'INTERROGATIVE_ELABORATION');
 
-    const { system, user } = buildElaborationQuestionsPrompt(
+    const { system, user } = buildQuestionSuggestionPrompt(
       systemPrompt,
       dto.selectedText,
       questionCount,
     );
 
     // Call LLM with retry on malformed JSON
-    let questions: ElaborationQuestion[];
+    let suggestedQuestions: SuggestedQuestion[];
+    let keyConcepts: string[] = [];
     let attempts = 0;
     const maxAttempts = 2;
 
@@ -457,16 +461,18 @@ export class LearningInterventionsService {
       try {
         const result = await this.llmService.callLlmForUser(teacherId, system, user);
         const parsed = this.parseLlmJson(result.content);
-        questions = this.validateElaborationResponse(parsed);
+        const validated = this.validateSuggestionResponse(parsed);
+        suggestedQuestions = validated.suggestedQuestions;
+        keyConcepts = validated.keyConcepts;
         break;
       } catch (err) {
         if (attempts >= maxAttempts) {
-          this.logger.error('Elaboration question generation failed after retries', err);
+          this.logger.error('Question suggestion generation failed after retries', err);
           throw new BadRequestException(
-            'Failed to generate elaboration questions. Please try again.',
+            'Failed to generate question suggestions. Please try again.',
           );
         }
-        this.logger.warn(`Elaboration question generation attempt ${attempts} failed, retrying...`);
+        this.logger.warn(`Question suggestion attempt ${attempts} failed, retrying...`);
       }
     }
 
@@ -481,30 +487,29 @@ export class LearningInterventionsService {
         status: 'IN_PROGRESS',
         selectedText: dto.selectedText,
         sessionData: {
-          questions: questions!,
+          suggestedQuestions: suggestedQuestions!,
+          keyConcepts,
+          conversation: [],
           selectedText: dto.selectedText,
-          userElaborations: [],
+          questionsAsked: 0,
         } as unknown as Prisma.InputJsonValue,
       },
     });
 
-    // Return questions without key points (don't reveal expected answers)
     return {
       interventionId: intervention.id,
-      questions: questions!.map((q) => ({
-        question: q.question,
-        type: q.type,
-      })),
+      suggestedQuestions: suggestedQuestions!,
+      keyConcepts,
     };
   }
 
-  async evaluateElaboration(
+  async askQuestion(
     userId: string,
     sessionId: string,
-    dto: SubmitElaborationDto,
-  ): Promise<ElaborationEvaluation> {
-    if (!dto.elaboration || dto.elaboration.trim().length < 50) {
-      throw new BadRequestException('Elaboration must be at least 50 characters');
+    dto: AskQuestionDto,
+  ): Promise<{ answer: string }> {
+    if (!dto.question || dto.question.trim().length < 5) {
+      throw new BadRequestException('Question must be at least 5 characters');
     }
 
     const intervention = await this.prisma.learningIntervention.findUnique({
@@ -516,90 +521,58 @@ export class LearningInterventionsService {
     }
 
     if (intervention.userId !== userId) {
-      throw new ForbiddenException('Cannot submit elaboration for another user');
+      throw new ForbiddenException("Cannot interact with another user's session");
     }
 
     if (intervention.type !== 'INTERROGATIVE_ELABORATION') {
       throw new BadRequestException('Invalid intervention type');
     }
 
-    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
-    const questions = sessionData?.questions;
-
-    if (!questions || !Array.isArray(questions)) {
-      throw new BadRequestException('Invalid elaboration session data');
-    }
-
-    if (dto.questionIndex < 0 || dto.questionIndex >= questions.length) {
-      throw new BadRequestException('Invalid question index');
-    }
-
-    const question = questions[dto.questionIndex]!;
-
     const teacherId = await this.getCourseTeacherIdWithApiKey(intervention.courseId);
 
-    // Call LLM with the evaluation prompt (fixed, not teacher-customizable)
-    const { system, user } = buildElaborationEvaluationPrompt({
-      question: question.question,
-      userElaboration: dto.elaboration,
-      keyPoints: question.keyPoints,
+    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
+
+    // Build the answer prompt with conversation history
+    const { system, user } = buildElaborationAnswerPrompt({
       sourceText: sessionData.selectedText,
+      conversationHistory: dto.conversationHistory || [],
+      studentQuestion: dto.question,
     });
 
-    let evaluation: ElaborationEvaluation;
-    let attempts = 0;
-    const maxAttempts = 2;
-
-    while (attempts < maxAttempts) {
-      attempts++;
-      try {
-        const result = await this.llmService.callLlmForUser(teacherId, system, user);
-        const parsed = this.parseLlmJson(result.content);
-        evaluation = this.validateElaborationEvaluation(parsed);
-        break;
-      } catch (err) {
-        if (attempts >= maxAttempts) {
-          this.logger.error('Elaboration evaluation failed after retries', err);
-          throw new BadRequestException('Failed to evaluate elaboration. Please try again.');
-        }
-        this.logger.warn(`Elaboration evaluation attempt ${attempts} failed, retrying...`);
-      }
+    let answer: string;
+    try {
+      const result = await this.llmService.callLlmForUser(teacherId, system, user);
+      answer = result.content;
+    } catch {
+      throw new BadRequestException('Failed to generate answer. Please try again.');
     }
 
-    // Update session data with user's elaboration
-    const updatedElaborations = [...sessionData.userElaborations];
-    // Replace existing elaboration for this question (supports revision)
-    const existingIdx = updatedElaborations.findIndex((e) => e.questionIndex === dto.questionIndex);
-    const elaborationEntry = {
-      questionIndex: dto.questionIndex,
-      elaboration: dto.elaboration,
-      rating: evaluation!.rating,
-      addressedPoints: evaluation!.addressedPoints,
-      missedPoints: evaluation!.missedPoints,
-      feedback: evaluation!.feedback,
-      modelElaboration: evaluation!.modelElaboration,
-    };
-
-    if (existingIdx >= 0) {
-      updatedElaborations[existingIdx] = elaborationEntry;
-    } else {
-      updatedElaborations.push(elaborationEntry);
-    }
+    // Append both messages to the conversation
+    const now = new Date().toISOString();
+    const updatedConversation = [
+      ...sessionData.conversation,
+      { role: 'user' as const, content: dto.question, timestamp: now },
+      { role: 'assistant' as const, content: answer, timestamp: now },
+    ];
 
     await this.prisma.learningIntervention.update({
       where: { id: sessionId },
       data: {
         sessionData: {
           ...sessionData,
-          userElaborations: updatedElaborations,
+          conversation: updatedConversation,
+          questionsAsked: sessionData.questionsAsked + 1,
         } as unknown as Prisma.InputJsonValue,
       },
     });
 
-    return evaluation!;
+    return { answer };
   }
 
-  async completeElaborationSession(userId: string, sessionId: string) {
+  async completeElaborationSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<ConversationSummary> {
     const intervention = await this.prisma.learningIntervention.findUnique({
       where: { id: sessionId },
     });
@@ -616,6 +589,39 @@ export class LearningInterventionsService {
       throw new BadRequestException('Invalid intervention type');
     }
 
+    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
+
+    // Generate conversation summary via LLM
+    let summary: ConversationSummary;
+
+    if (sessionData.conversation.length >= 2) {
+      try {
+        const teacherId = await this.getCourseTeacherIdWithApiKey(intervention.courseId);
+        const { system, user } = buildConversationSummaryPrompt({
+          sourceText: sessionData.selectedText,
+          conversation: sessionData.conversation,
+        });
+        const result = await this.llmService.callLlmForUser(teacherId, system, user);
+        const parsed = this.parseLlmJson(result.content);
+        summary = this.validateConversationSummary(parsed);
+      } catch {
+        // Fallback summary if LLM fails
+        summary = {
+          summary: 'The student explored the text through questions and answers.',
+          conceptsCovered: sessionData.keyConcepts.slice(0, 3),
+          questionsAsked: sessionData.questionsAsked,
+          depthRating: sessionData.questionsAsked >= 3 ? 'moderate' : 'surface',
+        };
+      }
+    } else {
+      summary = {
+        summary: 'Session completed without asking questions.',
+        conceptsCovered: [],
+        questionsAsked: 0,
+        depthRating: 'surface',
+      };
+    }
+
     await this.prisma.learningIntervention.update({
       where: { id: sessionId },
       data: {
@@ -624,17 +630,7 @@ export class LearningInterventionsService {
       },
     });
 
-    const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
-
-    return {
-      interventionId: sessionId,
-      status: 'COMPLETED',
-      questions: sessionData.questions.map((q) => ({
-        question: q.question,
-        type: q.type,
-      })),
-      userElaborations: sessionData.userElaborations,
-    };
+    return summary;
   }
 
   async getElaborationSession(userId: string, sessionId: string) {
@@ -659,11 +655,10 @@ export class LearningInterventionsService {
     return {
       interventionId: intervention.id,
       status: intervention.status,
-      questions: sessionData.questions.map((q) => ({
-        question: q.question,
-        type: q.type,
-      })),
-      userElaborations: sessionData.userElaborations,
+      suggestedQuestions: sessionData.suggestedQuestions,
+      keyConcepts: sessionData.keyConcepts,
+      conversation: sessionData.conversation,
+      questionsAsked: sessionData.questionsAsked,
       completedAt: intervention.completedAt,
     };
   }
@@ -735,42 +730,56 @@ export class LearningInterventionsService {
     });
   }
 
-  private validateElaborationResponse(parsed: unknown): ElaborationQuestion[] {
-    const data = parsed as { questions?: unknown[] };
+  private validateSuggestionResponse(parsed: unknown): {
+    suggestedQuestions: SuggestedQuestion[];
+    keyConcepts: string[];
+  } {
+    const data = parsed as { suggestedQuestions?: unknown[]; keyConcepts?: unknown[] };
 
-    if (!data?.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
-      throw new Error('LLM response missing questions array');
+    if (
+      !data?.suggestedQuestions ||
+      !Array.isArray(data.suggestedQuestions) ||
+      data.suggestedQuestions.length === 0
+    ) {
+      throw new Error('LLM response missing suggestedQuestions array');
     }
 
-    return data.questions.map((q: unknown) => {
+    const suggestedQuestions = data.suggestedQuestions.map((q: unknown) => {
       const item = q as Record<string, unknown>;
       if (!item.question || !item.type) {
-        throw new Error('Invalid elaboration question structure in LLM response');
+        throw new Error('Invalid suggested question structure in LLM response');
       }
 
       const type = String(item.type).toLowerCase();
+      const difficulty = String(item.difficulty || 'intermediate').toLowerCase();
 
       return {
         question: String(item.question),
-        type: type === 'how' ? 'how' : 'why',
-        keyPoints: Array.isArray(item.keyPoints) ? item.keyPoints.map(String) : [],
-      } as ElaborationQuestion;
+        type: type === 'how' ? ('how' as const) : ('why' as const),
+        topic: String(item.topic || ''),
+        difficulty: (['beginner', 'intermediate', 'advanced'].includes(difficulty)
+          ? difficulty
+          : 'intermediate') as SuggestedQuestion['difficulty'],
+      };
     });
+
+    const keyConcepts = Array.isArray(data.keyConcepts) ? data.keyConcepts.map(String) : [];
+
+    return { suggestedQuestions, keyConcepts };
   }
 
-  private validateElaborationEvaluation(parsed: unknown): ElaborationEvaluation {
+  private validateConversationSummary(parsed: unknown): ConversationSummary {
     const data = parsed as Record<string, unknown>;
 
-    if (!data?.rating || !data?.feedback) {
-      throw new Error('Invalid elaboration evaluation response');
-    }
-
     return {
-      rating: String(data.rating),
-      addressedPoints: Array.isArray(data.addressedPoints) ? data.addressedPoints.map(String) : [],
-      missedPoints: Array.isArray(data.missedPoints) ? data.missedPoints.map(String) : [],
-      feedback: String(data.feedback),
-      modelElaboration: String(data.modelElaboration || ''),
+      summary: String(data?.summary || 'Session completed.'),
+      conceptsCovered: Array.isArray(data?.conceptsCovered)
+        ? (data.conceptsCovered as unknown[]).map(String)
+        : [],
+      questionsAsked: typeof data?.questionsAsked === 'number' ? data.questionsAsked : 0,
+      depthRating: (['surface', 'moderate', 'deep'].includes(String(data?.depthRating || ''))
+        ? String(data.depthRating)
+        : 'surface') as ConversationSummary['depthRating'],
     };
   }
 

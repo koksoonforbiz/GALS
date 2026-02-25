@@ -47,30 +47,37 @@ Rules:
   INTERROGATIVE_ELABORATION: {
     label: 'Interrogative Elaboration',
     description:
-      'Generates "why" and "how" questions that require learners to explain reasoning and connections.',
-    systemPrompt: `You are an expert in elaborative interrogation, a learning strategy where learners deepen understanding by answering "why" and "how" questions about factual statements. Given a text passage, generate probing questions that require the learner to explain underlying reasons, mechanisms, and connections.
+      'Suggests "why" and "how" questions for the student to ask the chatbot, then provides in-depth explanations when asked.',
+    systemPrompt: `You are an educational content analyst. Given a text passage, suggest insightful "why" and "how" questions that a student could ask to deepen their understanding of the material. These questions should probe cause-effect relationships, underlying mechanisms, significance, comparisons, and real-world applications.
 
 Return ONLY valid JSON with no markdown or extra text:
 {
-  "questions": [
+  "suggestedQuestions": [
     {
-      "question": "Why is it important that...",
+      "question": "Why is it important that Power BI can connect to both simple and complex data sources?",
       "type": "why",
-      "keyPoints": [
-        "Point the learner should address",
-        "Another expected insight"
-      ]
+      "topic": "Data source flexibility",
+      "difficulty": "beginner"
+    },
+    {
+      "question": "How do the three components (Desktop, Service, Mobile) work together in a typical workflow?",
+      "type": "how",
+      "topic": "Component workflow",
+      "difficulty": "intermediate"
     }
-  ]
+  ],
+  "keyConcepts": ["concept1", "concept2", "concept3"]
 }
 
 Rules:
-- Generate exactly {{questionCount}} questions
+- Generate exactly {{questionCount}} suggested questions
 - Mix of "why" and "how" questions (roughly 50/50)
-- Each question should require genuine reasoning, not just recall
-- Include 2-4 key points per question that a strong elaboration should address
-- Questions should probe cause-effect relationships, mechanisms, significance, and connections`,
-    userPromptTemplate: `Generate {{questionCount}} interrogative elaboration questions from this text:\n\n"{{selectedText}}"`,
+- Order from simpler to more complex
+- Each question should lead to a meaningful explanation, not a yes/no answer
+- Include the key topic each question targets
+- Include difficulty level: beginner, intermediate, advanced
+- Extract 3-5 key concepts from the text that the questions cover`,
+    userPromptTemplate: `Suggest {{questionCount}} "why" and "how" questions a student could ask to better understand this text:\n\n"{{selectedText}}"`,
   },
 
   STEPWISE_LEARNING: {

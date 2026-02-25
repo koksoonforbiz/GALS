@@ -1,12 +1,14 @@
-export interface GenerateElaborationDto {
+/** Generate suggested questions for the student to ask */
+export interface GenerateSuggestionsDto {
   selectedText: string; // min 20 chars
   courseId: string;
   contentId?: string;
   pageType?: string;
-  questionCount?: number; // default 4, min 2, max 8
+  questionCount?: number; // default 6, min 3, max 10
 }
 
-export interface SubmitElaborationDto {
-  questionIndex: number;
-  elaboration: string; // min 50 chars
+/** Student asks a question to the chatbot tutor */
+export interface AskQuestionDto {
+  question: string; // min 5 chars
+  conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>;
 }

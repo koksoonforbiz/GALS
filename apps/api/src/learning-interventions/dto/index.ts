@@ -4,4 +4,4 @@ export type {
   GeneratePracticeTestDto,
   SubmitPracticeTestAnswersDto,
 } from './generate-practice-test.dto';
-export type { GenerateElaborationDto, SubmitElaborationDto } from './interrogative-elaboration.dto';
+export type { GenerateSuggestionsDto, AskQuestionDto } from './interrogative-elaboration.dto';
