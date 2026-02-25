@@ -79,7 +79,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   };
 
   const handleInterventionClick = (type: ChatbotMode) => {
-    if (!selectedText) return;
+    if (!selectedText || !courseId) return;
     setMode(type);
   };
 
@@ -258,22 +258,31 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
       {selectedText && (
         <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
           <div className="text-xs text-gray-500 mb-1.5">Apply learning strategy:</div>
+          {!courseId && (
+            <div className="text-[10px] text-amber-600 mb-1">
+              Navigate to a course to use learning strategies.
+            </div>
+          )}
           <div className="flex flex-wrap gap-1.5">
             <InterventionButton
               label="Practice"
               onClick={() => handleInterventionClick('practice-testing')}
+              disabled={!courseId}
             />
             <InterventionButton
               label="Distributed"
               onClick={() => handleInterventionClick('distributed-practice')}
+              disabled={!courseId}
             />
             <InterventionButton
               label="Step"
               onClick={() => handleInterventionClick('stepwise-learning')}
+              disabled={!courseId}
             />
             <InterventionButton
               label="Elab"
               onClick={() => handleInterventionClick('interrogative-elaboration')}
+              disabled={!courseId}
             />
           </div>
         </div>
@@ -394,11 +403,24 @@ function PanelHeader({
   );
 }
 
-function InterventionButton({ label, onClick }: { label: string; onClick: () => void }) {
+function InterventionButton({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       onClick={onClick}
-      className="text-xs bg-white border border-gray-300 text-gray-700 px-2.5 py-1 rounded-full hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+      disabled={disabled}
+      className={`text-xs px-2.5 py-1 rounded-full transition-colors ${
+        disabled
+          ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed'
+          : 'bg-white border border-gray-300 text-gray-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700'
+      }`}
     >
       {label}
     </button>
