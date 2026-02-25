@@ -20,6 +20,8 @@ import { CourseStudioPage } from './pages/teacher/CourseStudioPage';
 import { AiSettingsPage } from './pages/teacher/AiSettingsPage';
 import { PromptSettingsPage } from './pages/teacher/PromptSettingsPage';
 import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
+import { UserManagementPage } from './pages/teacher/UserManagementPage';
+import { ChangePassword } from './pages/ChangePassword';
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -40,6 +42,7 @@ function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/change-password" element={<ChangePassword />} />
             <Route path="/health" element={<Health />} />
 
             {/* Protected routes with layout */}
@@ -136,6 +139,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['teacher', 'admin']}>
                     <AttemptDetailPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/user-management"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <UserManagementPage />
                   </RoleRoute>
                 }
               />

@@ -21,7 +21,14 @@ interface CourseProgress {
 interface TokenUsage {
   totalTokens: number;
   totalCost: number;
-  byProvider: Record<string, { totalTokens: number; totalCost: number; byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }> }>;
+  byProvider: Record<
+    string,
+    {
+      totalTokens: number;
+      totalCost: number;
+      byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }>;
+    }
+  >;
   byFeature: Record<string, { totalTokens: number; totalCost: number }>;
 }
 
@@ -78,9 +85,7 @@ function formatCost(cost: number): string {
 }
 
 function formatFeatureName(feature: string): string {
-  return feature
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return feature.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ─── Add Student Modal ──────────────────────────────────
@@ -138,7 +143,7 @@ function AddStudentModal({
       setResult(res);
       onAdded();
     } catch (err: unknown) {
-      toast((err as Error).message || 'Failed to add student', 'error');
+      toast('error', (err as Error).message || 'Failed to add student');
     } finally {
       setSaving(false);
     }
@@ -147,14 +152,19 @@ function AddStudentModal({
   const handleBulkUpload = async () => {
     if (!csvText.trim() || selectedCourses.length === 0) return;
 
-    const lines = csvText.trim().split('\n').filter((l) => l.trim());
-    const students = lines.map((line) => {
-      const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
-      return { name: parts[0] || '', email: parts[1] || '' };
-    }).filter((s) => s.name && s.email);
+    const lines = csvText
+      .trim()
+      .split('\n')
+      .filter((l) => l.trim());
+    const students = lines
+      .map((line) => {
+        const parts = line.split(',').map((p) => p.trim().replace(/^"|"$/g, ''));
+        return { name: parts[0] || '', email: parts[1] || '' };
+      })
+      .filter((s) => s.name && s.email);
 
     if (students.length === 0) {
-      toast('No valid students found in CSV', 'error');
+      toast('error', 'No valid students found in CSV');
       return;
     }
 
@@ -167,7 +177,7 @@ function AddStudentModal({
       setBulkResult(res);
       onAdded();
     } catch (err: unknown) {
-      toast((err as Error).message || 'Bulk upload failed', 'error');
+      toast('error', (err as Error).message || 'Bulk upload failed');
     } finally {
       setSaving(false);
     }
@@ -178,14 +188,14 @@ function AddStudentModal({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      setCsvText(ev.target?.result as string || '');
+      setCsvText((ev.target?.result as string) || '');
     };
     reader.readAsText(file);
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast('Copied to clipboard', 'success');
+    toast('success', 'Copied to clipboard');
   };
 
   // Success view
@@ -262,13 +272,21 @@ function AddStudentModal({
 
           <div className="space-y-2 mb-4">
             {bulkResult.results.map((r, i) => (
-              <div key={i} className="flex items-center justify-between text-sm bg-gray-50 p-2 rounded">
+              <div
+                key={i}
+                className="flex items-center justify-between text-sm bg-gray-50 p-2 rounded"
+              >
                 <span>{r.email}</span>
                 <div className="flex items-center gap-2">
-                  <span className={
-                    r.status === 'created' ? 'text-green-600' :
-                    r.status === 'failed' ? 'text-red-600' : 'text-yellow-600'
-                  }>
+                  <span
+                    className={
+                      r.status === 'created'
+                        ? 'text-green-600'
+                        : r.status === 'failed'
+                          ? 'text-red-600'
+                          : 'text-yellow-600'
+                    }
+                  >
                     {r.status}
                   </span>
                   {r.temporaryPassword && (
@@ -340,7 +358,9 @@ function AddStudentModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Enroll in courses</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enroll in courses
+              </label>
               {courses.map((c) => (
                 <label key={c.id} className="flex items-center gap-2 py-1">
                   <input
@@ -360,7 +380,11 @@ function AddStudentModal({
               >
                 {saving ? 'Adding...' : 'Add Student'}
               </button>
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
             </div>
@@ -374,7 +398,7 @@ function AddStudentModal({
               <textarea
                 value={csvText}
                 onChange={(e) => setCsvText(e.target.value)}
-                placeholder={"John Doe, john@example.com\nJane Smith, jane@example.com"}
+                placeholder={'John Doe, john@example.com\nJane Smith, jane@example.com'}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg h-32 text-sm font-mono"
               />
               <div className="mt-2">
@@ -405,7 +429,10 @@ function AddStudentModal({
               >
                 {saving ? 'Uploading...' : 'Upload & Add All'}
               </button>
-              <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+              >
                 Cancel
               </button>
             </div>
@@ -440,7 +467,9 @@ function StudentDetailModal({
               Last active: {new Date(student.lastActiveAt).toLocaleDateString()}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">
+            &times;
+          </button>
         </div>
 
         {/* Course Progress */}
@@ -452,9 +481,10 @@ function StudentDetailModal({
               <ProgressBar percentage={course.progress.percentage} />
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              {course.progress.lessonsCompleted}/{course.progress.totalLessons} lessons
-              &middot; {course.progress.quizzesCompleted} quizzes
-              {course.progress.averageQuizScore > 0 && ` &middot; Avg: ${course.progress.averageQuizScore}%`}
+              {course.progress.lessonsCompleted}/{course.progress.totalLessons} lessons &middot;{' '}
+              {course.progress.quizzesCompleted} quizzes
+              {course.progress.averageQuizScore > 0 &&
+                ` &middot; Avg: ${course.progress.averageQuizScore}%`}
             </p>
           </div>
         ))}
@@ -462,7 +492,8 @@ function StudentDetailModal({
         {/* Token Usage */}
         <h4 className="font-medium text-gray-900 mb-2 mt-4">AI Token Usage & Costs</h4>
         <p className="text-sm text-gray-600 mb-3">
-          Total: {student.tokenUsage.totalTokens.toLocaleString()} tokens &middot; {formatCost(student.tokenUsage.totalCost)}
+          Total: {student.tokenUsage.totalTokens.toLocaleString()} tokens &middot;{' '}
+          {formatCost(student.tokenUsage.totalCost)}
         </p>
 
         {/* By Provider */}
@@ -484,10 +515,12 @@ function StudentDetailModal({
                     <tr key={`${provider}-${model}`} className="border-b border-gray-100">
                       <td className="py-1 capitalize">{provider}</td>
                       <td className="py-1 font-mono text-xs">{model}</td>
-                      <td className="py-1 text-right">{(mData.inputTokens + mData.outputTokens).toLocaleString()}</td>
+                      <td className="py-1 text-right">
+                        {(mData.inputTokens + mData.outputTokens).toLocaleString()}
+                      </td>
                       <td className="py-1 text-right">{formatCost(mData.totalCost)}</td>
                     </tr>
-                  ))
+                  )),
                 )}
               </tbody>
             </table>
@@ -529,7 +562,10 @@ function StudentDetailModal({
               Reset Password
             </button>
           )}
-          <button onClick={onClose} className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 ml-auto">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 ml-auto"
+          >
             Close
           </button>
         </div>
@@ -567,7 +603,10 @@ export function UserManagementPage() {
 
   // Load teacher's courses
   useEffect(() => {
-    api.get<TeacherCourse[]>('/courses').then(setTeacherCourses).catch(() => {});
+    api
+      .get<TeacherCourse[]>('/courses')
+      .then(setTeacherCourses)
+      .catch(() => {});
   }, []);
 
   // Load students
@@ -584,7 +623,7 @@ export function UserManagementPage() {
       setStudents(data.students);
       setTotalStudents(data.total);
     } catch {
-      toast('Failed to load students', 'error');
+      toast('error', 'Failed to load students');
     } finally {
       setLoading(false);
     }
@@ -598,9 +637,10 @@ export function UserManagementPage() {
   useEffect(() => {
     if (activeTab === 'usage' && !teacherUsage) {
       setUsageLoading(true);
-      api.get<TokenUsage>('/user-management/my-usage')
+      api
+        .get<TokenUsage>('/user-management/my-usage')
         .then(setTeacherUsage)
-        .catch(() => toast('Failed to load usage data', 'error'))
+        .catch(() => toast('error', 'Failed to load usage data'))
         .finally(() => setUsageLoading(false));
     }
   }, [activeTab, teacherUsage, toast]);
@@ -609,20 +649,23 @@ export function UserManagementPage() {
   useEffect(() => {
     if (activeTab === 'courses' && courseOverviews.length === 0) {
       setCoursesLoading(true);
-      api.get<CourseOverview[]>('/user-management/courses-overview')
+      api
+        .get<CourseOverview[]>('/user-management/courses-overview')
         .then(setCourseOverviews)
-        .catch(() => toast('Failed to load course overview', 'error'))
+        .catch(() => toast('error', 'Failed to load course overview'))
         .finally(() => setCoursesLoading(false));
     }
   }, [activeTab, courseOverviews.length, toast]);
 
   const handleResendInvitation = async (studentId: string) => {
     try {
-      const result = await api.post<{ temporaryPassword: string }>(`/user-management/students/${studentId}/resend-invitation`);
-      toast(`New temporary password: ${result.temporaryPassword}`, 'success');
+      const result = await api.post<{ temporaryPassword: string }>(
+        `/user-management/students/${studentId}/resend-invitation`,
+      );
+      toast('success', `New temporary password: ${result.temporaryPassword}`);
       loadStudents();
     } catch {
-      toast('Failed to reset password', 'error');
+      toast('error', 'Failed to reset password');
     }
   };
 
@@ -640,7 +683,7 @@ export function UserManagementPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast('Failed to export CSV', 'error');
+      toast('error', 'Failed to export CSV');
     }
   };
 
@@ -680,17 +723,25 @@ export function UserManagementPage() {
               type="text"
               placeholder="Search students..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64"
             />
             <select
               value={courseFilter}
-              onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }}
+              onChange={(e) => {
+                setCourseFilter(e.target.value);
+                setPage(1);
+              }}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
               <option value="">All Courses</option>
               {teacherCourses.map((c) => (
-                <option key={c.id} value={c.id}>{c.title}</option>
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
               ))}
             </select>
             <div className="ml-auto flex gap-2">
@@ -735,7 +786,10 @@ export function UserManagementPage() {
                         <td className="py-3 pr-4">
                           <div className="flex items-center gap-2">
                             {student.isTemporaryPassword && (
-                              <span className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded" title="Temporary password">
+                              <span
+                                className="text-xs bg-yellow-100 text-yellow-800 px-1.5 py-0.5 rounded"
+                                title="Temporary password"
+                              >
                                 Temp pwd
                               </span>
                             )}
@@ -747,7 +801,9 @@ export function UserManagementPage() {
                         </td>
                         <td className="py-3 pr-4">
                           {student.enrolledCourses.map((c) => (
-                            <p key={c.courseId} className="text-xs text-gray-600">{c.courseName}</p>
+                            <p key={c.courseId} className="text-xs text-gray-600">
+                              {c.courseName}
+                            </p>
                           ))}
                         </td>
                         <td className="py-3 pr-4">
@@ -778,7 +834,8 @@ export function UserManagementPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <span className="text-sm text-gray-500">
-                    Showing {(page - 1) * 20 + 1}-{Math.min(page * 20, totalStudents)} of {totalStudents}
+                    Showing {(page - 1) * 20 + 1}-{Math.min(page * 20, totalStudents)} of{' '}
+                    {totalStudents}
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -815,7 +872,8 @@ export function UserManagementPage() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900">My AI Usage</h3>
                 <p className="text-sm text-blue-700 mt-1">
-                  Total: {teacherUsage.totalTokens.toLocaleString()} tokens &middot; {formatCost(teacherUsage.totalCost)}
+                  Total: {teacherUsage.totalTokens.toLocaleString()} tokens &middot;{' '}
+                  {formatCost(teacherUsage.totalCost)}
                 </p>
               </div>
 
@@ -838,10 +896,12 @@ export function UserManagementPage() {
                           <tr key={`${provider}-${model}`} className="border-b border-gray-100">
                             <td className="py-2 capitalize">{provider}</td>
                             <td className="py-2 font-mono text-xs">{model}</td>
-                            <td className="py-2 text-right">{(mData.inputTokens + mData.outputTokens).toLocaleString()}</td>
+                            <td className="py-2 text-right">
+                              {(mData.inputTokens + mData.outputTokens).toLocaleString()}
+                            </td>
                             <td className="py-2 text-right">{formatCost(mData.totalCost)}</td>
                           </tr>
-                        ))
+                        )),
                       )}
                     </tbody>
                   </table>
@@ -874,7 +934,10 @@ export function UserManagementPage() {
               )}
 
               {teacherUsage.totalTokens === 0 && (
-                <p className="text-gray-500 text-sm">No AI usage recorded yet. Generate course content or use AI features to see usage tracked here.</p>
+                <p className="text-gray-500 text-sm">
+                  No AI usage recorded yet. Generate course content or use AI features to see usage
+                  tracked here.
+                </p>
               )}
             </div>
           )}
@@ -896,7 +959,8 @@ export function UserManagementPage() {
                     <div>
                       <h4 className="font-medium text-gray-900">{course.courseName}</h4>
                       <p className="text-sm text-gray-500 mt-1">
-                        {course.totalStudents} students &middot; Avg progress: {course.averageProgress}%
+                        {course.totalStudents} students &middot; Avg progress:{' '}
+                        {course.averageProgress}%
                       </p>
                     </div>
                     <div className="text-right">
@@ -907,7 +971,9 @@ export function UserManagementPage() {
                   {Object.keys(course.byProvider).length > 0 && (
                     <div className="mt-2 flex gap-3 text-xs text-gray-500">
                       {Object.entries(course.byProvider).map(([provider, cost]) => (
-                        <span key={provider} className="capitalize">{provider}: {formatCost(cost)}</span>
+                        <span key={provider} className="capitalize">
+                          {provider}: {formatCost(cost)}
+                        </span>
                       ))}
                     </div>
                   )}

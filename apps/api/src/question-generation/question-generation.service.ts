@@ -424,10 +424,15 @@ export class QuestionGenerationService {
         'Generate NEW questions different from previously generated ones.',
       );
 
-    const llmResult = await this.llmService.callLlmForUser(job.teacherId, systemPrompt, userPrompt, {
-      feature: 'question_generation',
-      courseId: job.courseId,
-    });
+    const llmResult = await this.llmService.callLlmForUser(
+      job.teacherId,
+      systemPrompt,
+      userPrompt,
+      {
+        feature: 'question_generation',
+        courseId: job.courseId,
+      },
+    );
 
     const parsed = this.parseLlmJson(llmResult.content) as { questions?: unknown[] };
     const newQuestions = (parsed.questions || []).map((q: any, i: number) => ({
@@ -493,8 +498,7 @@ export class QuestionGenerationService {
           `Grade this student answer:\n\n${dto.studentAnswer}`,
           {
             feature: 'open_ended_grading',
-            courseId: question.topicId ? undefined : undefined,
-            triggeredByUserId: dto.studentId,
+            courseId: dto.courseId,
           },
         );
 

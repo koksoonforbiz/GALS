@@ -3,7 +3,6 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -52,9 +51,7 @@ export class UserManagementService {
       where: { teacherId },
       select: { id: true, title: true },
     });
-    const courseIds = query.courseId
-      ? [query.courseId]
-      : teacherCourses.map((c) => c.id);
+    const courseIds = query.courseId ? [query.courseId] : teacherCourses.map((c) => c.id);
 
     if (courseIds.length === 0) {
       return { students: [], total: 0, page, limit };
@@ -255,7 +252,12 @@ export class UserManagementService {
 
   // ─── Course Usage Summary ───────────────────────────────
 
-  async getCourseUsageSummary(teacherId: string, courseId: string, dateFrom?: string, dateTo?: string) {
+  async getCourseUsageSummary(
+    teacherId: string,
+    courseId: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
     // Verify teacher owns course
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
@@ -273,8 +275,9 @@ export class UserManagementService {
     const studentIds = enrollments.map((e) => e.studentId);
 
     const dateWhere: Prisma.LlmUsageLogWhereInput = { courseId };
-    if (dateFrom) dateWhere.createdAt = { ...dateWhere.createdAt as object, gte: new Date(dateFrom) };
-    if (dateTo) dateWhere.createdAt = { ...dateWhere.createdAt as object, lte: new Date(dateTo) };
+    if (dateFrom)
+      dateWhere.createdAt = { ...(dateWhere.createdAt as object), gte: new Date(dateFrom) };
+    if (dateTo) dateWhere.createdAt = { ...(dateWhere.createdAt as object), lte: new Date(dateTo) };
 
     const logs = await this.prisma.llmUsageLog.groupBy({
       by: ['provider', 'model', 'feature'],
@@ -287,7 +290,14 @@ export class UserManagementService {
       },
     });
 
-    const byProvider: Record<string, { totalTokens: number; totalCost: number; byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }> }> = {};
+    const byProvider: Record<
+      string,
+      {
+        totalTokens: number;
+        totalCost: number;
+        byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }>;
+      }
+    > = {};
     const byFeature: Record<string, { totalTokens: number; totalCost: number }> = {};
 
     let totalTokens = 0;
@@ -303,22 +313,25 @@ export class UserManagementService {
       if (!byProvider[log.provider]) {
         byProvider[log.provider] = { totalTokens: 0, totalCost: 0, byModel: {} };
       }
-      byProvider[log.provider].totalTokens += t;
-      byProvider[log.provider].totalCost += c;
+      const provEntry = byProvider[log.provider]!;
+      provEntry.totalTokens += t;
+      provEntry.totalCost += c;
 
-      if (!byProvider[log.provider].byModel[log.model]) {
-        byProvider[log.provider].byModel[log.model] = { inputTokens: 0, outputTokens: 0, totalCost: 0 };
+      if (!provEntry.byModel[log.model]) {
+        provEntry.byModel[log.model] = { inputTokens: 0, outputTokens: 0, totalCost: 0 };
       }
-      byProvider[log.provider].byModel[log.model].inputTokens += log._sum.inputTokens || 0;
-      byProvider[log.provider].byModel[log.model].outputTokens += log._sum.outputTokens || 0;
-      byProvider[log.provider].byModel[log.model].totalCost += c;
+      const modelEntry = provEntry.byModel[log.model]!;
+      modelEntry.inputTokens += log._sum.inputTokens || 0;
+      modelEntry.outputTokens += log._sum.outputTokens || 0;
+      modelEntry.totalCost += c;
 
       // By feature
       if (!byFeature[log.feature]) {
         byFeature[log.feature] = { totalTokens: 0, totalCost: 0 };
       }
-      byFeature[log.feature].totalTokens += t;
-      byFeature[log.feature].totalCost += c;
+      const featEntry = byFeature[log.feature]!;
+      featEntry.totalTokens += t;
+      featEntry.totalCost += c;
     }
 
     // Top students by usage
@@ -364,7 +377,11 @@ export class UserManagementService {
 
     const dailyUsage = Object.entries(dailyMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, data]) => ({ date, tokens: data.tokens, cost: Math.round(data.cost * 1000000) / 1000000 }));
+      .map(([date, data]) => ({
+        date,
+        tokens: data.tokens,
+        cost: Math.round(data.cost * 1000000) / 1000000,
+      }));
 
     // Average progress
     let avgProgress = 0;
@@ -393,11 +410,16 @@ export class UserManagementService {
 
   // ─── Token Usage Aggregation ────────────────────────────
 
-  async getTokenUsageForUser(userId: string, courseId?: string, dateFrom?: string, dateTo?: string) {
+  async getTokenUsageForUser(
+    userId: string,
+    courseId?: string,
+    dateFrom?: string,
+    dateTo?: string,
+  ) {
     const where: Prisma.LlmUsageLogWhereInput = { userId };
     if (courseId) where.courseId = courseId;
-    if (dateFrom) where.createdAt = { ...where.createdAt as object, gte: new Date(dateFrom) };
-    if (dateTo) where.createdAt = { ...where.createdAt as object, lte: new Date(dateTo) };
+    if (dateFrom) where.createdAt = { ...(where.createdAt as object), gte: new Date(dateFrom) };
+    if (dateTo) where.createdAt = { ...(where.createdAt as object), lte: new Date(dateTo) };
 
     const logs = await this.prisma.llmUsageLog.groupBy({
       by: ['provider', 'model', 'feature'],
@@ -412,7 +434,14 @@ export class UserManagementService {
       },
     });
 
-    const byProvider: Record<string, { totalTokens: number; totalCost: number; byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }> }> = {};
+    const byProvider: Record<
+      string,
+      {
+        totalTokens: number;
+        totalCost: number;
+        byModel: Record<string, { inputTokens: number; outputTokens: number; totalCost: number }>;
+      }
+    > = {};
     const byFeature: Record<string, { totalTokens: number; totalCost: number }> = {};
 
     let totalTokens = 0;
@@ -428,22 +457,25 @@ export class UserManagementService {
       if (!byProvider[log.provider]) {
         byProvider[log.provider] = { totalTokens: 0, totalCost: 0, byModel: {} };
       }
-      byProvider[log.provider].totalTokens += t;
-      byProvider[log.provider].totalCost += c;
+      const provEntry2 = byProvider[log.provider]!;
+      provEntry2.totalTokens += t;
+      provEntry2.totalCost += c;
 
-      if (!byProvider[log.provider].byModel[log.model]) {
-        byProvider[log.provider].byModel[log.model] = { inputTokens: 0, outputTokens: 0, totalCost: 0 };
+      if (!provEntry2.byModel[log.model]) {
+        provEntry2.byModel[log.model] = { inputTokens: 0, outputTokens: 0, totalCost: 0 };
       }
-      byProvider[log.provider].byModel[log.model].inputTokens += log._sum.inputTokens || 0;
-      byProvider[log.provider].byModel[log.model].outputTokens += log._sum.outputTokens || 0;
-      byProvider[log.provider].byModel[log.model].totalCost += c;
+      const modelEntry2 = provEntry2.byModel[log.model]!;
+      modelEntry2.inputTokens += log._sum.inputTokens || 0;
+      modelEntry2.outputTokens += log._sum.outputTokens || 0;
+      modelEntry2.totalCost += c;
 
       // By feature
       if (!byFeature[log.feature]) {
         byFeature[log.feature] = { totalTokens: 0, totalCost: 0 };
       }
-      byFeature[log.feature].totalTokens += t;
-      byFeature[log.feature].totalCost += c;
+      const featEntry2 = byFeature[log.feature]!;
+      featEntry2.totalTokens += t;
+      featEntry2.totalCost += c;
     }
 
     return {
@@ -736,14 +768,17 @@ export class UserManagementService {
       limit: 10000,
     });
 
-    const rows: string[] = [
-      'Name,Email,Courses,Progress,AI Cost,Joined,Last Active,Temp Password',
-    ];
+    const rows: string[] = ['Name,Email,Courses,Progress,AI Cost,Joined,Last Active,Temp Password'];
 
     for (const student of result.students) {
-      const courses = student.enrolledCourses.map((c: { courseName: string }) => c.courseName).join('; ');
+      const courses = student.enrolledCourses
+        .map((c: { courseName: string }) => c.courseName)
+        .join('; ');
       const progress = student.enrolledCourses
-        .map((c: { courseName: string; progress: { percentage: number } }) => `${c.courseName}: ${c.progress.percentage}%`)
+        .map(
+          (c: { courseName: string; progress: { percentage: number } }) =>
+            `${c.courseName}: ${c.progress.percentage}%`,
+        )
         .join('; ');
       const csvRow = [
         `"${student.name}"`,
@@ -814,7 +849,9 @@ export class UserManagementService {
       .filter((a) => a.currentScore !== null)
       .map((a) => a.currentScore!);
     const averageQuizScore =
-      scores.length > 0 ? Math.round((scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100) / 100 : 0;
+      scores.length > 0
+        ? Math.round((scores.reduce((sum, s) => sum + s, 0) / scores.length) * 100) / 100
+        : 0;
 
     // Last activity
     const lastAttempt = await this.prisma.attempt.findFirst({

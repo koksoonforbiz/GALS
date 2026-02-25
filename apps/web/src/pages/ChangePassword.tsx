@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { ApiError } from '../lib/api';
-import { useAuth } from '../contexts/AuthContext';
 
 interface PasswordChangeResponse {
   accessToken: string;
@@ -33,7 +32,8 @@ export function ChangePassword() {
     match: newPassword === confirmPassword && confirmPassword.length > 0,
   };
 
-  const allValid = checks.length && checks.uppercase && checks.lowercase && checks.number && checks.match;
+  const allValid =
+    checks.length && checks.uppercase && checks.lowercase && checks.number && checks.match;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +70,9 @@ export function ChangePassword() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
         <div className="max-w-md w-full text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Session Expired</h2>
-          <p className="text-gray-600 mb-4">Your password change session has expired. Please log in again.</p>
+          <p className="text-gray-600 mb-4">
+            Your password change session has expired. Please log in again.
+          </p>
           <button
             onClick={() => navigate('/login')}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -89,7 +91,8 @@ export function ChangePassword() {
           <div className="text-4xl mb-4">🔒</div>
           <h2 className="text-2xl font-bold text-gray-900">Change Your Password</h2>
           <p className="mt-2 text-sm text-gray-600">
-            Welcome! You&apos;ve been invited to the Adaptive Tutoring System. Please create a new password to continue.
+            Welcome! You&apos;ve been invited to the Adaptive Tutoring System. Please create a new
+            password to continue.
           </p>
         </div>
 

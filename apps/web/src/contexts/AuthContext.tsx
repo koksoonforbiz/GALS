@@ -17,6 +17,12 @@ interface AuthResponse {
   user: User;
 }
 
+interface PasswordChangeResponse {
+  requirePasswordChange: true;
+  passwordChangeToken: string;
+  message: string;
+}
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
@@ -73,17 +79,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const response = await api.post<AuthResponse>('/auth/login', {
+    const response = await api.post<AuthResponse | PasswordChangeResponse>('/auth/login', {
       email,
       password,
     });
 
-    localStorage.setItem('token', response.accessToken);
-    localStorage.setItem('user', JSON.stringify(response.user));
-    setUser(response.user);
+    // Check if password change is required
+    if ('requirePasswordChange' in response && response.requirePasswordChange) {
+      localStorage.setItem('passwordChangeToken', response.passwordChangeToken);
+      window.location.href = '/change-password';
+      return;
+    }
 
-    if (response.user.role === 'student') {
-      joinStudentRoom(response.user.id);
+    const authResponse = response as AuthResponse;
+    localStorage.setItem('token', authResponse.accessToken);
+    localStorage.setItem('user', JSON.stringify(authResponse.user));
+    setUser(authResponse.user);
+
+    if (authResponse.user.role === 'student') {
+      joinStudentRoom(authResponse.user.id);
     }
   }, []);
 

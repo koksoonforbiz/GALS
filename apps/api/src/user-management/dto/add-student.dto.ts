@@ -1,26 +1,10 @@
-import { IsEmail, IsString, IsArray, ArrayMinSize, MinLength } from 'class-validator';
-
-export class AddStudentDto {
-  @IsString()
-  @MinLength(1)
+export interface AddStudentDto {
   name: string;
-
-  @IsEmail()
   email: string;
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsString({ each: true })
   courseIds: string[];
 }
 
-export class BulkAddStudentsDto {
-  @IsArray()
-  @ArrayMinSize(1)
+export interface BulkAddStudentsDto {
   students: Array<{ email: string; name: string }>;
-
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsString({ each: true })
   courseIds: string[];
 }
