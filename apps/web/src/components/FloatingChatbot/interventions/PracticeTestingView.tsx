@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
 
@@ -54,8 +54,9 @@ export function PracticeTestingView({
   const [saved, setSaved] = useState(false);
   const [userNotes, setUserNotes] = useState('');
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
+  const initialGenDone = useRef(false);
 
-  // Generate practice test on mount
+  // Generate practice test
   const generate = useCallback(async () => {
     setPhase('loading');
     try {
@@ -78,7 +79,10 @@ export function PracticeTestingView({
     }
   }, [selectedText, courseId, contentId, pageType]);
 
+  // Only generate once on mount (not on every selectedText change)
   useEffect(() => {
+    if (initialGenDone.current) return;
+    initialGenDone.current = true;
     void generate();
   }, [generate]);
 

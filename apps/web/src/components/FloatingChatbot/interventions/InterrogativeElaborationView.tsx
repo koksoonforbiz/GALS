@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import type { SaveForReviewInput } from '../types';
 
@@ -61,8 +61,9 @@ export function InterrogativeElaborationView({
   const [errorMsg, setErrorMsg] = useState('');
   const [saved, setSaved] = useState(false);
   const [userNotes, setUserNotes] = useState('');
+  const initialGenDone = useRef(false);
 
-  // Generate elaboration questions on mount
+  // Generate elaboration questions
   const generate = useCallback(async () => {
     setPhase('loading');
     try {
@@ -85,7 +86,10 @@ export function InterrogativeElaborationView({
     }
   }, [selectedText, courseId, contentId, pageType]);
 
+  // Only generate once on mount (not on every selectedText change)
   useEffect(() => {
+    if (initialGenDone.current) return;
+    initialGenDone.current = true;
     void generate();
   }, [generate]);
 
