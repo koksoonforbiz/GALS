@@ -83,7 +83,7 @@ export class LlmService {
 
   async saveApiKey(userId: string, provider: string, apiKey: string, model?: string) {
     const encrypted = this.encrypt(apiKey);
-    const defaultModel = provider === 'openai' ? 'gpt-4o-mini' : 'gpt-4o-mini';
+    const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -121,7 +121,7 @@ export class LlmService {
     };
   }
 
-  private async getUserApiKey(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getUserApiKey(userId: string): Promise<{ apiKey: string; model: string; provider: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
@@ -129,7 +129,9 @@ export class LlmService {
     if (!user?.encryptedApiKey) return null;
     try {
       const apiKey = this.decrypt(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
+      const provider = user.llmProvider || 'openai';
+      const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
+      return { apiKey, model: user.llmModel || defaultModel, provider };
     } catch {
       this.logger.error(`Failed to decrypt API key for user ${userId}`);
       return null;
@@ -413,9 +415,12 @@ export class LlmService {
   private async callLlm(
     systemPrompt: string,
     userPrompt: string,
-    credentials: { apiKey: string; model: string } | null,
+    credentials: { apiKey: string; model: string; provider: string } | null,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     if (credentials) {
+      if (credentials.provider === 'gemini') {
+        return this.callGeminiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
+      }
       return this.callOpenAiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
     }
     // Fallback: built-in template-based generation (no API key configured)
@@ -462,6 +467,48 @@ export class LlmService {
       };
     } catch (error) {
       this.logger.error('Failed to call OpenAI API', error);
+      // Fallback to template-based generation
+      return this.generateWithoutApi(systemPrompt, userPrompt);
+    }
+  }
+
+  private async callGeminiApi(
+    systemPrompt: string,
+    userPrompt: string,
+    apiKey: string,
+    model: string,
+  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: { maxOutputTokens: 4096 },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.error(`Gemini API error: ${response.status} ${errorText}`);
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+
+      return {
+        content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        promptTokens: data.usageMetadata?.promptTokenCount || 0,
+        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+      };
+    } catch (error) {
+      this.logger.error('Failed to call Gemini API', error);
       // Fallback to template-based generation
       return this.generateWithoutApi(systemPrompt, userPrompt);
     }
