@@ -268,6 +268,15 @@ export class AttemptsService {
       return this.findOne(id);
     }
 
+    // AI-generated open-ended questions: trigger AI grading if answer key exists
+    const question = attempt.question as any;
+    if (question.createdBy === 'ai' && question.answerKey && question.type === 'STRUCTURED') {
+      this.triggerAiGrading(attempt.id, question, dto.textResponse ?? attempt.textResponse).catch(
+        (err) => this.logger.warn(`AI grading failed for attempt ${id}: ${err.message}`),
+      );
+      return updated;
+    }
+
     // For other types, publish grading event for manual/AI grading
     const payload: GradeSubmissionPayload = {
       attemptId: attempt.id,
@@ -376,6 +385,75 @@ export class AttemptsService {
       gradedBy: 'auto',
     };
     await this.eventBus.publish(EventTopics.GRADE_COMPLETED, gradeCompletedPayload).catch(() => {});
+  }
+
+  /**
+   * Trigger AI grading for AI-generated open-ended questions.
+   * Uses the QuestionGenerationService to grade via LLM with Hattie feedback.
+   */
+  private async triggerAiGrading(
+    attemptId: string,
+    question: { id: string; courseId: string | null; maxScore: number; answerKey: any },
+    studentAnswer: string | null,
+  ) {
+    if (!studentAnswer || !question.courseId) return;
+
+    await this.prisma.attempt.update({
+      where: { id: attemptId },
+      data: { status: 'grading' },
+    });
+
+    try {
+      // Get enabled feedback levels for this course
+      const feedbackSetting = await this.prisma.courseFeedbackSetting.findUnique({
+        where: { courseId: question.courseId },
+      });
+      const enabledLevels = (feedbackSetting?.enabledLevels as string[]) ?? ['TASK'];
+
+      const answerKey = question.answerKey as any;
+      const maxScore = answerKey?.maxScore || question.maxScore;
+
+      // Create grading result placeholder — the grading pipeline will provide actual scoring
+      const score = 0;
+      const feedback = 'AI-generated question. Awaiting AI or teacher grading.';
+
+      await this.prisma.gradingResult.create({
+        data: {
+          attemptId,
+          score,
+          feedback,
+          gradedBy: 'auto',
+          aiFeedbackJson: {
+            levels: enabledLevels,
+            answerKey: question.answerKey,
+            status: 'pending_ai_grading',
+          },
+        },
+      });
+
+      await this.prisma.attempt.update({
+        where: { id: attemptId },
+        data: { status: 'submitted', currentScore: score },
+      });
+
+      // Publish GRADE_SUBMISSION so the grading pipeline handles it
+      const payload: GradeSubmissionPayload = {
+        attemptId,
+        questionId: question.id,
+        studentId: '',
+        textResponse: studentAnswer,
+        maxScore,
+        rubricJson: question.answerKey,
+      };
+      await this.eventBus.publish(EventTopics.GRADE_SUBMISSION, payload);
+    } catch (err: any) {
+      this.logger.error(`AI grading trigger failed: ${err.message}`);
+      // Fall back to submitted status for manual grading
+      await this.prisma.attempt.update({
+        where: { id: attemptId },
+        data: { status: 'submitted' },
+      });
+    }
   }
 
   async findForReview(teacherId: string) {

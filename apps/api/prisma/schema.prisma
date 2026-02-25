@@ -95,6 +95,22 @@ enum GenerationJobStatus {
   FAILED
 }
 
+enum QuestionGenJobStatus {
+  PENDING
+  RETRIEVING
+  GENERATING
+  REVIEW_READY
+  COMPLETED
+  FAILED
+}
+
+enum HattieFeedbackLevel {
+  TASK
+  PROCESS
+  SELF_REGULATION
+  SELF
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -120,6 +136,8 @@ model User {
   savedInterventionReviews   SavedInterventionReview[]
   teacherPromptConfigs       InterventionPromptConfig[] @relation("teacherPromptConfigs")
   spacedRepetitionCards      SpacedRepetitionCard[]
+  questionGenerationJobs     QuestionGenerationJob[]
+  feedbackPromptConfigs      FeedbackPromptConfig[]     @relation("teacherFeedbackConfigs")
 
   @@map("users")
 }
@@ -211,6 +229,11 @@ model Question {
   pageIds           String[] @map("page_ids") @db.Uuid  // links to lesson pages
   tags              Json?                          // additional custom tags
 
+  // AI generation metadata
+  answerKey            Json?    @map("answer_key")           // Structured answer key (varies by type)
+  difficultyConfidence Float?   @map("difficulty_confidence") // AI confidence in difficulty (0-1)
+  gradingConfig        Json?    @map("grading_config")        // {feedbackLevel, customInstructions}
+
   // Metadata
   status     String   @default("draft")           // draft/approved/archived
   createdBy  String?  @map("created_by")          // "admin" | "ai"
@@ -258,13 +281,14 @@ model Attempt {
 }
 
 model GradingResult {
-  id        String   @id @default(uuid()) @db.Uuid
-  attemptId String   @map("attempt_id") @db.Uuid
-  score     Float
-  feedback  String
-  gradedBy  GradedBy @map("graded_by")
-  graderId  String?  @map("grader_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id              String   @id @default(uuid()) @db.Uuid
+  attemptId       String   @map("attempt_id") @db.Uuid
+  score           Float
+  feedback        String
+  gradedBy        GradedBy @map("graded_by")
+  graderId        String?  @map("grader_id") @db.Uuid
+  aiFeedbackJson  Json?    @map("ai_feedback_json") // Structured Hattie feedback levels
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   attempt    Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   grader     User?        @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
@@ -533,10 +557,12 @@ model KnowledgeComponent {
 }
 
 model QuestionKc {
-  id         String @id @default(uuid()) @db.Uuid
-  questionId String @map("question_id") @db.Uuid
-  kcId       String @map("kc_id") @db.Uuid
-  weight     Float  @default(1.0)
+  id             String  @id @default(uuid()) @db.Uuid
+  questionId     String  @map("question_id") @db.Uuid
+  kcId           String  @map("kc_id") @db.Uuid
+  weight         Float   @default(1.0)
+  isAutoAssigned Boolean @default(false) @map("is_auto_assigned")
+  confidence     Float?
 
   question Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
   kc       KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
@@ -898,4 +924,68 @@ model SpacedRepetitionCard {
   @@index([courseId])
   @@index([interventionId])
   @@map("spaced_repetition_cards")
+}
+
+// ─── AI Question Generation ────────────────────────────
+
+model QuestionGenerationJob {
+  id                     String              @id @default(uuid()) @db.Uuid
+  courseId                String              @map("course_id") @db.Uuid
+  teacherId              String              @map("teacher_id") @db.Uuid
+  status                 QuestionGenJobStatus @default(PENDING)
+
+  // Input
+  sourceDocumentIds      Json                @map("source_document_ids")   // string[] of document IDs
+  sourceChunks           Json?               @map("source_chunks")         // retrieved chunks for audit
+  questionTypes          Json                @map("question_types")        // ["mcq", "true_false", "short_answer", "open_ended"]
+  questionCount          Int                 @map("question_count")
+  difficultyMix          Json?               @map("difficulty_mix")        // {easy: 2, medium: 3, hard: 2}
+  additionalInstructions String?             @map("additional_instructions") @db.Text
+
+  // Output
+  generatedQuestions     Json?               @map("generated_questions")   // raw AI output before review
+  approvedCount          Int                 @default(0) @map("approved_count")
+  rejectedCount          Int                 @default(0) @map("rejected_count")
+
+  // Metadata
+  error                  String?             @db.Text
+  startedAt              DateTime?           @map("started_at") @db.Timestamptz
+  completedAt            DateTime?           @map("completed_at") @db.Timestamptz
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  teacher                User                @relation(fields: [teacherId], references: [id])
+
+  @@index([courseId])
+  @@index([teacherId])
+  @@index([status])
+  @@map("question_generation_jobs")
+}
+
+// ─── Hattie Feedback Prompt Configuration ──────────────
+
+model FeedbackPromptConfig {
+  id              String              @id @default(cuid())
+  courseId         String              @map("course_id") @db.Uuid
+  teacherId       String              @map("teacher_id") @db.Uuid
+  feedbackLevel   HattieFeedbackLevel @map("feedback_level")
+  systemPrompt    String              @map("system_prompt") @db.Text
+  isCustom        Boolean             @default(true) @map("is_custom")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  teacher         User                @relation("teacherFeedbackConfigs", fields: [teacherId], references: [id])
+
+  @@unique([courseId, feedbackLevel])
+  @@map("feedback_prompt_configs")
+}
+
+model CourseFeedbackSetting {
+  id              String   @id @default(uuid()) @db.Uuid
+  courseId         String   @unique @map("course_id") @db.Uuid
+  enabledLevels   Json     @default("[\"TASK\"]") @map("enabled_levels") // HattieFeedbackLevel[]
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("course_feedback_settings")
 }

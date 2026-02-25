@@ -24,6 +24,7 @@ import { CurriculumCoverageModule } from './curriculum-coverage';
 import { KnowledgeVersionModule } from './knowledge-version';
 import { PublishGateModule } from './publish-gate';
 import { LearningInterventionsModule } from './learning-interventions';
+import { QuestionGenerationModule } from './question-generation';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -59,6 +60,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     KnowledgeVersionModule,
     PublishGateModule,
     LearningInterventionsModule,
+    QuestionGenerationModule,
   ],
   controllers: [HealthController],
 })

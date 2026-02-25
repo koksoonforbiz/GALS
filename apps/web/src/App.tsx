@@ -19,6 +19,7 @@ import { AttemptDetailPage } from './pages/teacher/AttemptDetailPage';
 import { CourseStudioPage } from './pages/teacher/CourseStudioPage';
 import { AiSettingsPage } from './pages/teacher/AiSettingsPage';
 import { PromptSettingsPage } from './pages/teacher/PromptSettingsPage';
+import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -87,6 +88,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['teacher', 'admin']}>
                     <PromptSettingsPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/courses/:courseId/generate-questions"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <QuestionGenerationPage />
                   </RoleRoute>
                 }
               />
