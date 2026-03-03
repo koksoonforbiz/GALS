@@ -1,12 +1,3 @@
--- Enable pgvector extension if available (required for vector column type)
--- Falls back to JSONB for embedding column if pgvector is not installed
-DO $$
-BEGIN
-  CREATE EXTENSION IF NOT EXISTS vector;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'pgvector extension not available — embedding column will use JSONB fallback';
-END $$;
-
 -- CreateEnum: LearningMode
 CREATE TYPE "LearningMode" AS ENUM ('STANDARD', 'DIALOGUE');
 
@@ -79,15 +70,8 @@ CREATE TABLE "student_rag_chunks" (
     CONSTRAINT "student_rag_chunks_pkey" PRIMARY KEY ("id")
 );
 
--- Add embedding column: use vector(1536) if pgvector is available, otherwise JSONB
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
-    ALTER TABLE "student_rag_chunks" ADD COLUMN "embedding" vector(1536);
-  ELSE
-    ALTER TABLE "student_rag_chunks" ADD COLUMN "embedding" JSONB;
-  END IF;
-END $$;
+-- Add embedding column as JSONB (pgvector not available in postgres:16-alpine)
+ALTER TABLE "student_rag_chunks" ADD COLUMN "embedding" JSONB;
 
 -- CreateTable: DialogueSession
 CREATE TABLE "dialogue_sessions" (

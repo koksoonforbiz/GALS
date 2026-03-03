@@ -568,7 +568,7 @@ model StudentRagChunk {
   studentId     String               @map("student_id") @db.Uuid
   courseId      String               @map("course_id") @db.Uuid
   content       String               @db.Text
-  embedding     Unsupported("vector(1536)")?
+  embedding     Json?
   chunkIndex    Int                  @map("chunk_index")
   pageNumber    Int?                 @map("page_number")
   metadata      Json?
