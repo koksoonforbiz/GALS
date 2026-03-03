@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
 import type { StudentSourceDocument } from './SourceCard';
@@ -51,6 +51,8 @@ interface StudioPanelProps {
   onSuggestedQuestionClick: (question: string) => void;
   pastInterventions: LearningIntervention[];
   onStartIntervention: (type: string) => void;
+  highlightedExcerpt?: string | null;
+  onHighlightClear?: () => void;
 }
 
 const STUDIO_TOOLS = [
@@ -102,12 +104,25 @@ export function StudioPanel({
   onSuggestedQuestionClick,
   pastInterventions,
   onStartIntervention,
+  highlightedExcerpt,
+  onHighlightClear,
 }: StudioPanelProps) {
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
   const [promptHints, setPromptHints] = useState<Record<string, string>>({});
   const [expandedHint, setExpandedHint] = useState<string | null>(null);
   const [showPastInterventions, setShowPastInterventions] = useState(false);
+  const highlightRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to highlighted excerpt when it changes
+  useEffect(() => {
+    if (highlightedExcerpt && highlightRef.current) {
+      highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Clear highlight after 5 seconds
+      const timer = setTimeout(() => onHighlightClear?.(), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedExcerpt, onHighlightClear]);
 
   const activeOutput = studioOutputs.find((o) => o.id === activeOutputId);
 
@@ -169,6 +184,8 @@ export function StudioPanel({
             selectedSource={selectedSource}
             guide={selectedSourceGuide}
             onQuestionClick={onSuggestedQuestionClick}
+            highlightedExcerpt={highlightedExcerpt}
+            highlightRef={highlightRef}
           />
         )}
 
@@ -505,10 +522,14 @@ function GuideTab({
   selectedSource,
   guide,
   onQuestionClick,
+  highlightedExcerpt,
+  highlightRef,
 }: {
   selectedSource: StudentSourceDocument | null;
   guide: SourceGuide | null;
   onQuestionClick: (question: string) => void;
+  highlightedExcerpt?: string | null;
+  highlightRef?: React.Ref<HTMLDivElement>;
 }) {
   const [tocExpanded, setTocExpanded] = useState(true);
 
@@ -539,6 +560,18 @@ function GuideTab({
   return (
     <div className="p-4 space-y-4">
       <h4 className="text-sm font-semibold">{selectedSource.originalName}</h4>
+
+      {/* Highlighted Citation Excerpt */}
+      {highlightedExcerpt && (
+        <div
+          ref={highlightRef}
+          className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg animate-pulse"
+          style={{ animationIterationCount: 3 }}
+        >
+          <h5 className="text-xs font-medium text-yellow-700 uppercase mb-1">Referenced Passage</h5>
+          <p className="text-sm text-yellow-900 whitespace-pre-wrap">{highlightedExcerpt}</p>
+        </div>
+      )}
 
       {/* Summary */}
       <div>

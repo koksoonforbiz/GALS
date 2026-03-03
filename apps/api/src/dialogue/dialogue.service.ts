@@ -210,6 +210,65 @@ export class DialogueService {
     });
   }
 
+  // ─── Teacher: Course Activity ────────────────────────────
+
+  async getCourseActivity(courseId: string, teacherId: string) {
+    // Verify the teacher owns this course
+    const course = await this.prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only view activity for your own courses');
+    }
+
+    // Get all enrolled students with their dialogue activity
+    const enrollments = await this.prisma.enrollment.findMany({
+      where: { courseId },
+      include: {
+        student: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    const results = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        const studentId = enrollment.studentId;
+
+        const [sessionCount, messageCount, sourceCount, lastSession] = await Promise.all([
+          this.prisma.dialogueSession.count({
+            where: { studentId, courseId },
+          }),
+          this.prisma.dialogueMessage.count({
+            where: { session: { studentId, courseId } },
+          }),
+          this.prisma.studentSourceDocument.count({
+            where: { studentId, courseId },
+          }),
+          this.prisma.dialogueSession.findFirst({
+            where: { studentId, courseId },
+            orderBy: { updatedAt: 'desc' },
+            select: { updatedAt: true },
+          }),
+        ]);
+
+        return {
+          studentId,
+          studentName: enrollment.student.name,
+          studentEmail: enrollment.student.email,
+          sessionCount,
+          messageCount,
+          sourceCount,
+          lastActiveAt: lastSession?.updatedAt?.toISOString() || null,
+        };
+      }),
+    );
+
+    return results.sort((a, b) => {
+      if (!a.lastActiveAt && !b.lastActiveAt) return 0;
+      if (!a.lastActiveAt) return 1;
+      if (!b.lastActiveAt) return -1;
+      return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
+    });
+  }
+
   // ─── Helpers ──────────────────────────────────────────────
 
   private buildSystemPrompt(settings: DialogueCourseSettings, ragContext: string): string {

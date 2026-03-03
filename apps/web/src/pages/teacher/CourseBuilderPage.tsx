@@ -17,6 +17,8 @@ import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
 import PublishGatePanel from '../../components/PublishGatePanel';
 import LearningPathPanel from '../../components/LearningPathPanel';
+import { DialogueCourseSettingsForm } from '../../components/teacher/DialogueCourseSettingsForm';
+import { DialogueActivityPanel } from '../../components/teacher/DialogueActivityPanel';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -27,7 +29,8 @@ type TopTabKey =
   | 'evaluate'
   | 'knowledge'
   | 'publish'
-  | 'settings';
+  | 'settings'
+  | 'dialogue';
 type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
 type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
 
@@ -73,6 +76,7 @@ interface Course {
   description: string;
   status: 'DRAFT' | 'PUBLISHED';
   visibility: 'PUBLIC' | 'PRIVATE';
+  learningMode: string;
   bannerBlobKey: string | null;
   modules: CourseModule[];
   _count: { enrollments: number; topics: number; modules: number };
@@ -128,6 +132,8 @@ export function CourseBuilderPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PRIVATE');
+  const [learningMode, setLearningMode] = useState<'STANDARD' | 'DIALOGUE'>('STANDARD');
+  const [hasApiKey, setHasApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -233,9 +239,14 @@ export function CourseBuilderPage() {
       setTitle(data.title);
       setDescription(data.description);
       setVisibility(data.visibility);
+      setLearningMode(data.learningMode === 'DIALOGUE' ? 'DIALOGUE' : 'STANDARD');
       if (data.modules.length > 0 && !selectedModuleId) {
         setSelectedModuleId(data.modules[0]!.id);
       }
+      // Check if teacher has API key
+      apiFetch<{ provider: string | null; model: string | null; hasKey: boolean }>('/llm-settings')
+        .then((s) => setHasApiKey(s.hasKey))
+        .catch(() => {});
     } catch {
       toast('error', 'Failed to load course');
       navigate('/teacher/courses');
@@ -266,7 +277,12 @@ export function CourseBuilderPage() {
   // ─── Autosave for Overview (debounced) ──────────────────
 
   const autosave = useCallback(
-    async (data: { title?: string; description?: string; visibility?: string }) => {
+    async (data: {
+      title?: string;
+      description?: string;
+      visibility?: string;
+      learningMode?: string;
+    }) => {
       setSaving(true);
       try {
         await apiFetch(`/courses/${courseId}`, {
@@ -283,7 +299,12 @@ export function CourseBuilderPage() {
   );
 
   const debounceSave = useCallback(
-    (data: { title?: string; description?: string; visibility?: string }) => {
+    (data: {
+      title?: string;
+      description?: string;
+      visibility?: string;
+      learningMode?: string;
+    }) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => autosave(data), 1500);
     },
@@ -584,6 +605,7 @@ export function CourseBuilderPage() {
     { key: 'evaluate', label: 'Evaluate' },
     { key: 'knowledge', label: 'Knowledge' },
     { key: 'publish', label: 'Publish' },
+    ...(learningMode === 'DIALOGUE' ? [{ key: 'dialogue' as TopTabKey, label: 'Dialogue' }] : []),
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -623,6 +645,11 @@ export function CourseBuilderPage() {
           >
             {course.status}
           </span>
+          {learningMode === 'DIALOGUE' && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+              Dialogue
+            </span>
+          )}
           {saving && <span className="text-xs text-gray-400">Saving...</span>}
         </div>
       </div>
@@ -747,6 +774,73 @@ export function CourseBuilderPage() {
             >
               Generate Course Structure
             </button>
+          </div>
+
+          {/* Learning Mode Selector */}
+          <div className="mt-6">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Learning Mode</h4>
+            <div className="space-y-3">
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  learningMode === 'STANDARD'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="learningMode"
+                  checked={learningMode === 'STANDARD'}
+                  onChange={() => {
+                    setLearningMode('STANDARD');
+                    autosave({ learningMode: 'STANDARD' });
+                  }}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">Standard Mode</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Traditional course with modules, pages, assessments and AI-assisted content
+                    tools.
+                  </p>
+                </div>
+              </label>
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  learningMode === 'DIALOGUE'
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="learningMode"
+                  checked={learningMode === 'DIALOGUE'}
+                  onChange={() => {
+                    setLearningMode('DIALOGUE');
+                    autosave({ learningMode: 'DIALOGUE' });
+                  }}
+                  className="mt-0.5 text-purple-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">
+                    Dialogue Mode{' '}
+                    <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium ml-1">
+                      NEW
+                    </span>
+                  </span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Students upload their own materials and learn through AI-powered dialogue.
+                    Inspired by NotebookLM.
+                  </p>
+                </div>
+              </label>
+            </div>
+            {learningMode === 'DIALOGUE' && (
+              <p className="text-xs text-purple-600 mt-2">
+                Configure dialogue settings in the &quot;Dialogue&quot; tab above.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -1290,6 +1384,17 @@ export function CourseBuilderPage() {
 
       {/* ─── Publish Tab ─── */}
       {activeTab === 'publish' && courseId && <PublishGatePanel courseId={courseId} />}
+
+      {/* ─── Dialogue Tab ─── */}
+      {activeTab === 'dialogue' && courseId && (
+        <div className="max-w-2xl space-y-6">
+          <DialogueCourseSettingsForm courseId={courseId} hasApiKey={hasApiKey} />
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dialogue Activity</h3>
+            <DialogueActivityPanel courseId={courseId} />
+          </div>
+        </div>
+      )}
 
       {/* ─── Settings Tab ─── */}
       {activeTab === 'settings' && (

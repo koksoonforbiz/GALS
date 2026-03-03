@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { api } from '../../lib/api';
@@ -16,6 +16,9 @@ import type {
   DialogueCourseSettings,
 } from '../../components/dialogue/StudioPanel';
 import type { Citation } from '../../components/dialogue/CitationChip';
+
+const PANEL_SIZES_KEY = 'ats:dialogue:panel-sizes';
+const DEFAULT_PANEL_SIZES = { left: 22, right: 28 };
 
 interface Course {
   id: string;
@@ -50,6 +53,18 @@ export function DialogueLearning() {
   const [processingDocumentIds, setProcessingDocumentIds] = useState<Set<string>>(new Set());
   const [chatInputOverride, setChatInputOverride] = useState<string | undefined>();
   const [suggestedQuestions, setSuggestedQuestions] = useState<Array<{ question: string }>>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [highlightedExcerpt, setHighlightedExcerpt] = useState<string | null>(null);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [panelSizes] = useState(() => {
+    try {
+      const stored = localStorage.getItem(PANEL_SIZES_KEY);
+      return stored ? JSON.parse(stored) : DEFAULT_PANEL_SIZES;
+    } catch {
+      return DEFAULT_PANEL_SIZES;
+    }
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const courseSettings: DialogueCourseSettings = course?.dblSettings || {};
 
@@ -188,6 +203,55 @@ export function DialogueLearning() {
     };
   }, [user, activeSession, loadSourceGuide]);
 
+  // ─── Keyboard shortcuts ──────────────────────────────────
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key === 'k') {
+        e.preventDefault();
+        document.querySelector<HTMLTextAreaElement>('[data-dialogue-input]')?.focus();
+      }
+      if (mod && e.key === 'u') {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
+      if (mod && e.key === '1') {
+        e.preventDefault();
+        setRightPanelMode('studio');
+      }
+      if (mod && e.key === '2') {
+        e.preventDefault();
+        setRightPanelMode('guide');
+      }
+      if (mod && e.key === '3') {
+        e.preventDefault();
+        setRightPanelMode('interventions');
+      }
+      if (
+        e.key === '?' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+      ) {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // ─── Persist panel sizes ───────────────────────────────
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PANEL_SIZES_KEY, JSON.stringify(panelSizes));
+    } catch {
+      // ignore
+    }
+  }, [panelSizes]);
+
   // ─── Handlers ─────────────────────────────────────────────
 
   const handleCreateSession = useCallback(async () => {
@@ -216,8 +280,13 @@ export function DialogueLearning() {
     [loadSessionData, setSearchParams],
   );
 
+  const lastSentContent = useRef<string>('');
+
   const handleSendMessage = useCallback(
     async (content: string) => {
+      setSendError(null);
+      lastSentContent.current = content;
+
       if (!activeSession) {
         // Auto-create session
         if (!courseId) return;
@@ -240,7 +309,7 @@ export function DialogueLearning() {
           });
           setMessages((prev) => [...prev, result.userMessage, result.assistantMessage]);
         } catch (err) {
-          toast('error', err instanceof Error ? err.message : 'Failed to send');
+          setSendError(err instanceof Error ? err.message : 'Failed to send');
         } finally {
           setIsSending(false);
         }
@@ -258,13 +327,19 @@ export function DialogueLearning() {
         });
         setMessages((prev) => [...prev, result.userMessage, result.assistantMessage]);
       } catch (err) {
-        toast('error', err instanceof Error ? err.message : 'Failed to send');
+        setSendError(err instanceof Error ? err.message : 'Failed to send');
       } finally {
         setIsSending(false);
       }
     },
-    [activeSession, courseId, activeSourceIds, toast, setSearchParams],
+    [activeSession, courseId, activeSourceIds, setSearchParams],
   );
+
+  const handleRetry = useCallback(() => {
+    if (lastSentContent.current) {
+      handleSendMessage(lastSentContent.current);
+    }
+  }, [handleSendMessage]);
 
   const handleToggleSource = useCallback((id: string, active: boolean) => {
     setActiveSourceIds((prev) => {
@@ -305,10 +380,34 @@ export function DialogueLearning() {
       if (source) {
         setSelectedSource(source);
         setRightPanelMode('guide');
+        setHighlightedExcerpt(citation.excerpt || null);
         loadSourceGuide(source.id);
       }
     },
     [sources, loadSourceGuide],
+  );
+
+  const handleActivateSources = useCallback(() => {
+    const completedIds = new Set(
+      sources.filter((s) => s.processingStatus === 'COMPLETED').map((s) => s.id),
+    );
+    setActiveSourceIds(completedIds);
+  }, [sources]);
+
+  const handleRetryProcessing = useCallback(
+    async (docId: string) => {
+      try {
+        await api.post(`/student-rag/documents/${docId}/reprocess`, {});
+        toast('info', 'Reprocessing document...');
+        setProcessingDocumentIds((prev) => new Set([...prev, docId]));
+        setSources((prev) =>
+          prev.map((s) => (s.id === docId ? { ...s, processingStatus: 'PROCESSING' } : s)),
+        );
+      } catch {
+        toast('error', 'Failed to reprocess document');
+      }
+    },
+    [toast],
   );
 
   const handleStudioGenerate = useCallback(
@@ -402,59 +501,184 @@ export function DialogueLearning() {
           >
             + New Session
           </button>
+          <button
+            onClick={() => setShowShortcutsModal(true)}
+            className="text-xs px-2 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+            title="Keyboard shortcuts"
+          >
+            ?
+          </button>
         </div>
       </div>
 
-      {/* Three-panel layout */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left panel - Sources */}
-        <div className="w-[22%] min-w-[200px] max-w-[320px] border-r border-gray-200 bg-white flex-shrink-0">
-          <SourcesPanel
-            sources={sources}
-            activeSourceIds={activeSourceIds}
-            courseId={courseId || ''}
-            onToggleSource={handleToggleSource}
-            onSourceSelect={handleSourceSelect}
-            onUploadComplete={handleUploadComplete}
-            onDelete={handleDeleteSource}
-            processingDocumentIds={processingDocumentIds}
-          />
-        </div>
+      {/* Hidden file input for Ctrl+U shortcut */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept=".pdf,.docx,.doc,.txt,.md,.png,.jpg,.webp"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            // Trigger upload via SourcesPanel by simulating upload
+            const formData = new FormData();
+            for (const file of Array.from(e.target.files)) {
+              formData.append('file', file);
+            }
+            // Use the direct upload flow
+            Array.from(e.target.files).forEach(async (file) => {
+              const fd = new FormData();
+              fd.append('file', file);
+              const token = localStorage.getItem('token');
+              try {
+                const res = await fetch(`/api/student-rag/courses/${courseId}/documents`, {
+                  method: 'POST',
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  body: fd,
+                });
+                if (res.ok) {
+                  const doc = await res.json();
+                  handleUploadComplete(doc as StudentSourceDocument);
+                  toast('success', `Uploaded ${file.name}`);
+                }
+              } catch {
+                toast('error', `Failed to upload ${file.name}`);
+              }
+            });
+            e.target.value = '';
+          }
+        }}
+      />
 
-        {/* Middle panel - Chat */}
-        <div className="flex-1 bg-white min-w-0">
-          <ChatPanel
-            messages={messages}
-            isSending={isSending}
-            activeSourceCount={activeSourceIds.size}
-            onSend={handleSendMessage}
-            onCitationClick={handleCitationClick}
-            session={activeSession}
-            suggestedQuestions={suggestedQuestions}
-            inputOverride={chatInputOverride}
-            onInputOverrideUsed={() => setChatInputOverride(undefined)}
-          />
+      {/* Empty state - no sources uploaded */}
+      {!isLoading && sources.length === 0 && messages.length === 0 && !activeSession ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md px-6 py-12">
+            <div className="text-5xl mb-4">📚</div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Start Your Learning Space</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Upload your study materials to begin. PDFs, documents, images, code — anything.
+            </p>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Upload Your First Document
+            </button>
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <p className="text-xs text-gray-400 mb-3">Or try with a quick prompt</p>
+              <button
+                onClick={() => {
+                  setChatInputOverride('What is machine learning?');
+                }}
+                className="text-sm text-blue-600 hover:text-blue-700"
+              >
+                &quot;What is machine learning?&quot; →
+              </button>
+              <p className="text-xs text-gray-400 mt-1">(uses fallback mode without sources)</p>
+            </div>
+          </div>
         </div>
+      ) : (
+        /* Three-panel layout */
+        <div className="flex-1 flex min-h-0">
+          {/* Left panel - Sources */}
+          <div
+            style={{ width: `${panelSizes.left}%` }}
+            className="min-w-[200px] max-w-[320px] border-r border-gray-200 bg-white flex-shrink-0"
+          >
+            <SourcesPanel
+              sources={sources}
+              activeSourceIds={activeSourceIds}
+              courseId={courseId || ''}
+              onToggleSource={handleToggleSource}
+              onSourceSelect={handleSourceSelect}
+              onUploadComplete={handleUploadComplete}
+              onDelete={handleDeleteSource}
+              processingDocumentIds={processingDocumentIds}
+              onRetryProcessing={handleRetryProcessing}
+            />
+          </div>
 
-        {/* Right panel - Studio/Guide/Interventions */}
-        <div className="w-[28%] min-w-[250px] max-w-[400px] border-l border-gray-200 bg-white flex-shrink-0">
-          <StudioPanel
-            mode={rightPanelMode}
-            onModeChange={setRightPanelMode}
-            selectedSource={selectedSource}
-            selectedSourceGuide={selectedSourceGuide}
-            activeSourceIds={[...activeSourceIds]}
-            sessionId={activeSession?.id || null}
-            courseId={courseId || ''}
-            courseSettings={courseSettings}
-            studioOutputs={studioOutputs}
-            onStudioGenerate={handleStudioGenerate}
-            onSuggestedQuestionClick={handleSuggestedQuestionClick}
-            pastInterventions={pastInterventions}
-            onStartIntervention={handleStartIntervention}
-          />
+          {/* Middle panel - Chat */}
+          <div className="flex-1 bg-white min-w-0">
+            <ChatPanel
+              messages={messages}
+              isSending={isSending}
+              activeSourceCount={activeSourceIds.size}
+              totalSourceCount={sources.length}
+              onSend={handleSendMessage}
+              onCitationClick={handleCitationClick}
+              session={activeSession}
+              suggestedQuestions={suggestedQuestions}
+              inputOverride={chatInputOverride}
+              onInputOverrideUsed={() => setChatInputOverride(undefined)}
+              sendError={sendError}
+              onRetry={handleRetry}
+              onActivateSources={handleActivateSources}
+            />
+          </div>
+
+          {/* Right panel - Studio/Guide/Interventions */}
+          <div
+            style={{ width: `${panelSizes.right}%` }}
+            className="min-w-[250px] max-w-[400px] border-l border-gray-200 bg-white flex-shrink-0"
+          >
+            <StudioPanel
+              mode={rightPanelMode}
+              onModeChange={setRightPanelMode}
+              selectedSource={selectedSource}
+              selectedSourceGuide={selectedSourceGuide}
+              activeSourceIds={[...activeSourceIds]}
+              sessionId={activeSession?.id || null}
+              courseId={courseId || ''}
+              courseSettings={courseSettings}
+              studioOutputs={studioOutputs}
+              onStudioGenerate={handleStudioGenerate}
+              onSuggestedQuestionClick={handleSuggestedQuestionClick}
+              pastInterventions={pastInterventions}
+              onStartIntervention={handleStartIntervention}
+              highlightedExcerpt={highlightedExcerpt}
+              onHighlightClear={() => setHighlightedExcerpt(null)}
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Keyboard shortcuts modal */}
+      {showShortcutsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">Keyboard Shortcuts</h3>
+              <button
+                onClick={() => setShowShortcutsModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              {[
+                ['Ctrl/Cmd + Enter', 'Send message'],
+                ['Ctrl/Cmd + K', 'Focus chat input'],
+                ['Ctrl/Cmd + U', 'Open upload dialog'],
+                ['Ctrl/Cmd + 1', 'Studio tab'],
+                ['Ctrl/Cmd + 2', 'Guide tab'],
+                ['Ctrl/Cmd + 3', 'Interventions tab'],
+                ['?', 'Toggle this help'],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex justify-between">
+                  <kbd className="px-2 py-0.5 text-xs bg-gray-100 border border-gray-200 rounded font-mono">
+                    {key}
+                  </kbd>
+                  <span className="text-gray-600">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -13,6 +13,8 @@ interface SourcesPanelProps {
   onUploadComplete: (doc: StudentSourceDocument) => void;
   onDelete: (id: string) => void;
   processingDocumentIds: Set<string>;
+  isLoading?: boolean;
+  onRetryProcessing?: (id: string) => void;
 }
 
 export function SourcesPanel({
@@ -23,6 +25,8 @@ export function SourcesPanel({
   onSourceSelect,
   onUploadComplete,
   onDelete,
+  isLoading,
+  onRetryProcessing,
 }: SourcesPanelProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +153,16 @@ export function SourcesPanel({
 
       {/* Source list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {sources.length === 0 ? (
+        {isLoading ? (
+          <>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+                <div className="h-3 bg-gray-200 rounded w-1/2" />
+              </div>
+            ))}
+          </>
+        ) : sources.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-4">
             No sources uploaded yet. Upload files to get started.
           </p>
@@ -162,6 +175,7 @@ export function SourcesPanel({
               onToggle={onToggleSource}
               onSelect={onSourceSelect}
               onDelete={handleDeleteSource}
+              onRetryProcessing={onRetryProcessing}
             />
           ))
         )}

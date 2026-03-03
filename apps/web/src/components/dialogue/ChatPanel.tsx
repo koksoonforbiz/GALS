@@ -38,6 +38,11 @@ interface ChatPanelProps {
   suggestedQuestions?: SuggestedQuestion[];
   inputOverride?: string;
   onInputOverrideUsed?: () => void;
+  isLoading?: boolean;
+  sendError?: string | null;
+  onRetry?: () => void;
+  onActivateSources?: () => void;
+  totalSourceCount?: number;
 }
 
 const MAX_CHARS = 8000;
@@ -52,8 +57,14 @@ export function ChatPanel({
   suggestedQuestions,
   inputOverride,
   onInputOverrideUsed,
+  isLoading,
+  sendError,
+  onRetry,
+  onActivateSources,
+  totalSourceCount = 0,
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [showNoSourcesWarning, setShowNoSourcesWarning] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -81,12 +92,24 @@ export function ChatPanel({
     }
   }, [input]);
 
-  const handleSend = useCallback(() => {
+  const doSend = useCallback(() => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
+    setShowNoSourcesWarning(false);
     onSend(trimmed);
     setInput('');
   }, [input, isSending, onSend]);
+
+  const handleSend = useCallback(() => {
+    const trimmed = input.trim();
+    if (!trimmed || isSending) return;
+    // Show warning if no sources active and there are sources available
+    if (activeSourceCount === 0 && totalSourceCount > 0) {
+      setShowNoSourcesWarning(true);
+      return;
+    }
+    doSend();
+  }, [input, isSending, activeSourceCount, totalSourceCount, doSend]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -129,6 +152,23 @@ export function ChatPanel({
       </div>
     );
   };
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full p-4 space-y-4">
+        <div className="flex justify-end">
+          <div className="w-2/3 h-12 bg-blue-100 rounded-2xl animate-pulse" />
+        </div>
+        <div className="flex justify-start">
+          <div className="w-3/4 h-20 bg-gray-100 rounded-2xl animate-pulse" />
+        </div>
+        <div className="flex justify-end">
+          <div className="w-1/2 h-10 bg-blue-100 rounded-2xl animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   // Empty state
   if (!session) {
@@ -226,6 +266,49 @@ export function ChatPanel({
         )}
       </div>
 
+      {/* Error state */}
+      {sendError && (
+        <div className="mx-4 mb-2 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm">
+          <span className="text-red-600">Failed to get a response.</span>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="text-red-700 font-medium underline hover:text-red-800"
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* No sources warning */}
+      {showNoSourcesWarning && (
+        <div className="mx-4 mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm flex items-center justify-between">
+          <span className="text-amber-700">
+            No sources are active. Your answer won&apos;t be grounded in your materials.
+          </span>
+          <div className="flex gap-2 ml-2">
+            {onActivateSources && (
+              <button
+                onClick={() => {
+                  setShowNoSourcesWarning(false);
+                  onActivateSources();
+                }}
+                className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded font-medium hover:bg-amber-200"
+              >
+                Activate sources
+              </button>
+            )}
+            <button
+              onClick={doSend}
+              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded font-medium hover:bg-gray-200"
+            >
+              Send anyway
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="border-t border-gray-200 p-3">
         <div className="flex items-end gap-2">
@@ -237,6 +320,7 @@ export function ChatPanel({
               onKeyDown={handleKeyDown}
               placeholder="Ask a question about your sources..."
               rows={1}
+              data-dialogue-input
               className="w-full resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             <div className="flex items-center justify-between mt-1 px-1">
@@ -253,7 +337,7 @@ export function ChatPanel({
             </div>
           </div>
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!input.trim() || isSending}
             className="flex-shrink-0 p-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >

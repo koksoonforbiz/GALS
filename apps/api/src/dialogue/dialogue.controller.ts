@@ -23,16 +23,24 @@ interface RequestUser {
 
 @Controller('dialogue')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('student')
 export class DialogueController {
   constructor(
     private readonly dialogueService: DialogueService,
     private readonly studioService: StudioService,
   ) {}
 
+  // ─── Teacher endpoints ───────────────────────────────────
+
+  @Get('courses/:courseId/activity')
+  @Roles('teacher', 'admin')
+  getCourseActivity(@Request() req: { user: RequestUser }, @Param('courseId') courseId: string) {
+    return this.dialogueService.getCourseActivity(courseId, req.user.id);
+  }
+
   // ─── Sessions ─────────────────────────────────────────────
 
   @Post('courses/:courseId/sessions')
+  @Roles('student')
   createSession(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
@@ -42,16 +50,19 @@ export class DialogueController {
   }
 
   @Get('courses/:courseId/sessions')
+  @Roles('student')
   listSessions(@Request() req: { user: RequestUser }, @Param('courseId') courseId: string) {
     return this.dialogueService.listSessions(req.user.id, courseId);
   }
 
   @Get('sessions/:sessionId')
+  @Roles('student')
   getSession(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
     return this.dialogueService.getSession(sessionId, req.user.id);
   }
 
   @Patch('sessions/:sessionId')
+  @Roles('student')
   updateSession(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
@@ -61,6 +72,7 @@ export class DialogueController {
   }
 
   @Delete('sessions/:sessionId')
+  @Roles('student')
   deleteSession(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
     return this.dialogueService.deleteSession(sessionId, req.user.id);
   }
@@ -68,6 +80,7 @@ export class DialogueController {
   // ─── Chat ─────────────────────────────────────────────────
 
   @Post('sessions/:sessionId/messages')
+  @Roles('student')
   sendMessage(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
@@ -77,6 +90,7 @@ export class DialogueController {
   }
 
   @Get('sessions/:sessionId/messages')
+  @Roles('student')
   getMessages(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
     return this.dialogueService.getMessages(sessionId, req.user.id);
   }
@@ -84,6 +98,7 @@ export class DialogueController {
   // ─── Studio ───────────────────────────────────────────────
 
   @Post('courses/:courseId/studio')
+  @Roles('student')
   generateStudioOutput(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
@@ -99,11 +114,13 @@ export class DialogueController {
   }
 
   @Get('sessions/:sessionId/studio')
+  @Roles('student')
   listStudioOutputs(@Request() req: { user: RequestUser }, @Param('sessionId') sessionId: string) {
     return this.studioService.listOutputs(sessionId, req.user.id);
   }
 
   @Delete('studio/:outputId')
+  @Roles('student')
   deleteStudioOutput(@Request() req: { user: RequestUser }, @Param('outputId') outputId: string) {
     return this.studioService.deleteOutput(outputId, req.user.id);
   }
@@ -111,6 +128,7 @@ export class DialogueController {
   // ─── Intervention Linking ─────────────────────────────────
 
   @Post('sessions/:sessionId/interventions')
+  @Roles('student')
   async linkIntervention(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
@@ -143,6 +161,7 @@ export class DialogueController {
   }
 
   @Get('sessions/:sessionId/interventions')
+  @Roles('student')
   async listInterventions(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,

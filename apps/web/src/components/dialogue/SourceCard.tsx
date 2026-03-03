@@ -18,6 +18,7 @@ interface SourceCardProps {
   onToggle: (id: string, active: boolean) => void;
   onSelect: (source: StudentSourceDocument) => void;
   onDelete: (id: string) => void;
+  onRetryProcessing?: (id: string) => void;
 }
 
 function fileIcon(fileType: string): string {
@@ -41,7 +42,14 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function SourceCard({ source, isActive, onToggle, onSelect, onDelete }: SourceCardProps) {
+export function SourceCard({
+  source,
+  isActive,
+  onToggle,
+  onSelect,
+  onDelete,
+  onRetryProcessing,
+}: SourceCardProps) {
   return (
     <div
       className={`group relative rounded-lg border p-3 transition-colors ${
@@ -83,6 +91,14 @@ export function SourceCard({ source, isActive, onToggle, onSelect, onDelete }: S
               className="text-xs text-blue-600 hover:text-blue-800 px-1.5 py-0.5 rounded hover:bg-blue-50"
             >
               Guide
+            </button>
+          )}
+          {source.processingStatus === 'FAILED' && onRetryProcessing && (
+            <button
+              onClick={() => onRetryProcessing(source.id)}
+              className="text-xs text-amber-600 hover:text-amber-800 px-1.5 py-0.5 rounded hover:bg-amber-50"
+            >
+              Retry
             </button>
           )}
           <button
