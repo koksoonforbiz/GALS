@@ -26,6 +26,7 @@ import { PublishGateModule } from './publish-gate';
 import { LearningInterventionsModule } from './learning-interventions';
 import { QuestionGenerationModule } from './question-generation';
 import { UserManagementModule } from './user-management';
+import { StudentRagModule } from './student-rag';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -63,6 +64,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     LearningInterventionsModule,
     QuestionGenerationModule,
     UserManagementModule,
+    StudentRagModule,
   ],
   controllers: [HealthController],
 })
