@@ -32,6 +32,8 @@ import { CatalogPage } from './pages/student/CatalogPage';
 import { MyCoursesPage } from './pages/student/MyCoursesPage';
 import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
 import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
+import { DialogueLearning } from './pages/student/DialogueLearning';
+import { DialogueSessionHistory } from './pages/student/DialogueSessionHistory';
 
 function App() {
   return (
@@ -213,6 +215,22 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['student']}>
                     <ReviewQueuePage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/courses/:courseId/dialogue"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <DialogueLearning />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/student/courses/:courseId/dialogue/sessions"
+                element={
+                  <RoleRoute allowedRoles={['student']}>
+                    <DialogueSessionHistory />
                   </RoleRoute>
                 }
               />
