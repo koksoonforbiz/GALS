@@ -1,5 +1,11 @@
--- Enable pgvector extension (required for vector column type)
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension if available (required for vector column type)
+-- Falls back to JSONB for embedding column if pgvector is not installed
+DO $$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'pgvector extension not available — embedding column will use JSONB fallback';
+END $$;
 
 -- CreateEnum: LearningMode
 CREATE TYPE "LearningMode" AS ENUM ('STANDARD', 'DIALOGUE');
@@ -58,14 +64,13 @@ CREATE TABLE "student_source_guides" (
     CONSTRAINT "student_source_guides_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable: StudentRagChunk
+-- CreateTable: StudentRagChunk (embedding column type depends on pgvector availability)
 CREATE TABLE "student_rag_chunks" (
     "id" TEXT NOT NULL,
     "document_id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "course_id" UUID NOT NULL,
     "content" TEXT NOT NULL,
-    "embedding" vector(1536),
     "chunk_index" INTEGER NOT NULL,
     "page_number" INTEGER,
     "metadata" JSONB,
@@ -73,6 +78,16 @@ CREATE TABLE "student_rag_chunks" (
 
     CONSTRAINT "student_rag_chunks_pkey" PRIMARY KEY ("id")
 );
+
+-- Add embedding column: use vector(1536) if pgvector is available, otherwise JSONB
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    ALTER TABLE "student_rag_chunks" ADD COLUMN "embedding" vector(1536);
+  ELSE
+    ALTER TABLE "student_rag_chunks" ADD COLUMN "embedding" JSONB;
+  END IF;
+END $$;
 
 -- CreateTable: DialogueSession
 CREATE TABLE "dialogue_sessions" (
