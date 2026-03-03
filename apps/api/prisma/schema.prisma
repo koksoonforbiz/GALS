@@ -111,6 +111,45 @@ enum HattieFeedbackLevel {
   SELF
 }
 
+enum LearningMode {
+  STANDARD
+  DIALOGUE
+}
+
+enum StudentFileType {
+  PDF
+  DOCX
+  DOC
+  TXT
+  MD
+  IMAGE_PNG
+  IMAGE_JPG
+  IMAGE_WEBP
+  CODE
+}
+
+enum DocumentProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum StudioOutputType {
+  BRIEFING_DOC
+  FLASHCARD_SET
+  TABLE_COMPARISON
+  MIND_MAP
+  TIMELINE
+  FAQ
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -146,6 +185,8 @@ model User {
   questionGenerationJobs     QuestionGenerationJob[]
   feedbackPromptConfigs      FeedbackPromptConfig[]     @relation("teacherFeedbackConfigs")
   llmUsageLogs               LlmUsageLog[]
+  studentDocuments           StudentSourceDocument[]    @relation("StudentDocuments")
+  dialogueSessions           DialogueSession[]          @relation("StudentDialogueSessions")
 
   @@map("users")
 }
@@ -159,6 +200,8 @@ model Course {
   visibility     CourseVisibility @default(PRIVATE)
   bannerBlobKey  String?          @map("banner_blob_key")
   orderIndex     Int              @default(0) @map("order_index")
+  learningMode   LearningMode     @default(STANDARD) @map("learning_mode")
+  dblSettings    Json?            @map("dbl_settings")
   archivedAt     DateTime?        @map("archived_at") @db.Timestamptz
   createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz
@@ -171,6 +214,8 @@ model Course {
   modules         CourseModule[]
   sourceDocuments SourceDocument[]
   contentDrafts   ContentDraft[]
+  studentDocuments    StudentSourceDocument[]
+  dialogueSessions    DialogueSession[]
 
   @@index([teacherId])
   @@map("courses")
@@ -185,6 +230,8 @@ model Enrollment {
 
   student User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   course  Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentDocuments    StudentSourceDocument[]
+  dialogueSessions    DialogueSession[]
 
   @@unique([studentId, courseId])
   @@index([courseId])
@@ -469,6 +516,119 @@ model DocumentChunk {
   @@unique([documentId, chunkIndex])
   @@index([documentId])
   @@map("document_chunks")
+}
+
+// ─── Dialogue-Based Learning (DBL) ──────────────────────
+
+model StudentSourceDocument {
+  id              String                    @id @default(cuid())
+  enrollmentId    String                    @map("enrollment_id") @db.Uuid
+  enrollment      Enrollment                @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  studentId       String                    @map("student_id") @db.Uuid
+  student         User                      @relation("StudentDocuments", fields: [studentId], references: [id])
+  courseId        String                    @map("course_id") @db.Uuid
+  course          Course                    @relation(fields: [courseId], references: [id])
+  fileName        String                    @map("file_name")
+  originalName    String                    @map("original_name")
+  mimeType        String                    @map("mime_type")
+  fileSize        Int                       @map("file_size")
+  blobKey         String                    @map("blob_key")
+  fileType        StudentFileType           @map("file_type")
+  processingStatus DocumentProcessingStatus @default(PENDING) @map("processing_status")
+  processingError String?                   @map("processing_error")
+  isActive        Boolean                   @default(true) @map("is_active")
+  autoGuide       StudentSourceGuide?
+  chunks          StudentRagChunk[]
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([enrollmentId])
+  @@index([studentId, courseId])
+  @@map("student_source_documents")
+}
+
+model StudentSourceGuide {
+  id                String               @id @default(cuid())
+  documentId        String               @unique @map("document_id")
+  document          StudentSourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  summary           String               @db.Text
+  tableOfContents   Json                 @map("table_of_contents")
+  suggestedQuestions Json                 @map("suggested_questions")
+  keyTopics         Json                 @map("key_topics")
+  generatedAt       DateTime             @default(now()) @map("generated_at") @db.Timestamptz
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("student_source_guides")
+}
+
+model StudentRagChunk {
+  id            String               @id @default(cuid())
+  documentId    String               @map("document_id")
+  document      StudentSourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  studentId     String               @map("student_id") @db.Uuid
+  courseId      String               @map("course_id") @db.Uuid
+  content       String               @db.Text
+  embedding     Unsupported("vector(1536)")?
+  chunkIndex    Int                  @map("chunk_index")
+  pageNumber    Int?                 @map("page_number")
+  metadata      Json?
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([documentId])
+  @@index([studentId, courseId])
+  @@map("student_rag_chunks")
+}
+
+model DialogueSession {
+  id              String              @id @default(cuid())
+  enrollmentId    String              @map("enrollment_id") @db.Uuid
+  enrollment      Enrollment          @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  studentId       String              @map("student_id") @db.Uuid
+  student         User                @relation("StudentDialogueSessions", fields: [studentId], references: [id])
+  courseId        String              @map("course_id") @db.Uuid
+  course          Course              @relation(fields: [courseId], references: [id])
+  title           String              @default("New Session")
+  activeSourceIds String[]            @map("active_source_ids")
+  messages        DialogueMessage[]
+  studioOutputs   StudioOutput[]
+  linkedInterventions LearningIntervention[]
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([enrollmentId])
+  @@index([studentId, courseId])
+  @@map("dialogue_sessions")
+}
+
+model DialogueMessage {
+  id          String          @id @default(cuid())
+  sessionId   String          @map("session_id")
+  session     DialogueSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        MessageRole
+  content     String          @db.Text
+  citations   Json?
+  tokenUsage  Json?           @map("token_usage")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([sessionId])
+  @@map("dialogue_messages")
+}
+
+model StudioOutput {
+  id          String          @id @default(cuid())
+  sessionId   String          @map("session_id")
+  session     DialogueSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  studentId   String          @map("student_id") @db.Uuid
+  type        StudioOutputType
+  title       String
+  content     Json
+  sourceIds   String[]        @map("source_ids")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([sessionId])
+  @@index([studentId])
+  @@map("studio_outputs")
 }
 
 // ─── LLM: Content Drafts & Audit Logs ───────────────────
@@ -900,8 +1060,10 @@ model LearningIntervention {
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime           @updatedAt @map("updated_at") @db.Timestamptz
 
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  savedReviews  SavedInterventionReview[]
+  dialogueSessionId String?          @map("dialogue_session_id")
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dialogueSession   DialogueSession?   @relation(fields: [dialogueSessionId], references: [id])
+  savedReviews      SavedInterventionReview[]
   spacedRepetitionCards SpacedRepetitionCard[]
 
   @@index([userId])
