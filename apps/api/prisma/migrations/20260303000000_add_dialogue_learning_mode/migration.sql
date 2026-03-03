@@ -1,3 +1,6 @@
+-- Enable pgvector extension (required for vector column type)
+CREATE EXTENSION IF NOT EXISTS vector;
+
 -- CreateEnum: LearningMode
 CREATE TYPE "LearningMode" AS ENUM ('STANDARD', 'DIALOGUE');
 
