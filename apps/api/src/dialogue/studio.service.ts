@@ -120,6 +120,7 @@ export class StudioService {
         courseId,
         triggeredByUserId: studentId,
       },
+      { jsonMode: true },
     );
 
     // Parse JSON from LLM output

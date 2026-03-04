@@ -122,7 +122,9 @@ export class LlmService {
     };
   }
 
-  private async getUserApiKey(userId: string): Promise<{ apiKey: string; model: string; provider: string } | null> {
+  private async getUserApiKey(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string; provider: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
@@ -429,9 +431,10 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
     usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
+    options?: { jsonMode?: boolean },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     const credentials = await this.getUserApiKey(userId);
-    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
+    const result = await this.callLlm(systemPrompt, userPrompt, credentials, options);
 
     if (usageContext) {
       await this.logLlmUsage({
@@ -479,7 +482,8 @@ export class LlmService {
           outputCost: cost.outputCost,
           totalCost: cost.totalCost,
           feature: params.feature,
-          metadata: params.metadata as import('@prisma/client').Prisma.InputJsonValue ?? undefined,
+          metadata:
+            (params.metadata as import('@prisma/client').Prisma.InputJsonValue) ?? undefined,
         },
       });
     } catch (err) {
@@ -493,12 +497,25 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
     credentials: { apiKey: string; model: string; provider: string } | null,
+    options?: { jsonMode?: boolean },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     if (credentials) {
       if (credentials.provider === 'gemini') {
-        return this.callGeminiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
+        return this.callGeminiApi(
+          systemPrompt,
+          userPrompt,
+          credentials.apiKey,
+          credentials.model,
+          options,
+        );
       }
-      return this.callOpenAiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
+      return this.callOpenAiApi(
+        systemPrompt,
+        userPrompt,
+        credentials.apiKey,
+        credentials.model,
+        options,
+      );
     }
     // Fallback: built-in template-based generation (no API key configured)
     return this.generateWithoutApi(systemPrompt, userPrompt);
@@ -509,22 +526,27 @@ export class LlmService {
     userPrompt: string,
     apiKey: string,
     model: string,
+    options?: { jsonMode?: boolean },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
+      const body: Record<string, unknown> = {
+        model,
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      };
+      if (options?.jsonMode) {
+        body.response_format = { type: 'json_object' };
+      }
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: 4096,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -554,9 +576,15 @@ export class LlmService {
     userPrompt: string,
     apiKey: string,
     model: string,
+    options?: { jsonMode?: boolean },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const generationConfig: Record<string, unknown> = { maxOutputTokens: 4096 };
+      if (options?.jsonMode) {
+        generationConfig.responseMimeType = 'application/json';
+      }
 
       const response = await fetch(url, {
         method: 'POST',
@@ -564,7 +592,7 @@ export class LlmService {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig: { maxOutputTokens: 4096 },
+          generationConfig,
         }),
       });
 

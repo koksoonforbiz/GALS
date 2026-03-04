@@ -103,6 +103,7 @@ Return JSON with this exact structure:
         systemPrompt,
         userPrompt,
         { feature: 'source_guide_generation', courseId: doc.courseId },
+        { jsonMode: true },
       );
 
       // 5. Parse JSON response
