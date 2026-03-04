@@ -62,6 +62,7 @@ interface StudioPanelProps {
   courseSettings: DialogueCourseSettings;
   studioOutputs: StudioOutput[];
   onStudioGenerate: (type: string, promptHint?: string) => Promise<void>;
+  onStudioDelete: (outputId: string) => Promise<void>;
   onSuggestedQuestionClick: (question: string) => void;
   pastInterventions: LearningIntervention[];
   onStartIntervention: (type: string) => void;
@@ -114,6 +115,7 @@ export function StudioPanel({
   courseSettings,
   studioOutputs,
   onStudioGenerate,
+  onStudioDelete,
   onSuggestedQuestionClick,
   pastInterventions,
   onStartIntervention,
@@ -196,6 +198,10 @@ export function StudioPanel({
             activeSourceIds={activeSourceIds}
             generating={generating}
             onGenerate={handleGenerate}
+            onDelete={async (id) => {
+              await onStudioDelete(id);
+              setActiveOutputId(null);
+            }}
             promptHints={promptHints}
             onPromptHintChange={(type, val) => setPromptHints((prev) => ({ ...prev, [type]: val }))}
             expandedHint={expandedHint}
@@ -239,6 +245,7 @@ function StudioTab({
   activeSourceIds,
   generating,
   onGenerate,
+  onDelete,
   promptHints,
   onPromptHintChange,
   expandedHint,
@@ -252,21 +259,62 @@ function StudioTab({
   activeSourceIds: string[];
   generating: string | null;
   onGenerate: (type: string) => void;
+  onDelete: (id: string) => Promise<void>;
   promptHints: Record<string, string>;
   onPromptHintChange: (type: string, val: string) => void;
   expandedHint: string | null;
   onToggleHint: (type: string) => void;
   onViewOutput: (id: string) => void;
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (id: string) => {
+    setDeleting(true);
+    try {
+      await onDelete(id);
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteId(null);
+    }
+  };
+
   if (activeOutput) {
     return (
       <div className="p-4">
-        <button
-          onClick={onBack}
-          className="text-sm text-blue-600 hover:text-blue-700 mb-3 flex items-center gap-1"
-        >
-          <span>&larr;</span> Back to Tools
-        </button>
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={onBack}
+            className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          >
+            <span>&larr;</span> Back to Tools
+          </button>
+          {confirmDeleteId === activeOutput.id ? (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">Delete?</span>
+              <button
+                onClick={() => handleDelete(activeOutput.id)}
+                disabled={deleting}
+                className="text-xs px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300"
+              >
+                {deleting ? 'Deleting...' : 'Yes'}
+              </button>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                No
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDeleteId(activeOutput.id)}
+              className="text-xs px-2 py-1 rounded text-red-600 hover:bg-red-50 border border-red-200"
+            >
+              Delete
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 mb-4">
           <h4 className="font-semibold text-sm">{activeOutput.title}</h4>
           <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700">

@@ -430,6 +430,19 @@ export function DialogueLearning() {
     [courseId, activeSession, activeSourceIds, toast],
   );
 
+  const handleStudioDelete = useCallback(
+    async (outputId: string) => {
+      try {
+        await api.delete(`/dialogue/studio/${outputId}`);
+        setStudioOutputs((prev) => prev.filter((o) => o.id !== outputId));
+        toast('success', 'Output deleted');
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Delete failed');
+      }
+    },
+    [toast],
+  );
+
   const handleSuggestedQuestionClick = useCallback((question: string) => {
     setChatInputOverride(question);
   }, []);
@@ -638,6 +651,7 @@ export function DialogueLearning() {
               courseSettings={courseSettings}
               studioOutputs={studioOutputs}
               onStudioGenerate={handleStudioGenerate}
+              onStudioDelete={handleStudioDelete}
               onSuggestedQuestionClick={handleSuggestedQuestionClick}
               pastInterventions={pastInterventions}
               onStartIntervention={handleStartIntervention}
