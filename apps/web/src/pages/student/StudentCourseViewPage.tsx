@@ -30,6 +30,7 @@ interface Course {
   title: string;
   description: string;
   status: string;
+  learningMode?: string;
   teacher: { id: string; name: string };
   modules: CourseModule[];
 }
@@ -70,6 +71,11 @@ export function StudentCourseViewPage() {
     const fetch = async () => {
       try {
         const data = await apiFetch<Course>(`/courses/${courseId}`);
+        // Redirect dialogue courses to the dialogue learning interface
+        if (data.learningMode === 'DIALOGUE') {
+          navigate(`/student/courses/${courseId}/dialogue`, { replace: true });
+          return;
+        }
         setCourse(data);
         // Auto-select first item
         const firstItem = data.modules[0]?.items[0];
