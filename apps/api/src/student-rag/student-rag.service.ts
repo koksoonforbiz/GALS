@@ -153,12 +153,15 @@ export class StudentRagService {
       });
 
       // 7. Batch-create StudentRagChunk records (without embeddings first)
+      // Strip lone surrogates that can appear in extracted PDF text and break JSON serialization
+      const stripSurrogates = (s: string) => s.replace(/[\uD800-\uDFFF]/g, '\uFFFD');
+
       await this.prisma.studentRagChunk.createMany({
         data: textChunks.map((chunk) => ({
           documentId,
           studentId: document.studentId,
           courseId: document.courseId,
-          content: chunk.content,
+          content: stripSurrogates(chunk.content),
           chunkIndex: chunk.chunkIndex,
           pageNumber: chunk.pageNumber ?? null,
           metadata: chunk.metadata as Prisma.InputJsonValue,
