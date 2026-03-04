@@ -175,6 +175,27 @@ export class StudentRagController {
     return this.studentRagService.deleteDocument(documentId, req.user.id);
   }
 
+  // ─── Reprocess document ─────────────────────────────────
+
+  @Post('documents/:documentId/reprocess')
+  @Roles('student')
+  async reprocessDocument(
+    @Request() req: { user: RequestUser },
+    @Param('documentId') documentId: string,
+  ) {
+    // Verify ownership
+    const doc = await this.studentRagService.getSource(documentId, req.user.id);
+    await this.prisma.studentSourceDocument.update({
+      where: { id: documentId },
+      data: { processingStatus: 'PROCESSING' },
+    });
+    // Re-trigger processing asynchronously
+    this.studentRagService.processDocument(documentId).catch((err) => {
+      this.logger.error(`Reprocess failed for ${documentId}: ${err.message}`);
+    });
+    return { id: doc.id, processingStatus: 'PROCESSING' };
+  }
+
   // ─── Regenerate guide ───────────────────────────────────
 
   @Post('courses/:courseId/documents/:documentId/regenerate-guide')
