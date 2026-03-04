@@ -196,6 +196,19 @@ export class StudentRagController {
     return { id: doc.id, processingStatus: 'PROCESSING' };
   }
 
+  // ─── Get guide ─────────────────────────────────────────
+
+  @Get('documents/:documentId/guide')
+  @Roles('student')
+  async getGuide(@Request() req: { user: RequestUser }, @Param('documentId') documentId: string) {
+    // Verify ownership
+    await this.studentRagService.getSource(documentId, req.user.id);
+    const guide = await this.prisma.studentSourceGuide.findUnique({
+      where: { documentId },
+    });
+    return guide || null;
+  }
+
   // ─── Regenerate guide ───────────────────────────────────
 
   @Post('courses/:courseId/documents/:documentId/regenerate-guide')
