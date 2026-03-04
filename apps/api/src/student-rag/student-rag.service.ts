@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
@@ -350,16 +351,34 @@ export class StudentRagService {
       select: { encryptedApiKey: true, llmProvider: true },
     });
 
-    // If teacher has API key, use their credentials
+    // If teacher has API key, decrypt and use their credentials
     if (user?.encryptedApiKey) {
-      return {
-        apiKey: user.encryptedApiKey, // Will be decrypted by LlmService when needed
-        provider: user.llmProvider || dblSettings.llmProvider || 'fallback',
-      };
+      try {
+        const apiKey = this.decryptApiKey(user.encryptedApiKey);
+        return {
+          apiKey,
+          provider: user.llmProvider || dblSettings.llmProvider || 'fallback',
+        };
+      } catch (err) {
+        this.logger.error(`Failed to decrypt API key for teacher ${teacherId}`, err);
+        return { apiKey: '', provider: 'fallback' };
+      }
     }
 
     // No API key — use fallback
     return { apiKey: '', provider: 'fallback' };
+  }
+
+  private decryptApiKey(encrypted: string): string {
+    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
+    const parts = encrypted.split(':');
+    const iv = Buffer.from(parts[0]!, 'hex');
+    const authTag = Buffer.from(parts[1]!, 'hex');
+    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(authTag);
+    return decipher.update(encryptedBuf) + decipher.final('utf8');
   }
 
   private async verifyOwnership(documentId: string, studentId: string) {
