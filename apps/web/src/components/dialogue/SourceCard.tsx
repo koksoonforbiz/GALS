@@ -1,3 +1,4 @@
+import { FileText, Image, Code, File } from 'lucide-react';
 import { ProcessingBadge } from './ProcessingBadge';
 
 interface StudentSourceDocument {
@@ -21,18 +22,18 @@ interface SourceCardProps {
   onRetryProcessing?: (id: string) => void;
 }
 
-function fileIcon(fileType: string): string {
+function fileIcon(fileType: string) {
   switch (fileType) {
     case 'PDF':
-      return '\u{1F4C4}';
+      return <FileText size={18} className="text-red-500" />;
     case 'IMAGE_PNG':
     case 'IMAGE_JPG':
     case 'IMAGE_WEBP':
-      return '\u{1F5BC}';
+      return <Image size={18} className="text-purple-500" />;
     case 'CODE':
-      return '</>';
+      return <Code size={18} className="text-green-600" />;
     default:
-      return '\u{1F4DD}';
+      return <File size={18} className="text-gray-500" />;
   }
 }
 
@@ -57,7 +58,7 @@ export function SourceCard({
       }`}
     >
       <div className="flex items-start gap-2">
-        <span className="text-lg flex-shrink-0">{fileIcon(source.fileType)}</span>
+        <span className="flex-shrink-0">{fileIcon(source.fileType)}</span>
         <div className="flex-1 min-w-0">
           <button
             onClick={() => onSelect(source)}

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { MessageSquare, SendHorizontal } from 'lucide-react';
 import { CitationChip } from './CitationChip';
 import type { Citation } from './CitationChip';
 
@@ -174,14 +175,7 @@ export function ChatPanel({
   if (!session) {
     return (
       <div className="flex flex-col h-full items-center justify-center text-gray-400 p-8">
-        <svg className="w-12 h-12 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-          />
-        </svg>
+        <MessageSquare size={48} className="mb-3" />
         <p className="text-sm">Select or create a session to start chatting</p>
       </div>
     );
@@ -193,7 +187,9 @@ export function ChatPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && !isSending ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6">
-            <div className="text-4xl mb-4">💬</div>
+            <div className="text-gray-400 mb-4">
+              <MessageSquare size={40} />
+            </div>
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Start a Conversation</h3>
             <p className="text-sm text-gray-500 mb-6 max-w-md">
               Ask questions about your study materials. The AI will use your active sources to
@@ -341,14 +337,7 @@ export function ChatPanel({
             disabled={!input.trim() || isSending}
             className="flex-shrink-0 p-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
+            <SendHorizontal size={20} />
           </button>
         </div>
       </div>

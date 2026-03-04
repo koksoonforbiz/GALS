@@ -1,4 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
+import {
+  ClipboardList,
+  Layers3,
+  BarChart3,
+  Map,
+  HelpCircle,
+  Clock,
+  FlaskConical,
+  Layers,
+  Footprints,
+  MessageCircleQuestion,
+  Palette,
+  BookOpen,
+  Brain,
+} from 'lucide-react';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
 import type { StudentSourceDocument } from './SourceCard';
@@ -56,36 +71,36 @@ interface StudioPanelProps {
 }
 
 const STUDIO_TOOLS = [
-  { type: 'BRIEFING_DOC', icon: '\u{1F4CB}', name: 'Briefing Doc' },
-  { type: 'FLASHCARD_SET', icon: '\u{1F0CF}', name: 'Flashcards' },
-  { type: 'TABLE_COMPARISON', icon: '\u{1F4CA}', name: 'Table Comparison' },
-  { type: 'MIND_MAP', icon: '\u{1F5FA}', name: 'Mind Map' },
-  { type: 'FAQ', icon: '\u{2753}', name: 'FAQ' },
-  { type: 'TIMELINE', icon: '\u{23F0}', name: 'Timeline' },
+  { type: 'BRIEFING_DOC', icon: <ClipboardList size={20} />, name: 'Briefing Doc' },
+  { type: 'FLASHCARD_SET', icon: <Layers3 size={20} />, name: 'Flashcards' },
+  { type: 'TABLE_COMPARISON', icon: <BarChart3 size={20} />, name: 'Table Comparison' },
+  { type: 'MIND_MAP', icon: <Map size={20} />, name: 'Mind Map' },
+  { type: 'FAQ', icon: <HelpCircle size={20} />, name: 'FAQ' },
+  { type: 'TIMELINE', icon: <Clock size={20} />, name: 'Timeline' },
 ];
 
 const INTERVENTION_TYPES = [
   {
     type: 'PRACTICE_TESTING',
-    icon: '\u{1F9EA}',
+    icon: <FlaskConical size={18} />,
     name: 'Practice Testing',
     description: 'Test your understanding with questions',
   },
   {
     type: 'DISTRIBUTED_PRACTICE',
-    icon: '\u{1F501}',
+    icon: <Layers size={18} />,
     name: 'Spaced Repetition',
     description: 'Review flashcards with SM-2 algorithm',
   },
   {
     type: 'STEPWISE_LEARNING',
-    icon: '\u{1F4F6}',
+    icon: <Footprints size={18} />,
     name: 'Stepwise Learning',
     description: 'Break complex topics into guided steps',
   },
   {
     type: 'INTERROGATIVE_ELABORATION',
-    icon: '\u{1F4AC}',
+    icon: <MessageCircleQuestion size={18} />,
     name: 'Interrogative Elaboration',
     description: 'Deepen understanding with why/how questions',
   },
@@ -153,9 +168,21 @@ export function StudioPanel({
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
-            {tab === 'studio' && '\u{1F3A8} Studio'}
-            {tab === 'guide' && '\u{1F4D6} Guide'}
-            {tab === 'interventions' && '\u{1F9E0} Learn'}
+            {tab === 'studio' && (
+              <span className="flex items-center justify-center gap-1">
+                <Palette size={14} /> Studio
+              </span>
+            )}
+            {tab === 'guide' && (
+              <span className="flex items-center justify-center gap-1">
+                <BookOpen size={14} /> Guide
+              </span>
+            )}
+            {tab === 'interventions' && (
+              <span className="flex items-center justify-center gap-1">
+                <Brain size={14} /> Learn
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -265,7 +292,7 @@ function StudioTab({
               key={tool.type}
               className={`rounded-lg border p-3 ${enabled ? 'border-gray-200' : 'border-gray-100 opacity-50'}`}
             >
-              <div className="text-2xl mb-1">{tool.icon}</div>
+              <div className="text-gray-700 mb-1">{tool.icon}</div>
               <div className="text-xs font-medium text-gray-900 mb-2">{tool.name}</div>
 
               {expandedHint === tool.type && (
@@ -536,7 +563,9 @@ function GuideTab({
   if (!selectedSource) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-6">
-        <div className="text-3xl mb-3">{'\u{1F4D6}'}</div>
+        <div className="text-gray-400 mb-3">
+          <BookOpen size={32} />
+        </div>
         <p className="text-sm text-gray-500">
           Select a source from the left panel or click a citation to view its guide.
         </p>
@@ -674,7 +703,7 @@ function InterventionsTab({
             className={`rounded-lg border p-3 ${enabled ? 'border-gray-200' : 'border-gray-100 opacity-50'}`}
           >
             <div className="flex items-start gap-2">
-              <span className="text-xl">{intervention.icon}</span>
+              <span className="text-gray-700 flex-shrink-0">{intervention.icon}</span>
               <div className="flex-1">
                 <div className="text-sm font-medium">{intervention.name}</div>
                 <p className="text-xs text-gray-500 mt-0.5">{intervention.description}</p>

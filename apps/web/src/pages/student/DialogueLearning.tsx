@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { BookOpen } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -554,7 +555,9 @@ export function DialogueLearning() {
       {!isLoading && sources.length === 0 && messages.length === 0 && !activeSession ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center max-w-md px-6 py-12">
-            <div className="text-5xl mb-4">📚</div>
+            <div className="text-gray-400 mb-4">
+              <BookOpen size={48} />
+            </div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Start Your Learning Space</h2>
             <p className="text-sm text-gray-500 mb-6">
               Upload your study materials to begin. PDFs, documents, images, code — anything.
