@@ -19,7 +19,8 @@ interface StudioPromptConfig {
 const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
   BRIEFING_DOC: {
     systemPrompt:
-      'You are a study-aid generator. Create a concise briefing document with clear sections. ' +
+      'You are a study-aid generator. Create a concise briefing document with 4-8 clear sections. ' +
+      'Keep each section body under 200 words. ' +
       'Return ONLY valid JSON matching: { "sections": [{ "heading": string, "body": string }] }',
     userPromptTemplate:
       'Create a briefing document from the following study material:\n\n{content}\n\n{hint}',
@@ -27,7 +28,7 @@ const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
   },
   FLASHCARD_SET: {
     systemPrompt:
-      'You are a flashcard generator. Create effective study flashcards from the material. ' +
+      'You are a flashcard generator. Create 8-15 effective study flashcards from the material. ' +
       'Return ONLY valid JSON matching: { "cards": [{ "front": string, "back": string, "kcHint": string? }] }',
     userPromptTemplate:
       'Create flashcards from the following study material:\n\n{content}\n\n{hint}',
@@ -35,7 +36,7 @@ const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
   },
   TABLE_COMPARISON: {
     systemPrompt:
-      'You are a comparison table generator. Create a structured comparison table. ' +
+      'You are a comparison table generator. Create a structured comparison table with up to 8 rows. ' +
       'Return ONLY valid JSON matching: { "headers": string[], "rows": string[][], "caption": string? }',
     userPromptTemplate:
       'Create a comparison table from the following study material:\n\n{content}\n\n{hint}',
@@ -43,7 +44,8 @@ const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
   },
   MIND_MAP: {
     systemPrompt:
-      'You are a mind map generator. Create a hierarchical mind map structure. ' +
+      'You are a mind map generator. Create a concise hierarchical mind map with 3-6 top-level branches and up to 20 total nodes. ' +
+      'Keep labels short (under 8 words each). ' +
       'Return ONLY valid JSON matching: { "root": string, "nodes": [{ "id": string, "label": string, "parentId": string|null, "level": number }] }',
     userPromptTemplate:
       'Create a mind map from the following study material:\n\n{content}\n\n{hint}',
@@ -51,7 +53,7 @@ const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
   },
   FAQ: {
     systemPrompt:
-      'You are an FAQ generator. Create frequently asked questions with clear answers. ' +
+      'You are an FAQ generator. Create 5-10 frequently asked questions with clear, concise answers (under 100 words each). ' +
       'Return ONLY valid JSON matching: { "items": [{ "question": string, "answer": string }] }',
     userPromptTemplate: 'Create an FAQ from the following study material:\n\n{content}\n\n{hint}',
     defaultTitle: 'FAQ',
@@ -120,7 +122,7 @@ export class StudioService {
           courseId,
           triggeredByUserId: studentId,
         },
-        { jsonMode: true },
+        { jsonMode: true, maxTokens: 8192 },
       );
       llmOutput = result.content;
     } catch (error) {
@@ -254,8 +256,50 @@ export class StudioService {
         }
       }
 
+      // Try to repair truncated JSON (output cut off by token limit)
+      const repaired = this.repairTruncatedJson(raw);
+      if (repaired) return repaired;
+
       this.logger.warn('Failed to parse studio JSON output, returning raw');
       return { raw };
+    }
+  }
+
+  /**
+   * Attempt to repair JSON truncated by token limits.
+   * Finds the last complete array element and closes the JSON.
+   */
+  private repairTruncatedJson(raw: string): unknown | null {
+    // Find start of JSON object
+    const objStart = raw.indexOf('{');
+    if (objStart === -1) return null;
+
+    let json = raw.slice(objStart);
+
+    // Find the last complete object in an array (ends with "}")
+    // then close the array and outer object
+    const lastCompleteObj = json.lastIndexOf('}');
+    if (lastCompleteObj === -1) return null;
+
+    // Trim to last complete "}"
+    json = json.slice(0, lastCompleteObj + 1);
+
+    // Close any unclosed arrays and objects
+    const opens = { '[': 0, '{': 0 };
+    const closes: Record<string, keyof typeof opens> = { ']': '[', '}': '{' };
+    for (const ch of json) {
+      if (ch in opens) opens[ch as keyof typeof opens]++;
+      if (ch in closes) opens[closes[ch]!]--;
+    }
+
+    // Append missing closers
+    for (let i = 0; i < opens['[']; i++) json += ']';
+    for (let i = 0; i < opens['{']; i++) json += '}';
+
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
     }
   }
 }

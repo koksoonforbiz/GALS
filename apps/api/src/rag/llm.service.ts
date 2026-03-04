@@ -431,7 +431,7 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
     usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
-    options?: { jsonMode?: boolean },
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     const credentials = await this.getUserApiKey(userId);
     const result = await this.callLlm(systemPrompt, userPrompt, credentials, options);
@@ -497,7 +497,7 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
     credentials: { apiKey: string; model: string; provider: string } | null,
-    options?: { jsonMode?: boolean },
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     if (credentials) {
       if (credentials.provider === 'gemini') {
@@ -526,12 +526,12 @@ export class LlmService {
     userPrompt: string,
     apiKey: string,
     model: string,
-    options?: { jsonMode?: boolean },
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
       const body: Record<string, unknown> = {
         model,
-        max_tokens: 4096,
+        max_tokens: options?.maxTokens || 4096,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
@@ -577,12 +577,14 @@ export class LlmService {
     userPrompt: string,
     apiKey: string,
     model: string,
-    options?: { jsonMode?: boolean },
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-      const generationConfig: Record<string, unknown> = { maxOutputTokens: 4096 };
+      const generationConfig: Record<string, unknown> = {
+        maxOutputTokens: options?.maxTokens || 4096,
+      };
       if (options?.jsonMode) {
         generationConfig.responseMimeType = 'application/json';
       }
