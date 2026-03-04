@@ -97,7 +97,6 @@ const ALL_STUDIO_TOOLS = [
   { key: 'TABLE_COMPARISON', label: 'Table Comparison' },
   { key: 'MIND_MAP', label: 'Mind Map' },
   { key: 'FAQ', label: 'FAQ' },
-  { key: 'TIMELINE', label: 'Timeline' },
 ];
 
 interface Props {

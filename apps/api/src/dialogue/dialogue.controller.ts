@@ -104,7 +104,7 @@ export class DialogueController {
     @Param('courseId') courseId: string,
     @Body()
     dto: {
-      type: 'BRIEFING_DOC' | 'FLASHCARD_SET' | 'TABLE_COMPARISON' | 'MIND_MAP' | 'TIMELINE' | 'FAQ';
+      type: 'BRIEFING_DOC' | 'FLASHCARD_SET' | 'TABLE_COMPARISON' | 'MIND_MAP' | 'FAQ';
       sourceIds: string[];
       promptHint?: string;
       sessionId?: string;

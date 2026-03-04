@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadGatewayException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { LlmService } from '../rag/llm.service';
 import type { StudioOutputType } from '@prisma/client';
@@ -42,14 +48,6 @@ const STUDIO_PROMPTS: Record<string, StudioPromptConfig> = {
     userPromptTemplate:
       'Create a mind map from the following study material:\n\n{content}\n\n{hint}',
     defaultTitle: 'Mind Map',
-  },
-  TIMELINE: {
-    systemPrompt:
-      'You are a timeline generator. Create a chronological or sequential timeline. ' +
-      'Return ONLY valid JSON matching: { "sections": [{ "heading": string, "body": string }] }',
-    userPromptTemplate:
-      'Create a timeline from the following study material:\n\n{content}\n\n{hint}',
-    defaultTitle: 'Timeline',
   },
   FAQ: {
     systemPrompt:
@@ -111,17 +109,26 @@ export class StudioService {
       .replace('{content}', content)
       .replace('{hint}', dto.promptHint ? `Focus: ${dto.promptHint}` : '');
 
-    const { content: llmOutput } = await this.llmService.callLlmForUser(
-      course.teacherId,
-      promptConfig.systemPrompt,
-      userPrompt,
-      {
-        feature: `studio_${dto.type.toLowerCase()}`,
-        courseId,
-        triggeredByUserId: studentId,
-      },
-      { jsonMode: true },
-    );
+    let llmOutput: string;
+    try {
+      const result = await this.llmService.callLlmForUser(
+        course.teacherId,
+        promptConfig.systemPrompt,
+        userPrompt,
+        {
+          feature: `studio_${dto.type.toLowerCase()}`,
+          courseId,
+          triggeredByUserId: studentId,
+        },
+        { jsonMode: true },
+      );
+      llmOutput = result.content;
+    } catch (error) {
+      this.logger.error(`LLM call failed for studio ${dto.type}`, error);
+      throw new BadGatewayException(
+        'AI service is unavailable. Please check your API key in AI Settings and try again.',
+      );
+    }
 
     // Parse JSON from LLM output
     const parsedContent = this.parseStudioJson(llmOutput);

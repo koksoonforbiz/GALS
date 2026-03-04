@@ -566,6 +566,7 @@ export class LlmService {
       };
     } catch (error) {
       this.logger.error('Failed to call OpenAI API', error);
+      if (options?.jsonMode) throw error;
       // Fallback to template-based generation
       return this.generateWithoutApi(systemPrompt, userPrompt);
     }
@@ -614,6 +615,7 @@ export class LlmService {
       };
     } catch (error) {
       this.logger.error('Failed to call Gemini API', error);
+      if (options?.jsonMode) throw error;
       // Fallback to template-based generation
       return this.generateWithoutApi(systemPrompt, userPrompt);
     }

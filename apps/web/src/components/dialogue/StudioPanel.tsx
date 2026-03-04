@@ -5,7 +5,6 @@ import {
   BarChart3,
   Map,
   HelpCircle,
-  Clock,
   FlaskConical,
   Layers,
   Footprints,
@@ -76,7 +75,6 @@ const STUDIO_TOOLS = [
   { type: 'TABLE_COMPARISON', icon: <BarChart3 size={20} />, name: 'Table Comparison' },
   { type: 'MIND_MAP', icon: <Map size={20} />, name: 'Mind Map' },
   { type: 'FAQ', icon: <HelpCircle size={20} />, name: 'FAQ' },
-  { type: 'TIMELINE', icon: <Clock size={20} />, name: 'Timeline' },
 ];
 
 const INTERVENTION_TYPES = [
@@ -362,9 +360,22 @@ function StudioTab({
 function StudioOutputRenderer({ output }: { output: StudioOutput }) {
   const content = output.content as Record<string, unknown>;
 
+  // Handle failed JSON parse fallback (content is { raw: "..." })
+  if (content.raw && typeof content.raw === 'string') {
+    return (
+      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-sm text-yellow-700 font-medium mb-2">
+          Output could not be parsed. Try regenerating.
+        </p>
+        <pre className="text-xs text-gray-600 overflow-x-auto whitespace-pre-wrap">
+          {content.raw as string}
+        </pre>
+      </div>
+    );
+  }
+
   switch (output.type) {
     case 'BRIEFING_DOC':
-    case 'TIMELINE':
       return (
         <BriefingDocRenderer
           sections={(content.sections as Array<{ heading: string; body: string }>) || []}
