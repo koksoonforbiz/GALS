@@ -167,9 +167,18 @@ export class StudentRagController {
 
   @Delete('courses/:courseId/documents/:documentId')
   @Roles('student')
-  async deleteDocument(
+  async deleteDocumentWithCourse(
     @Request() req: { user: RequestUser },
     @Param('courseId') _courseId: string,
+    @Param('documentId') documentId: string,
+  ) {
+    return this.studentRagService.deleteDocument(documentId, req.user.id);
+  }
+
+  @Delete('documents/:documentId')
+  @Roles('student')
+  async deleteDocument(
+    @Request() req: { user: RequestUser },
     @Param('documentId') documentId: string,
   ) {
     return this.studentRagService.deleteDocument(documentId, req.user.id);
