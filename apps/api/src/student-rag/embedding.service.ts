@@ -82,11 +82,12 @@ export class EmbeddingService {
 
   private async embedGemini(texts: string[], apiKey: string): Promise<number[][]> {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents?key=${apiKey}`;
 
       const requests = texts.map((text) => ({
-        model: 'models/text-embedding-004',
+        model: 'models/gemini-embedding-001',
         content: { parts: [{ text }] },
+        outputDimensionality: EMBEDDING_DIMENSION,
       }));
 
       const response = await fetch(url, {
