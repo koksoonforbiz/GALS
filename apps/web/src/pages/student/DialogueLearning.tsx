@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, Pencil, Check, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -76,40 +76,40 @@ export function DialogueLearning() {
 
     const loadData = async () => {
       try {
-        const [courseData, sourcesData, sessionsData] = await Promise.all([
+        const [courseData, sessionsData] = await Promise.all([
           api.get<Course>(`/courses/${courseId}`),
-          api.get<StudentSourceDocument[]>(`/student-rag/courses/${courseId}/documents`),
           api.get<DialogueSession[]>(`/dialogue/courses/${courseId}/sessions`),
         ]);
 
         setCourse(courseData);
-        setSources(sourcesData);
         setSessions(sessionsData);
 
-        // Set active sources (all completed documents by default)
-        const completedIds = new Set(
-          sourcesData.filter((s) => s.processingStatus === 'COMPLETED').map((s) => s.id),
-        );
-        setActiveSourceIds(completedIds);
-
-        // Restore session from URL param
+        // Restore session from URL param or use most recent
         const sessionId = searchParams.get('session');
+        let selectedSession: DialogueSession | null = null;
         if (sessionId) {
-          const session = sessionsData.find((s) => s.id === sessionId);
-          if (session) {
-            setActiveSession(session);
-            await loadSessionData(session.id);
-          }
+          selectedSession = sessionsData.find((s) => s.id === sessionId) || null;
         } else if (sessionsData.length > 0 && sessionsData[0]) {
-          // Load most recent session
-          setActiveSession(sessionsData[0]);
-          await loadSessionData(sessionsData[0].id);
+          selectedSession = sessionsData[0];
         }
 
-        // Load first source guide for suggested questions
-        const completedSource = sourcesData.find((s) => s.processingStatus === 'COMPLETED');
-        if (completedSource) {
-          loadSourceGuide(completedSource.id);
+        if (selectedSession) {
+          setActiveSession(selectedSession);
+          await loadSessionData(selectedSession.id);
+          // Load sources for this session
+          const sourcesData = await api.get<StudentSourceDocument[]>(
+            `/student-rag/courses/${courseId}/documents?sessionId=${selectedSession.id}`,
+          );
+          setSources(sourcesData);
+          const completedIds = new Set(
+            sourcesData.filter((s) => s.processingStatus === 'COMPLETED').map((s) => s.id),
+          );
+          setActiveSourceIds(completedIds);
+
+          const completedSource = sourcesData.find((s) => s.processingStatus === 'COMPLETED');
+          if (completedSource) {
+            loadSourceGuide(completedSource.id);
+          }
         }
       } catch (err) {
         toast('error', err instanceof Error ? err.message : 'Failed to load course data');
@@ -258,27 +258,43 @@ export function DialogueLearning() {
   const handleCreateSession = useCallback(async () => {
     if (!courseId) return;
     try {
-      const session = await api.post<DialogueSession>(`/dialogue/courses/${courseId}/sessions`, {
-        activeSourceIds: [...activeSourceIds],
-      });
+      const session = await api.post<DialogueSession>(`/dialogue/courses/${courseId}/sessions`, {});
       setSessions((prev) => [session, ...prev]);
       setActiveSession(session);
       setMessages([]);
       setStudioOutputs([]);
       setPastInterventions([]);
+      setSources([]);
+      setActiveSourceIds(new Set());
       setSearchParams({ session: session.id });
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to create session');
     }
-  }, [courseId, activeSourceIds, toast, setSearchParams]);
+  }, [courseId, toast, setSearchParams]);
 
   const handleSelectSession = useCallback(
     async (session: DialogueSession) => {
       setActiveSession(session);
       setSearchParams({ session: session.id });
       await loadSessionData(session.id);
+      // Load session-scoped sources
+      if (courseId) {
+        try {
+          const sourcesData = await api.get<StudentSourceDocument[]>(
+            `/student-rag/courses/${courseId}/documents?sessionId=${session.id}`,
+          );
+          setSources(sourcesData);
+          const completedIds = new Set(
+            sourcesData.filter((s) => s.processingStatus === 'COMPLETED').map((s) => s.id),
+          );
+          setActiveSourceIds(completedIds);
+        } catch {
+          setSources([]);
+          setActiveSourceIds(new Set());
+        }
+      }
     },
-    [loadSessionData, setSearchParams],
+    [courseId, loadSessionData, setSearchParams],
   );
 
   const lastSentContent = useRef<string>('');
@@ -361,10 +377,35 @@ export function DialogueLearning() {
     [loadSourceGuide],
   );
 
-  const handleUploadComplete = useCallback((doc: StudentSourceDocument) => {
-    setSources((prev) => [doc, ...prev]);
-    setProcessingDocumentIds((prev) => new Set([...prev, doc.id]));
-  }, []);
+  const handleUploadComplete = useCallback(
+    (doc: StudentSourceDocument) => {
+      setSources((prev) => {
+        const updated = [doc, ...prev];
+        // Auto-name session based on uploaded materials if title is still default
+        if (activeSession && activeSession.title === 'New Session') {
+          const names = updated
+            .map((s) => s.originalName.replace(/\.[^.]+$/, '')) // strip extension
+            .slice(0, 3);
+          const autoTitle =
+            names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
+          if (autoTitle) {
+            api
+              .patch(`/dialogue/sessions/${activeSession.id}`, { title: autoTitle })
+              .then(() => {
+                setActiveSession((prev) => (prev ? { ...prev, title: autoTitle } : prev));
+                setSessions((prev) =>
+                  prev.map((s) => (s.id === activeSession.id ? { ...s, title: autoTitle } : s)),
+                );
+              })
+              .catch(() => {});
+          }
+        }
+        return updated;
+      });
+      setProcessingDocumentIds((prev) => new Set([...prev, doc.id]));
+    },
+    [activeSession],
+  );
 
   const handleDeleteSource = useCallback((id: string) => {
     setSources((prev) => prev.filter((s) => s.id !== id));
@@ -374,6 +415,47 @@ export function DialogueLearning() {
       return next;
     });
   }, []);
+
+  const handleRenameSession = useCallback(
+    async (newTitle: string) => {
+      if (!activeSession || !newTitle.trim()) return;
+      try {
+        await api.patch(`/dialogue/sessions/${activeSession.id}`, { title: newTitle.trim() });
+        setActiveSession((prev) => (prev ? { ...prev, title: newTitle.trim() } : prev));
+        setSessions((prev) =>
+          prev.map((s) => (s.id === activeSession.id ? { ...s, title: newTitle.trim() } : s)),
+        );
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Failed to rename session');
+      }
+    },
+    [activeSession, toast],
+  );
+
+  const handleImportDocuments = useCallback(
+    async (documentIds: string[]) => {
+      if (!courseId || !activeSession) return;
+      try {
+        await api.post(`/student-rag/courses/${courseId}/documents/import`, {
+          documentIds,
+          targetSessionId: activeSession.id,
+        });
+        // Reload sources for current session
+        const sourcesData = await api.get<StudentSourceDocument[]>(
+          `/student-rag/courses/${courseId}/documents?sessionId=${activeSession.id}`,
+        );
+        setSources(sourcesData);
+        const completedIds = new Set(
+          sourcesData.filter((s) => s.processingStatus === 'COMPLETED').map((s) => s.id),
+        );
+        setActiveSourceIds(completedIds);
+        toast('success', `Imported ${documentIds.length} document(s)`);
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Import failed');
+      }
+    },
+    [courseId, activeSession, toast],
+  );
 
   const handleCitationClick = useCallback(
     (citation: Citation) => {
@@ -500,7 +582,7 @@ export function DialogueLearning() {
               const session = sessions.find((s) => s.id === e.target.value);
               if (session) handleSelectSession(session);
             }}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 max-w-[160px]"
           >
             {sessions.length === 0 && <option value="">No sessions</option>}
             {sessions.map((s) => (
@@ -509,6 +591,8 @@ export function DialogueLearning() {
               </option>
             ))}
           </select>
+          {/* Inline rename */}
+          <SessionRenameButton title={activeSession?.title || ''} onRename={handleRenameSession} />
           <button
             onClick={handleCreateSession}
             className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
@@ -545,7 +629,10 @@ export function DialogueLearning() {
               fd.append('file', file);
               const token = localStorage.getItem('token');
               try {
-                const res = await fetch(`/api/student-rag/courses/${courseId}/documents`, {
+                const uploadUrl = activeSession
+                  ? `/api/student-rag/courses/${courseId}/documents?sessionId=${activeSession.id}`
+                  : `/api/student-rag/courses/${courseId}/documents`;
+                const res = await fetch(uploadUrl, {
                   method: 'POST',
                   headers: token ? { Authorization: `Bearer ${token}` } : {},
                   body: fd,
@@ -607,10 +694,12 @@ export function DialogueLearning() {
               sources={sources}
               activeSourceIds={activeSourceIds}
               courseId={courseId || ''}
+              sessionId={activeSession?.id || null}
               onToggleSource={handleToggleSource}
               onSourceSelect={handleSourceSelect}
               onUploadComplete={handleUploadComplete}
               onDelete={handleDeleteSource}
+              onImport={handleImportDocuments}
               processingDocumentIds={processingDocumentIds}
               onRetryProcessing={handleRetryProcessing}
             />
@@ -696,6 +785,68 @@ export function DialogueLearning() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Session Rename Button ──────────────────────────────
+
+function SessionRenameButton({
+  title,
+  onRename,
+}: {
+  title: string;
+  onRename: (newTitle: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setValue(title);
+  }, [title]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="text-gray-400 hover:text-gray-600 p-1 rounded"
+        title="Rename session"
+      >
+        <Pencil size={14} />
+      </button>
+    );
+  }
+
+  const handleSave = async () => {
+    if (value.trim() && value.trim() !== title) {
+      await onRename(value.trim());
+    }
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleSave();
+          if (e.key === 'Escape') setEditing(false);
+        }}
+        className="text-xs border border-blue-400 rounded px-2 py-1 w-[160px] focus:outline-none focus:ring-1 focus:ring-blue-400"
+      />
+      <button onClick={handleSave} className="text-green-600 hover:text-green-700 p-0.5">
+        <Check size={14} />
+      </button>
+      <button onClick={() => setEditing(false)} className="text-gray-400 hover:text-gray-600 p-0.5">
+        <X size={14} />
+      </button>
     </div>
   );
 }

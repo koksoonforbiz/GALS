@@ -4,14 +4,26 @@ import { useToast } from '../Toast';
 import { SourceCard } from './SourceCard';
 import type { StudentSourceDocument } from './SourceCard';
 
+interface ImportableDoc {
+  id: string;
+  originalName: string;
+  fileType: string;
+  fileSize: number;
+  processingStatus: string;
+  sessionId: string | null;
+  session: { id: string; title: string } | null;
+}
+
 interface SourcesPanelProps {
   sources: StudentSourceDocument[];
   activeSourceIds: Set<string>;
   courseId: string;
+  sessionId: string | null;
   onToggleSource: (id: string, active: boolean) => void;
   onSourceSelect: (source: StudentSourceDocument) => void;
   onUploadComplete: (doc: StudentSourceDocument) => void;
   onDelete: (id: string) => void;
+  onImport: (documentIds: string[]) => Promise<void>;
   processingDocumentIds: Set<string>;
   isLoading?: boolean;
   onRetryProcessing?: (id: string) => void;
@@ -21,10 +33,12 @@ export function SourcesPanel({
   sources,
   activeSourceIds,
   courseId,
+  sessionId,
   onToggleSource,
   onSourceSelect,
   onUploadComplete,
   onDelete,
+  onImport,
   isLoading,
   onRetryProcessing,
 }: SourcesPanelProps) {
@@ -32,6 +46,10 @@ export function SourcesPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importableDocs, setImportableDocs] = useState<ImportableDoc[]>([]);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const [loadingImportable, setLoadingImportable] = useState(false);
 
   const activeCount = sources.filter((s) => activeSourceIds.has(s.id)).length;
   const allActive = activeCount === sources.length && sources.length > 0;
@@ -40,12 +58,15 @@ export function SourcesPanel({
     async (files: FileList) => {
       setUploading(true);
       try {
+        const uploadUrl = sessionId
+          ? `/api/student-rag/courses/${courseId}/documents?sessionId=${sessionId}`
+          : `/api/student-rag/courses/${courseId}/documents`;
         for (const file of Array.from(files)) {
           const formData = new FormData();
           formData.append('file', file);
 
           const token = localStorage.getItem('token');
-          const res = await fetch(`/api/student-rag/courses/${courseId}/documents`, {
+          const res = await fetch(uploadUrl, {
             method: 'POST',
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: formData,
@@ -66,7 +87,7 @@ export function SourcesPanel({
         setUploading(false);
       }
     },
-    [courseId, onUploadComplete, toast],
+    [courseId, sessionId, onUploadComplete, toast],
   );
 
   const handleDrop = useCallback(
@@ -181,18 +202,122 @@ export function SourcesPanel({
         )}
       </div>
 
-      {/* Footer with active count */}
-      {sources.length > 0 && (
-        <div className="p-3 border-t border-gray-200 flex items-center justify-between">
-          <span className="text-xs text-gray-500">
-            {activeCount} of {sources.length} active
-          </span>
+      {/* Footer with active count + import */}
+      <div className="p-3 border-t border-gray-200">
+        {sources.length > 0 && (
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-500">
+              {activeCount} of {sources.length} active
+            </span>
+            <button
+              onClick={handleToggleAll}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            >
+              {allActive ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+        )}
+        {sessionId && (
           <button
-            onClick={handleToggleAll}
-            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            onClick={async () => {
+              setShowImport(true);
+              setLoadingImportable(true);
+              try {
+                const docs = await api.get<ImportableDoc[]>(
+                  `/student-rag/courses/${courseId}/documents/importable?sessionId=${sessionId}`,
+                );
+                setImportableDocs(docs);
+              } catch {
+                toast('error', 'Failed to load documents');
+              } finally {
+                setLoadingImportable(false);
+              }
+            }}
+            className="w-full text-xs text-center py-1.5 rounded border border-dashed border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 transition-colors"
           >
-            {allActive ? 'Deselect All' : 'Select All'}
+            Import from other sessions
           </button>
+        )}
+      </div>
+
+      {/* Import modal */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-5 max-w-md w-full mx-4 max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold">Import Documents</h3>
+              <button
+                onClick={() => {
+                  setShowImport(false);
+                  setSelectedImports(new Set());
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {loadingImportable ? (
+                <div className="text-center py-8">
+                  <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                </div>
+              ) : importableDocs.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">
+                  No documents in other sessions to import.
+                </p>
+              ) : (
+                importableDocs.map((doc) => (
+                  <label
+                    key={doc.id}
+                    className="flex items-center gap-2 p-2 rounded border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedImports.has(doc.id)}
+                      onChange={(e) => {
+                        setSelectedImports((prev) => {
+                          const next = new Set(prev);
+                          e.target.checked ? next.add(doc.id) : next.delete(doc.id);
+                          return next;
+                        });
+                      }}
+                      className="rounded border-gray-300"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium truncate">{doc.originalName}</div>
+                      <div className="text-xs text-gray-400">
+                        From: {doc.session?.title || 'No session'}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowImport(false);
+                  setSelectedImports(new Set());
+                }}
+                className="text-xs px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={selectedImports.size === 0}
+                onClick={async () => {
+                  await onImport([...selectedImports]);
+                  setShowImport(false);
+                  setSelectedImports(new Set());
+                }}
+                className="text-xs px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Import ({selectedImports.size})
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

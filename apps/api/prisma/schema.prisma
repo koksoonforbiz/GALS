@@ -528,6 +528,8 @@ model StudentSourceDocument {
   student         User                      @relation("StudentDocuments", fields: [studentId], references: [id])
   courseId        String                    @map("course_id") @db.Uuid
   course          Course                    @relation(fields: [courseId], references: [id])
+  sessionId       String?                   @map("session_id")
+  session         DialogueSession?          @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   fileName        String                    @map("file_name")
   originalName    String                    @map("original_name")
   mimeType        String                    @map("mime_type")
@@ -544,6 +546,7 @@ model StudentSourceDocument {
 
   @@index([enrollmentId])
   @@index([studentId, courseId])
+  @@index([sessionId])
   @@map("student_source_documents")
 }
 
@@ -589,6 +592,7 @@ model DialogueSession {
   course          Course              @relation(fields: [courseId], references: [id])
   title           String              @default("New Session")
   activeSourceIds String[]            @map("active_source_ids")
+  documents       StudentSourceDocument[]
   messages        DialogueMessage[]
   studioOutputs   StudioOutput[]
   linkedInterventions LearningIntervention[]

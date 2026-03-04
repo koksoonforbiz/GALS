@@ -45,6 +45,7 @@ export class StudentRagService {
     studentId: string,
     courseId: string,
     file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+    sessionId?: string,
   ) {
     // Determine file type
     const fileType = this.resolveFileType(file.mimetype, file.originalname);
@@ -63,6 +64,7 @@ export class StudentRagService {
         enrollmentId,
         studentId,
         courseId,
+        sessionId: sessionId || null,
         fileName: file.originalname,
         originalName: file.originalname,
         mimeType: file.mimetype,
@@ -256,17 +258,66 @@ export class StudentRagService {
     return { deleted: true };
   }
 
-  // ─── List all sources for a student in a course ─────────
+  // ─── List sources for a student in a course ──────────────
 
-  async listSources(enrollmentId: string) {
+  async listSources(enrollmentId: string, sessionId?: string) {
+    const where: { enrollmentId: string; sessionId?: string | null } = { enrollmentId };
+    if (sessionId) {
+      where.sessionId = sessionId;
+    }
     return this.prisma.studentSourceDocument.findMany({
-      where: { enrollmentId },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         autoGuide: true,
         _count: { select: { chunks: true } },
       },
     });
+  }
+
+  // ─── List sources from other sessions (for import) ──────
+
+  async listOtherSessionSources(enrollmentId: string, currentSessionId: string) {
+    return this.prisma.studentSourceDocument.findMany({
+      where: {
+        enrollmentId,
+        sessionId: { not: currentSessionId },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        originalName: true,
+        fileType: true,
+        fileSize: true,
+        processingStatus: true,
+        sessionId: true,
+        session: { select: { id: true, title: true } },
+      },
+    });
+  }
+
+  // ─── Import documents into a session ────────────────────
+
+  async importDocumentsToSession(
+    documentIds: string[],
+    targetSessionId: string,
+    studentId: string,
+  ) {
+    // Verify ownership of all documents
+    const docs = await this.prisma.studentSourceDocument.findMany({
+      where: { id: { in: documentIds }, studentId },
+    });
+    if (docs.length !== documentIds.length) {
+      throw new ForbiddenException('Some documents do not belong to you');
+    }
+
+    // Update documents to point to the target session
+    await this.prisma.studentSourceDocument.updateMany({
+      where: { id: { in: documentIds } },
+      data: { sessionId: targetSessionId },
+    });
+
+    return { imported: documentIds.length };
   }
 
   // ─── Get a single source with its guide ─────────────────

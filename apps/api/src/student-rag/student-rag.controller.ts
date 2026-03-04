@@ -12,6 +12,7 @@ import {
   UploadedFile,
   BadRequestException,
   ForbiddenException,
+  Query,
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -82,6 +83,7 @@ export class StudentRagController {
   async uploadDocument(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
+    @Query('sessionId') sessionId: string | undefined,
     @UploadedFile() file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
   ) {
     if (!file) throw new BadRequestException('No file provided');
@@ -123,16 +125,26 @@ export class StudentRagController {
       );
     }
 
-    return this.studentRagService.uploadDocument(enrollment.id, req.user.id, courseId, file);
+    return this.studentRagService.uploadDocument(
+      enrollment.id,
+      req.user.id,
+      courseId,
+      file,
+      sessionId,
+    );
   }
 
   // ─── List documents ─────────────────────────────────────
 
   @Get('courses/:courseId/documents')
   @Roles('student')
-  async listDocuments(@Request() req: { user: RequestUser }, @Param('courseId') courseId: string) {
+  async listDocuments(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Query('sessionId') sessionId?: string,
+  ) {
     const enrollment = await this.verifyEnrollment(req.user.id, courseId);
-    return this.studentRagService.listSources(enrollment.id);
+    return this.studentRagService.listSources(enrollment.id, sessionId);
   }
 
   // ─── Get single document ────────────────────────────────
@@ -231,6 +243,39 @@ export class StudentRagController {
     await this.studentRagService.getSource(documentId, req.user.id);
     const guide = await this.guideService.generateGuide(documentId);
     return guide || { message: 'Guide generation failed' };
+  }
+
+  // ─── Import documents from other sessions ──────────────
+
+  @Get('courses/:courseId/documents/importable')
+  @Roles('student')
+  async listImportableDocuments(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Query('sessionId') sessionId: string,
+  ) {
+    const enrollment = await this.verifyEnrollment(req.user.id, courseId);
+    if (!sessionId) {
+      throw new BadRequestException('sessionId is required');
+    }
+    return this.studentRagService.listOtherSessionSources(enrollment.id, sessionId);
+  }
+
+  @Post('courses/:courseId/documents/import')
+  @Roles('student')
+  async importDocuments(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') _courseId: string,
+    @Body() body: { documentIds: string[]; targetSessionId: string },
+  ) {
+    if (!body.documentIds?.length || !body.targetSessionId) {
+      throw new BadRequestException('documentIds and targetSessionId are required');
+    }
+    return this.studentRagService.importDocumentsToSession(
+      body.documentIds,
+      body.targetSessionId,
+      req.user.id,
+    );
   }
 
   // ─── Helpers ────────────────────────────────────────────
