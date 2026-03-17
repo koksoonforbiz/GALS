@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LlmService } from '../rag/llm.service';
+import { ActivityLogService, ActivityAction } from '../activity-log';
 import type { InterventionType, Prisma } from '@prisma/client';
 import type {
   CreateSavedReviewDto,
@@ -176,6 +177,7 @@ export class LearningInterventionsService {
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
     private readonly ragService: RagService,
+    private readonly activityLogService: ActivityLogService,
   ) {}
 
   // ─── Prompt Config ────────────────────────────────────────
@@ -315,6 +317,7 @@ export class LearningInterventionsService {
   async generatePracticeTest(
     userId: string,
     dto: GeneratePracticeTestDto,
+    sessionId?: string,
   ): Promise<PracticeTestResult> {
     if (!dto.selectedText || dto.selectedText.trim().length < 20) {
       throw new BadRequestException('Selected text must be at least 20 characters');
@@ -375,6 +378,20 @@ export class LearningInterventionsService {
         sessionData: { questions: questions! } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId,
+        action: ActivityAction.INTERVENTION_TRIGGERED,
+        interventionId: intervention.id,
+        metadata: {
+          interventionType: 'PRACTICE_TESTING',
+          triggerReason: 'student_initiated',
+          summary: `Intervention triggered: PRACTICE_TESTING`,
+        },
+      });
+    }
 
     // Return questions without answers
     return {
@@ -536,6 +553,7 @@ export class LearningInterventionsService {
   async generateSuggestions(
     userId: string,
     dto: GenerateSuggestionsDto,
+    sessionId?: string,
   ): Promise<SuggestionResult> {
     if (!dto.selectedText || dto.selectedText.trim().length < 20) {
       throw new BadRequestException('Selected text must be at least 20 characters');
@@ -607,6 +625,20 @@ export class LearningInterventionsService {
         } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId,
+        action: ActivityAction.INTERVENTION_TRIGGERED,
+        interventionId: intervention.id,
+        metadata: {
+          interventionType: 'INTERROGATIVE_ELABORATION',
+          triggerReason: 'student_initiated',
+          summary: `Intervention triggered: INTERROGATIVE_ELABORATION`,
+        },
+      });
+    }
 
     return {
       interventionId: intervention.id,
@@ -788,6 +820,7 @@ export class LearningInterventionsService {
   async generateSteps(
     userId: string,
     dto: GenerateStepwiseDto,
+    sessionId?: string,
   ): Promise<{
     interventionId: string;
     steps: Array<{ stepNumber: number; title: string }>;
@@ -851,6 +884,20 @@ export class LearningInterventionsService {
         } as unknown as Prisma.InputJsonValue,
       },
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId,
+        action: ActivityAction.INTERVENTION_TRIGGERED,
+        interventionId: intervention.id,
+        metadata: {
+          interventionType: 'STEPWISE_LEARNING',
+          triggerReason: 'student_initiated',
+          summary: `Intervention triggered: STEPWISE_LEARNING`,
+        },
+      });
+    }
 
     return {
       interventionId: intervention.id,
@@ -1116,7 +1163,7 @@ export class LearningInterventionsService {
 
   // ─── Distributed Practice ─────────────────────────────────
 
-  async generateCards(userId: string, dto: GenerateCardsDto) {
+  async generateCards(userId: string, dto: GenerateCardsDto, sessionId?: string) {
     if (!dto.selectedText || dto.selectedText.trim().length < 20) {
       throw new BadRequestException('Selected text must be at least 20 characters');
     }
@@ -1196,6 +1243,20 @@ export class LearningInterventionsService {
       ),
     );
 
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId,
+        action: ActivityAction.INTERVENTION_TRIGGERED,
+        interventionId: intervention.id,
+        metadata: {
+          interventionType: 'DISTRIBUTED_PRACTICE',
+          triggerReason: 'student_initiated',
+          summary: `Intervention triggered: DISTRIBUTED_PRACTICE`,
+        },
+      });
+    }
+
     return {
       interventionId: intervention.id,
       cards: createdCards.map((c) => ({ id: c.id, front: c.front, back: c.back })),
@@ -1234,7 +1295,7 @@ export class LearningInterventionsService {
     };
   }
 
-  async reviewCard(userId: string, cardId: string, dto: ReviewCardDto) {
+  async reviewCard(userId: string, cardId: string, dto: ReviewCardDto, sessionId?: string) {
     const card = await this.prisma.spacedRepetitionCard.findUnique({
       where: { id: cardId },
     });
@@ -1269,6 +1330,20 @@ export class LearningInterventionsService {
         lastReviewedAt: new Date(),
       },
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId,
+        action: ActivityAction.SPACED_REP_CARD_RATED,
+        metadata: {
+          cardId: card.id,
+          rating: quality,
+          nextReviewAt: result.nextReviewAt?.toISOString(),
+          summary: `Flashcard rated: ${quality}/5`,
+        },
+      });
+    }
 
     return {
       nextReviewAt: result.nextReviewAt,

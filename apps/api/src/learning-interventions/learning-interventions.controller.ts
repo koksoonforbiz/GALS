@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { LearningInterventionsService } from './learning-interventions.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import { SessionId } from '../common';
 import type {
   CreateSavedReviewDto,
   UpdateSavedReviewDto,
@@ -110,8 +111,9 @@ export class LearningInterventionsController {
   generatePracticeTest(
     @Request() req: { user: RequestUser },
     @Body() dto: GeneratePracticeTestDto,
+    @SessionId() sessionId?: string,
   ) {
-    return this.service.generatePracticeTest(req.user.id, dto);
+    return this.service.generatePracticeTest(req.user.id, dto, sessionId);
   }
 
   @Post('practice-testing/:interventionId/submit')
@@ -134,8 +136,12 @@ export class LearningInterventionsController {
   // ─── Interrogative Elaboration (Conversational Q&A) ─────
 
   @Post('interrogative-elaboration/generate')
-  generateSuggestions(@Request() req: { user: RequestUser }, @Body() dto: GenerateSuggestionsDto) {
-    return this.service.generateSuggestions(req.user.id, dto);
+  generateSuggestions(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateSuggestionsDto,
+    @SessionId() sessionId?: string,
+  ) {
+    return this.service.generateSuggestions(req.user.id, dto, sessionId);
   }
 
   @Post('interrogative-elaboration/:sessionId/ask')
@@ -166,8 +172,12 @@ export class LearningInterventionsController {
   // ─── Stepwise Learning ─────────────────────────────────
 
   @Post('stepwise-learning/generate')
-  generateSteps(@Request() req: { user: RequestUser }, @Body() dto: GenerateStepwiseDto) {
-    return this.service.generateSteps(req.user.id, dto);
+  generateSteps(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateStepwiseDto,
+    @SessionId() sessionId?: string,
+  ) {
+    return this.service.generateSteps(req.user.id, dto, sessionId);
   }
 
   @Post('stepwise-learning/:sessionId/check')
@@ -200,8 +210,12 @@ export class LearningInterventionsController {
   // ─── Distributed Practice ────────────────────────────────
 
   @Post('distributed-practice/generate')
-  generateCards(@Request() req: { user: RequestUser }, @Body() dto: GenerateCardsDto) {
-    return this.service.generateCards(req.user.id, dto);
+  generateCards(
+    @Request() req: { user: RequestUser },
+    @Body() dto: GenerateCardsDto,
+    @SessionId() sessionId?: string,
+  ) {
+    return this.service.generateCards(req.user.id, dto, sessionId);
   }
 
   @Get('distributed-practice/due')
@@ -218,8 +232,9 @@ export class LearningInterventionsController {
     @Request() req: { user: RequestUser },
     @Param('cardId') cardId: string,
     @Body() dto: ReviewCardDto,
+    @SessionId() sessionId?: string,
   ) {
-    return this.service.reviewCard(req.user.id, cardId, dto);
+    return this.service.reviewCard(req.user.id, cardId, dto, sessionId);
   }
 
   @Get('distributed-practice/stats')

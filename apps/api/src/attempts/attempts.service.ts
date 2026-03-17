@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import { EventBusService } from '../event-bus';
 import { MasteryService } from '../mastery';
+import { ActivityLogService, ActivityAction } from '../activity-log';
 import { EventTopics } from '@ats/shared';
 import type {
   CreateAttempt,
@@ -32,9 +33,10 @@ export class AttemptsService {
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
     private readonly masteryService: MasteryService,
+    private readonly activityLogService: ActivityLogService,
   ) {}
 
-  async create(studentId: string, dto: CreateAttempt) {
+  async create(studentId: string, dto: CreateAttempt, sessionId?: string) {
     // If assessmentId is provided, get the first question from the assessment
     if (dto.assessmentId) {
       const assessmentQuestion = await this.prisma.assessmentQuestion.findFirst({
@@ -64,7 +66,7 @@ export class AttemptsService {
         throw new ForbiddenException('You must be enrolled in the course to start an attempt');
       }
 
-      return this.prisma.attempt.create({
+      const attempt = await this.prisma.attempt.create({
         data: {
           studentId,
           questionId: assessmentQuestion.questionId,
@@ -75,6 +77,20 @@ export class AttemptsService {
           question: true,
         },
       });
+
+      if (sessionId) {
+        void this.activityLogService.record({
+          sessionId,
+          userId: studentId,
+          action: ActivityAction.ASSESSMENT_STARTED,
+          assessmentId: attempt.assessmentId ?? undefined,
+          attemptId: attempt.id,
+          courseId: assessmentQuestion.assessment.courseId,
+          metadata: { summary: `Started assessment: ${attempt.assessmentId}` },
+        });
+      }
+
+      return attempt;
     }
 
     // If questionId is provided directly
@@ -105,7 +121,7 @@ export class AttemptsService {
         }
       }
 
-      return this.prisma.attempt.create({
+      const attempt = await this.prisma.attempt.create({
         data: {
           studentId,
           questionId: dto.questionId,
@@ -115,6 +131,19 @@ export class AttemptsService {
           question: true,
         },
       });
+
+      if (sessionId) {
+        void this.activityLogService.record({
+          sessionId,
+          userId: studentId,
+          action: ActivityAction.ASSESSMENT_STARTED,
+          attemptId: attempt.id,
+          courseId: courseId ?? undefined,
+          metadata: { summary: `Started attempt on question: ${dto.questionId}` },
+        });
+      }
+
+      return attempt;
     }
 
     throw new BadRequestException('Either assessmentId or questionId must be provided');
@@ -223,7 +252,7 @@ export class AttemptsService {
     });
   }
 
-  async submit(id: string, studentId: string, dto: SubmitAttempt) {
+  async submit(id: string, studentId: string, dto: SubmitAttempt, sessionId?: string) {
     const attempt = await this.prisma.attempt.findUnique({
       where: { id },
       include: { question: true },
@@ -256,6 +285,17 @@ export class AttemptsService {
       where: { id },
       data,
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId: studentId,
+        action: ActivityAction.ASSESSMENT_SUBMITTED,
+        assessmentId: attempt.assessmentId ?? undefined,
+        attemptId: attempt.id,
+        metadata: { summary: `Submitted attempt ${attempt.id}` },
+      });
+    }
 
     // Auto-grade MCQ questions immediately
     const qType = attempt.question.type;

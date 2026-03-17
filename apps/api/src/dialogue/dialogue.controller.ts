@@ -12,6 +12,7 @@ import {
 import { DialogueService } from './dialogue.service';
 import { StudioService } from './studio.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import { SessionId } from '../common';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -45,8 +46,9 @@ export class DialogueController {
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
     @Body() dto: { title?: string; activeSourceIds?: string[] },
+    @SessionId() sessionId?: string,
   ) {
-    return this.dialogueService.createSession(req.user.id, courseId, dto);
+    return this.dialogueService.createSession(req.user.id, courseId, dto, sessionId);
   }
 
   @Get('courses/:courseId/sessions')
@@ -85,8 +87,9 @@ export class DialogueController {
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
     @Body() dto: { content: string; activeSourceIds?: string[] },
+    @SessionId() activitySessionId?: string,
   ) {
-    return this.dialogueService.sendMessage(sessionId, req.user.id, dto);
+    return this.dialogueService.sendMessage(sessionId, req.user.id, dto, activitySessionId);
   }
 
   @Get('sessions/:sessionId/messages')

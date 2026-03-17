@@ -35,8 +35,22 @@ function createMockMasteryService() {
   return { updateMasteryAfterGrading: jest.fn().mockResolvedValue(undefined) };
 }
 
-function createService(prisma: any, eventBus: any, masteryService: any): AttemptsService {
-  return new AttemptsService(prisma, eventBus, masteryService);
+function createMockActivityLogService() {
+  return { record: jest.fn().mockResolvedValue(undefined) };
+}
+
+function createService(
+  prisma: any,
+  eventBus: any,
+  masteryService: any,
+  activityLogService?: any,
+): AttemptsService {
+  return new AttemptsService(
+    prisma,
+    eventBus,
+    masteryService,
+    activityLogService ?? createMockActivityLogService(),
+  );
 }
 
 // ─── Tests ──────────────────────────────────────────────

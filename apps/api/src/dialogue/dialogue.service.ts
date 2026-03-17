@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nest
 import { PrismaService } from '../prisma';
 import { LlmService } from '../rag/llm.service';
 import { RagService } from '../rag/rag.service';
+import { ActivityLogService, ActivityAction } from '../activity-log';
 import type { DialogueCourseSettings } from '@ats/shared';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateSessionDto, SendMessageDto } from './dto';
@@ -14,14 +15,20 @@ export class DialogueService {
     private readonly prisma: PrismaService,
     private readonly llmService: LlmService,
     private readonly ragService: RagService,
+    private readonly activityLogService: ActivityLogService,
   ) {}
 
   // ─── Session CRUD ─────────────────────────────────────────
 
-  async createSession(studentId: string, courseId: string, dto: CreateSessionDto) {
+  async createSession(
+    studentId: string,
+    courseId: string,
+    dto: CreateSessionDto,
+    sessionId?: string,
+  ) {
     const enrollment = await this.verifyEnrollment(studentId, courseId);
 
-    return this.prisma.dialogueSession.create({
+    const dialogueSession = await this.prisma.dialogueSession.create({
       data: {
         enrollmentId: enrollment.id,
         studentId,
@@ -31,6 +38,19 @@ export class DialogueService {
       },
       include: { _count: { select: { messages: true, studioOutputs: true } } },
     });
+
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId: studentId,
+        action: ActivityAction.DIALOGUE_SESSION_STARTED,
+        dialogueSessionId: dialogueSession.id,
+        courseId,
+        metadata: { summary: 'Dialogue session started' },
+      });
+    }
+
+    return dialogueSession;
   }
 
   async listSessions(studentId: string, courseId: string) {
@@ -83,7 +103,12 @@ export class DialogueService {
 
   // ─── Chat (send message + RAG retrieval) ──────────────────
 
-  async sendMessage(sessionId: string, studentId: string, dto: SendMessageDto) {
+  async sendMessage(
+    sessionId: string,
+    studentId: string,
+    dto: SendMessageDto,
+    activitySessionId?: string,
+  ) {
     const session = await this.verifySessionOwnership(sessionId, studentId);
     const course = await this.prisma.course.findUnique({
       where: { id: session.courseId },
@@ -186,6 +211,32 @@ export class DialogueService {
         },
       }),
     ]);
+
+    if (activitySessionId) {
+      void this.activityLogService.record({
+        sessionId: activitySessionId,
+        userId: studentId,
+        action: ActivityAction.DIALOGUE_MESSAGE_SENT,
+        dialogueSessionId: sessionId,
+        metadata: {
+          messageText: dto.content,
+          role: 'student',
+          summary: dto.content.slice(0, 80),
+        },
+      });
+
+      void this.activityLogService.record({
+        sessionId: activitySessionId,
+        userId: studentId,
+        action: ActivityAction.DIALOGUE_MESSAGE_RECEIVED,
+        dialogueSessionId: sessionId,
+        metadata: {
+          messageText: assistantContent,
+          role: 'assistant',
+          summary: assistantContent.slice(0, 80),
+        },
+      });
+    }
 
     // Auto-generate title after first exchange
     if (history.length === 0) {

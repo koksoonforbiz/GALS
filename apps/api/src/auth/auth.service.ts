@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma';
+import { SessionService } from '../activity-log';
 import type { CreateUser, Login, UserRole } from '@ats/shared';
 
 interface UserWithoutPassword {
@@ -21,6 +22,7 @@ interface UserWithoutPassword {
 interface AuthResponse {
   accessToken: string;
   user: UserWithoutPassword;
+  sessionId?: string;
 }
 
 interface PasswordChangeRequired {
@@ -34,6 +36,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async register(dto: CreateUser): Promise<AuthResponse> {
@@ -72,7 +75,10 @@ export class AuthService {
     };
   }
 
-  async login(dto: Login): Promise<AuthResponse | PasswordChangeRequired> {
+  async login(
+    dto: Login,
+    requestMeta?: { ip?: string; userAgent?: string },
+  ): Promise<AuthResponse | PasswordChangeRequired> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -105,22 +111,32 @@ export class AuthService {
 
     const token = this.signToken(userWithoutPassword);
 
+    const sessionId = await this.sessionService.openSession({
+      userId: user.id,
+      ipAddress: requestMeta?.ip,
+      userAgent: requestMeta?.userAgent,
+    });
+
     return {
       accessToken: token,
       user: userWithoutPassword,
+      sessionId,
     };
   }
 
-  async changePassword(
-    token: string,
-    newPassword: string,
-  ): Promise<AuthResponse> {
+  async logout(sessionId: string): Promise<void> {
+    await this.sessionService.closeSession(sessionId);
+  }
+
+  async changePassword(token: string, newPassword: string): Promise<AuthResponse> {
     // Verify token
     let payload: { sub: string; type?: string };
     try {
       payload = this.jwtService.verify(token);
     } catch {
-      throw new UnauthorizedException('Invalid or expired password change token. Please log in again.');
+      throw new UnauthorizedException(
+        'Invalid or expired password change token. Please log in again.',
+      );
     }
 
     if (payload.type !== 'password_change') {
