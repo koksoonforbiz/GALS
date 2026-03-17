@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 
@@ -816,13 +817,19 @@ export function UserManagementPage() {
                         <td className="py-3 pr-4 text-right font-mono text-xs">
                           {formatCost(student.tokenUsage.totalCost)}
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-3 text-right space-x-3">
                           <button
                             onClick={() => setSelectedStudent(student)}
                             className="text-sm text-blue-600 hover:underline"
                           >
                             View
                           </button>
+                          <Link
+                            to={`/teacher/students/${student.id}/logs`}
+                            className="text-sm text-indigo-600 hover:underline"
+                          >
+                            Logs
+                          </Link>
                         </td>
                       </tr>
                     ))}

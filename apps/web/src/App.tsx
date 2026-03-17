@@ -21,6 +21,7 @@ import { AiSettingsPage } from './pages/teacher/AiSettingsPage';
 import { PromptSettingsPage } from './pages/teacher/PromptSettingsPage';
 import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 import { UserManagementPage } from './pages/teacher/UserManagementPage';
+import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
 import { ChangePassword } from './pages/ChangePassword';
 
 // Student pages
@@ -149,6 +150,14 @@ function App() {
                 element={
                   <RoleRoute allowedRoles={['teacher', 'admin']}>
                     <UserManagementPage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/teacher/students/:studentId/logs"
+                element={
+                  <RoleRoute allowedRoles={['teacher', 'admin']}>
+                    <StudentLogPage />
                   </RoleRoute>
                 }
               />
