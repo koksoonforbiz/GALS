@@ -28,6 +28,7 @@ import { QuestionGenerationModule } from './question-generation';
 import { UserManagementModule } from './user-management';
 import { StudentRagModule } from './student-rag';
 import { DialogueModule } from './dialogue';
+import { ActivityLogModule } from './activity-log';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -67,6 +68,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     UserManagementModule,
     StudentRagModule,
     DialogueModule,
+    ActivityLogModule,
   ],
   controllers: [HealthController],
 })
