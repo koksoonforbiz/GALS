@@ -10,7 +10,9 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { ZodValidationPipe, SessionId } from '../common';
 import { ActivityLogService } from './activity-log.service';
 import { SessionService } from './session.service';
