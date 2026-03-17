@@ -10,6 +10,7 @@ import {
   disconnectSocket,
 } from '../../lib/socket';
 import { MDXRenderer } from '../../components/MDXRenderer';
+import { useActivityLog } from '../../lib/activity-log';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -124,6 +125,7 @@ export function AttemptPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { setPageContext } = usePageContext();
+  const { track } = useActivityLog();
 
   /* ---- core state ---- */
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -164,6 +166,13 @@ export function AttemptPage() {
         } else if (data.status === 'submitted' || data.status === 'grading') {
           setGradingStatus('pending');
         }
+
+        track('QUESTION_VIEWED', {
+          attemptId: data.id,
+          assessmentId: data.assessmentId,
+          questionId: data.questionId,
+          metadata: { summary: `Viewed question ${data.questionId}` },
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load attempt');
       } finally {
@@ -172,7 +181,7 @@ export function AttemptPage() {
     };
 
     fetchAttempt();
-  }, [attemptId]);
+  }, [attemptId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update page context when attempt loads
   useEffect(() => {
@@ -278,6 +287,13 @@ export function AttemptPage() {
           textResponse: textResponse || null,
           selectedOptionIds: selectedOptionIds.length > 0 ? selectedOptionIds : null,
         }),
+      });
+
+      track('ASSESSMENT_SUBMITTED', {
+        attemptId,
+        assessmentId: attempt.assessmentId,
+        questionId: attempt.questionId,
+        metadata: { summary: `Submitted attempt ${attemptId}` },
       });
 
       // Update local state from server response (contains autoFeedback / currentScore for MCQ)

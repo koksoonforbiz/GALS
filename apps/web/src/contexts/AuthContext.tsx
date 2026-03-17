@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { joinStudentRoom, disconnectSocket } from '../lib/socket';
+import { initActivitySession, clearActivitySession } from '../lib/activity-log';
 import type { UserRole } from '@ats/shared';
 
 interface User {
@@ -15,6 +16,7 @@ interface User {
 interface AuthResponse {
   accessToken: string;
   user: User;
+  sessionId?: string;
 }
 
 interface PasswordChangeResponse {
@@ -96,6 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('user', JSON.stringify(authResponse.user));
     setUser(authResponse.user);
 
+    if (authResponse.sessionId) {
+      initActivitySession(authResponse.sessionId);
+    }
+
     if (authResponse.user.role === 'student') {
       joinStudentRoom(authResponse.user.id);
     }
@@ -122,6 +128,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Close activity session on the backend (fire-and-forget)
+    const sid = sessionStorage.getItem('ats_session_id');
+    const token = localStorage.getItem('token');
+    if (sid && token) {
+      fetch('/api/activity-log/session/close', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          'X-Session-Id': sid,
+        },
+      }).catch(() => {});
+    }
+    clearActivitySession();
+
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     disconnectSocket();

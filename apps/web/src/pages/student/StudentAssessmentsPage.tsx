@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { usePageContext } from '../../contexts/PageContext';
+import { useActivityLog } from '../../lib/activity-log';
 
 interface AssessmentQuestion {
   id: string;
@@ -30,6 +31,7 @@ interface Attempt {
 export function StudentAssessmentsPage() {
   const navigate = useNavigate();
   const { setPageContext } = usePageContext();
+  const { track } = useActivityLog();
 
   useEffect(() => {
     setPageContext({
@@ -83,6 +85,12 @@ export function StudentAssessmentsPage() {
         body: JSON.stringify({
           assessmentId: assessment.id,
         }),
+      });
+      track('ASSESSMENT_STARTED', {
+        assessmentId: assessment.id,
+        attemptId: attempt.id,
+        courseId: assessment.courseId,
+        metadata: { summary: `Started assessment: ${assessment.title}` },
       });
       navigate(`/student/attempt/${attempt.id}`);
     } catch (err) {

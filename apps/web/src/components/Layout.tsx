@@ -4,9 +4,11 @@ import { Sidebar } from './Sidebar';
 import { PageContextProvider } from '../contexts/PageContext';
 import { FloatingChatbot } from './FloatingChatbot';
 import { useAuth } from '../contexts/AuthContext';
+import { usePageViewTracker } from '../lib/activity-log';
 
 export function Layout() {
   const { user } = useAuth();
+  usePageViewTracker();
 
   return (
     <PageContextProvider>

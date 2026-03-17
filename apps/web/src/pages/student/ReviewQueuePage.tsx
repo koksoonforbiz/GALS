@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
+import { useActivityLog } from '../../lib/activity-log';
 
 interface DueCard {
   id: string;
@@ -49,6 +50,7 @@ function formatInterval(days: number): string {
 }
 
 export function ReviewQueuePage() {
+  const { track } = useActivityLog();
   const [stats, setStats] = useState<Stats | null>(null);
   const [cards, setCards] = useState<DueCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -93,6 +95,10 @@ export function ReviewQueuePage() {
     if (!currentCard) return;
     setPhase('back');
     setPreviews(null);
+    track('SPACED_REP_CARD_VIEWED', {
+      courseId: currentCard.courseId,
+      metadata: { cardId: currentCard.id, summary: currentCard.front.slice(0, 80) },
+    });
 
     try {
       const data = await api.get<Record<string, RatingPreview>>(
@@ -119,6 +125,14 @@ export function ReviewQueuePage() {
       // Still advance even if the API fails
     }
 
+    track('SPACED_REP_CARD_RATED', {
+      courseId: currentCard.courseId,
+      metadata: {
+        cardId: currentCard.id,
+        quality,
+        summary: `Rated ${quality}: ${currentCard.front.slice(0, 60)}`,
+      },
+    });
     setSessionResults((prev) => [...prev, { quality, front: currentCard.front }]);
 
     const nextIndex = currentIndex + 1;

@@ -5,6 +5,7 @@ import { BookOpen, Pencil, Check, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
+import { useActivityLog } from '../../lib/activity-log';
 import { SourcesPanel } from '../../components/dialogue/SourcesPanel';
 import { ChatPanel } from '../../components/dialogue/ChatPanel';
 import { StudioPanel } from '../../components/dialogue/StudioPanel';
@@ -34,6 +35,7 @@ export function DialogueLearning() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { track } = useActivityLog();
 
   // Core state
   const [course, setCourse] = useState<Course | null>(null);
@@ -267,10 +269,15 @@ export function DialogueLearning() {
       setSources([]);
       setActiveSourceIds(new Set());
       setSearchParams({ session: session.id });
+      track('DIALOGUE_SESSION_STARTED', {
+        dialogueSessionId: session.id,
+        courseId,
+        metadata: { summary: 'Started new dialogue session' },
+      });
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to create session');
     }
-  }, [courseId, toast, setSearchParams]);
+  }, [courseId, toast, setSearchParams, track]);
 
   const handleSelectSession = useCallback(
     async (session: DialogueSession) => {
@@ -343,13 +350,18 @@ export function DialogueLearning() {
           activeSourceIds: [...activeSourceIds],
         });
         setMessages((prev) => [...prev, result.userMessage, result.assistantMessage]);
+        track('DIALOGUE_MESSAGE_SENT', {
+          dialogueSessionId: activeSession.id,
+          courseId,
+          metadata: { role: 'student', summary: content.slice(0, 80) },
+        });
       } catch (err) {
         setSendError(err instanceof Error ? err.message : 'Failed to send');
       } finally {
         setIsSending(false);
       }
     },
-    [activeSession, courseId, activeSourceIds, setSearchParams],
+    [activeSession, courseId, activeSourceIds, setSearchParams, track],
   );
 
   const handleRetry = useCallback(() => {
@@ -379,6 +391,15 @@ export function DialogueLearning() {
 
   const handleUploadComplete = useCallback(
     (doc: StudentSourceDocument) => {
+      track('STUDY_MATERIAL_UPLOADED', {
+        dialogueSessionId: activeSession?.id,
+        courseId,
+        metadata: {
+          documentId: doc.id,
+          fileName: doc.originalName,
+          summary: `Uploaded ${doc.originalName}`,
+        },
+      });
       setSources((prev) => {
         const updated = [doc, ...prev];
         // Auto-name session based on uploaded materials if title is still default
@@ -404,7 +425,7 @@ export function DialogueLearning() {
       });
       setProcessingDocumentIds((prev) => new Set([...prev, doc.id]));
     },
-    [activeSession],
+    [activeSession, track, courseId],
   );
 
   const handleDeleteSource = useCallback((id: string) => {
@@ -504,12 +525,17 @@ export function DialogueLearning() {
           sessionId: activeSession.id,
         });
         setStudioOutputs((prev) => [output, ...prev]);
+        track('STUDIO_OUTPUT_REQUESTED', {
+          dialogueSessionId: activeSession.id,
+          courseId,
+          metadata: { type, summary: `Generated ${type.replace('_', ' ').toLowerCase()}` },
+        });
         toast('success', `Generated ${type.replace('_', ' ').toLowerCase()}`);
       } catch (err) {
         toast('error', err instanceof Error ? err.message : 'Generation failed');
       }
     },
-    [courseId, activeSession, activeSourceIds, toast],
+    [courseId, activeSession, activeSourceIds, toast, track],
   );
 
   const handleStudioDelete = useCallback(
