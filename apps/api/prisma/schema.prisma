@@ -150,6 +150,53 @@ enum StudioOutputType {
   FAQ
 }
 
+enum ActivityAction {
+  // Session lifecycle
+  SESSION_START
+  SESSION_END
+  SESSION_HEARTBEAT
+
+  // Navigation
+  MODULE_OPENED
+  MODULE_ITEM_VIEWED
+  KC_GRAPH_VIEWED
+
+  // Assessments
+  ASSESSMENT_STARTED
+  QUESTION_VIEWED
+  QUESTION_ANSWERED
+  ASSESSMENT_SUBMITTED
+  ASSESSMENT_GRADED
+
+  // Dialogue / conversational AI
+  DIALOGUE_SESSION_STARTED
+  DIALOGUE_MESSAGE_SENT
+  DIALOGUE_MESSAGE_RECEIVED
+  DIALOGUE_SESSION_ENDED
+
+  // Learning interventions
+  INTERVENTION_TRIGGERED
+  INTERVENTION_VIEWED
+  INTERVENTION_COMPLETED
+  INTERVENTION_DISMISSED
+
+  // Spaced repetition
+  SPACED_REP_CARD_VIEWED
+  SPACED_REP_CARD_RATED
+
+  // Study materials / RAG
+  STUDY_MATERIAL_UPLOADED
+  STUDY_GUIDE_GENERATED
+  STUDIO_OUTPUT_REQUESTED
+  STUDIO_OUTPUT_VIEWED
+
+  // Mastery
+  MASTERY_UPDATED
+
+  // Feedback
+  FEEDBACK_RECEIVED
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -187,6 +234,9 @@ model User {
   llmUsageLogs               LlmUsageLog[]
   studentDocuments           StudentSourceDocument[]    @relation("StudentDocuments")
   dialogueSessions           DialogueSession[]          @relation("StudentDialogueSessions")
+  studentSessions            StudentSession[]
+  activityLogs               ActivityLog[]
+  sessionSummaries           SessionSummary[]
 
   @@map("users")
 }
@@ -216,6 +266,7 @@ model Course {
   contentDrafts   ContentDraft[]
   studentDocuments    StudentSourceDocument[]
   dialogueSessions    DialogueSession[]
+  studentSessions     StudentSession[]
 
   @@index([teacherId])
   @@map("courses")
@@ -1201,4 +1252,110 @@ model CourseFeedbackSetting {
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("course_feedback_settings")
+}
+
+// ─── Student Activity Logging ────────────────────────────
+
+model StudentSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId       String?   @map("course_id") @db.Uuid
+  course        Course?   @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  endedAt       DateTime? @map("ended_at") @db.Timestamptz
+  durationSecs  Int?      @map("duration_secs")
+
+  ipAddress     String?   @map("ip_address")
+  userAgent     String?   @map("user_agent")
+
+  activityLogs  ActivityLog[]
+  summary       SessionSummary?
+
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([userId])
+  @@index([userId, startedAt])
+  @@map("student_sessions")
+}
+
+model ActivityLog {
+  id              String         @id @default(uuid()) @db.Uuid
+
+  sessionId       String         @map("session_id") @db.Uuid
+  session         StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  userId          String         @map("user_id") @db.Uuid
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action          ActivityAction
+  occurredAt      DateTime       @default(now()) @map("occurred_at") @db.Timestamptz
+
+  // Optional foreign keys — only the relevant ones are set per action
+  courseId           String?  @map("course_id") @db.Uuid
+  moduleId           String?  @map("module_id") @db.Uuid
+  moduleItemId       String?  @map("module_item_id") @db.Uuid
+  assessmentId       String?  @map("assessment_id") @db.Uuid
+  attemptId          String?  @map("attempt_id") @db.Uuid
+  questionId         String?  @map("question_id") @db.Uuid
+  dialogueSessionId  String?  @map("dialogue_session_id") @db.Uuid
+  interventionId     String?  @map("intervention_id") @db.Uuid
+  kcId               String?  @map("kc_id") @db.Uuid
+
+  // Free-form JSON payload — action-specific detail
+  metadata        Json?
+
+  @@index([sessionId])
+  @@index([userId, occurredAt])
+  @@index([userId, action])
+  @@index([occurredAt])
+  @@map("activity_logs")
+}
+
+model SessionSummary {
+  id                      String         @id @default(uuid()) @db.Uuid
+
+  sessionId               String         @unique @map("session_id") @db.Uuid
+  session                 StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  userId                  String         @map("user_id") @db.Uuid
+  user                    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  totalEvents             Int            @default(0) @map("total_events")
+  totalActiveTimeSecs     Int            @default(0) @map("total_active_time_secs")
+
+  // Assessment stats
+  assessmentsStarted      Int            @default(0) @map("assessments_started")
+  assessmentsSubmitted    Int            @default(0) @map("assessments_submitted")
+  questionsAnswered       Int            @default(0) @map("questions_answered")
+  questionsCorrect        Int            @default(0) @map("questions_correct")
+
+  // Intervention stats
+  interventionsTriggered  Int            @default(0) @map("interventions_triggered")
+  interventionsCompleted  Int            @default(0) @map("interventions_completed")
+  interventionBreakdown   Json?          @map("intervention_breakdown")
+
+  // Dialogue stats
+  dialogueSessionsStarted Int           @default(0) @map("dialogue_sessions_started")
+  studentMessagesSent     Int            @default(0) @map("student_messages_sent")
+
+  // Spaced rep
+  flashcardsReviewed      Int            @default(0) @map("flashcards_reviewed")
+
+  // Pages / materials
+  moduleItemsViewed       Int            @default(0) @map("module_items_viewed")
+  studyMaterialsUploaded  Int            @default(0) @map("study_materials_uploaded")
+
+  // Mastery deltas — JSON: [{ kcId, kcName, deltaP_L }]
+  masteryDeltas           Json?          @map("mastery_deltas")
+
+  // Full ordered event timeline — JSON array of { action, occurredAt, summary }
+  eventTimeline           Json?          @map("event_timeline")
+
+  computedAt              DateTime       @default(now()) @map("computed_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("session_summaries")
 }
