@@ -332,6 +332,16 @@ export function DialogueLearning() {
             activeSourceIds: [...activeSourceIds],
           });
           setMessages((prev) => [...prev, result.userMessage, result.assistantMessage]);
+          track('DIALOGUE_SESSION_STARTED', {
+            dialogueSessionId: session.id,
+            courseId,
+            metadata: { summary: 'Auto-created dialogue session' },
+          });
+          track('DIALOGUE_MESSAGE_SENT', {
+            dialogueSessionId: session.id,
+            courseId,
+            metadata: { role: 'student', summary: content.slice(0, 80) },
+          });
         } catch (err) {
           setSendError(err instanceof Error ? err.message : 'Failed to send');
         } finally {
