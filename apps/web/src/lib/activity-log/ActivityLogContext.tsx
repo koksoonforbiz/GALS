@@ -106,7 +106,15 @@ export function ActivityLogProvider({ children, getToken }: Props) {
         sessionId: sessionIdRef.current,
         events: buffer.current,
       });
-      navigator.sendBeacon(API_BATCH_URL, new Blob([payload], { type: 'application/json' }));
+      fetch(API_BATCH_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {});
     };
 
     const handleVisibilityChange = () => {

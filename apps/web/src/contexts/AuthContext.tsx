@@ -98,11 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('user', JSON.stringify(authResponse.user));
     setUser(authResponse.user);
 
-    if (authResponse.sessionId) {
-      initActivitySession(authResponse.sessionId);
-    }
-
     if (authResponse.user.role === 'student') {
+      if (authResponse.sessionId) {
+        initActivitySession(authResponse.sessionId);
+      }
       joinStudentRoom(authResponse.user.id);
     }
   }, []);
