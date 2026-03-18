@@ -103,6 +103,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         initActivitySession(authResponse.sessionId);
       }
       joinStudentRoom(authResponse.user.id);
+    } else {
+      // Clear any stale activity session for non-student roles
+      clearActivitySession();
     }
   }, []);
 

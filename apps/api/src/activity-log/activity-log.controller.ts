@@ -42,7 +42,7 @@ export class ActivityLogController {
    * Frontend sends buffered events in batches (e.g. every 30 seconds).
    */
   @Post('batch')
-  @Roles('student')
+  @Roles('student', 'teacher')
   async batchLog(
     @Body(new ZodValidationPipe(BatchLogEventsSchema)) dto: BatchLogEventsDto,
     @Request() req: { user: RequestUser },
@@ -73,7 +73,7 @@ export class ActivityLogController {
    * Called by the frontend on logout or page unload (sendBeacon).
    */
   @Post('session/close')
-  @Roles('student')
+  @Roles('student', 'teacher')
   async closeSession(@SessionId() sessionId: string) {
     if (sessionId) await this.sessionService.closeSession(sessionId);
     return { ok: true };
