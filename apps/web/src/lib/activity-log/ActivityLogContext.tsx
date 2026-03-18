@@ -1,4 +1,12 @@
-import { createContext, useContext, useRef, useCallback, useEffect, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useRef,
+  useCallback,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
 import { ActivityAction, ActivityEvent } from './types';
 
 interface ActivityLogContextValue {
@@ -12,6 +20,7 @@ const ActivityLogContext = createContext<ActivityLogContextValue>({
 });
 
 const SESSION_KEY = 'ats_session_id';
+const SESSION_CHANGE_EVENT = 'ats_session_change';
 const FLUSH_INTERVAL_MS = 30_000; // 30 seconds
 const API_BATCH_URL = '/api/activity-log/batch';
 
@@ -21,13 +30,30 @@ interface Props {
 }
 
 export function ActivityLogProvider({ children, getToken }: Props) {
-  const sessionId = useRef<string | null>(sessionStorage.getItem(SESSION_KEY));
+  const [sessionId, setSessionId] = useState<string | null>(() =>
+    sessionStorage.getItem(SESSION_KEY),
+  );
+  const sessionIdRef = useRef(sessionId);
   const buffer = useRef<ActivityEvent[]>([]);
   const flushTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Keep ref in sync with state
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // Listen for session changes dispatched by initActivitySession / clearActivitySession
+  useEffect(() => {
+    const handler = () => {
+      setSessionId(sessionStorage.getItem(SESSION_KEY));
+    };
+    window.addEventListener(SESSION_CHANGE_EVENT, handler);
+    return () => window.removeEventListener(SESSION_CHANGE_EVENT, handler);
+  }, []);
+
   // ── Flush buffer to API ──────────────────────────────────────────────────
   const flush = useCallback(async () => {
-    if (!sessionId.current || buffer.current.length === 0) return;
+    if (!sessionIdRef.current || buffer.current.length === 0) return;
     const events = [...buffer.current];
     buffer.current = [];
 
@@ -39,9 +65,9 @@ export function ActivityLogProvider({ children, getToken }: Props) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'X-Session-Id': sessionId.current,
+          'X-Session-Id': sessionIdRef.current,
         },
-        body: JSON.stringify({ sessionId: sessionId.current, events }),
+        body: JSON.stringify({ sessionId: sessionIdRef.current, events }),
       });
     } catch {
       // Silently restore events to the buffer so they aren't lost
@@ -52,7 +78,7 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   // ── Track a single event ─────────────────────────────────────────────────
   const track = useCallback(
     (action: ActivityAction, extras: Omit<ActivityEvent, 'action' | 'occurredAt'> = {}) => {
-      if (!sessionId.current) return;
+      if (!sessionIdRef.current) return;
       buffer.current.push({
         action,
         occurredAt: new Date().toISOString(),
@@ -73,11 +99,11 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   // ── Flush on page unload (sendBeacon for reliability) ───────────────────
   useEffect(() => {
     const handleUnload = () => {
-      if (!sessionId.current || buffer.current.length === 0) return;
+      if (!sessionIdRef.current || buffer.current.length === 0) return;
       const token = getToken();
       if (!token) return;
       const payload = JSON.stringify({
-        sessionId: sessionId.current,
+        sessionId: sessionIdRef.current,
         events: buffer.current,
       });
       navigator.sendBeacon(API_BATCH_URL, new Blob([payload], { type: 'application/json' }));
@@ -96,7 +122,7 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   }, [getToken]);
 
   return (
-    <ActivityLogContext.Provider value={{ sessionId: sessionId.current, track }}>
+    <ActivityLogContext.Provider value={{ sessionId, track }}>
       {children}
     </ActivityLogContext.Provider>
   );
@@ -111,6 +137,7 @@ export function useActivityLog() {
  */
 export function initActivitySession(sid: string) {
   sessionStorage.setItem(SESSION_KEY, sid);
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
 }
 
 /**
@@ -118,4 +145,5 @@ export function initActivitySession(sid: string) {
  */
 export function clearActivitySession() {
   sessionStorage.removeItem(SESSION_KEY);
+  window.dispatchEvent(new Event(SESSION_CHANGE_EVENT));
 }
