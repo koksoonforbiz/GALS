@@ -1300,7 +1300,7 @@ model ActivityLog {
   assessmentId       String?  @map("assessment_id") @db.Uuid
   attemptId          String?  @map("attempt_id") @db.Uuid
   questionId         String?  @map("question_id") @db.Uuid
-  dialogueSessionId  String?  @map("dialogue_session_id") @db.Uuid
+  dialogueSessionId  String?  @map("dialogue_session_id")
   interventionId     String?  @map("intervention_id") @db.Uuid
   kcId               String?  @map("kc_id") @db.Uuid
 
