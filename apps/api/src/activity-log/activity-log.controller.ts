@@ -38,6 +38,19 @@ export class ActivityLogController {
   // ─── STUDENT ENDPOINTS ────────────────────────────────────────────────────
 
   /**
+   * POST /activity-log/session/open
+   * Called by the frontend on page refresh when no session ID exists in sessionStorage.
+   */
+  @Post('session/open')
+  @Roles('student')
+  async openSession(@Request() req: { user: RequestUser }) {
+    const sessionId = await this.sessionService.openSession({
+      userId: req.user.id,
+    });
+    return { sessionId };
+  }
+
+  /**
    * POST /activity-log/batch
    * Frontend sends buffered events in batches (e.g. every 30 seconds).
    */

@@ -49,9 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const parsedUser = JSON.parse(savedUser) as User;
         setUser(parsedUser);
 
-        // Join socket room for students
+        // Join socket room for students and ensure activity session exists
         if (parsedUser.role === 'student') {
           joinStudentRoom(parsedUser.id);
+
+          // If no activity session exists in sessionStorage, open a new one
+          if (!sessionStorage.getItem('ats_session_id')) {
+            api
+              .post<{ sessionId: string }>('/activity-log/session/open')
+              .then((res) => {
+                if (res.sessionId) {
+                  initActivitySession(res.sessionId);
+                }
+              })
+              .catch(() => {
+                // Non-critical — activity logging will be skipped
+              });
+          }
         }
 
         // Validate token by fetching current user
