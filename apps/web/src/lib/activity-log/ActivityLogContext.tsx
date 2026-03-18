@@ -89,10 +89,6 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   // ── Track a single event ─────────────────────────────────────────────────
   const track = useCallback(
     (action: ActivityAction, extras: Omit<ActivityEvent, 'action' | 'occurredAt'> = {}) => {
-      if (!sessionIdRef.current) {
-        console.log('[ActivityLog] track skipped (no session):', action);
-        return;
-      }
       console.log('[ActivityLog] track:', action, 'buffer size:', buffer.current.length + 1);
       buffer.current.push({
         action,

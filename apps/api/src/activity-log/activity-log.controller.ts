@@ -121,9 +121,14 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/summary')
   @Roles('teacher')
   async getSessionSummary(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
-    return this.activityLogService['prisma'].sessionSummary.findUnique({
+    // Try saved summary first
+    const saved = await this.activityLogService['prisma'].sessionSummary.findUnique({
       where: { sessionId },
     });
+    if (saved) return saved;
+
+    // For in-progress sessions, compute a live summary from raw logs
+    return this.activityLogService.computeLiveSummary(sessionId);
   }
 
   /**

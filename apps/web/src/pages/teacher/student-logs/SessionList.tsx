@@ -5,6 +5,7 @@ interface Session {
   startedAt: string;
   endedAt: string | null;
   durationSecs: number | null;
+  liveEventCount?: number;
   summary: {
     totalEvents: number;
     totalActiveTimeSecs: number;
@@ -37,7 +38,7 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
             </p>
             <p className="text-xs text-gray-500 mt-0.5">
               {s.durationSecs ? `${Math.round(s.durationSecs / 60)} min` : 'In progress'} ·{' '}
-              {s.summary?.totalEvents ?? 0} events
+              {s.summary?.totalEvents ?? s.liveEventCount ?? 0} events
             </p>
             {s.summary && (
               <div className="flex gap-2 mt-1.5 flex-wrap">

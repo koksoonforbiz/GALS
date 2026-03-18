@@ -98,12 +98,90 @@ export class ActivityLogService {
     });
   }
 
-  /** Retrieve all sessions for a student (most recent first). */
+  /** Retrieve all sessions for a student (most recent first), with live event counts. */
   async getStudentSessions(userId: string) {
-    return this.prisma.studentSession.findMany({
+    const sessions = await this.prisma.studentSession.findMany({
       where: { userId },
       orderBy: { startedAt: 'desc' },
-      include: { summary: true },
+      include: {
+        summary: true,
+        _count: { select: { activityLogs: true } },
+      },
     });
+
+    return sessions.map((s) => ({
+      ...s,
+      // Provide a live event count so the session list always shows the real number
+      liveEventCount: s._count.activityLogs,
+      _count: undefined,
+    }));
+  }
+
+  /** Compute a summary on the fly from raw logs (for in-progress sessions). */
+  async computeLiveSummary(sessionId: string) {
+    const logs = await this.prisma.activityLog.findMany({
+      where: { sessionId },
+      orderBy: { occurredAt: 'asc' },
+    });
+
+    if (logs.length === 0) {
+      return {
+        totalEvents: 0,
+        totalActiveTimeSecs: 0,
+        assessmentsStarted: 0,
+        assessmentsSubmitted: 0,
+        questionsAnswered: 0,
+        questionsCorrect: 0,
+        interventionsTriggered: 0,
+        interventionsCompleted: 0,
+        interventionBreakdown: null,
+        dialogueSessionsStarted: 0,
+        studentMessagesSent: 0,
+        flashcardsReviewed: 0,
+        moduleItemsViewed: 0,
+        masteryDeltas: null,
+      };
+    }
+
+    const count = (action: string) => logs.filter((l) => l.action === action).length;
+
+    const interventionBreakdown: Record<string, number> = {};
+    logs
+      .filter((l) => l.action === 'INTERVENTION_TRIGGERED')
+      .forEach((l) => {
+        const meta = l.metadata as Record<string, string> | null;
+        const type = meta?.interventionType ?? 'unknown';
+        interventionBreakdown[type] = (interventionBreakdown[type] ?? 0) + 1;
+      });
+
+    let totalActiveTimeSecs = 0;
+    for (let i = 1; i < logs.length; i++) {
+      const gap = (logs[i]!.occurredAt.getTime() - logs[i - 1]!.occurredAt.getTime()) / 1000;
+      if (gap <= 300) totalActiveTimeSecs += gap;
+    }
+
+    const questionsCorrect = logs
+      .filter((l) => l.action === 'QUESTION_ANSWERED')
+      .filter((l) => (l.metadata as Record<string, unknown> | null)?.isCorrect === true).length;
+
+    return {
+      totalEvents: logs.length,
+      totalActiveTimeSecs: Math.round(totalActiveTimeSecs),
+      assessmentsStarted: count('ASSESSMENT_STARTED'),
+      assessmentsSubmitted: count('ASSESSMENT_SUBMITTED'),
+      questionsAnswered: count('QUESTION_ANSWERED'),
+      questionsCorrect,
+      interventionsTriggered: count('INTERVENTION_TRIGGERED'),
+      interventionsCompleted: count('INTERVENTION_COMPLETED'),
+      interventionBreakdown:
+        Object.keys(interventionBreakdown).length > 0 ? interventionBreakdown : null,
+      dialogueSessionsStarted: count('DIALOGUE_SESSION_STARTED'),
+      studentMessagesSent: count('DIALOGUE_MESSAGE_SENT'),
+      flashcardsReviewed: count('SPACED_REP_CARD_RATED'),
+      moduleItemsViewed: count('MODULE_ITEM_VIEWED'),
+      masteryDeltas: logs
+        .filter((l) => l.action === 'MASTERY_UPDATED')
+        .map((l) => l.metadata) as any,
+    };
   }
 }
