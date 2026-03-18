@@ -59,8 +59,11 @@ export function ActivityLogProvider({ children, getToken }: Props) {
 
     try {
       const token = getToken();
-      if (!token) return;
-      await fetch(API_BATCH_URL, {
+      if (!token) {
+        buffer.current = [...events, ...buffer.current];
+        return;
+      }
+      const res = await fetch(API_BATCH_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,6 +72,14 @@ export function ActivityLogProvider({ children, getToken }: Props) {
         },
         body: JSON.stringify({ sessionId: sessionIdRef.current, events }),
       });
+      if (!res.ok) {
+        console.warn(
+          '[ActivityLog] batch flush failed:',
+          res.status,
+          await res.text().catch(() => ''),
+        );
+        buffer.current = [...events, ...buffer.current];
+      }
     } catch {
       // Silently restore events to the buffer so they aren't lost
       buffer.current = [...events, ...buffer.current];
@@ -78,7 +89,11 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   // ── Track a single event ─────────────────────────────────────────────────
   const track = useCallback(
     (action: ActivityAction, extras: Omit<ActivityEvent, 'action' | 'occurredAt'> = {}) => {
-      if (!sessionIdRef.current) return;
+      if (!sessionIdRef.current) {
+        console.debug('[ActivityLog] track skipped (no session):', action);
+        return;
+      }
+      console.debug('[ActivityLog] track:', action, 'buffer size:', buffer.current.length + 1);
       buffer.current.push({
         action,
         occurredAt: new Date().toISOString(),
