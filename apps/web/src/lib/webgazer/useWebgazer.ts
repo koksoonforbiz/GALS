@@ -60,6 +60,10 @@ export function useWebgazer(
   isCalibrating: boolean;
   needsCalibration: boolean;
   triggerCalibration: () => void;
+  completeCalibration: () => void;
+  skipCalibration: () => void;
+  trainOnPoint: (screenX: number, screenY: number) => void;
+  getCurrentPrediction: () => Promise<{ x: number; y: number } | null>;
   latestGaze: { x: number; y: number } | null;
   config: WebgazerConfig | null;
 } {
@@ -107,6 +111,42 @@ export function useWebgazer(
     setIsCalibrating(true);
     setNeedsCalibration(false);
   }, []);
+
+  const completeCalibration = useCallback(() => {
+    setIsCalibrating(false);
+    setNeedsCalibration(false);
+  }, []);
+
+  const skipCalibration = useCallback(() => {
+    setIsCalibrating(false);
+    setNeedsCalibration(false);
+  }, []);
+
+  /** Feed a known screen position into WebGazer's regression model. */
+  const trainOnPoint = useCallback((screenX: number, screenY: number) => {
+    try {
+      webgazerRef.current?.recordScreenPosition(screenX, screenY, 'click');
+    } catch {
+      // WebGazer may not be ready yet
+    }
+  }, []);
+
+  /** Get WebGazer's current gaze prediction (for accuracy testing). */
+  const getCurrentPrediction = useCallback(
+    (): Promise<{ x: number; y: number } | null> =>
+      new Promise((resolve) => {
+        try {
+          const wg = webgazerRef.current;
+          if (!wg) return resolve(null);
+          wg.getCurrentPrediction()
+            .then((pred: { x: number; y: number } | null) => resolve(pred))
+            .catch(() => resolve(null));
+        } catch {
+          resolve(null);
+        }
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (!courseId || !sessionId) return;
@@ -199,6 +239,23 @@ export function useWebgazer(
     };
   }, [courseId, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clean up WebGazer on logout
+  useEffect(() => {
+    const handleLogout = () => {
+      if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      flushBuffer();
+      try {
+        webgazerRef.current?.end();
+      } catch {
+        // WebGazer may throw on cleanup
+      }
+      setIsActive(false);
+    };
+    window.addEventListener('ats:logout', handleLogout);
+    return () => window.removeEventListener('ats:logout', handleLogout);
+  }, [flushBuffer]);
+
   // sendBeacon on unload
   useEffect(() => {
     const handleUnload = () => {
@@ -216,5 +273,16 @@ export function useWebgazer(
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [sessionId, courseId]);
 
-  return { isActive, isCalibrating, needsCalibration, triggerCalibration, latestGaze, config };
+  return {
+    isActive,
+    isCalibrating,
+    needsCalibration,
+    triggerCalibration,
+    completeCalibration,
+    skipCalibration,
+    trainOnPoint,
+    getCurrentPrediction,
+    latestGaze,
+    config,
+  };
 }

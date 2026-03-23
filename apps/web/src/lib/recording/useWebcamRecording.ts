@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { toWallTime } from '../biometrics/time';
+import { mediaStreamRegistry } from '../biometrics/mediaStreamRegistry';
 
 export interface RecordingState {
   isActive: boolean;
@@ -98,6 +99,7 @@ export function useWebcamRecording(
         audio: false,
       });
       streamRef.current = stream;
+      mediaStreamRegistry.register('recording', stream);
 
       const startWall = toWall(performance.now());
       const { segmentId: sid, uploadUrl } = await api.post<{
@@ -173,6 +175,7 @@ export function useWebcamRecording(
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    mediaStreamRegistry.unregister('recording');
     setIsActive(false);
     onRecordingActiveChange?.(false);
   }, [onRecordingActiveChange]);

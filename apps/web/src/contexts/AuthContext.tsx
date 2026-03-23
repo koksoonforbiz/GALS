@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { api } from '../lib/api';
 import { joinStudentRoom, disconnectSocket } from '../lib/socket';
 import { initActivitySession, clearActivitySession } from '../lib/activity-log';
+import { mediaStreamRegistry } from '../lib/biometrics/mediaStreamRegistry';
 import type { UserRole } from '@ats/shared';
 
 interface User {
@@ -158,6 +159,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
     }
     clearActivitySession();
+
+    // Stop all active webcam/media streams before clearing auth
+    mediaStreamRegistry.stopAll();
+    // Signal biometric hooks (e.g. WebGazer) to clean up
+    window.dispatchEvent(new CustomEvent('ats:logout'));
 
     localStorage.removeItem('token');
     localStorage.removeItem('user');

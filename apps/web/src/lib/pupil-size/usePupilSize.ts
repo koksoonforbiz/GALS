@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { mediaStreamRegistry } from '../biometrics/mediaStreamRegistry';
 
 export interface PupilReading {
   timestamp: string;
@@ -122,6 +123,7 @@ export function usePupilSize(
           return;
         }
         streamRef.current = stream;
+        mediaStreamRegistry.register('pupil-size', stream);
 
         // Create hidden video + canvas
         const video = document.createElement('video');
@@ -174,6 +176,7 @@ export function usePupilSize(
       flushBuffer(); // Flush remaining
 
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      mediaStreamRegistry.unregister('pupil-size');
       if (videoRef.current) {
         videoRef.current.remove();
         videoRef.current = null;

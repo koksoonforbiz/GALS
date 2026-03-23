@@ -7,6 +7,8 @@ interface CalibrationModalProps {
   triggeredBy: 'new_session' | 'inactivity' | 'manual';
   onComplete: () => void;
   onSkip: () => void;
+  onTrainPoint: (screenX: number, screenY: number) => void;
+  getCurrentPrediction: () => Promise<{ x: number; y: number } | null>;
 }
 
 // 9-point calibration grid positions (percentage of viewport)
@@ -22,6 +24,15 @@ const CALIBRATION_POINTS = [
   { x: 90, y: 90 }, // bottom-right
 ];
 
+// Points used to measure accuracy after calibration
+const ACCURACY_TEST_POINTS = [
+  { x: 30, y: 30 },
+  { x: 70, y: 30 },
+  { x: 50, y: 50 },
+  { x: 30, y: 70 },
+  { x: 70, y: 70 },
+];
+
 type Phase = 'instructions' | 'calibrating' | 'accuracy_test' | 'done';
 
 export function CalibrationModal({
@@ -30,32 +41,63 @@ export function CalibrationModal({
   triggeredBy,
   onComplete,
   onSkip,
+  onTrainPoint,
+  getCurrentPrediction,
 }: CalibrationModalProps) {
   const [phase, setPhase] = useState<Phase>('instructions');
   const [currentPoint, setCurrentPoint] = useState(0);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const clickCountRef = useRef(0);
 
-  const handlePointClick = useCallback(() => {
-    clickCountRef.current += 1;
+  const handlePointClick = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      // Train WebGazer with the actual screen coordinates of the clicked point
+      const rect = e.currentTarget.getBoundingClientRect();
+      const screenX = rect.left + rect.width / 2;
+      const screenY = rect.top + rect.height / 2;
+      onTrainPoint(screenX, screenY);
 
-    // Require 5 clicks per point for training
-    if (clickCountRef.current >= 5) {
-      clickCountRef.current = 0;
-      if (currentPoint < CALIBRATION_POINTS.length - 1) {
-        setCurrentPoint((prev) => prev + 1);
-      } else {
-        // All points done, run accuracy test
-        setPhase('accuracy_test');
-        // Simulate accuracy measurement (in real implementation, collect gaze samples)
-        setTimeout(() => {
-          const estimatedAccuracy = Math.random() * 60 + 30; // 30-90px
-          setAccuracy(Math.round(estimatedAccuracy));
-          setPhase('done');
-        }, 2000);
+      clickCountRef.current += 1;
+
+      // Require 5 clicks per point for training
+      if (clickCountRef.current >= 5) {
+        clickCountRef.current = 0;
+        if (currentPoint < CALIBRATION_POINTS.length - 1) {
+          setCurrentPoint((prev) => prev + 1);
+        } else {
+          // All points done, run accuracy test
+          runAccuracyTest();
+        }
+      }
+    },
+    [currentPoint, onTrainPoint],
+  );
+
+  const runAccuracyTest = useCallback(async () => {
+    setPhase('accuracy_test');
+
+    const errors: number[] = [];
+    for (const testPoint of ACCURACY_TEST_POINTS) {
+      const targetX = (testPoint.x / 100) * window.innerWidth;
+      const targetY = (testPoint.y / 100) * window.innerHeight;
+
+      // Wait briefly for the user to look at each region
+      await new Promise((r) => setTimeout(r, 400));
+
+      const prediction = await getCurrentPrediction();
+      if (prediction) {
+        const dx = prediction.x - targetX;
+        const dy = prediction.y - targetY;
+        errors.push(Math.sqrt(dx * dx + dy * dy));
       }
     }
-  }, [currentPoint]);
+
+    const avgError =
+      errors.length > 0 ? Math.round(errors.reduce((a, b) => a + b, 0) / errors.length) : 999;
+
+    setAccuracy(avgError);
+    setPhase('done');
+  }, [getCurrentPrediction]);
 
   const handleComplete = useCallback(async () => {
     try {

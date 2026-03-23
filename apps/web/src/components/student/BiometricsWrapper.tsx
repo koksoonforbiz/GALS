@@ -9,6 +9,7 @@ import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { RecordingIndicator } from './RecordingIndicator';
 import { RecordingConsentModal } from './RecordingConsentModal';
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
+import { WebcamPreviewWindow } from './WebcamPreviewWindow';
 
 /**
  * Inner component that uses BiometricsSync context to activate all hooks.
@@ -96,6 +97,9 @@ function BiometricsHooksInner({
       {/* Recording indicator */}
       <RecordingIndicator isActive={recording.isActive} isUploading={recording.isUploading} />
 
+      {/* Floating webcam preview with face bounding box */}
+      {(recording.isActive || pupilSize.isActive) && <WebcamPreviewWindow />}
+
       {/* Consent modal */}
       {showConsentModal && (
         <RecordingConsentModal
@@ -117,11 +121,13 @@ function BiometricsHooksInner({
           courseId={courseId}
           sessionId={sessionId}
           triggeredBy="new_session"
+          onTrainPoint={webgazer.trainOnPoint}
+          getCurrentPrediction={webgazer.getCurrentPrediction}
           onComplete={() => {
-            // calibration done, gaze tracking resumes
+            webgazer.completeCalibration();
           }}
           onSkip={() => {
-            // skipped
+            webgazer.skipCalibration();
           }}
         />
       )}
