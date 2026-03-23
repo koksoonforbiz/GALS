@@ -20,7 +20,7 @@ export class RecordingController {
   // ─── Config (teacher) ─────────────────────────────────
 
   @Get('config/:courseId')
-  @Roles('teacher')
+  @Roles('teacher', 'student')
   getConfig(@Param('courseId') courseId: string) {
     return this.recordingService.getConfig(courseId);
   }

@@ -28,7 +28,7 @@ export class WebgazerController {
   constructor(private readonly webgazerService: WebgazerService) {}
 
   @Get('config/:courseId')
-  @Roles('teacher')
+  @Roles('teacher', 'student')
   getConfig(@Param('courseId') courseId: string) {
     return this.webgazerService.getConfig(courseId);
   }

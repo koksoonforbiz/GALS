@@ -27,7 +27,7 @@ export class PupilSizeController {
   constructor(private readonly pupilSizeService: PupilSizeService) {}
 
   @Get('config/:courseId')
-  @Roles('teacher')
+  @Roles('teacher', 'student')
   getConfig(@Param('courseId') courseId: string) {
     return this.pupilSizeService.getConfig(courseId);
   }
