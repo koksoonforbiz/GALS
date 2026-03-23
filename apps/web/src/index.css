@@ -3,28 +3,70 @@
 /* KaTeX styles */
 @import 'katex/dist/katex.min.css';
 
+/* react-pdf layer styles — imported here (after Tailwind) so they aren't
+   clobbered by Tailwind v4's CSS layer ordering. */
+@import 'react-pdf/dist/Page/TextLayer.css';
+@import 'react-pdf/dist/Page/AnnotationLayer.css';
+
 /* Base styles */
 body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
-/* PDF text layer — ensure text is selectable over the canvas */
+/*
+ * PDF text-layer overrides
+ * Tailwind v4 preflight sets line-height: 1.5 on html which breaks the
+ * alignment of the invisible text spans that sit on top of the canvas.
+ * We also force user-select and pointer-events so text is selectable.
+ */
 .react-pdf__Page {
   position: relative !important;
 }
 
-.react-pdf__Page__textContent.textLayer {
+.react-pdf__Page canvas {
+  display: block;
+}
+
+.textLayer {
+  position: absolute !important;
+  inset: 0 !important;
+  overflow: hidden !important;
+  line-height: 1 !important;
+  text-size-adjust: none !important;
   z-index: 2 !important;
   user-select: text !important;
   -webkit-user-select: text !important;
+  pointer-events: auto !important;
 }
 
-.react-pdf__Page__textContent.textLayer span {
+.textLayer span {
+  color: transparent !important;
+  position: absolute !important;
+  white-space: pre !important;
+  cursor: text !important;
   user-select: text !important;
   -webkit-user-select: text !important;
+  pointer-events: auto !important;
+  line-height: inherit !important;
 }
 
-.react-pdf__Page__textContent.textLayer ::selection {
+.textLayer ::selection {
   background: rgba(0, 100, 255, 0.3);
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.annotationLayer {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  pointer-events: none !important;
+  z-index: 3 !important;
+}
+
+.annotationLayer a {
+  pointer-events: auto !important;
 }

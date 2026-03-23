@@ -1,7 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Document, Page } from 'react-pdf';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
 import {
   ArrowLeft,
   ZoomIn,
