@@ -192,17 +192,21 @@ export function usePupilSize(
     };
   }, [courseId, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // sendBeacon on page unload
+  // Flush remaining readings on page unload using fetch with keepalive (supports auth headers)
   useEffect(() => {
     const handleUnload = () => {
       const readings = bufferRef.current.splice(0, bufferRef.current.length);
       if (readings.length > 0) {
-        navigator.sendBeacon(
-          '/api/pupil-size/logs',
-          new Blob([JSON.stringify({ sessionId, courseId, readings })], {
-            type: 'application/json',
-          }),
-        );
+        const token = localStorage.getItem('token');
+        fetch('/api/pupil-size/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId, courseId, readings }),
+          keepalive: true,
+        }).catch(() => {});
       }
     };
     window.addEventListener('beforeunload', handleUnload);

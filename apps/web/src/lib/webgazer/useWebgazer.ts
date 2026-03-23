@@ -172,8 +172,12 @@ export function useWebgazer(
         wg.setRegression('ridge');
         wg.saveDataAcrossSessions(false);
 
-        // Show WebGazer's internal video + face overlay (needed for face tracking)
-        // but hide them from the main UI — the preview window reads them
+        // Set absolute path for MediaPipe face_mesh WASM assets
+        // (default relative path './mediapipe/face_mesh' breaks on non-root pages)
+        wg.params.faceMeshSolutionPath = '/mediapipe/face_mesh';
+
+        // Enable internal video + face overlay (needed for face tracking)
+        // but we'll remove the container from DOM after begin()
         wg.showVideo(true);
         wg.showFaceOverlay(true);
         wg.showFaceFeedbackBox(true);
@@ -184,29 +188,32 @@ export function useWebgazer(
           return;
         }
 
-        // Hide WebGazer's default UI elements via a persistent CSS rule
-        // (the underlying face detection still runs for our preview window)
-        if (!document.getElementById('webgazer-hide-style')) {
-          const style = document.createElement('style');
-          style.id = 'webgazer-hide-style';
-          style.textContent = `
-            #webgazerVideoContainer { display: none !important; }
-            #webgazerGazeDot { display: none !important; }
-          `;
-          document.head.appendChild(style);
-        }
-
         // Register WebGazer's video stream in the shared registry
-        // so the preview window can display it
         try {
-          const videoEl = wg.getVideoElement?.() as HTMLVideoElement | undefined;
+          const videoEl = document.getElementById('webgazerVideoFeed') as HTMLVideoElement | undefined;
           const stream = videoEl?.srcObject as MediaStream | null;
           if (stream) {
             mediaStreamRegistry.register('webgazer', stream);
           }
         } catch {
-          // getVideoElement may not exist in all WebGazer builds
+          // Video element may not exist yet
         }
+
+        // Hide WebGazer's default UI from view but keep elements in DOM
+        // (WebGazer's internal face tracking loop needs its video + canvas elements)
+        const wgContainer = document.getElementById('webgazerVideoContainer');
+        if (wgContainer) {
+          wgContainer.style.position = 'fixed';
+          wgContainer.style.left = '-9999px';
+          wgContainer.style.top = '-9999px';
+          wgContainer.style.width = '1px';
+          wgContainer.style.height = '1px';
+          wgContainer.style.overflow = 'hidden';
+          wgContainer.style.opacity = '0';
+          wgContainer.style.pointerEvents = 'none';
+        }
+        const wgGazeDot = document.getElementById('webgazerGazeDot');
+        if (wgGazeDot) wgGazeDot.style.display = 'none';
 
         // Gaze listener throttled to 5 Hz (200ms)
         wg.setGazeListener(
@@ -292,17 +299,21 @@ export function useWebgazer(
     return () => window.removeEventListener('ats:logout', handleLogout);
   }, [flushBuffer]);
 
-  // sendBeacon on unload
+  // Flush remaining readings on page unload using fetch with keepalive (supports auth headers)
   useEffect(() => {
     const handleUnload = () => {
       const readings = bufferRef.current.splice(0, bufferRef.current.length);
       if (readings.length > 0) {
-        navigator.sendBeacon(
-          '/api/webgazer/logs',
-          new Blob([JSON.stringify({ sessionId, courseId, readings })], {
-            type: 'application/json',
-          }),
-        );
+        const token = localStorage.getItem('token');
+        fetch('/api/webgazer/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId, courseId, readings }),
+          keepalive: true,
+        }).catch(() => {});
       }
     };
     window.addEventListener('beforeunload', handleUnload);

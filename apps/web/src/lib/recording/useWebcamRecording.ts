@@ -215,18 +215,23 @@ export function useWebcamRecording(
       }
       streamRef.current?.getTracks().forEach((t) => t.stop());
 
-      // Use sendBeacon for best-effort completion notification
+      // Use fetch with keepalive for best-effort completion notification (supports auth headers)
       const sid = segmentIdRef.current;
       if (sid) {
-        const payload = JSON.stringify({
-          endWallTime: new Date().toISOString(),
-          durationMs: Date.now() - segmentStartTimeRef.current,
-          fileSizeBytes: totalBytesRef.current,
-        });
-        navigator.sendBeacon(
-          `/api/recording/segments/${sid}/complete`,
-          new Blob([payload], { type: 'application/json' }),
-        );
+        const token = localStorage.getItem('token');
+        fetch(`/api/recording/segments/${sid}/complete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            endWallTime: new Date().toISOString(),
+            durationMs: Date.now() - segmentStartTimeRef.current,
+            fileSizeBytes: totalBytesRef.current,
+          }),
+          keepalive: true,
+        }).catch(() => {});
       }
     };
 

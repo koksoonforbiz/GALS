@@ -57,7 +57,7 @@ export function WebcamPreviewWindow() {
     };
   }, [attachStream]);
 
-  // Draw video frame + WebGazer face overlay onto canvas
+  // Draw video frame + face detection bounding box onto canvas
   useEffect(() => {
     if (isMinimized || !isOpen || !hasStream) return;
 
@@ -82,115 +82,50 @@ export function WebcamPreviewWindow() {
       // Draw the video frame
       ctx.drawImage(video, 0, 0, w, h);
 
-      // Try to get WebGazer's face overlay canvas for bounding box data
+      // Use WebGazer's tracker to get actual face detection positions
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wg = (window as any).webgazer;
       let drewFace = false;
 
       if (wg) {
         try {
-          // WebGazer exposes a videoElementCanvas that contains its face mesh drawing
-          const wgCanvas = wg.videoElementCanvas?.() as HTMLCanvasElement | undefined;
-          if (wgCanvas && wgCanvas.width > 0 && wgCanvas.height > 0) {
-            // WebGazer's canvas has the face mesh overlay drawn on it
-            // Extract the face data by reading its canvas content
-            const wgCtx = wgCanvas.getContext('2d');
-            if (wgCtx) {
-              const wgImageData = wgCtx.getImageData(0, 0, wgCanvas.width, wgCanvas.height);
-              const pixels = wgImageData.data;
+          const tracker = wg.getTracker?.();
+          const positions = tracker?.getPositions?.();
 
-              // Find the bounding box of non-transparent drawn elements (face mesh lines)
-              let minX = wgCanvas.width,
-                minY = wgCanvas.height,
-                maxX = 0,
-                maxY = 0;
-              let meshPixels = 0;
-
-              // Sample every 4th pixel for performance
-              for (let py = 0; py < wgCanvas.height; py += 4) {
-                for (let px = 0; px < wgCanvas.width; px += 4) {
-                  const idx = (py * wgCanvas.width + px) * 4;
-                  const a = pixels[idx + 3] ?? 0;
-                  // Non-transparent pixels that aren't the video itself (overlay drawings)
-                  const r = pixels[idx] ?? 0;
-                  const g = pixels[idx + 1] ?? 0;
-                  const b = pixels[idx + 2] ?? 0;
-                  // WebGazer face overlay uses green lines typically
-                  if (a > 128 && (g > r + 30 || (r > 200 && g > 200 && b < 100))) {
-                    meshPixels++;
-                    if (px < minX) minX = px;
-                    if (px > maxX) maxX = px;
-                    if (py < minY) minY = py;
-                    if (py > maxY) maxY = py;
-                  }
-                }
-              }
-
-              if (meshPixels > 20) {
-                // Scale from WebGazer canvas coords to our preview canvas coords
-                const scaleX = w / wgCanvas.width;
-                const scaleY = h / wgCanvas.height;
-
-                const pad = 10;
-                const bx = Math.max(0, (minX - pad) * scaleX);
-                const by = Math.max(0, (minY - pad) * scaleY);
-                const bw = Math.min(w - bx, (maxX - minX + pad * 2) * scaleX);
-                const bh = Math.min(h - by, (maxY - minY + pad * 2) * scaleY);
-
-                ctx.strokeStyle = '#22c55e';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(bx, by, bw, bh);
-
-                ctx.fillStyle = '#22c55e';
-                ctx.font = '10px sans-serif';
-                ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
-                drewFace = true;
+          // positions is an array of [x, y] face landmark coordinates
+          if (positions && positions.length > 0) {
+            // Compute bounding box from landmark positions
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const pt of positions) {
+              if (pt && pt.length >= 2) {
+                if (pt[0] < minX) minX = pt[0];
+                if (pt[0] > maxX) maxX = pt[0];
+                if (pt[1] < minY) minY = pt[1];
+                if (pt[1] > maxY) maxY = pt[1];
               }
             }
-          }
 
-          // Fallback: use WebGazer's face feedback box element position
-          if (!drewFace) {
-            const feedbackBox = document.getElementById('webgazerFaceFeedbackBox');
-            const videoContainer = document.getElementById('webgazerVideoContainer');
-            if (feedbackBox && videoContainer) {
-              const fbStyle = feedbackBox.style;
-              const vcRect = videoContainer.getBoundingClientRect();
+            if (minX < Infinity && maxX > -Infinity) {
+              // Get the source video dimensions for scaling
+              const srcW = video.videoWidth || 640;
+              const srcH = video.videoHeight || 480;
+              const scaleX = w / srcW;
+              const scaleY = h / srcH;
 
-              if (
-                fbStyle.left &&
-                fbStyle.top &&
-                fbStyle.width &&
-                fbStyle.height &&
-                vcRect.width > 0
-              ) {
-                const fbLeft = parseFloat(fbStyle.left);
-                const fbTop = parseFloat(fbStyle.top);
-                const fbWidth = parseFloat(fbStyle.width);
-                const fbHeight = parseFloat(fbStyle.height);
+              const pad = 15;
+              const bx = Math.max(0, (minX - pad) * scaleX);
+              const by = Math.max(0, (minY - pad) * scaleY);
+              const bw = Math.min(w - bx, (maxX - minX + pad * 2) * scaleX);
+              const bh = Math.min(h - by, (maxY - minY + pad * 2) * scaleY);
 
-                // Scale to our canvas
-                const scaleX = w / vcRect.width;
-                const scaleY = h / vcRect.height;
+              ctx.strokeStyle = '#22c55e';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(bx, by, bw, bh);
 
-                ctx.strokeStyle = '#22c55e';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(
-                  fbLeft * scaleX,
-                  fbTop * scaleY,
-                  fbWidth * scaleX,
-                  fbHeight * scaleY,
-                );
-
-                ctx.fillStyle = '#22c55e';
-                ctx.font = '10px sans-serif';
-                ctx.fillText(
-                  'Face detected',
-                  fbLeft * scaleX + 2,
-                  fbTop * scaleY - 4 > 0 ? fbTop * scaleY - 4 : fbTop * scaleY + 12,
-                );
-                drewFace = true;
-              }
+              ctx.fillStyle = '#22c55e';
+              ctx.font = '10px sans-serif';
+              ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
+              drewFace = true;
             }
           }
         } catch {
@@ -306,7 +241,7 @@ export function WebcamPreviewWindow() {
               <span
                 className={`w-1.5 h-1.5 rounded-full animate-pulse ${faceDetected ? 'bg-green-500' : 'bg-red-500'}`}
               />
-              <span className="text-[9px] text-white/70">{faceDetected ? 'FACE OK' : 'LIVE'}</span>
+              <span className="text-[9px] text-white/70">{faceDetected ? 'FACE OK' : 'NO FACE'}</span>
             </div>
           )}
         </div>
