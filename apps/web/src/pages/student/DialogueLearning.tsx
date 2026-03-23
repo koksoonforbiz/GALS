@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { BookOpen, Pencil, Check, X } from 'lucide-react';
+import { BookOpen, Pencil, Check, X, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -577,12 +577,15 @@ export function DialogueLearning() {
   const handleStartIntervention = useCallback(
     async (type: string) => {
       if (!activeSession) return;
+      // Capture any text the user has selected on the page
+      const selectedText =
+        window.getSelection()?.toString().trim() || 'Based on active student sources';
       try {
         const intervention = await api.post<LearningIntervention>(
           `/dialogue/sessions/${activeSession.id}/interventions`,
           {
             type,
-            selectedText: 'Based on active student sources',
+            selectedText,
           },
         );
         setPastInterventions((prev) => [intervention, ...prev]);
@@ -592,6 +595,51 @@ export function DialogueLearning() {
       }
     },
     [activeSession, toast],
+  );
+
+  const handleSaveForReview = useCallback(
+    async (data: {
+      interventionId: string;
+      interventionType: string;
+      title: string;
+      selectedText: string;
+      savedData: Record<string, unknown>;
+    }) => {
+      try {
+        await api.post('/learning-interventions/saved-reviews', {
+          ...data,
+          courseId: courseId || '',
+          contentId: undefined,
+          pageType: 'dialogue',
+        });
+        toast('success', 'Saved to Review Queue');
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Failed to save review');
+      }
+    },
+    [courseId, toast],
+  );
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await api.delete(`/dialogue/sessions/${sessionId}`);
+        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        if (activeSession?.id === sessionId) {
+          setActiveSession(null);
+          setMessages([]);
+          setStudioOutputs([]);
+          setPastInterventions([]);
+          setSources([]);
+          setActiveSourceIds(new Set());
+          setSearchParams({});
+        }
+        toast('success', 'Session deleted');
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Failed to delete session');
+      }
+    },
+    [activeSession, toast, setSearchParams],
   );
 
   // ─── Loading state ────────────────────────────────────────
@@ -638,6 +686,19 @@ export function DialogueLearning() {
           </select>
           {/* Inline rename */}
           <SessionRenameButton title={activeSession?.title || ''} onRename={handleRenameSession} />
+          {activeSession && (
+            <button
+              onClick={() => {
+                if (window.confirm('Delete this session? This cannot be undone.')) {
+                  handleDeleteSession(activeSession.id);
+                }
+              }}
+              className="text-gray-400 hover:text-red-600 p-1 rounded transition-colors"
+              title="Delete session"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
           <button
             onClick={handleCreateSession}
             className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
@@ -791,6 +852,7 @@ export function DialogueLearning() {
               onStartIntervention={handleStartIntervention}
               highlightedExcerpt={highlightedExcerpt}
               onHighlightClear={() => setHighlightedExcerpt(null)}
+              onSaveForReview={handleSaveForReview}
             />
           </div>
         </div>

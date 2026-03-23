@@ -72,6 +72,7 @@ interface StudioPanelProps {
   onStartIntervention: (type: string) => void;
   highlightedExcerpt?: string | null;
   onHighlightClear?: () => void;
+  onSaveForReview?: (data: import('../FloatingChatbot/types').SaveForReviewInput) => void;
 }
 
 const STUDIO_TOOLS = [
@@ -126,6 +127,7 @@ export function StudioPanel({
   onStartIntervention,
   highlightedExcerpt,
   onHighlightClear,
+  onSaveForReview,
 }: StudioPanelProps) {
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -234,6 +236,7 @@ export function StudioPanel({
             pastInterventions={pastInterventions}
             showPast={showPastInterventions}
             onTogglePast={() => setShowPastInterventions(!showPastInterventions)}
+            onSaveForReview={onSaveForReview}
           />
         )}
       </div>
@@ -749,6 +752,7 @@ function InterventionsTab({
   pastInterventions,
   showPast,
   onTogglePast,
+  onSaveForReview,
 }: {
   enabledInterventions: string[];
   sessionId: string | null;
@@ -757,35 +761,43 @@ function InterventionsTab({
   pastInterventions: LearningIntervention[];
   showPast: boolean;
   onTogglePast: () => void;
+  onSaveForReview?: (data: import('../FloatingChatbot/types').SaveForReviewInput) => void;
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
+  const [capturedText, setCapturedText] = useState<string>('');
 
   const handleStart = (type: string) => {
+    // Capture any text the user has selected on the page
+    const selection = window.getSelection()?.toString().trim() || '';
+    setCapturedText(selection);
     onStartIntervention(type);
     setActiveType(type);
   };
 
   const handleComplete = () => {
     setActiveType(null);
+    setCapturedText('');
   };
 
   const handleBack = () => {
     setActiveType(null);
+    setCapturedText('');
   };
 
-  const noopSaveForReview = () => {};
+  const handleSaveForReview = onSaveForReview || (() => {});
 
   // Show the active intervention view
   if (activeType) {
+    const selectedText = capturedText || 'Based on active student sources';
     const sharedProps = {
-      selectedText: 'Based on active student sources',
+      selectedText,
       courseId,
       contentId: null,
       pageType: 'dialogue' as const,
       contentTitle: 'Dialogue Session',
       onComplete: handleComplete,
       onBack: handleBack,
-      onSaveForReview: noopSaveForReview,
+      onSaveForReview: handleSaveForReview,
     };
 
     return (

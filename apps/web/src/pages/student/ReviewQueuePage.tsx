@@ -1,6 +1,54 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { useActivityLog } from '../../lib/activity-log';
+import {
+  FlaskConical,
+  Footprints,
+  Layers,
+  MessageCircleQuestion,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
+
+type InterventionType =
+  | 'PRACTICE_TESTING'
+  | 'DISTRIBUTED_PRACTICE'
+  | 'STEPWISE_LEARNING'
+  | 'INTERROGATIVE_ELABORATION';
+
+interface SavedReviewListItem {
+  id: string;
+  interventionId: string;
+  interventionType: InterventionType;
+  courseId: string;
+  contentId: string | null;
+  pageType: string | null;
+  title: string;
+  selectedText: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SavedReviewDetail extends SavedReviewListItem {
+  savedData: Record<string, unknown>;
+}
+
+interface SavedReviewsResponse {
+  items: SavedReviewListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+const TYPE_LABELS: Record<InterventionType, { icon: React.ReactNode; label: string }> = {
+  PRACTICE_TESTING: { icon: <FlaskConical size={14} />, label: 'Practice Test' },
+  STEPWISE_LEARNING: { icon: <Footprints size={14} />, label: 'Stepwise Learning' },
+  DISTRIBUTED_PRACTICE: { icon: <Layers size={14} />, label: 'Flashcards' },
+  INTERROGATIVE_ELABORATION: { icon: <MessageCircleQuestion size={14} />, label: 'Elaboration' },
+};
 
 interface DueCard {
   id: string;
@@ -50,6 +98,263 @@ function formatInterval(days: number): string {
 }
 
 export function ReviewQueuePage() {
+  const [activeTab, setActiveTab] = useState<'flashcards' | 'saved-reviews'>('flashcards');
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-xl font-bold text-gray-800 mb-4">Review Queue</h1>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 mb-6">
+        <button
+          onClick={() => setActiveTab('flashcards')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'flashcards'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Flashcards
+        </button>
+        <button
+          onClick={() => setActiveTab('saved-reviews')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'saved-reviews'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Saved Reviews
+        </button>
+      </div>
+
+      {activeTab === 'flashcards' ? <FlashcardsTab /> : <SavedReviewsTab />}
+    </div>
+  );
+}
+
+// ─── Saved Reviews Tab ──────────────────────────────────────
+
+function SavedReviewsTab() {
+  const [reviews, setReviews] = useState<SavedReviewListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<InterventionType | 'ALL'>('ALL');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedDetail, setExpandedDetail] = useState<SavedReviewDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const fetchReviews = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (typeFilter !== 'ALL') {
+        params.set('interventionType', typeFilter);
+      }
+      const data = await api.get<SavedReviewsResponse>(
+        `/learning-interventions/saved-reviews?${params}`,
+      );
+      setReviews(data.items);
+      setTotalPages(data.totalPages);
+    } catch {
+      setReviews([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, typeFilter]);
+
+  useEffect(() => {
+    void fetchReviews();
+  }, [fetchReviews]);
+
+  const handleExpand = async (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      setExpandedDetail(null);
+      return;
+    }
+    setExpandedId(id);
+    setDetailLoading(true);
+    try {
+      const detail = await api.get<SavedReviewDetail>(
+        `/learning-interventions/saved-reviews/${id}`,
+      );
+      setExpandedDetail(detail);
+    } catch {
+      setExpandedDetail(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/learning-interventions/saved-reviews/${id}`);
+      setReviews((prev) => prev.filter((r) => r.id !== id));
+      if (expandedId === id) {
+        setExpandedId(null);
+        setExpandedDetail(null);
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  if (loading) {
+    return <div className="text-center text-gray-400 py-16 animate-pulse">Loading...</div>;
+  }
+
+  if (reviews.length === 0) {
+    return (
+      <div className="text-center py-16">
+        <div className="text-4xl mb-4">{'\uD83D\uDCDA'}</div>
+        <h2 className="text-lg font-semibold text-gray-700 mb-2">No saved reviews yet</h2>
+        <p className="text-sm text-gray-500 max-w-md mx-auto">
+          Use a learning strategy (Practice Testing, Distributed Practice, etc.) from the floating
+          chatbot or the Learn tab in a dialogue session, then click &quot;Save to My Reviews&quot;
+          to see your reviews here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Filter */}
+      <div className="mb-4">
+        <select
+          value={typeFilter}
+          onChange={(e) => {
+            setTypeFilter(e.target.value as InterventionType | 'ALL');
+            setPage(1);
+          }}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+        >
+          <option value="ALL">All Types</option>
+          <option value="PRACTICE_TESTING">Practice Testing</option>
+          <option value="STEPWISE_LEARNING">Stepwise Learning</option>
+          <option value="DISTRIBUTED_PRACTICE">Flashcards</option>
+          <option value="INTERROGATIVE_ELABORATION">Elaboration</option>
+        </select>
+      </div>
+
+      {/* List */}
+      <div className="space-y-3">
+        {reviews.map((review) => {
+          const typeInfo = TYPE_LABELS[review.interventionType];
+          const isExpanded = expandedId === review.id;
+
+          return (
+            <div
+              key={review.id}
+              className="bg-white border border-gray-200 rounded-lg overflow-hidden"
+            >
+              <div
+                className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                onClick={() => handleExpand(review.id)}
+              >
+                <span className="text-gray-500">{typeInfo.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-800 truncate">{review.title}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {typeInfo.label} &middot; {new Date(review.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm('Delete this saved review?')) {
+                      handleDelete(review.id);
+                    }
+                  }}
+                  className="text-gray-400 hover:text-red-600 p-1 transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 size={14} />
+                </button>
+                {isExpanded ? (
+                  <ChevronUp size={16} className="text-gray-400" />
+                ) : (
+                  <ChevronDown size={16} className="text-gray-400" />
+                )}
+              </div>
+
+              {isExpanded && (
+                <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                  {detailLoading ? (
+                    <div className="text-sm text-gray-400 animate-pulse">Loading details...</div>
+                  ) : expandedDetail && expandedDetail.id === review.id ? (
+                    <div className="space-y-3">
+                      {/* Original text */}
+                      <div>
+                        <div className="text-xs font-medium text-gray-600 mb-1">Selected Text</div>
+                        <div className="text-xs text-gray-700 bg-yellow-50 border border-yellow-200 rounded p-2 max-h-24 overflow-y-auto">
+                          {expandedDetail.selectedText}
+                        </div>
+                      </div>
+
+                      {/* Saved data */}
+                      <div>
+                        <div className="text-xs font-medium text-gray-600 mb-1">
+                          Interaction Data
+                        </div>
+                        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 max-h-48 overflow-y-auto">
+                          <pre className="whitespace-pre-wrap break-words">
+                            {JSON.stringify(expandedDetail.savedData, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      {expandedDetail.notes && (
+                        <div>
+                          <div className="text-xs font-medium text-gray-600 mb-1">Notes</div>
+                          <div className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded p-2">
+                            {expandedDetail.notes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400">Could not load details.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 mt-6">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="text-sm text-blue-600 disabled:text-gray-300"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-gray-500">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages}
+            className="text-sm text-blue-600 disabled:text-gray-300"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Flashcards Tab ──────────────────────────────────────────
+
+function FlashcardsTab() {
   const { track } = useActivityLog();
   const [stats, setStats] = useState<Stats | null>(null);
   const [cards, setCards] = useState<DueCard[]>([]);
@@ -148,20 +453,13 @@ export function ReviewQueuePage() {
 
   // ─── Loading ──────────────────────────────────────────
   if (phase === 'loading') {
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-xl font-bold text-gray-800 mb-4">Review Queue</h1>
-        <div className="text-center text-gray-400 py-16 animate-pulse">Loading...</div>
-      </div>
-    );
+    return <div className="text-center text-gray-400 py-16 animate-pulse">Loading...</div>;
   }
 
   // ─── Empty State ──────────────────────────────────────
   if (phase === 'empty') {
     return (
-      <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-xl font-bold text-gray-800 mb-4">Review Queue</h1>
-
+      <div>
         {/* Stats bar */}
         {stats && (
           <div className="flex items-center gap-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3 mb-6">
@@ -194,49 +492,44 @@ export function ReviewQueuePage() {
     }
 
     return (
-      <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-xl font-bold text-gray-800 mb-4">Review Queue</h1>
-        <div className="text-center py-8">
-          <div className="text-4xl mb-3">{'\u2705'}</div>
-          <h2 className="text-lg font-semibold text-gray-700 mb-2">Review session complete!</h2>
-          <p className="text-sm text-gray-600 mb-4">You reviewed {sessionResults.length} cards:</p>
+      <div className="text-center py-8">
+        <div className="text-4xl mb-3">{'\u2705'}</div>
+        <h2 className="text-lg font-semibold text-gray-700 mb-2">Review session complete!</h2>
+        <p className="text-sm text-gray-600 mb-4">You reviewed {sessionResults.length} cards:</p>
 
-          <div className="flex items-center justify-center gap-3 mb-6">
-            {Object.entries(counts).map(([q, count]) => {
-              const style = RATING_STYLES[q as keyof typeof RATING_STYLES];
-              return (
-                <span
-                  key={q}
-                  className={`text-sm px-3 py-1 rounded-full border ${style?.color || 'bg-gray-100'}`}
-                >
-                  {count} {style?.label || q}
-                </span>
-              );
-            })}
-          </div>
-
-          {counts['again'] && counts['again'] > 0 && (
-            <p className="text-xs text-gray-500 mb-4">
-              The &quot;Again&quot; cards will reappear tomorrow.
-            </p>
-          )}
-
-          <button
-            onClick={fetchData}
-            className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Back to Dashboard
-          </button>
+        <div className="flex items-center justify-center gap-3 mb-6">
+          {Object.entries(counts).map(([q, count]) => {
+            const style = RATING_STYLES[q as keyof typeof RATING_STYLES];
+            return (
+              <span
+                key={q}
+                className={`text-sm px-3 py-1 rounded-full border ${style?.color || 'bg-gray-100'}`}
+              >
+                {count} {style?.label || q}
+              </span>
+            );
+          })}
         </div>
+
+        {counts['again'] && counts['again'] > 0 && (
+          <p className="text-xs text-gray-500 mb-4">
+            The &quot;Again&quot; cards will reappear tomorrow.
+          </p>
+        )}
+
+        <button
+          onClick={fetchData}
+          className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Back to Dashboard
+        </button>
       </div>
     );
   }
 
   // ─── Card Front / Back ──────────────────────────────────
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-xl font-bold text-gray-800 mb-4">Review Queue</h1>
-
+    <div>
       {/* Stats bar */}
       {stats && (
         <div className="flex items-center gap-4 text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3 mb-6">
