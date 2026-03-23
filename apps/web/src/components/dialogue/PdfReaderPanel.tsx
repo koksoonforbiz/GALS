@@ -304,16 +304,17 @@ export function PdfReaderPanel({
           </Document>
         )}
 
-        {/* Selection popup */}
-        {selection && (
-          <SelectionPopup
-            selection={selection}
-            onSendToIntervention={handleSendToIntervention}
-            onSaveToNotes={handleSaveToNotes}
-            onDismiss={handleDismissSelection}
-          />
-        )}
       </div>
+
+      {/* Selection popup – rendered outside scroll container so mousedown dismiss doesn't intercept clicks */}
+      {selection && (
+        <SelectionPopup
+          selection={selection}
+          onSendToIntervention={handleSendToIntervention}
+          onSaveToNotes={handleSaveToNotes}
+          onDismiss={handleDismissSelection}
+        />
+      )}
     </div>
   );
 }
@@ -377,6 +378,7 @@ function SelectionPopup({
       ref={popupRef}
       className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-2 flex flex-col gap-1 min-w-[220px]"
       style={{ top, left }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Selected text preview */}
       <div className="px-3 py-1.5 text-xs text-gray-400 italic truncate border-b border-gray-100 mb-1">
