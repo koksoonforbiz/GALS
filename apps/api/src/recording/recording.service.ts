@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
+import { PyfeatService } from '../pyfeat/pyfeat.service';
 import type { RecordingConfig, RecordingSegment } from '@prisma/client';
 import type { RecordingConfigDto } from './dto/recording-config.dto';
 import type { CreateSegmentDto } from './dto/create-segment.dto';
@@ -13,6 +14,8 @@ export class RecordingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly blob: BlobService,
+    @Inject(forwardRef(() => PyfeatService))
+    private readonly pyfeatService: PyfeatService,
   ) {}
 
   async getConfig(courseId: string): Promise<RecordingConfig> {
@@ -90,6 +93,27 @@ export class RecordingService {
     this.logger.log(
       `Segment ${segmentId} completed: ${updated.filename} (${dto.fileSizeBytes} bytes, ${dto.durationMs}ms)`,
     );
+
+    // If py-feat is enabled for this course, auto-enqueue a processing job
+    try {
+      const pyfeatConfig = await this.pyfeatService.getConfig(updated.courseId);
+      if (pyfeatConfig.isEnabled) {
+        const job = await this.pyfeatService.enqueueJob({
+          studentId: updated.studentId,
+          sessionId: updated.sessionId,
+          courseId: updated.courseId,
+          sourceMinioKey: updated.minioKey,
+          clipStartWallTime: updated.startWallTime.toISOString(),
+        });
+        await this.prisma.recordingSegment.update({
+          where: { id: updated.id },
+          data: { pyfeatJobId: job.id },
+        });
+        this.logger.log(`Auto-enqueued py-feat job ${job.id} for segment ${segmentId}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to enqueue py-feat job for segment ${segmentId}: ${err}`);
+    }
 
     return updated;
   }

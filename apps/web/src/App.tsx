@@ -36,6 +36,7 @@ import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
 import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
 import { DialogueLearning } from './pages/student/DialogueLearning';
 import { DialogueSessionHistory } from './pages/student/DialogueSessionHistory';
+import { BiometricsWrapper } from './components/student/BiometricsWrapper';
 
 function getToken() {
   return localStorage.getItem('token');
@@ -197,7 +198,9 @@ function App() {
                   path="/student/attempt/:attemptId"
                   element={
                     <RoleRoute allowedRoles={['student']}>
-                      <AttemptPage />
+                      <BiometricsWrapper>
+                        <AttemptPage />
+                      </BiometricsWrapper>
                     </RoleRoute>
                   }
                 />
@@ -221,7 +224,9 @@ function App() {
                   path="/student/courses/:courseId"
                   element={
                     <RoleRoute allowedRoles={['student']}>
-                      <StudentCourseViewPage />
+                      <BiometricsWrapper>
+                        <StudentCourseViewPage />
+                      </BiometricsWrapper>
                     </RoleRoute>
                   }
                 />
@@ -237,7 +242,9 @@ function App() {
                   path="/student/courses/:courseId/dialogue"
                   element={
                     <RoleRoute allowedRoles={['student']}>
-                      <DialogueLearning />
+                      <BiometricsWrapper>
+                        <DialogueLearning />
+                      </BiometricsWrapper>
                     </RoleRoute>
                   }
                 />

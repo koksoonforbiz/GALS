@@ -31,6 +31,9 @@ import { DialogueModule } from './dialogue';
 import { DialogueNotesModule } from './dialogue-notes';
 import { ActivityLogModule } from './activity-log';
 import { RecordingModule } from './recording';
+import { PupilSizeModule } from './pupil-size';
+import { WebgazerModule } from './webgazer';
+import { PyfeatModule } from './pyfeat';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -73,6 +76,9 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     DialogueNotesModule,
     ActivityLogModule,
     RecordingModule,
+    PupilSizeModule,
+    WebgazerModule,
+    PyfeatModule,
   ],
   controllers: [HealthController],
 })

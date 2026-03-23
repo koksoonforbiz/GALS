@@ -20,6 +20,9 @@ import LearningPathPanel from '../../components/LearningPathPanel';
 import { DialogueCourseSettingsForm } from '../../components/teacher/DialogueCourseSettingsForm';
 import { DialogueActivityPanel } from '../../components/teacher/DialogueActivityPanel';
 import { RecordingSettings } from '../../components/teacher/biometrics/RecordingSettings';
+import { PupilSizeSettings } from '../../components/teacher/biometrics/PupilSizeSettings';
+import { WebgazerSettings } from '../../components/teacher/biometrics/WebgazerSettings';
+import { PyfeatSettings } from '../../components/teacher/biometrics/PyfeatSettings';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -1410,7 +1413,15 @@ export function CourseBuilderPage() {
           <div className="border border-gray-200 rounded-lg p-4">
             <RecordingSettings courseId={courseId!} />
           </div>
-          {/* Future: PupilSizeSettings, WebgazerSettings, PyfeatSettings will be added here */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PupilSizeSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <WebgazerSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PyfeatSettings courseId={courseId!} />
+          </div>
         </div>
       )}
 

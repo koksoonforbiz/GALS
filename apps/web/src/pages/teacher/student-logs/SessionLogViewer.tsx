@@ -6,6 +6,9 @@ import { TimelineTab } from './tabs/TimelineTab';
 import { ConversationTab } from './tabs/ConversationTab';
 import { InterventionTab } from './tabs/InterventionTab';
 import { RecordingLogViewer } from '../../../components/teacher/biometrics/RecordingLogViewer';
+import { PupilSizeLogViewer } from '../../../components/teacher/biometrics/PupilSizeLogViewer';
+import { WebgazerLogViewer } from '../../../components/teacher/biometrics/WebgazerLogViewer';
+import { PyfeatLogViewer } from '../../../components/teacher/biometrics/PyfeatLogViewer';
 
 const TABS = ['Summary', 'Timeline', 'Conversations', 'Interventions', 'Biometrics'] as const;
 type Tab = (typeof TABS)[number];
@@ -84,9 +87,11 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
             {activeTab === 'Conversations' && <ConversationTab logs={logs} />}
             {activeTab === 'Interventions' && <InterventionTab logs={logs} />}
             {activeTab === 'Biometrics' && courseId && (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <RecordingLogViewer studentId={studentId} courseId={courseId} />
-                {/* Future: PupilSizeLogViewer, WebgazerLogViewer, PyfeatLogViewer */}
+                <PupilSizeLogViewer studentId={studentId} courseId={courseId} />
+                <WebgazerLogViewer studentId={studentId} courseId={courseId} />
+                <PyfeatLogViewer studentId={studentId} courseId={courseId} />
               </div>
             )}
             {activeTab === 'Biometrics' && !courseId && (

@@ -8,3 +8,6 @@ export * from './dialogue.schemas';
 export * from './dialogue-notes.schema';
 export * from './blob.schema';
 export * from './recording.schema';
+export * from './pupil-size.schema';
+export * from './webgazer.schema';
+export * from './pyfeat.schema';
