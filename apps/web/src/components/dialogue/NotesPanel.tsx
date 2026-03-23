@@ -37,6 +37,7 @@ interface PendingHighlight {
   sourceDocumentId: string;
   documentName: string;
   pageNumber?: number;
+  color?: string;
 }
 
 interface NotesPanelProps {
@@ -45,6 +46,7 @@ interface NotesPanelProps {
   pendingHighlight?: PendingHighlight | null;
   onPendingHighlightConsumed: () => void;
   onSendToIntervention?: (text: string) => void;
+  onNotesChanged?: () => void;
 }
 
 const COLOR_MAP: Record<string, string> = {
@@ -69,6 +71,7 @@ export function NotesPanel({
   pendingHighlight,
   onPendingHighlightConsumed,
   onSendToIntervention,
+  onNotesChanged,
 }: NotesPanelProps) {
   const { toast } = useToast();
   const [notes, setNotes] = useState<DialogueNote[]>([]);
@@ -107,7 +110,7 @@ export function NotesPanel({
     setIsCreating(true);
     setNewHighlight(pendingHighlight);
     setNewNoteText('');
-    setNewNoteColor('yellow');
+    setNewNoteColor(pendingHighlight.color || 'yellow');
     onPendingHighlightConsumed();
     // Focus textarea after render
     setTimeout(() => newNoteRef.current?.focus(), 100);
@@ -130,6 +133,7 @@ export function NotesPanel({
       setNewNoteText('');
       setNewHighlight(null);
       toast('success', 'Note saved');
+      onNotesChanged?.();
     } catch {
       toast('error', 'Failed to save note');
     }
@@ -156,6 +160,7 @@ export function NotesPanel({
       await api.delete(`/dialogue-notes/${id}`);
       setNotes((prev) => prev.filter((n) => n.id !== id));
       toast('success', 'Note deleted');
+      onNotesChanged?.();
     } catch {
       toast('error', 'Failed to delete note');
     }

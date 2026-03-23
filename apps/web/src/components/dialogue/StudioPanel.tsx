@@ -69,6 +69,7 @@ interface PendingHighlight {
   sourceDocumentId: string;
   documentName: string;
   pageNumber?: number;
+  color?: string;
 }
 
 type StudioMode = 'studio' | 'guide' | 'interventions' | 'notes';
@@ -95,6 +96,7 @@ interface StudioPanelProps {
   onInterventionPrefillConsumed?: () => void;
   pendingHighlight?: PendingHighlight | null;
   onPendingHighlightConsumed?: () => void;
+  onNotesChanged?: () => void;
 }
 
 const STUDIO_TOOLS = [
@@ -154,6 +156,7 @@ export function StudioPanel({
   onInterventionPrefillConsumed,
   pendingHighlight,
   onPendingHighlightConsumed,
+  onNotesChanged,
 }: StudioPanelProps) {
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -283,6 +286,7 @@ export function StudioPanel({
               onModeChange('interventions');
               onStartIntervention('INTERROGATIVE_ELABORATION');
             }}
+            onNotesChanged={onNotesChanged}
           />
         )}
         {mode === 'notes' && !sessionId && (

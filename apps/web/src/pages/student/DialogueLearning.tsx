@@ -11,7 +11,10 @@ import { SourcesPanel } from '../../components/dialogue/SourcesPanel';
 import { ChatPanel } from '../../components/dialogue/ChatPanel';
 import { StudioPanel } from '../../components/dialogue/StudioPanel';
 import { PdfReaderPanel } from '../../components/dialogue/PdfReaderPanel';
-import type { InterventionStrategy } from '../../components/dialogue/PdfReaderPanel';
+import type {
+  InterventionStrategy,
+  HighlightEntry,
+} from '../../components/dialogue/PdfReaderPanel';
 import type { StudentSourceDocument } from '../../components/dialogue/SourceCard';
 import type { DialogueMessage, DialogueSession } from '../../components/dialogue/ChatPanel';
 import type {
@@ -91,8 +94,10 @@ export function DialogueLearning() {
     sourceDocumentId: string;
     documentName: string;
     pageNumber?: number;
+    color?: string;
   }
   const [pendingHighlight, setPendingHighlight] = useState<PendingHighlight | null>(null);
+  const [pdfHighlights, setPdfHighlights] = useState<HighlightEntry[]>([]);
   const [panelSizes] = useState(() => {
     try {
       const stored = localStorage.getItem(PANEL_SIZES_KEY);
@@ -596,6 +601,31 @@ export function DialogueLearning() {
 
   // ─── PDF Reader handlers ───────────────────────────────
 
+  const fetchPdfHighlights = useCallback(async (sessionId: string) => {
+    try {
+      const notes = await api.get<
+        Array<{
+          id: string;
+          highlightedText: string | null;
+          pageNumber: number | null;
+          color: string;
+        }>
+      >(`/dialogue-notes?sessionId=${sessionId}`);
+      setPdfHighlights(
+        notes
+          .filter((n) => n.highlightedText)
+          .map((n) => ({
+            id: n.id,
+            text: n.highlightedText!,
+            pageNumber: n.pageNumber,
+            color: n.color,
+          })),
+      );
+    } catch {
+      // non-critical
+    }
+  }, []);
+
   const handleReadPdf = useCallback(
     async (source: StudentSourceDocument) => {
       try {
@@ -608,11 +638,14 @@ export function DialogueLearning() {
           documentName: source.originalName,
           documentUrl: url,
         });
+        if (activeSession) {
+          fetchPdfHighlights(activeSession.id);
+        }
       } catch (err) {
         toast('error', err instanceof Error ? err.message : 'Failed to get PDF URL');
       }
     },
-    [toast],
+    [toast, activeSession, fetchPdfHighlights],
   );
 
   const handleSendToIntervention = useCallback(
@@ -625,7 +658,7 @@ export function DialogueLearning() {
   );
 
   const handleSaveHighlightToNotes = useCallback(
-    (text: string, pageNumber?: number) => {
+    (text: string, pageNumber?: number, color?: string) => {
       if (centerPanel.type !== 'pdf-reader') return;
       setRightPanelMode('notes');
       setPendingHighlight({
@@ -633,10 +666,11 @@ export function DialogueLearning() {
         sourceDocumentId: centerPanel.documentId,
         documentName: centerPanel.documentName,
         pageNumber,
+        color,
       });
       toast('info', 'Saving to Notes...');
     },
-    [centerPanel, toast],
+    [centerPanel, toast, activeSession, fetchPdfHighlights],
   );
 
   const handleStudioGenerate = useCallback(
@@ -944,6 +978,7 @@ export function DialogueLearning() {
                 onClose={() => setCenterPanel({ type: 'chat' })}
                 onSendToIntervention={handleSendToIntervention}
                 onSaveHighlightToNotes={handleSaveHighlightToNotes}
+                highlights={pdfHighlights}
               />
             )}
           </div>
@@ -996,6 +1031,9 @@ export function DialogueLearning() {
               onInterventionPrefillConsumed={() => setInterventionPrefill(null)}
               pendingHighlight={pendingHighlight}
               onPendingHighlightConsumed={() => setPendingHighlight(null)}
+              onNotesChanged={() => {
+                if (activeSession) fetchPdfHighlights(activeSession.id);
+              }}
             />
           </div>
         </div>

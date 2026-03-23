@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -15,6 +15,7 @@ import {
   List,
   CalendarDays,
   Bookmark,
+  Highlighter,
 } from 'lucide-react';
 
 type InterventionStrategy =
@@ -23,13 +24,21 @@ type InterventionStrategy =
   | 'stepwise'
   | 'distributed_practice';
 
+interface HighlightEntry {
+  id: string;
+  text: string;
+  pageNumber: number | null;
+  color: string;
+}
+
 interface PdfReaderPanelProps {
   documentId: string;
   documentName: string;
   documentUrl: string;
   onClose: () => void;
   onSendToIntervention: (text: string, strategy: InterventionStrategy) => void;
-  onSaveHighlightToNotes: (text: string, pageNumber?: number) => void;
+  onSaveHighlightToNotes: (text: string, pageNumber?: number, color?: string) => void;
+  highlights?: HighlightEntry[];
 }
 
 export function PdfReaderPanel({
@@ -38,6 +47,7 @@ export function PdfReaderPanel({
   onClose,
   onSendToIntervention,
   onSaveHighlightToNotes,
+  highlights = [],
 }: PdfReaderPanelProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -143,11 +153,22 @@ export function PdfReaderPanel({
     onSendToIntervention(text, strategy);
   };
 
-  const handleSaveToNotes = (text: string) => {
+  const handleSaveToNotes = (text: string, color?: string) => {
     setSelection(null);
     window.getSelection()?.removeAllRanges();
-    onSaveHighlightToNotes(text, currentPage);
+    onSaveHighlightToNotes(text, currentPage, color);
   };
+
+  // Group highlights by page number for overlay rendering
+  const highlightsByPage = useMemo(() => {
+    const map = new Map<number, HighlightEntry[]>();
+    for (const h of highlights) {
+      const page = h.pageNumber ?? 1;
+      if (!map.has(page)) map.set(page, []);
+      map.get(page)!.push(h);
+    }
+    return map;
+  }, [highlights]);
 
   const handleDismissSelection = () => {
     setSelection(null);
@@ -238,7 +259,7 @@ export function PdfReaderPanel({
                   ref={(el) => {
                     if (el) pageRefs.current.set(pageNum, el);
                   }}
-                  className="bg-white shadow-md rounded mx-auto"
+                  className="bg-white shadow-md rounded mx-auto relative"
                 >
                   <Page
                     pageNumber={pageNum}
@@ -247,6 +268,27 @@ export function PdfReaderPanel({
                     renderTextLayer={true}
                     renderAnnotationLayer={true}
                   />
+                  {/* Highlight indicators for this page */}
+                  {(highlightsByPage.get(pageNum) || []).length > 0 && (
+                    <div className="absolute top-1 right-1 z-10 flex flex-col gap-1">
+                      {(highlightsByPage.get(pageNum) || []).map((h) => (
+                        <div
+                          key={h.id}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs shadow-sm border border-gray-200 bg-white/90 max-w-[180px]"
+                          title={h.text}
+                        >
+                          <Highlighter
+                            size={10}
+                            style={{ color: HIGHLIGHT_COLORS[h.color] || HIGHLIGHT_COLORS.yellow }}
+                          />
+                          <span className="truncate text-gray-600">
+                            {h.text.slice(0, 40)}
+                            {h.text.length > 40 ? '...' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -267,12 +309,22 @@ export function PdfReaderPanel({
   );
 }
 
-// ─── Selection Popup (inline for Stage 2) ────────────────
+// ─── Highlight color mapping ─────────────────────────────
+
+const HIGHLIGHT_COLORS: Record<string, string> = {
+  yellow: '#facc15',
+  green: '#4ade80',
+  blue: '#60a5fa',
+  pink: '#f472b6',
+  purple: '#a78bfa',
+};
+
+// ─── Selection Popup ─────────────────────────────────────
 
 interface SelectionPopupProps {
   selection: { text: string; boundingRect: DOMRect };
   onSendToIntervention: (text: string, strategy: InterventionStrategy) => void;
-  onSaveToNotes: (text: string) => void;
+  onSaveToNotes: (text: string, color?: string) => void;
   onDismiss: () => void;
 }
 
@@ -283,14 +335,15 @@ function SelectionPopup({
   onDismiss,
 }: SelectionPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
+  const [showHighlightColors, setShowHighlightColors] = useState(false);
 
   // Position calculation
   const { boundingRect, text } = selection;
-  const popupHeight = 140;
+  const popupHeight = showHighlightColors ? 220 : 190;
   const top = Math.max(8, boundingRect.top - popupHeight - 8);
   const left = Math.max(
     8,
-    Math.min(window.innerWidth - 220, boundingRect.left + boundingRect.width / 2 - 110),
+    Math.min(window.innerWidth - 240, boundingRect.left + boundingRect.width / 2 - 120),
   );
 
   // Click outside to dismiss
@@ -313,9 +366,48 @@ function SelectionPopup({
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-2 flex flex-col gap-1 min-w-[200px]"
+      className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-2 flex flex-col gap-1 min-w-[220px]"
       style={{ top, left }}
     >
+      {/* Selected text preview */}
+      <div className="px-3 py-1.5 text-xs text-gray-400 italic truncate border-b border-gray-100 mb-1">
+        &quot;{text.slice(0, 60)}
+        {text.length > 60 ? '...' : ''}&quot;
+      </div>
+
+      {/* Highlight & Note section */}
+      <button
+        onClick={() => setShowHighlightColors(!showHighlightColors)}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-amber-50 text-amber-600 w-full text-left transition-colors font-medium"
+      >
+        <Highlighter size={14} />
+        Highlight &amp; Note
+      </button>
+      {showHighlightColors && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5">
+          {Object.entries(HIGHLIGHT_COLORS).map(([name, hex]) => (
+            <button
+              key={name}
+              onClick={() => onSaveToNotes(text, name)}
+              className="w-6 h-6 rounded-full border-2 border-gray-200 hover:border-gray-500 hover:scale-110 transition-all"
+              style={{ backgroundColor: hex }}
+              title={`Highlight ${name}`}
+            />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => onSaveToNotes(text)}
+        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-amber-50 text-amber-600 w-full text-left transition-colors"
+      >
+        <Bookmark size={14} />
+        Save to Notes
+      </button>
+
+      <div className="border-t border-gray-100 my-1" />
+
+      {/* Intervention strategies */}
       <button
         onClick={() => onSendToIntervention(text, 'practice_testing')}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-indigo-50 text-gray-700 w-full text-left transition-colors"
@@ -344,16 +436,8 @@ function SelectionPopup({
         <CalendarDays size={14} />
         Spaced Rep
       </button>
-      <div className="border-t border-gray-100 my-1" />
-      <button
-        onClick={() => onSaveToNotes(text)}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-amber-50 text-amber-600 w-full text-left transition-colors"
-      >
-        <Bookmark size={14} />
-        Save to Notes
-      </button>
     </div>
   );
 }
 
-export type { PdfReaderPanelProps, InterventionStrategy };
+export type { PdfReaderPanelProps, InterventionStrategy, HighlightEntry };
