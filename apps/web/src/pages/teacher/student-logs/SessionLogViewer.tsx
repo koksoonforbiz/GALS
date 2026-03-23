@@ -5,16 +5,18 @@ import { SummaryTab } from './tabs/SummaryTab';
 import { TimelineTab } from './tabs/TimelineTab';
 import { ConversationTab } from './tabs/ConversationTab';
 import { InterventionTab } from './tabs/InterventionTab';
+import { RecordingLogViewer } from '../../../components/teacher/biometrics/RecordingLogViewer';
 
-const TABS = ['Summary', 'Timeline', 'Conversations', 'Interventions'] as const;
+const TABS = ['Summary', 'Timeline', 'Conversations', 'Interventions', 'Biometrics'] as const;
 type Tab = (typeof TABS)[number];
 
 interface Props {
   sessionId: string;
   studentId: string;
+  courseId?: string;
 }
 
-export function SessionLogViewer({ sessionId, studentId: _studentId }: Props) {
+export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('Summary');
   const { logs, isLoading: logsLoading } = useSessionLogs(sessionId);
   const { summary, isLoading: summaryLoading } = useSessionSummary(sessionId);
@@ -81,6 +83,17 @@ export function SessionLogViewer({ sessionId, studentId: _studentId }: Props) {
             {activeTab === 'Timeline' && <TimelineTab logs={logs} />}
             {activeTab === 'Conversations' && <ConversationTab logs={logs} />}
             {activeTab === 'Interventions' && <InterventionTab logs={logs} />}
+            {activeTab === 'Biometrics' && courseId && (
+              <div className="space-y-6">
+                <RecordingLogViewer studentId={studentId} courseId={courseId} />
+                {/* Future: PupilSizeLogViewer, WebgazerLogViewer, PyfeatLogViewer */}
+              </div>
+            )}
+            {activeTab === 'Biometrics' && !courseId && (
+              <div className="text-sm text-gray-400 text-center py-8">
+                No course associated with this session.
+              </div>
+            )}
           </>
         )}
       </div>

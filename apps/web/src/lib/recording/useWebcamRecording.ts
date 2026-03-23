@@ -1,0 +1,242 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { api } from '../api';
+import { toWallTime } from '../biometrics/time';
+
+export interface RecordingState {
+  isActive: boolean;
+  isUploading: boolean;
+  segmentId: string | null;
+  startWallTime: Date | null;
+  wallClockOffset: number;
+  error: string | null;
+}
+
+const MAX_SEGMENT_BYTES = 50 * 1024 * 1024; // 50 MB auto-rotate
+
+function getPreferredMimeType(): string {
+  const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  for (const mt of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mt)) return mt;
+  }
+  return 'video/webm';
+}
+
+export function useWebcamRecording(
+  courseId: string,
+  sessionId: string,
+  wallClockOffset: number,
+  isEnabled: boolean,
+  hasConsent: boolean,
+  onRecordingActiveChange?: (active: boolean) => void,
+): RecordingState {
+  const [isActive, setIsActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [segmentId, setSegmentId] = useState<string | null>(null);
+  const [startWallTime, setStartWallTime] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const totalBytesRef = useRef(0);
+  const segmentIndexRef = useRef(0);
+  const segmentIdRef = useRef<string | null>(null);
+  const segmentStartTimeRef = useRef<number>(0);
+  const uploadUrlRef = useRef<string | null>(null);
+  const isStoppingRef = useRef(false);
+
+  const toWall = useCallback(
+    (perfNow: number) => toWallTime(wallClockOffset)(perfNow),
+    [wallClockOffset],
+  );
+
+  const uploadSegment = useCallback(
+    async (blob: Blob, currentSegmentId: string, startTime: number) => {
+      const url = uploadUrlRef.current;
+      if (!url || blob.size === 0) return;
+
+      setIsUploading(true);
+      try {
+        // Direct PUT to presigned MinIO URL
+        await fetch(url, {
+          method: 'PUT',
+          body: blob,
+          headers: { 'Content-Type': blob.type || 'video/webm' },
+        });
+
+        const endWallTime = new Date().toISOString();
+        const durationMs = Date.now() - startTime;
+
+        await api.patch(`/recording/segments/${currentSegmentId}/complete`, {
+          endWallTime,
+          durationMs,
+          fileSizeBytes: blob.size,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        setError(msg);
+        try {
+          await api.patch(`/recording/segments/${currentSegmentId}/fail`, {
+            error: msg,
+          });
+        } catch {
+          // best effort
+        }
+      } finally {
+        setIsUploading(false);
+      }
+    },
+    [],
+  );
+
+  const startRecording = useCallback(async () => {
+    if (!isEnabled || !hasConsent || !courseId || !sessionId) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, frameRate: 15 },
+        audio: false,
+      });
+      streamRef.current = stream;
+
+      const startWall = toWall(performance.now());
+      const { segmentId: sid, uploadUrl } = await api.post<{
+        segmentId: string;
+        uploadUrl: string;
+        minioKey: string;
+      }>('/recording/segments/initiate', {
+        sessionId,
+        courseId,
+        startWallTime: startWall,
+        segmentIndex: segmentIndexRef.current,
+        mimeType: getPreferredMimeType(),
+      });
+
+      segmentIdRef.current = sid;
+      uploadUrlRef.current = uploadUrl;
+      setSegmentId(sid);
+      setStartWallTime(new Date(startWall));
+      segmentStartTimeRef.current = Date.now();
+      chunksRef.current = [];
+      totalBytesRef.current = 0;
+
+      const mimeType = getPreferredMimeType();
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          totalBytesRef.current += e.data.size;
+
+          // Auto-rotate at 50 MB
+          if (totalBytesRef.current >= MAX_SEGMENT_BYTES && !isStoppingRef.current) {
+            isStoppingRef.current = true;
+            recorder.stop();
+          }
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        const currentSid = segmentIdRef.current;
+        const startTime = segmentStartTimeRef.current;
+
+        if (currentSid && blob.size > 0) {
+          await uploadSegment(blob, currentSid, startTime);
+        }
+
+        // If auto-rotated, start a new segment
+        if (isStoppingRef.current && streamRef.current?.active) {
+          isStoppingRef.current = false;
+          segmentIndexRef.current += 1;
+          startRecording();
+        }
+      };
+
+      recorder.start(1000); // 1-second time slices
+      setIsActive(true);
+      setError(null);
+      onRecordingActiveChange?.(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to start recording';
+      setError(msg);
+      setIsActive(false);
+      onRecordingActiveChange?.(false);
+    }
+  }, [courseId, sessionId, isEnabled, hasConsent, toWall, uploadSegment, onRecordingActiveChange]);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setIsActive(false);
+    onRecordingActiveChange?.(false);
+  }, [onRecordingActiveChange]);
+
+  // Start recording on mount if enabled + consent
+  useEffect(() => {
+    if (isEnabled && hasConsent) {
+      startRecording();
+    }
+    return () => {
+      stopRecording();
+    };
+  }, [isEnabled, hasConsent]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle page visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stopRecording();
+      } else if (isEnabled && hasConsent) {
+        segmentIndexRef.current += 1;
+        startRecording();
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+
+      // Use sendBeacon for best-effort completion notification
+      const sid = segmentIdRef.current;
+      if (sid) {
+        const payload = JSON.stringify({
+          endWallTime: new Date().toISOString(),
+          durationMs: Date.now() - segmentStartTimeRef.current,
+          fileSizeBytes: totalBytesRef.current,
+        });
+        navigator.sendBeacon(
+          `/api/recording/segments/${sid}/complete`,
+          new Blob([payload], { type: 'application/json' }),
+        );
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [isEnabled, hasConsent, startRecording, stopRecording]);
+
+  return {
+    isActive,
+    isUploading,
+    segmentId,
+    startWallTime,
+    wallClockOffset,
+    error,
+  };
+}

@@ -141,6 +141,20 @@ enum MessageRole {
   SYSTEM
 }
 
+enum RecordingUploadStatus {
+  PENDING
+  UPLOADING
+  COMPLETED
+  FAILED
+}
+
+enum PyfeatJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 enum StudioOutputType {
   BRIEFING_DOC
   FLASHCARD_SET
@@ -195,6 +209,32 @@ enum ActivityAction {
 
   // Feedback
   FEEDBACK_RECEIVED
+
+  // Recording (Feature 04)
+  RECORDING_STARTED
+  RECORDING_STOPPED
+  RECORDING_SEGMENT_UPLOADED
+  RECORDING_UPLOAD_FAILED
+  RECORDING_RESUMED
+
+  // Pupil Size (Feature 01)
+  PUPIL_SIZE_TRACKING_STARTED
+  PUPIL_SIZE_TRACKING_STOPPED
+  PUPIL_SIZE_BATCH_SUBMITTED
+
+  // WebGazer (Feature 02)
+  WEBGAZER_TRACKING_STARTED
+  WEBGAZER_TRACKING_STOPPED
+  WEBGAZER_CALIBRATION_STARTED
+  WEBGAZER_CALIBRATION_COMPLETED
+  WEBGAZER_CALIBRATION_SKIPPED
+  WEBGAZER_BATCH_SUBMITTED
+  WEBGAZER_RECALIBRATION_PROMPTED
+
+  // py-feat (Feature 03)
+  PYFEAT_JOB_ENQUEUED
+  PYFEAT_JOB_COMPLETED
+  PYFEAT_JOB_FAILED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -239,6 +279,14 @@ model User {
   activityLogs               ActivityLog[]
   sessionSummaries           SessionSummary[]
 
+  // Biometrics relations
+  recordingSegments          RecordingSegment[]
+  recordingConsents          RecordingConsent[]
+  pupilSizeLogs              PupilSizeLog[]
+  webgazerLogs               WebgazerLog[]
+  webgazerCalibrations       WebgazerCalibrationEvent[]
+  pyfeatJobs                 PyfeatJob[]
+
   @@map("users")
 }
 
@@ -268,6 +316,18 @@ model Course {
   studentDocuments    StudentSourceDocument[]
   dialogueSessions    DialogueSession[]
   studentSessions     StudentSession[]
+
+  // Biometrics relations
+  recordingConfig     RecordingConfig?
+  recordingSegments   RecordingSegment[]
+  recordingConsents   RecordingConsent[]
+  pupilSizeConfig     PupilSizeConfig?
+  pupilSizeLogs       PupilSizeLog[]
+  webgazerConfig      WebgazerConfig?
+  webgazerLogs        WebgazerLog[]
+  webgazerCalibrations WebgazerCalibrationEvent[]
+  pyfeatConfig        PyfeatConfig?
+  pyfeatJobs          PyfeatJob[]
 
   @@index([teacherId])
   @@map("courses")
@@ -1301,6 +1361,13 @@ model StudentSession {
   activityLogs  ActivityLog[]
   summary       SessionSummary?
 
+  // Biometrics relations
+  recordingSegments   RecordingSegment[]
+  pupilSizeLogs       PupilSizeLog[]
+  webgazerLogs        WebgazerLog[]
+  webgazerCalibrations WebgazerCalibrationEvent[]
+  pyfeatJobs          PyfeatJob[]
+
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -1386,4 +1453,212 @@ model SessionSummary {
 
   @@index([userId])
   @@map("session_summaries")
+}
+
+// ─── Biometrics: Recording (Feature 04) ─────────────────
+
+model RecordingConfig {
+  id        String   @id @default(cuid())
+  courseId   String   @unique @map("course_id") @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("recording_configs")
+}
+
+model RecordingSegment {
+  id              String                @id @default(cuid())
+  studentId       String                @map("student_id") @db.Uuid
+  student         User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId       String                @map("session_id") @db.Uuid
+  session         StudentSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courseId         String                @map("course_id") @db.Uuid
+  course          Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  minioKey        String                @map("minio_key")
+  filename        String
+  startWallTime   DateTime              @map("start_wall_time") @db.Timestamptz
+  endWallTime     DateTime?             @map("end_wall_time") @db.Timestamptz
+  durationMs      Int?                  @map("duration_ms")
+  fileSizeBytes   Int?                  @map("file_size_bytes")
+  mimeType        String                @default("video/webm") @map("mime_type")
+  segmentIndex    Int                   @default(0) @map("segment_index")
+  uploadStatus    RecordingUploadStatus @default(PENDING) @map("upload_status")
+  pyfeatJobId     String?               @map("pyfeat_job_id")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([studentId, sessionId])
+  @@index([courseId])
+  @@map("recording_segments")
+}
+
+model RecordingConsent {
+  id        String   @id @default(cuid())
+  studentId String   @map("student_id") @db.Uuid
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId   String   @map("course_id") @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  accepted  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([studentId, courseId])
+  @@map("recording_consents")
+}
+
+// ─── Biometrics: Pupil Size (Feature 01) ────────────────
+
+model PupilSizeConfig {
+  id        String   @id @default(cuid())
+  courseId   String   @unique @map("course_id") @db.Uuid
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isEnabled Boolean  @default(false) @map("is_enabled")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("pupil_size_configs")
+}
+
+model PupilSizeLog {
+  id            String         @id @default(cuid())
+  studentId     String         @map("student_id") @db.Uuid
+  student       User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId     String         @map("session_id") @db.Uuid
+  session       StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courseId       String         @map("course_id") @db.Uuid
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  timestamp     DateTime       @db.Timestamptz
+  pupilDiameter Float          @map("pupil_diameter")
+  rawData       Json?          @map("raw_data")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([studentId, sessionId])
+  @@index([courseId])
+  @@map("pupil_size_logs")
+}
+
+// ─── Biometrics: WebGazer (Feature 02) ──────────────────
+
+model WebgazerConfig {
+  id                      String   @id @default(cuid())
+  courseId                 String   @unique @map("course_id") @db.Uuid
+  course                  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isEnabled               Boolean  @default(false) @map("is_enabled")
+  calibrationOnNewSession Boolean  @default(true) @map("calibration_on_new_session")
+  inactivityTimeoutSecs   Int      @default(1800) @map("inactivity_timeout_secs")
+  recalibrationEnabled    Boolean  @default(true) @map("recalibration_enabled")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("webgazer_configs")
+}
+
+model WebgazerLog {
+  id         String         @id @default(cuid())
+  studentId  String         @map("student_id") @db.Uuid
+  student    User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId  String         @map("session_id") @db.Uuid
+  session    StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courseId    String         @map("course_id") @db.Uuid
+  course     Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  timestamp  DateTime       @db.Timestamptz
+  gazeX      Float          @map("gaze_x")
+  gazeY      Float          @map("gaze_y")
+  confidence Float?
+  pageUrl    String?        @map("page_url")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([studentId, sessionId])
+  @@index([courseId])
+  @@map("webgazer_logs")
+}
+
+model WebgazerCalibrationEvent {
+  id          String         @id @default(cuid())
+  studentId   String         @map("student_id") @db.Uuid
+  student     User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId   String         @map("session_id") @db.Uuid
+  session     StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courseId     String         @map("course_id") @db.Uuid
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  triggeredBy String         @map("triggered_by")
+  completedAt DateTime?      @map("completed_at") @db.Timestamptz
+  accuracy    Float?
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([studentId, courseId])
+  @@map("webgazer_calibration_events")
+}
+
+// ─── Biometrics: py-feat (Feature 03) ───────────────────
+
+model PyfeatConfig {
+  id              String   @id @default(cuid())
+  courseId         String   @unique @map("course_id") @db.Uuid
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isEnabled       Boolean  @default(false) @map("is_enabled")
+  extractionFps   Float    @default(1.0) @map("extraction_fps")
+  enabledAus      String[] @default([]) @map("enabled_aus")
+  detectorBackend String   @default("retinaface") @map("detector_backend")
+  auPredictor     String   @default("xgb") @map("au_predictor")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("pyfeat_configs")
+}
+
+model PyfeatJob {
+  id             String          @id @default(cuid())
+  studentId      String          @map("student_id") @db.Uuid
+  student        User            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId      String          @map("session_id") @db.Uuid
+  session        StudentSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courseId        String          @map("course_id") @db.Uuid
+  course         Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status         PyfeatJobStatus @default(PENDING)
+  sourceMinioKey String          @map("source_minio_key")
+  resultMinioKey String?         @map("result_minio_key")
+  error          String?
+  startedAt      DateTime?       @map("started_at") @db.Timestamptz
+  completedAt    DateTime?       @map("completed_at") @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  auResults      PyfeatAuResult[]
+
+  @@index([studentId, courseId])
+  @@map("pyfeat_jobs")
+}
+
+model PyfeatAuResult {
+  id         String    @id @default(cuid())
+  jobId      String    @map("job_id")
+  job        PyfeatJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  frameIndex Int       @map("frame_index")
+  timestamp  Float
+  wallTime   DateTime  @map("wall_time") @db.Timestamptz
+  au01       Float?
+  au02       Float?
+  au04       Float?
+  au05       Float?
+  au06       Float?
+  au07       Float?
+  au09       Float?
+  au10       Float?
+  au12       Float?
+  au14       Float?
+  au15       Float?
+  au17       Float?
+  au20       Float?
+  au23       Float?
+  au24       Float?
+  au25       Float?
+  au26       Float?
+  au28       Float?
+  faceConf   Float?    @map("face_conf")
+  faceBox    Json?     @map("face_box")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([jobId])
+  @@map("pyfeat_au_results")
 }

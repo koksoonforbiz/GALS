@@ -30,6 +30,7 @@ import { StudentRagModule } from './student-rag';
 import { DialogueModule } from './dialogue';
 import { DialogueNotesModule } from './dialogue-notes';
 import { ActivityLogModule } from './activity-log';
+import { RecordingModule } from './recording';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -71,6 +72,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     DialogueModule,
     DialogueNotesModule,
     ActivityLogModule,
+    RecordingModule,
   ],
   controllers: [HealthController],
 })

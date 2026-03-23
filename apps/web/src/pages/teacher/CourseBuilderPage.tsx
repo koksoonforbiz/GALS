@@ -19,6 +19,7 @@ import PublishGatePanel from '../../components/PublishGatePanel';
 import LearningPathPanel from '../../components/LearningPathPanel';
 import { DialogueCourseSettingsForm } from '../../components/teacher/DialogueCourseSettingsForm';
 import { DialogueActivityPanel } from '../../components/teacher/DialogueActivityPanel';
+import { RecordingSettings } from '../../components/teacher/biometrics/RecordingSettings';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -30,7 +31,8 @@ type TopTabKey =
   | 'knowledge'
   | 'publish'
   | 'settings'
-  | 'dialogue';
+  | 'dialogue'
+  | 'biometrics';
 type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
 type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
 
@@ -606,6 +608,7 @@ export function CourseBuilderPage() {
     { key: 'knowledge', label: 'Knowledge' },
     { key: 'publish', label: 'Publish' },
     ...(learningMode === 'DIALOGUE' ? [{ key: 'dialogue' as TopTabKey, label: 'Dialogue' }] : []),
+    { key: 'biometrics' as TopTabKey, label: 'Biometrics' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -1393,6 +1396,21 @@ export function CourseBuilderPage() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Dialogue Activity</h3>
             <DialogueActivityPanel courseId={courseId} />
           </div>
+        </div>
+      )}
+
+      {/* ─── Biometrics Tab ─── */}
+      {activeTab === 'biometrics' && (
+        <div className="max-w-2xl space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Biometrics Settings</h2>
+          <p className="text-sm text-gray-500">
+            Configure biometric tracking features for this course. Settings here control what data
+            is collected from students during learning sessions.
+          </p>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <RecordingSettings courseId={courseId!} />
+          </div>
+          {/* Future: PupilSizeSettings, WebgazerSettings, PyfeatSettings will be added here */}
         </div>
       )}
 

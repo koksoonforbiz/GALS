@@ -44,7 +44,14 @@ export function StudentLogPage() {
       {/* Right panel — log viewer */}
       <div className="flex-1 overflow-y-auto">
         {selectedSessionId ? (
-          <SessionLogViewer sessionId={selectedSessionId} studentId={studentId!} />
+          <SessionLogViewer
+            sessionId={selectedSessionId}
+            studentId={studentId!}
+            courseId={
+              sessions.find((s: { id: string; courseId?: string }) => s.id === selectedSessionId)
+                ?.courseId
+            }
+          />
         ) : (
           <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
             Select a session to view details
