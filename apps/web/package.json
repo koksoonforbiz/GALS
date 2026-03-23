@@ -27,7 +27,7 @@
     "date-fns": "^4.1.0",
     "katex": "^0.16.28",
     "lucide-react": "^0.575.0",
-    "pdfjs-dist": "^5.5.207",
+    "pdfjs-dist": "5.4.296",
     "postcss": "^8.5.6",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

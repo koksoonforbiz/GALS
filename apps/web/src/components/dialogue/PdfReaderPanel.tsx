@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Document, Page } from 'react-pdf';
+import { Document, Page, pdfjs } from 'react-pdf';
 import {
   ArrowLeft,
   ZoomIn,
@@ -173,6 +173,16 @@ export function PdfReaderPanel({
     window.getSelection()?.removeAllRanges();
   };
 
+  // Configure cMaps and standard fonts so pdfjs can extract text from all PDFs
+  const documentOptions = useMemo(
+    () => ({
+      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+      cMapPacked: true,
+      standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+    }),
+    [],
+  );
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -248,6 +258,7 @@ export function PdfReaderPanel({
             file={documentUrl}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
+            options={documentOptions}
             loading={null}
           >
             <div className="flex flex-col items-center gap-4 py-4">
