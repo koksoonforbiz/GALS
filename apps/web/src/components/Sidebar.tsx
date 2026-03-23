@@ -202,28 +202,67 @@ const studentNavItems: NavItem[] = [
   },
 ];
 
-const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
+const SIDEBAR_STATE_KEY = 'sidebar_state';
+
+type SidebarState = 'expanded' | 'collapsed' | 'hidden';
 
 export function Sidebar() {
   const { user } = useAuth();
-  const [collapsed, setCollapsed] = useState(() => {
+  const [sidebarState, setSidebarState] = useState<SidebarState>(() => {
     try {
-      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+      const stored = localStorage.getItem(SIDEBAR_STATE_KEY);
+      if (stored === 'hidden' || stored === 'collapsed' || stored === 'expanded') return stored;
+      // Migrate from old key
+      if (localStorage.getItem('sidebar_collapsed') === 'true') return 'collapsed';
+      return 'expanded';
     } catch {
-      return false;
+      return 'expanded';
     }
   });
 
+  const collapsed = sidebarState === 'collapsed';
+  const hidden = sidebarState === 'hidden';
+
   useEffect(() => {
     try {
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+      localStorage.setItem(SIDEBAR_STATE_KEY, sidebarState);
     } catch {
       // ignore
     }
-  }, [collapsed]);
+  }, [sidebarState]);
+
+  const cycleState = () => {
+    setSidebarState((prev) => {
+      if (prev === 'expanded') return 'collapsed';
+      if (prev === 'collapsed') return 'hidden';
+      return 'expanded';
+    });
+  };
 
   const navItems =
     user?.role === 'teacher' || user?.role === 'admin' ? teacherNavItems : studentNavItems;
+
+  // Hidden state: show a thin strip with a show button
+  if (hidden) {
+    return (
+      <aside className="w-6 bg-gray-50 border-r border-gray-200 min-h-screen flex flex-col items-center pt-3 transition-all duration-200">
+        <button
+          onClick={() => setSidebarState('expanded')}
+          className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
+          title="Show sidebar"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 5l7 7-7 7M5 5l7 7-7 7"
+            />
+          </svg>
+        </button>
+      </aside>
+    );
+  }
 
   return (
     <aside
@@ -232,9 +271,9 @@ export function Sidebar() {
       {/* Toggle button */}
       <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-3 pb-1`}>
         <button
-          onClick={() => setCollapsed((prev) => !prev)}
+          onClick={cycleState}
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Hide sidebar' : 'Collapse sidebar'}
         >
           {collapsed ? (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -242,7 +281,7 @@ export function Sidebar() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                d="M11 19l-7-7 7-7M19 19l-7-7 7-7"
               />
             </svg>
           ) : (

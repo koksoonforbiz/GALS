@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { SavedDataRenderer } from '../../components/FloatingChatbot/ReviewTabView';
 
 type InterventionType =
   | 'PRACTICE_TESTING'
@@ -294,16 +295,15 @@ function SavedReviewsTab() {
                         </div>
                       </div>
 
-                      {/* Saved data */}
+                      {/* Saved data - formatted view */}
                       <div>
                         <div className="text-xs font-medium text-gray-600 mb-1">
                           Interaction Data
                         </div>
-                        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded p-2 max-h-48 overflow-y-auto">
-                          <pre className="whitespace-pre-wrap break-words">
-                            {JSON.stringify(expandedDetail.savedData, null, 2)}
-                          </pre>
-                        </div>
+                        <SavedDataRenderer
+                          type={expandedDetail.interventionType}
+                          data={expandedDetail.savedData}
+                        />
                       </div>
 
                       {/* Notes */}

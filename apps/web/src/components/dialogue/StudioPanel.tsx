@@ -12,6 +12,7 @@ import {
   Palette,
   BookOpen,
   Brain,
+  MousePointerClick,
 } from 'lucide-react';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
@@ -765,13 +766,31 @@ function InterventionsTab({
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [capturedText, setCapturedText] = useState<string>('');
+  const [pendingType, setPendingType] = useState<string | null>(null);
 
   const handleStart = (type: string) => {
     // Capture any text the user has selected on the page
     const selection = window.getSelection()?.toString().trim() || '';
+    if (!selection) {
+      // Prompt user to select text first
+      setPendingType(type);
+      return;
+    }
     setCapturedText(selection);
     onStartIntervention(type);
     setActiveType(type);
+  };
+
+  const handleProceedWithoutText = () => {
+    if (!pendingType) return;
+    setCapturedText('');
+    onStartIntervention(pendingType);
+    setActiveType(pendingType);
+    setPendingType(null);
+  };
+
+  const handleCancelPrompt = () => {
+    setPendingType(null);
   };
 
   const handleComplete = () => {
@@ -814,6 +833,34 @@ function InterventionsTab({
 
   return (
     <div className="p-4 space-y-3">
+      {/* Text selection prompt */}
+      {pendingType && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+          <div className="flex items-center gap-2 text-amber-800">
+            <MousePointerClick size={16} />
+            <span className="text-xs font-medium">No text selected</span>
+          </div>
+          <p className="text-xs text-amber-700">
+            Select some text from the chat or your source materials first, then try again. This
+            helps generate more targeted content.
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleProceedWithoutText}
+              className="text-xs px-3 py-1 rounded bg-amber-600 text-white hover:bg-amber-700 transition-colors"
+            >
+              Continue without selection
+            </button>
+            <button
+              onClick={handleCancelPrompt}
+              className="text-xs px-3 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {INTERVENTION_TYPES.map((intervention) => {
         const enabled = enabledInterventions.includes(intervention.type);
         const pastCount = pastInterventions.filter((p) => p.type === intervention.type).length;

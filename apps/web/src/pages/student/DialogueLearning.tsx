@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { BookOpen, Pencil, Check, X, Trash2 } from 'lucide-react';
+import { BookOpen, Pencil, Check, X, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -76,6 +76,10 @@ export function DialogueLearning() {
       return DEFAULT_PANEL_SIZES;
     }
   });
+  const [rightPanelWidth, setRightPanelWidth] = useState(panelSizes.right);
+  const [rightPanelExpanded, setRightPanelExpanded] = useState(false);
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const courseSettings: DialogueCourseSettings = course?.dblSettings || {};
@@ -263,6 +267,38 @@ export function DialogueLearning() {
       // ignore
     }
   }, [panelSizes]);
+
+  // ─── Right panel resize via drag ──────────────────────────
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingRef.current = true;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const containerWidth = containerRect.width;
+      const rightEdge = containerRect.right;
+      const newWidthPx = rightEdge - ev.clientX;
+      const newWidthPercent = (newWidthPx / containerWidth) * 100;
+      // Clamp between 15% and 60%
+      const clamped = Math.max(15, Math.min(60, newWidthPercent));
+      setRightPanelWidth(clamped);
+    };
+
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   // ─── Handlers ─────────────────────────────────────────────
 
@@ -790,7 +826,7 @@ export function DialogueLearning() {
         </div>
       ) : (
         /* Three-panel layout */
-        <div className="flex-1 flex min-h-0">
+        <div ref={containerRef} className="flex-1 flex min-h-0">
           {/* Left panel - Sources */}
           <div
             style={{ width: `${panelSizes.left}%` }}
@@ -812,7 +848,7 @@ export function DialogueLearning() {
           </div>
 
           {/* Middle panel - Chat */}
-          <div className="flex-1 bg-white min-w-0">
+          <div className={`bg-white min-w-0 ${rightPanelExpanded ? 'hidden' : 'flex-1'}`}>
             <ChatPanel
               messages={messages}
               isSending={isSending}
@@ -830,11 +866,32 @@ export function DialogueLearning() {
             />
           </div>
 
+          {/* Drag handle between chat and right panel */}
+          {!rightPanelExpanded && (
+            <div
+              onMouseDown={handleDragStart}
+              className="w-1 hover:w-1.5 bg-gray-200 hover:bg-blue-400 cursor-col-resize transition-colors flex-shrink-0 relative group"
+              title="Drag to resize"
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+            </div>
+          )}
+
           {/* Right panel - Studio/Guide/Interventions */}
           <div
-            style={{ width: `${panelSizes.right}%` }}
-            className="min-w-[250px] max-w-[400px] border-l border-gray-200 bg-white flex-shrink-0"
+            style={rightPanelExpanded ? { flex: 1 } : { width: `${rightPanelWidth}%` }}
+            className={`border-l border-gray-200 bg-white flex-shrink-0 flex flex-col ${rightPanelExpanded ? '' : 'min-w-[250px] max-w-[50%]'}`}
           >
+            {/* Expand/Collapse button */}
+            <div className="flex items-center justify-end px-2 py-1 border-b border-gray-100 flex-shrink-0">
+              <button
+                onClick={() => setRightPanelExpanded((prev) => !prev)}
+                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title={rightPanelExpanded ? 'Restore panel size' : 'Expand panel'}
+              >
+                {rightPanelExpanded ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              </button>
+            </div>
             <StudioPanel
               mode={rightPanelMode}
               onModeChange={setRightPanelMode}

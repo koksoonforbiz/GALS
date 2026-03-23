@@ -336,7 +336,7 @@ function ReviewDetailView({
 
 // ─── Type-specific Saved Data Renderers ──────────────────
 
-function SavedDataRenderer({
+export function SavedDataRenderer({
   type,
   data,
 }: {
