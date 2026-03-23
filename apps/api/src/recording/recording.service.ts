@@ -24,7 +24,7 @@ export class RecordingService {
     });
     if (!config) {
       config = await this.prisma.recordingConfig.create({
-        data: { courseId, isEnabled: false },
+        data: { courseId, isEnabled: true },
       });
     }
     return config;

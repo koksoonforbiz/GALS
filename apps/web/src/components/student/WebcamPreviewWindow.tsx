@@ -4,17 +4,17 @@ import { mediaStreamRegistry } from '../../lib/biometrics/mediaStreamRegistry';
 
 /**
  * Floating draggable window that shows the live webcam feed
- * with a face-detection bounding box overlay.
+ * with WebGazer's face-detection bounding box overlay.
  */
 export function WebcamPreviewWindow() {
   const [isOpen, setIsOpen] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [hasStream, setHasStream] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
-  const posRef = useRef({ x: 16, y: 64 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(
     null,
   );
@@ -23,7 +23,10 @@ export function WebcamPreviewWindow() {
 
   // Attach webcam stream to video element
   const attachStream = useCallback(() => {
-    const stream = mediaStreamRegistry.get('recording') ?? mediaStreamRegistry.get('pupil-size');
+    const stream =
+      mediaStreamRegistry.get('recording') ??
+      mediaStreamRegistry.get('pupil-size') ??
+      mediaStreamRegistry.get('webgazer');
     if (stream && videoRef.current) {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;
@@ -36,6 +39,14 @@ export function WebcamPreviewWindow() {
     }
   }, []);
 
+  // Re-attach stream when component becomes visible (open + not minimized)
+  useEffect(() => {
+    if (!isOpen || isMinimized) return;
+    // Small delay to let refs settle after render
+    const t = setTimeout(attachStream, 50);
+    return () => clearTimeout(t);
+  }, [isOpen, isMinimized, attachStream]);
+
   // Subscribe to stream registry changes
   useEffect(() => {
     attachStream();
@@ -46,9 +57,9 @@ export function WebcamPreviewWindow() {
     };
   }, [attachStream]);
 
-  // Face detection bounding box using lightweight skin-color detection
+  // Draw video frame + WebGazer face overlay onto canvas
   useEffect(() => {
-    if (isMinimized || !hasStream) return;
+    if (isMinimized || !isOpen || !hasStream) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -59,78 +70,145 @@ export function WebcamPreviewWindow() {
 
     let running = true;
 
-    const detect = () => {
+    const drawFrame = () => {
       if (!running || video.readyState < 2) {
-        animFrameRef.current = requestAnimationFrame(detect);
+        animFrameRef.current = requestAnimationFrame(drawFrame);
         return;
       }
 
       const w = canvas.width;
       const h = canvas.height;
+
+      // Draw the video frame
       ctx.drawImage(video, 0, 0, w, h);
 
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const data = imageData.data;
+      // Try to get WebGazer's face overlay canvas for bounding box data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wg = (window as any).webgazer;
+      let drewFace = false;
 
-      // Simple skin-color detection to find face region
-      let minX = w,
-        minY = h,
-        maxX = 0,
-        maxY = 0;
-      let skinPixels = 0;
+      if (wg) {
+        try {
+          // WebGazer exposes a videoElementCanvas that contains its face mesh drawing
+          const wgCanvas = wg.videoElementCanvas?.() as HTMLCanvasElement | undefined;
+          if (wgCanvas && wgCanvas.width > 0 && wgCanvas.height > 0) {
+            // WebGazer's canvas has the face mesh overlay drawn on it
+            // Extract the face data by reading its canvas content
+            const wgCtx = wgCanvas.getContext('2d');
+            if (wgCtx) {
+              const wgImageData = wgCtx.getImageData(0, 0, wgCanvas.width, wgCanvas.height);
+              const pixels = wgImageData.data;
 
-      for (let y = 0; y < h; y += 2) {
-        for (let x = 0; x < w; x += 2) {
-          const i = (y * w + x) * 4;
-          const r = data[i] ?? 0;
-          const g = data[i + 1] ?? 0;
-          const b = data[i + 2] ?? 0;
+              // Find the bounding box of non-transparent drawn elements (face mesh lines)
+              let minX = wgCanvas.width,
+                minY = wgCanvas.height,
+                maxX = 0,
+                maxY = 0;
+              let meshPixels = 0;
 
-          // HSV-based skin detection heuristic
-          if (r > 80 && g > 40 && b > 20 && r > g && r > b && r - g > 15 && Math.abs(r - g) < 150) {
-            skinPixels++;
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
+              // Sample every 4th pixel for performance
+              for (let py = 0; py < wgCanvas.height; py += 4) {
+                for (let px = 0; px < wgCanvas.width; px += 4) {
+                  const idx = (py * wgCanvas.width + px) * 4;
+                  const a = pixels[idx + 3] ?? 0;
+                  // Non-transparent pixels that aren't the video itself (overlay drawings)
+                  const r = pixels[idx] ?? 0;
+                  const g = pixels[idx + 1] ?? 0;
+                  const b = pixels[idx + 2] ?? 0;
+                  // WebGazer face overlay uses green lines typically
+                  if (a > 128 && (g > r + 30 || (r > 200 && g > 200 && b < 100))) {
+                    meshPixels++;
+                    if (px < minX) minX = px;
+                    if (px > maxX) maxX = px;
+                    if (py < minY) minY = py;
+                    if (py > maxY) maxY = py;
+                  }
+                }
+              }
+
+              if (meshPixels > 20) {
+                // Scale from WebGazer canvas coords to our preview canvas coords
+                const scaleX = w / wgCanvas.width;
+                const scaleY = h / wgCanvas.height;
+
+                const pad = 10;
+                const bx = Math.max(0, (minX - pad) * scaleX);
+                const by = Math.max(0, (minY - pad) * scaleY);
+                const bw = Math.min(w - bx, (maxX - minX + pad * 2) * scaleX);
+                const bh = Math.min(h - by, (maxY - minY + pad * 2) * scaleY);
+
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bx, by, bw, bh);
+
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
+                drewFace = true;
+              }
+            }
           }
+
+          // Fallback: use WebGazer's face feedback box element position
+          if (!drewFace) {
+            const feedbackBox = document.getElementById('webgazerFaceFeedbackBox');
+            const videoContainer = document.getElementById('webgazerVideoContainer');
+            if (feedbackBox && videoContainer) {
+              const fbStyle = feedbackBox.style;
+              const vcRect = videoContainer.getBoundingClientRect();
+
+              if (
+                fbStyle.left &&
+                fbStyle.top &&
+                fbStyle.width &&
+                fbStyle.height &&
+                vcRect.width > 0
+              ) {
+                const fbLeft = parseFloat(fbStyle.left);
+                const fbTop = parseFloat(fbStyle.top);
+                const fbWidth = parseFloat(fbStyle.width);
+                const fbHeight = parseFloat(fbStyle.height);
+
+                // Scale to our canvas
+                const scaleX = w / vcRect.width;
+                const scaleY = h / vcRect.height;
+
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                  fbLeft * scaleX,
+                  fbTop * scaleY,
+                  fbWidth * scaleX,
+                  fbHeight * scaleY,
+                );
+
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '10px sans-serif';
+                ctx.fillText(
+                  'Face detected',
+                  fbLeft * scaleX + 2,
+                  fbTop * scaleY - 4 > 0 ? fbTop * scaleY - 4 : fbTop * scaleY + 12,
+                );
+                drewFace = true;
+              }
+            }
+          }
+        } catch {
+          // WebGazer may not be fully initialized
         }
       }
 
-      // Clear and redraw video frame
-      ctx.drawImage(video, 0, 0, w, h);
-
-      // Draw bounding box if enough skin pixels detected
-      const boxW = maxX - minX;
-      const boxH = maxY - minY;
-      if (skinPixels > 200 && boxW > 20 && boxH > 20) {
-        // Add some padding
-        const pad = 8;
-        const bx = Math.max(0, minX - pad);
-        const by = Math.max(0, minY - pad);
-        const bw = Math.min(w - bx, boxW + pad * 2);
-        const bh = Math.min(h - by, boxH + pad * 2);
-
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
-
-        // Label
-        ctx.fillStyle = '#22c55e';
-        ctx.font = '10px sans-serif';
-        ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
-      }
-
-      animFrameRef.current = requestAnimationFrame(detect);
+      setFaceDetected(drewFace);
+      animFrameRef.current = requestAnimationFrame(drawFrame);
     };
 
-    animFrameRef.current = requestAnimationFrame(detect);
+    animFrameRef.current = requestAnimationFrame(drawFrame);
 
     return () => {
       running = false;
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isMinimized, hasStream]);
+  }, [isMinimized, isOpen, hasStream]);
 
   // Drag handlers
   const handleMouseDown = useCallback(
@@ -144,7 +222,6 @@ export function WebcamPreviewWindow() {
         const dy = e.clientY - dragRef.current.startY;
         const newX = Math.max(0, Math.min(window.innerWidth - 200, dragRef.current.origX + dx));
         const newY = Math.max(0, Math.min(window.innerHeight - 40, dragRef.current.origY + dy));
-        posRef.current = { x: newX, y: newY };
         setPos({ x: newX, y: newY });
       };
 
@@ -226,8 +303,10 @@ export function WebcamPreviewWindow() {
           )}
           {hasStream && (
             <div className="absolute bottom-1 left-1 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-[9px] text-white/70">LIVE</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full animate-pulse ${faceDetected ? 'bg-green-500' : 'bg-red-500'}`}
+              />
+              <span className="text-[9px] text-white/70">{faceDetected ? 'FACE OK' : 'LIVE'}</span>
             </div>
           )}
         </div>

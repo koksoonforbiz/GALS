@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { mediaStreamRegistry } from '../biometrics/mediaStreamRegistry';
 
 /**
  * Load WebGazer.js dynamically via script tag.
@@ -166,15 +167,37 @@ export function useWebgazer(
 
         const wg = webgazerRef.current;
         wg.setRegression('ridge');
-        wg.showVideo(false);
-        wg.showFaceOverlay(false);
-        wg.showFaceFeedbackBox(false);
         wg.saveDataAcrossSessions(false);
+
+        // Show WebGazer's internal video + face overlay (needed for face tracking)
+        // but hide them from the main UI — the preview window reads them
+        wg.showVideo(true);
+        wg.showFaceOverlay(true);
+        wg.showFaceFeedbackBox(true);
 
         await wg.begin();
         if (cancelled) {
           wg.end();
           return;
+        }
+
+        // Hide WebGazer's default UI elements via CSS
+        // (the underlying face detection still runs for our preview window)
+        const wgVideoContainer = document.getElementById('webgazerVideoContainer');
+        if (wgVideoContainer) wgVideoContainer.style.display = 'none';
+        const wgGazeDot = document.getElementById('webgazerGazeDot');
+        if (wgGazeDot) wgGazeDot.style.display = 'none';
+
+        // Register WebGazer's video stream in the shared registry
+        // so the preview window can display it
+        try {
+          const videoEl = wg.getVideoElement?.() as HTMLVideoElement | undefined;
+          const stream = videoEl?.srcObject as MediaStream | null;
+          if (stream) {
+            mediaStreamRegistry.register('webgazer', stream);
+          }
+        } catch {
+          // getVideoElement may not exist in all WebGazer builds
         }
 
         // Gaze listener throttled to 5 Hz (200ms)
@@ -235,6 +258,7 @@ export function useWebgazer(
       } catch {
         // WebGazer may throw on cleanup
       }
+      mediaStreamRegistry.unregister('webgazer');
       setIsActive(false);
     };
   }, [courseId, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -250,6 +274,7 @@ export function useWebgazer(
       } catch {
         // WebGazer may throw on cleanup
       }
+      mediaStreamRegistry.unregister('webgazer');
       setIsActive(false);
     };
     window.addEventListener('ats:logout', handleLogout);

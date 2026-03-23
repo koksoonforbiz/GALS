@@ -19,7 +19,7 @@ export class WebgazerService {
       config = await this.prisma.webgazerConfig.create({
         data: {
           courseId,
-          isEnabled: false,
+          isEnabled: true,
           calibrationOnNewSession: true,
           inactivityTimeoutSecs: 1800,
           recalibrationEnabled: true,

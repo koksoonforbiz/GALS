@@ -98,7 +98,7 @@ function BiometricsHooksInner({
       <RecordingIndicator isActive={recording.isActive} isUploading={recording.isUploading} />
 
       {/* Floating webcam preview with face bounding box */}
-      {(recording.isActive || pupilSize.isActive) && <WebcamPreviewWindow />}
+      {(recording.isActive || pupilSize.isActive || webgazer.isActive) && <WebcamPreviewWindow />}
 
       {/* Consent modal */}
       {showConsentModal && (

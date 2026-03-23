@@ -16,7 +16,7 @@ export class PupilSizeService {
     let config = await this.prisma.pupilSizeConfig.findUnique({ where: { courseId } });
     if (!config) {
       config = await this.prisma.pupilSizeConfig.create({
-        data: { courseId, isEnabled: false },
+        data: { courseId, isEnabled: true },
       });
     }
     return config;
