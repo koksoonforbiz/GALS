@@ -23,6 +23,17 @@ import { KcEvaluationModule } from './kc-evaluation';
 import { CurriculumCoverageModule } from './curriculum-coverage';
 import { KnowledgeVersionModule } from './knowledge-version';
 import { PublishGateModule } from './publish-gate';
+import { LearningInterventionsModule } from './learning-interventions';
+import { QuestionGenerationModule } from './question-generation';
+import { UserManagementModule } from './user-management';
+import { StudentRagModule } from './student-rag';
+import { DialogueModule } from './dialogue';
+import { DialogueNotesModule } from './dialogue-notes';
+import { ActivityLogModule } from './activity-log';
+import { RecordingModule } from './recording';
+import { PupilSizeModule } from './pupil-size';
+import { WebgazerModule } from './webgazer';
+import { PyfeatModule } from './pyfeat';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -57,6 +68,17 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     CurriculumCoverageModule,
     KnowledgeVersionModule,
     PublishGateModule,
+    LearningInterventionsModule,
+    QuestionGenerationModule,
+    UserManagementModule,
+    StudentRagModule,
+    DialogueModule,
+    DialogueNotesModule,
+    ActivityLogModule,
+    RecordingModule,
+    PupilSizeModule,
+    WebgazerModule,
+    PyfeatModule,
   ],
   controllers: [HealthController],
 })

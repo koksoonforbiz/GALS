@@ -1,0 +1,88 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { WebgazerService } from './webgazer.service';
+import type { WebgazerConfigDto } from './dto/webgazer-config.dto';
+import type { WebgazerBatchDto } from './dto/create-gaze-log.dto';
+import type { CalibrationEventDto } from './dto/calibration-event.dto';
+
+interface RequestUser {
+  id: string;
+  role: string;
+}
+
+@Controller('webgazer')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class WebgazerController {
+  constructor(private readonly webgazerService: WebgazerService) {}
+
+  @Get('config/:courseId')
+  @Roles('teacher', 'student')
+  getConfig(@Param('courseId') courseId: string) {
+    return this.webgazerService.getConfig(courseId);
+  }
+
+  @Patch('config/:courseId')
+  @Roles('teacher')
+  updateConfig(@Param('courseId') courseId: string, @Body() dto: WebgazerConfigDto) {
+    return this.webgazerService.updateConfig(courseId, dto);
+  }
+
+  @Post('logs')
+  @Roles('student')
+  bulkCreateLogs(@Request() req: { user: RequestUser }, @Body() dto: WebgazerBatchDto) {
+    return this.webgazerService.bulkCreateLogs(
+      req.user.id,
+      dto.sessionId,
+      dto.courseId,
+      dto.readings,
+    );
+  }
+
+  @Post('calibration')
+  @Roles('student')
+  recordCalibration(@Request() req: { user: RequestUser }, @Body() dto: CalibrationEventDto) {
+    return this.webgazerService.recordCalibrationEvent(req.user.id, dto);
+  }
+
+  @Get('logs/:studentId/:courseId')
+  @Roles('teacher')
+  getLogs(
+    @Param('studentId') studentId: string,
+    @Param('courseId') courseId: string,
+    @Query('sessionId') sessionId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.webgazerService.getLogs(studentId, courseId, {
+      sessionId,
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(to) : undefined,
+    });
+  }
+
+  @Get('logs/:studentId/:sessionId/export')
+  exportCsv(@Param('studentId') studentId: string, @Param('sessionId') sessionId: string) {
+    return this.webgazerService.exportSessionCsv(studentId, sessionId);
+  }
+
+  @Get('calibration/:studentId/:courseId')
+  @Roles('teacher')
+  getCalibrationHistory(
+    @Param('studentId') studentId: string,
+    @Param('courseId') courseId: string,
+  ) {
+    return this.webgazerService.getCalibrationHistory(studentId, courseId);
+  }
+}

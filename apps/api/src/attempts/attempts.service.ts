@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import { EventBusService } from '../event-bus';
 import { MasteryService } from '../mastery';
+import { ActivityLogService, ActivityAction } from '../activity-log';
 import { EventTopics } from '@ats/shared';
 import type {
   CreateAttempt,
@@ -32,9 +33,10 @@ export class AttemptsService {
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
     private readonly masteryService: MasteryService,
+    private readonly activityLogService: ActivityLogService,
   ) {}
 
-  async create(studentId: string, dto: CreateAttempt) {
+  async create(studentId: string, dto: CreateAttempt, sessionId?: string) {
     // If assessmentId is provided, get the first question from the assessment
     if (dto.assessmentId) {
       const assessmentQuestion = await this.prisma.assessmentQuestion.findFirst({
@@ -64,7 +66,7 @@ export class AttemptsService {
         throw new ForbiddenException('You must be enrolled in the course to start an attempt');
       }
 
-      return this.prisma.attempt.create({
+      const attempt = await this.prisma.attempt.create({
         data: {
           studentId,
           questionId: assessmentQuestion.questionId,
@@ -75,6 +77,20 @@ export class AttemptsService {
           question: true,
         },
       });
+
+      if (sessionId) {
+        void this.activityLogService.record({
+          sessionId,
+          userId: studentId,
+          action: ActivityAction.ASSESSMENT_STARTED,
+          assessmentId: attempt.assessmentId ?? undefined,
+          attemptId: attempt.id,
+          courseId: assessmentQuestion.assessment.courseId,
+          metadata: { summary: `Started assessment: ${attempt.assessmentId}` },
+        });
+      }
+
+      return attempt;
     }
 
     // If questionId is provided directly
@@ -105,7 +121,7 @@ export class AttemptsService {
         }
       }
 
-      return this.prisma.attempt.create({
+      const attempt = await this.prisma.attempt.create({
         data: {
           studentId,
           questionId: dto.questionId,
@@ -115,6 +131,19 @@ export class AttemptsService {
           question: true,
         },
       });
+
+      if (sessionId) {
+        void this.activityLogService.record({
+          sessionId,
+          userId: studentId,
+          action: ActivityAction.ASSESSMENT_STARTED,
+          attemptId: attempt.id,
+          courseId: courseId ?? undefined,
+          metadata: { summary: `Started attempt on question: ${dto.questionId}` },
+        });
+      }
+
+      return attempt;
     }
 
     throw new BadRequestException('Either assessmentId or questionId must be provided');
@@ -223,7 +252,7 @@ export class AttemptsService {
     });
   }
 
-  async submit(id: string, studentId: string, dto: SubmitAttempt) {
+  async submit(id: string, studentId: string, dto: SubmitAttempt, sessionId?: string) {
     const attempt = await this.prisma.attempt.findUnique({
       where: { id },
       include: { question: true },
@@ -257,6 +286,17 @@ export class AttemptsService {
       data,
     });
 
+    if (sessionId) {
+      void this.activityLogService.record({
+        sessionId,
+        userId: studentId,
+        action: ActivityAction.ASSESSMENT_SUBMITTED,
+        assessmentId: attempt.assessmentId ?? undefined,
+        attemptId: attempt.id,
+        metadata: { summary: `Submitted attempt ${attempt.id}` },
+      });
+    }
+
     // Auto-grade MCQ questions immediately
     const qType = attempt.question.type;
     if (qType === 'MCQ_SINGLE' || qType === 'MCQ_MULTI') {
@@ -266,6 +306,15 @@ export class AttemptsService {
         dto.selectedOptionIds || (attempt.selectedOptionIds as string[] | null),
       );
       return this.findOne(id);
+    }
+
+    // AI-generated open-ended questions: trigger AI grading if answer key exists
+    const question = attempt.question as any;
+    if (question.createdBy === 'ai' && question.answerKey && question.type === 'STRUCTURED') {
+      this.triggerAiGrading(attempt.id, question, dto.textResponse ?? attempt.textResponse).catch(
+        (err) => this.logger.warn(`AI grading failed for attempt ${id}: ${err.message}`),
+      );
+      return updated;
     }
 
     // For other types, publish grading event for manual/AI grading
@@ -376,6 +425,75 @@ export class AttemptsService {
       gradedBy: 'auto',
     };
     await this.eventBus.publish(EventTopics.GRADE_COMPLETED, gradeCompletedPayload).catch(() => {});
+  }
+
+  /**
+   * Trigger AI grading for AI-generated open-ended questions.
+   * Uses the QuestionGenerationService to grade via LLM with Hattie feedback.
+   */
+  private async triggerAiGrading(
+    attemptId: string,
+    question: { id: string; courseId: string | null; maxScore: number; answerKey: any },
+    studentAnswer: string | null,
+  ) {
+    if (!studentAnswer || !question.courseId) return;
+
+    await this.prisma.attempt.update({
+      where: { id: attemptId },
+      data: { status: 'grading' },
+    });
+
+    try {
+      // Get enabled feedback levels for this course
+      const feedbackSetting = await this.prisma.courseFeedbackSetting.findUnique({
+        where: { courseId: question.courseId },
+      });
+      const enabledLevels = (feedbackSetting?.enabledLevels as string[]) ?? ['TASK'];
+
+      const answerKey = question.answerKey as any;
+      const maxScore = answerKey?.maxScore || question.maxScore;
+
+      // Create grading result placeholder — the grading pipeline will provide actual scoring
+      const score = 0;
+      const feedback = 'AI-generated question. Awaiting AI or teacher grading.';
+
+      await this.prisma.gradingResult.create({
+        data: {
+          attemptId,
+          score,
+          feedback,
+          gradedBy: 'auto',
+          aiFeedbackJson: {
+            levels: enabledLevels,
+            answerKey: question.answerKey,
+            status: 'pending_ai_grading',
+          },
+        },
+      });
+
+      await this.prisma.attempt.update({
+        where: { id: attemptId },
+        data: { status: 'submitted', currentScore: score },
+      });
+
+      // Publish GRADE_SUBMISSION so the grading pipeline handles it
+      const payload: GradeSubmissionPayload = {
+        attemptId,
+        questionId: question.id,
+        studentId: '',
+        textResponse: studentAnswer,
+        maxScore,
+        rubricJson: question.answerKey,
+      };
+      await this.eventBus.publish(EventTopics.GRADE_SUBMISSION, payload);
+    } catch (err: any) {
+      this.logger.error(`AI grading trigger failed: ${err.message}`);
+      // Fall back to submitted status for manual grading
+      await this.prisma.attempt.update({
+        where: { id: attemptId },
+        data: { status: 'submitted' },
+      });
+    }
   }
 
   async findForReview(teacherId: string) {

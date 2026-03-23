@@ -1,0 +1,1 @@
+export { FloatingChatbot } from './FloatingChatbot';

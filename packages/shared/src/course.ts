@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DialogueCourseSettingsSchema } from './dialogue.schemas';
 
 export const CourseSchema = z.object({
   id: z.string().uuid(),
@@ -72,6 +73,8 @@ export type Question = z.infer<typeof QuestionSchema>;
 export const CreateCourseSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).default(''),
+  learningMode: z.enum(['STANDARD', 'DIALOGUE']).optional().default('STANDARD'),
+  dblSettings: DialogueCourseSettingsSchema.optional(),
 });
 export type CreateCourse = z.infer<typeof CreateCourseSchema>;
 

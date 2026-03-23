@@ -13,10 +13,12 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('token');
+  const sessionId = sessionStorage.getItem('ats_session_id');
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
     ...options?.headers,
   };
 
@@ -59,6 +61,12 @@ export const api = {
   patch: <T>(path: string, data: unknown) =>
     apiFetch<T>(path, {
       method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  put: <T>(path: string, data: unknown) =>
+    apiFetch<T>(path, {
+      method: 'PUT',
       body: JSON.stringify(data),
     }),
 

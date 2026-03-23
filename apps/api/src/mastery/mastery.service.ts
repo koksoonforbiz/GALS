@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma';
+import { ActivityLogService, ActivityAction } from '../activity-log';
 import type { CreateKc, MasteryByTopic, KcMasteryItem } from '@ats/shared';
 
 const EMA_ALPHA = 0.3;
@@ -10,12 +11,19 @@ const CORRECT_THRESHOLD = 0.5;
 
 @Injectable()
 export class MasteryService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLogService: ActivityLogService,
+  ) {}
 
   /**
    * Called after any grading (auto or manual) to update KC evidence and mastery.
    */
-  async updateMasteryAfterGrading(gradingResultId: string, attemptId: string): Promise<void> {
+  async updateMasteryAfterGrading(
+    gradingResultId: string,
+    attemptId: string,
+    sessionId?: string,
+  ): Promise<void> {
     // Load the grading result + attempt + question + question KCs
     const gradingResult = await this.prisma.gradingResult.findUnique({
       where: { id: gradingResultId },
@@ -75,6 +83,21 @@ export class MasteryService {
             lastAttemptAt: now,
           },
         });
+
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId: attempt.studentId,
+            action: ActivityAction.MASTERY_UPDATED,
+            kcId: qkc.kcId,
+            metadata: {
+              previousP_L: existing.probabilityKnown,
+              newP_L: newP,
+              delta: newP - existing.probabilityKnown,
+              summary: `KC mastery updated: ${qkc.kcId} → ${newP.toFixed(3)}`,
+            },
+          });
+        }
       } else {
         const newP = EMA_ALPHA * fractionalScore + (1 - EMA_ALPHA) * INITIAL_PROBABILITY;
 
@@ -88,6 +111,21 @@ export class MasteryService {
             lastAttemptAt: now,
           },
         });
+
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId: attempt.studentId,
+            action: ActivityAction.MASTERY_UPDATED,
+            kcId: qkc.kcId,
+            metadata: {
+              previousP_L: null,
+              newP_L: newP,
+              delta: newP,
+              summary: `KC mastery updated: ${qkc.kcId} → ${newP.toFixed(3)}`,
+            },
+          });
+        }
       }
     }
   }

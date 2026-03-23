@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 
 /* ------------------------------------------------------------------ */
@@ -161,6 +162,7 @@ function DifficultyStars({ value }: { value: number }) {
 /* ------------------------------------------------------------------ */
 
 export function QuestionsPage() {
+  const navigate = useNavigate();
   /* ---- data ---- */
   const [questions, setQuestions] = useState<Question[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -586,6 +588,14 @@ export function QuestionsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <h2 className="text-2xl font-bold text-gray-900">Question Bank</h2>
         <div className="flex items-center gap-2">
+          {filterCourse && (
+            <button
+              onClick={() => navigate(`/teacher/courses/${filterCourse}/generate-questions`)}
+              className="px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+            >
+              Generate with AI
+            </button>
+          )}
           <button
             onClick={() => setImportOpen(true)}
             className="px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
