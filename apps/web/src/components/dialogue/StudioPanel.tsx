@@ -13,7 +13,9 @@ import {
   BookOpen,
   Brain,
   MousePointerClick,
+  NotebookPen,
 } from 'lucide-react';
+import { NotesPanel } from './NotesPanel';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
 import { PracticeTestingView } from '../FloatingChatbot/interventions/PracticeTestingView';
@@ -56,9 +58,24 @@ interface DialogueCourseSettings {
   enabledInterventions?: string[];
 }
 
+interface InterventionPrefill {
+  text: string;
+  strategy: string;
+  triggeredAt: number;
+}
+
+interface PendingHighlight {
+  text: string;
+  sourceDocumentId: string;
+  documentName: string;
+  pageNumber?: number;
+}
+
+type StudioMode = 'studio' | 'guide' | 'interventions' | 'notes';
+
 interface StudioPanelProps {
-  mode: 'studio' | 'guide' | 'interventions';
-  onModeChange: (mode: 'studio' | 'guide' | 'interventions') => void;
+  mode: StudioMode;
+  onModeChange: (mode: StudioMode) => void;
   selectedSource: StudentSourceDocument | null;
   selectedSourceGuide: SourceGuide | null;
   activeSourceIds: string[];
@@ -74,6 +91,10 @@ interface StudioPanelProps {
   highlightedExcerpt?: string | null;
   onHighlightClear?: () => void;
   onSaveForReview?: (data: import('../FloatingChatbot/types').SaveForReviewInput) => void;
+  interventionPrefill?: InterventionPrefill | null;
+  onInterventionPrefillConsumed?: () => void;
+  pendingHighlight?: PendingHighlight | null;
+  onPendingHighlightConsumed?: () => void;
 }
 
 const STUDIO_TOOLS = [
@@ -129,6 +150,10 @@ export function StudioPanel({
   highlightedExcerpt,
   onHighlightClear,
   onSaveForReview,
+  interventionPrefill,
+  onInterventionPrefillConsumed,
+  pendingHighlight,
+  onPendingHighlightConsumed,
 }: StudioPanelProps) {
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null);
   const [generating, setGenerating] = useState<string | null>(null);
@@ -166,10 +191,10 @@ export function StudioPanel({
     <div className="flex flex-col h-full">
       {/* Tab bar */}
       <div className="flex border-b border-gray-200">
-        {(['studio', 'guide', 'interventions'] as const).map((tab) => (
+        {(['studio', 'guide', 'interventions', 'notes'] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => onModeChange(tab)}
+            onClick={() => onModeChange(tab as 'studio' | 'guide' | 'interventions')}
             className={`flex-1 px-3 py-2.5 text-xs font-medium transition-colors ${
               mode === tab
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
@@ -189,6 +214,11 @@ export function StudioPanel({
             {tab === 'interventions' && (
               <span className="flex items-center justify-center gap-1">
                 <Brain size={14} /> Learn
+              </span>
+            )}
+            {tab === 'notes' && (
+              <span className="flex items-center justify-center gap-1">
+                <NotebookPen size={14} /> Notes
               </span>
             )}
           </button>
@@ -238,7 +268,28 @@ export function StudioPanel({
             showPast={showPastInterventions}
             onTogglePast={() => setShowPastInterventions(!showPastInterventions)}
             onSaveForReview={onSaveForReview}
+            interventionPrefill={interventionPrefill}
+            onInterventionPrefillConsumed={onInterventionPrefillConsumed}
           />
+        )}
+
+        {mode === 'notes' && sessionId && (
+          <NotesPanel
+            sessionId={sessionId}
+            courseId={courseId}
+            pendingHighlight={pendingHighlight}
+            onPendingHighlightConsumed={onPendingHighlightConsumed ?? (() => {})}
+            onSendToIntervention={(_text: string) => {
+              onModeChange('interventions');
+              onStartIntervention('INTERROGATIVE_ELABORATION');
+            }}
+          />
+        )}
+        {mode === 'notes' && !sessionId && (
+          <div className="flex flex-col items-center justify-center h-full text-center p-6">
+            <NotebookPen size={32} className="text-gray-400 mb-3" />
+            <p className="text-sm text-gray-500">Select or create a session to use notes.</p>
+          </div>
         )}
       </div>
     </div>
@@ -754,6 +805,8 @@ function InterventionsTab({
   showPast,
   onTogglePast,
   onSaveForReview,
+  interventionPrefill,
+  onInterventionPrefillConsumed,
 }: {
   enabledInterventions: string[];
   sessionId: string | null;
@@ -763,10 +816,31 @@ function InterventionsTab({
   showPast: boolean;
   onTogglePast: () => void;
   onSaveForReview?: (data: import('../FloatingChatbot/types').SaveForReviewInput) => void;
+  interventionPrefill?: InterventionPrefill | null;
+  onInterventionPrefillConsumed?: () => void;
 }) {
   const [activeType, setActiveType] = useState<string | null>(null);
   const [capturedText, setCapturedText] = useState<string>('');
   const [pendingType, setPendingType] = useState<string | null>(null);
+
+  const STRATEGY_MAP: Record<string, string> = {
+    practice_testing: 'PRACTICE_TESTING',
+    elaboration: 'INTERROGATIVE_ELABORATION',
+    stepwise: 'STEPWISE_LEARNING',
+    distributed_practice: 'DISTRIBUTED_PRACTICE',
+  };
+
+  // Handle prefill from PDF highlight
+  useEffect(() => {
+    if (!interventionPrefill) return;
+    const interventionType =
+      STRATEGY_MAP[interventionPrefill.strategy] || interventionPrefill.strategy;
+    const prefillText = `[Highlighted from PDF]\n"${interventionPrefill.text}"`;
+    setCapturedText(prefillText);
+    onStartIntervention(interventionType);
+    setActiveType(interventionType);
+    onInterventionPrefillConsumed?.();
+  }, [interventionPrefill?.triggeredAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStart = (type: string) => {
     // Capture any text the user has selected on the page
@@ -943,4 +1017,5 @@ export type {
   LearningIntervention,
   DialogueCourseSettings,
   StudioPanelProps,
+  StudioMode,
 };

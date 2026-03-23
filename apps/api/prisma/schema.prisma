@@ -234,6 +234,7 @@ model User {
   llmUsageLogs               LlmUsageLog[]
   studentDocuments           StudentSourceDocument[]    @relation("StudentDocuments")
   dialogueSessions           DialogueSession[]          @relation("StudentDialogueSessions")
+  dialogueNotes              DialogueNote[]             @relation("StudentNotes")
   studentSessions            StudentSession[]
   activityLogs               ActivityLog[]
   sessionSummaries           SessionSummary[]
@@ -592,6 +593,7 @@ model StudentSourceDocument {
   isActive        Boolean                   @default(true) @map("is_active")
   autoGuide       StudentSourceGuide?
   chunks          StudentRagChunk[]
+  dialogueNotes   DialogueNote[]
   createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -646,6 +648,7 @@ model DialogueSession {
   documents       StudentSourceDocument[]
   messages        DialogueMessage[]
   studioOutputs   StudioOutput[]
+  dialogueNotes   DialogueNote[]
   linkedInterventions LearningIntervention[]
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
@@ -684,6 +687,31 @@ model StudioOutput {
   @@index([sessionId])
   @@index([studentId])
   @@map("studio_outputs")
+}
+
+model DialogueNote {
+  id               String   @id @default(cuid())
+  sessionId        String   @map("session_id")
+  studentId        String   @map("student_id") @db.Uuid
+  courseId          String   @map("course_id") @db.Uuid
+
+  sourceDocumentId String?  @map("source_document_id")
+  pageNumber       Int?     @map("page_number")
+  highlightedText  String?  @map("highlighted_text") @db.Text
+
+  noteText         String   @map("note_text") @db.Text
+  color            String   @default("yellow")
+
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  session          DialogueSession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student          User                   @relation("StudentNotes", fields: [studentId], references: [id])
+  sourceDocument   StudentSourceDocument? @relation(fields: [sourceDocumentId], references: [id])
+
+  @@index([sessionId])
+  @@index([studentId])
+  @@map("dialogue_notes")
 }
 
 // ─── LLM: Content Drafts & Audit Logs ───────────────────

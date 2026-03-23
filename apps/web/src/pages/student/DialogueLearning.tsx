@@ -10,6 +10,8 @@ import { usePageContext } from '../../contexts/PageContext';
 import { SourcesPanel } from '../../components/dialogue/SourcesPanel';
 import { ChatPanel } from '../../components/dialogue/ChatPanel';
 import { StudioPanel } from '../../components/dialogue/StudioPanel';
+import { PdfReaderPanel } from '../../components/dialogue/PdfReaderPanel';
+import type { InterventionStrategy } from '../../components/dialogue/PdfReaderPanel';
 import type { StudentSourceDocument } from '../../components/dialogue/SourceCard';
 import type { DialogueMessage, DialogueSession } from '../../components/dialogue/ChatPanel';
 import type {
@@ -56,9 +58,9 @@ export function DialogueLearning() {
   const [studioOutputs, setStudioOutputs] = useState<StudioOutput[]>([]);
   const [selectedSource, setSelectedSource] = useState<StudentSourceDocument | null>(null);
   const [selectedSourceGuide, setSelectedSourceGuide] = useState<SourceGuide | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'studio' | 'guide' | 'interventions'>(
-    'studio',
-  );
+  const [rightPanelMode, setRightPanelMode] = useState<
+    'studio' | 'guide' | 'interventions' | 'notes'
+  >('studio');
   const [pastInterventions, setPastInterventions] = useState<LearningIntervention[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -68,6 +70,29 @@ export function DialogueLearning() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [highlightedExcerpt, setHighlightedExcerpt] = useState<string | null>(null);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+
+  // PDF reader center panel state
+  type CenterPanelMode =
+    | { type: 'chat' }
+    | { type: 'pdf-reader'; documentId: string; documentName: string; documentUrl: string };
+  const [centerPanel, setCenterPanel] = useState<CenterPanelMode>({ type: 'chat' });
+
+  // Intervention prefill from PDF highlight
+  interface InterventionPrefill {
+    text: string;
+    strategy: InterventionStrategy;
+    triggeredAt: number;
+  }
+  const [interventionPrefill, setInterventionPrefill] = useState<InterventionPrefill | null>(null);
+
+  // Notes pending highlight from PDF
+  interface PendingHighlight {
+    text: string;
+    sourceDocumentId: string;
+    documentName: string;
+    pageNumber?: number;
+  }
+  const [pendingHighlight, setPendingHighlight] = useState<PendingHighlight | null>(null);
   const [panelSizes] = useState(() => {
     try {
       const stored = localStorage.getItem(PANEL_SIZES_KEY);
@@ -569,6 +594,51 @@ export function DialogueLearning() {
     [toast],
   );
 
+  // ─── PDF Reader handlers ───────────────────────────────
+
+  const handleReadPdf = useCallback(
+    async (source: StudentSourceDocument) => {
+      try {
+        const { url } = await api.get<{ url: string }>(
+          `/student-rag/documents/${source.id}/presign`,
+        );
+        setCenterPanel({
+          type: 'pdf-reader',
+          documentId: source.id,
+          documentName: source.originalName,
+          documentUrl: url,
+        });
+      } catch (err) {
+        toast('error', err instanceof Error ? err.message : 'Failed to get PDF URL');
+      }
+    },
+    [toast],
+  );
+
+  const handleSendToIntervention = useCallback(
+    (text: string, strategy: InterventionStrategy) => {
+      setRightPanelMode('interventions');
+      setInterventionPrefill({ text, strategy, triggeredAt: Date.now() });
+      toast('info', 'Sending to Learn...');
+    },
+    [toast],
+  );
+
+  const handleSaveHighlightToNotes = useCallback(
+    (text: string, pageNumber?: number) => {
+      if (centerPanel.type !== 'pdf-reader') return;
+      setRightPanelMode('notes');
+      setPendingHighlight({
+        text,
+        sourceDocumentId: centerPanel.documentId,
+        documentName: centerPanel.documentName,
+        pageNumber,
+      });
+      toast('info', 'Saving to Notes...');
+    },
+    [centerPanel, toast],
+  );
+
   const handleStudioGenerate = useCallback(
     async (type: string, promptHint?: string) => {
       if (!courseId || !activeSession) return;
@@ -844,26 +914,38 @@ export function DialogueLearning() {
               onImport={handleImportDocuments}
               processingDocumentIds={processingDocumentIds}
               onRetryProcessing={handleRetryProcessing}
+              onReadPdf={handleReadPdf}
             />
           </div>
 
-          {/* Middle panel - Chat */}
+          {/* Middle panel - Chat or PDF Reader */}
           <div className={`bg-white min-w-0 ${rightPanelExpanded ? 'hidden' : 'flex-1'}`}>
-            <ChatPanel
-              messages={messages}
-              isSending={isSending}
-              activeSourceCount={activeSourceIds.size}
-              totalSourceCount={sources.length}
-              onSend={handleSendMessage}
-              onCitationClick={handleCitationClick}
-              session={activeSession}
-              suggestedQuestions={suggestedQuestions}
-              inputOverride={chatInputOverride}
-              onInputOverrideUsed={() => setChatInputOverride(undefined)}
-              sendError={sendError}
-              onRetry={handleRetry}
-              onActivateSources={handleActivateSources}
-            />
+            {centerPanel.type === 'chat' ? (
+              <ChatPanel
+                messages={messages}
+                isSending={isSending}
+                activeSourceCount={activeSourceIds.size}
+                totalSourceCount={sources.length}
+                onSend={handleSendMessage}
+                onCitationClick={handleCitationClick}
+                session={activeSession}
+                suggestedQuestions={suggestedQuestions}
+                inputOverride={chatInputOverride}
+                onInputOverrideUsed={() => setChatInputOverride(undefined)}
+                sendError={sendError}
+                onRetry={handleRetry}
+                onActivateSources={handleActivateSources}
+              />
+            ) : (
+              <PdfReaderPanel
+                documentId={centerPanel.documentId}
+                documentName={centerPanel.documentName}
+                documentUrl={centerPanel.documentUrl}
+                onClose={() => setCenterPanel({ type: 'chat' })}
+                onSendToIntervention={handleSendToIntervention}
+                onSaveHighlightToNotes={handleSaveHighlightToNotes}
+              />
+            )}
           </div>
 
           {/* Drag handle between chat and right panel */}
@@ -910,6 +992,10 @@ export function DialogueLearning() {
               highlightedExcerpt={highlightedExcerpt}
               onHighlightClear={() => setHighlightedExcerpt(null)}
               onSaveForReview={handleSaveForReview}
+              interventionPrefill={interventionPrefill}
+              onInterventionPrefillConsumed={() => setInterventionPrefill(null)}
+              pendingHighlight={pendingHighlight}
+              onPendingHighlightConsumed={() => setPendingHighlight(null)}
             />
           </div>
         </div>

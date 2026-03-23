@@ -22,6 +22,7 @@ import { Roles } from '../auth/roles.decorator';
 import { StudentRagService } from './student-rag.service';
 import { StudentSourceGuideService } from './student-source-guide.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { BlobService } from '../blob/blob.service';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 
 interface RequestUser {
@@ -73,6 +74,7 @@ export class StudentRagController {
     private readonly studentRagService: StudentRagService,
     private readonly guideService: StudentSourceGuideService,
     private readonly prisma: PrismaService,
+    private readonly blobService: BlobService,
   ) {}
 
   // ─── Upload document ────────────────────────────────────
@@ -276,6 +278,34 @@ export class StudentRagController {
       body.targetSessionId,
       req.user.id,
     );
+  }
+
+  // ─── Presigned URL for PDF reading ─────────────────────
+
+  @Get('documents/:documentId/presign')
+  @Roles('student')
+  async getPresignedUrl(
+    @Request() req: { user: RequestUser },
+    @Param('documentId') documentId: string,
+  ) {
+    const doc = await this.prisma.studentSourceDocument.findUnique({
+      where: { id: documentId },
+    });
+
+    if (!doc) {
+      throw new BadRequestException('Document not found');
+    }
+
+    if (doc.studentId !== req.user.id) {
+      throw new ForbiddenException('You do not own this document');
+    }
+
+    const url = await this.blobService.getPresignedDownloadUrl({
+      key: doc.blobKey,
+      expiresIn: 900, // 15 minutes
+    });
+
+    return { url };
   }
 
   // ─── Helpers ────────────────────────────────────────────

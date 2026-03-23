@@ -1,4 +1,4 @@
-import { FileText, Image, Code, File } from 'lucide-react';
+import { FileText, Image, Code, File, BookOpen } from 'lucide-react';
 import { ProcessingBadge } from './ProcessingBadge';
 
 interface StudentSourceDocument {
@@ -20,6 +20,7 @@ interface SourceCardProps {
   onSelect: (source: StudentSourceDocument) => void;
   onDelete: (id: string) => void;
   onRetryProcessing?: (id: string) => void;
+  onReadPdf?: (source: StudentSourceDocument) => void;
 }
 
 function fileIcon(fileType: string) {
@@ -50,7 +51,10 @@ export function SourceCard({
   onSelect,
   onDelete,
   onRetryProcessing,
+  onReadPdf,
 }: SourceCardProps) {
+  const isPdf =
+    source.mimeType === 'application/pdf' || source.originalName.toLowerCase().endsWith('.pdf');
   return (
     <div
       className={`group relative rounded-lg border p-3 transition-colors ${
@@ -86,6 +90,24 @@ export function SourceCard({
         </label>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {source.processingStatus === 'COMPLETED' && isPdf && onReadPdf && (
+            <button
+              onClick={() => onReadPdf(source)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 px-1.5 py-0.5 rounded hover:bg-indigo-50 flex items-center gap-1"
+            >
+              <BookOpen size={12} />
+              Read
+            </button>
+          )}
+          {source.processingStatus === 'COMPLETED' && !isPdf && (
+            <span
+              className="text-xs text-gray-400 px-1.5 py-0.5 opacity-50 cursor-not-allowed flex items-center gap-1"
+              title="Reading is available for PDF files only"
+            >
+              <BookOpen size={12} />
+              Read
+            </span>
+          )}
           {source.processingStatus === 'COMPLETED' && (
             <button
               onClick={() => onSelect(source)}

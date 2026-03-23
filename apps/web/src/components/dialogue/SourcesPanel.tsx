@@ -27,6 +27,7 @@ interface SourcesPanelProps {
   processingDocumentIds: Set<string>;
   isLoading?: boolean;
   onRetryProcessing?: (id: string) => void;
+  onReadPdf?: (source: StudentSourceDocument) => void;
 }
 
 export function SourcesPanel({
@@ -41,6 +42,7 @@ export function SourcesPanel({
   onImport,
   isLoading,
   onRetryProcessing,
+  onReadPdf,
 }: SourcesPanelProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -197,6 +199,7 @@ export function SourcesPanel({
               onSelect={onSourceSelect}
               onDelete={handleDeleteSource}
               onRetryProcessing={onRetryProcessing}
+              onReadPdf={onReadPdf}
             />
           ))
         )}
