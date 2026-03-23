@@ -1,7 +1,8 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
+import { calculateCost } from '../user-management/llm-cost-calculator';
 import * as crypto from 'crypto';
 
 interface GenerateRagAnswerInput {
@@ -83,7 +84,7 @@ export class LlmService {
 
   async saveApiKey(userId: string, provider: string, apiKey: string, model?: string) {
     const encrypted = this.encrypt(apiKey);
-    const defaultModel = provider === 'openai' ? 'gpt-4o-mini' : 'gpt-4o-mini';
+    const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -121,7 +122,9 @@ export class LlmService {
     };
   }
 
-  private async getUserApiKey(userId: string): Promise<{ apiKey: string; model: string } | null> {
+  private async getUserApiKey(
+    userId: string,
+  ): Promise<{ apiKey: string; model: string; provider: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
@@ -129,7 +132,9 @@ export class LlmService {
     if (!user?.encryptedApiKey) return null;
     try {
       const apiKey = this.decrypt(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
+      const provider = user.llmProvider || 'openai';
+      const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
+      return { apiKey, model: user.llmModel || defaultModel, provider };
     } catch {
       this.logger.error(`Failed to decrypt API key for user ${userId}`);
       return null;
@@ -158,11 +163,7 @@ export class LlmService {
     let notEnoughInfo = false;
 
     if (input.strictSource) {
-      const validation = this.ragService.validateCitations(
-        result.content,
-        citations,
-        input.chunks,
-      );
+      const validation = this.ragService.validateCitations(result.content, citations, input.chunks);
       strictSourceValid = validation.valid;
 
       if (
@@ -195,6 +196,17 @@ export class LlmService {
         strictSourceValid,
         notEnoughInfo,
       },
+    });
+
+    // Log LLM usage for cost tracking
+    await this.logLlmUsage({
+      userId: input.userId,
+      courseId: input.courseId,
+      provider: credentials?.provider || 'template',
+      model: modelUsed,
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      feature: 'query_rag',
     });
 
     return {
@@ -241,11 +253,7 @@ export class LlmService {
     let notEnoughInfo = false;
 
     if (input.strictSource) {
-      const validation = this.ragService.validateCitations(
-        result.content,
-        citations,
-        input.chunks,
-      );
+      const validation = this.ragService.validateCitations(result.content, citations, input.chunks);
       strictSourceValid = validation.valid;
       notEnoughInfo =
         result.content.includes('NOT_ENOUGH_INFO') ||
@@ -261,7 +269,7 @@ export class LlmService {
         createdById: input.userId,
         title: input.title,
         contentMdx: result.content,
-        citations: citations as any,
+        citations: citations as unknown as import('@prisma/client').Prisma.InputJsonValue,
         status: 'DRAFT',
       },
     });
@@ -288,6 +296,17 @@ export class LlmService {
         strictSourceValid,
         notEnoughInfo,
       },
+    });
+
+    // Log LLM usage for cost tracking
+    await this.logLlmUsage({
+      userId: input.userId,
+      courseId: input.courseId,
+      provider: credentials?.provider || 'template',
+      model: modelUsed,
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      feature: 'content_generation',
     });
 
     return {
@@ -366,7 +385,7 @@ export class LlmService {
     });
   }
 
-  async rejectDraft(draftId: string, userId: string) {
+  async rejectDraft(draftId: string, _userId: string) {
     const draft = await this.prisma.contentDraft.findUnique({ where: { id: draftId } });
     if (!draft) throw new NotFoundException(`Draft ${draftId} not found`);
 
@@ -400,15 +419,103 @@ export class LlmService {
     });
   }
 
+  // ─── Public Helpers ──────────────────────────────────────
+
+  async hasApiKey(userId: string): Promise<boolean> {
+    const credentials = await this.getUserApiKey(userId);
+    return credentials !== null;
+  }
+
+  async callLlmForUser(
+    userId: string,
+    systemPrompt: string,
+    userPrompt: string,
+    usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
+    options?: { jsonMode?: boolean; maxTokens?: number },
+  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+    const credentials = await this.getUserApiKey(userId);
+    const result = await this.callLlm(systemPrompt, userPrompt, credentials, options);
+
+    if (usageContext) {
+      await this.logLlmUsage({
+        userId: usageContext.triggeredByUserId || userId,
+        courseId: usageContext.courseId,
+        provider: credentials?.provider || 'template',
+        model: credentials?.model || 'template',
+        inputTokens: result.promptTokens,
+        outputTokens: result.completionTokens,
+        feature: usageContext.feature,
+      });
+    }
+
+    return result;
+  }
+
+  async logLlmUsage(params: {
+    userId: string;
+    courseId?: string;
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    feature: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
+    try {
+      const cost = await calculateCost(this.prisma, {
+        inputTokens: params.inputTokens,
+        outputTokens: params.outputTokens,
+        model: params.model,
+        provider: params.provider,
+      });
+
+      await this.prisma.llmUsageLog.create({
+        data: {
+          userId: params.userId,
+          courseId: params.courseId || null,
+          provider: params.provider,
+          model: params.model,
+          inputTokens: params.inputTokens,
+          outputTokens: params.outputTokens,
+          totalTokens: params.inputTokens + params.outputTokens,
+          inputCost: cost.inputCost,
+          outputCost: cost.outputCost,
+          totalCost: cost.totalCost,
+          feature: params.feature,
+          metadata:
+            (params.metadata as import('@prisma/client').Prisma.InputJsonValue) ?? undefined,
+        },
+      });
+    } catch (err) {
+      this.logger.error('Failed to log LLM usage', err);
+    }
+  }
+
   // ─── Private Helpers ───────────────────────────────────
 
   private async callLlm(
     systemPrompt: string,
     userPrompt: string,
-    credentials: { apiKey: string; model: string } | null,
+    credentials: { apiKey: string; model: string; provider: string } | null,
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     if (credentials) {
-      return this.callOpenAiApi(systemPrompt, userPrompt, credentials.apiKey, credentials.model);
+      if (credentials.provider === 'gemini') {
+        return this.callGeminiApi(
+          systemPrompt,
+          userPrompt,
+          credentials.apiKey,
+          credentials.model,
+          options,
+        );
+      }
+      return this.callOpenAiApi(
+        systemPrompt,
+        userPrompt,
+        credentials.apiKey,
+        credentials.model,
+        options,
+      );
     }
     // Fallback: built-in template-based generation (no API key configured)
     return this.generateWithoutApi(systemPrompt, userPrompt);
@@ -419,22 +526,27 @@ export class LlmService {
     userPrompt: string,
     apiKey: string,
     model: string,
+    options?: { jsonMode?: boolean; maxTokens?: number },
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
     try {
+      const body: Record<string, unknown> = {
+        model,
+        max_tokens: options?.maxTokens || 4096,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      };
+      if (options?.jsonMode) {
+        body.response_format = { type: 'json_object' };
+      }
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
         },
-        body: JSON.stringify({
-          model,
-          max_tokens: 4096,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -454,6 +566,58 @@ export class LlmService {
       };
     } catch (error) {
       this.logger.error('Failed to call OpenAI API', error);
+      if (options?.jsonMode) throw error;
+      // Fallback to template-based generation
+      return this.generateWithoutApi(systemPrompt, userPrompt);
+    }
+  }
+
+  private async callGeminiApi(
+    systemPrompt: string,
+    userPrompt: string,
+    apiKey: string,
+    model: string,
+    options?: { jsonMode?: boolean; maxTokens?: number },
+  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+      const generationConfig: Record<string, unknown> = {
+        maxOutputTokens: options?.maxTokens || 4096,
+      };
+      if (options?.jsonMode) {
+        generationConfig.responseMimeType = 'application/json';
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.error(`Gemini API error: ${response.status} ${errorText}`);
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+
+      return {
+        content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
+        promptTokens: data.usageMetadata?.promptTokenCount || 0,
+        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+      };
+    } catch (error) {
+      this.logger.error('Failed to call Gemini API', error);
+      if (options?.jsonMode) throw error;
       // Fallback to template-based generation
       return this.generateWithoutApi(systemPrompt, userPrompt);
     }
@@ -463,7 +627,7 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
   ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    const sourceMatch = userPrompt.match(/Source \d+[\s\S]*?(?=---|\z)/g);
+    const sourceMatch = userPrompt.match(/Source \d+[\s\S]*?(?=---|$)/g);
     const questionMatch = userPrompt.match(/Question:\s*(.*)/);
     const generateMatch = userPrompt.match(/Generate course content for:\s*"([^"]+)"/);
     const instructionsMatch = userPrompt.match(/Teacher instructions:\s*([\s\S]*?)$/);
@@ -489,11 +653,7 @@ export class LlmService {
     };
   }
 
-  private buildTemplateContent(
-    title: string,
-    instructions: string,
-    sources: string[],
-  ): string {
+  private buildTemplateContent(title: string, instructions: string, sources: string[]): string {
     if (sources.length === 0) {
       return `> **NOT_ENOUGH_INFO**: No source documents available to generate content for "${title}". Please upload reference materials and try again.`;
     }
@@ -631,7 +791,7 @@ Rules:
       });
   }
 
-  private noSourcesResponse(input: GenerateRagAnswerInput): LlmResponse {
+  private noSourcesResponse(_input: GenerateRagAnswerInput): LlmResponse {
     return {
       answer:
         '> **NOT_ENOUGH_INFO**: No source documents have been indexed for this course. Please upload reference materials in the Sources tab first.',
@@ -653,8 +813,8 @@ Rules:
     promptTokens: number;
     completionTokens: number;
     durationMs: number;
-    inputPayload?: any;
-    outputPayload?: any;
+    inputPayload?: import('@prisma/client').Prisma.InputJsonValue;
+    outputPayload?: import('@prisma/client').Prisma.InputJsonValue;
     errorMessage?: string;
   }) {
     try {

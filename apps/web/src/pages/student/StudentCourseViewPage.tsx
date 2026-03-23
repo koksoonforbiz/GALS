@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { usePageContext } from '../../contexts/PageContext';
 import BlockRenderer from '../../components/editor/BlockRenderer';
 
 interface ModuleItem {
@@ -29,6 +30,7 @@ interface Course {
   title: string;
   description: string;
   status: string;
+  learningMode?: string;
   teacher: { id: string; name: string };
   modules: CourseModule[];
 }
@@ -38,14 +40,42 @@ export function StudentCourseViewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const { setPageContext } = usePageContext();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Update page context when course or selected item changes
+  useEffect(() => {
+    if (course && selectedItemId) {
+      const item = course.modules.flatMap((m) => m.items).find((i) => i.id === selectedItemId);
+      setPageContext({
+        pageType: 'lesson',
+        courseId: course.id,
+        contentId: selectedItemId,
+        contentTitle: item?.title || course.title,
+        contentText: item?.type === 'PAGE' && item.contentMdx ? item.contentMdx : null,
+      });
+    } else if (course) {
+      setPageContext({
+        pageType: 'lesson',
+        courseId: course.id,
+        contentId: null,
+        contentTitle: course.title,
+        contentText: null,
+      });
+    }
+  }, [course, selectedItemId, setPageContext]);
 
   useEffect(() => {
     const fetch = async () => {
       try {
         const data = await apiFetch<Course>(`/courses/${courseId}`);
+        // Redirect dialogue courses to the dialogue learning interface
+        if (data.learningMode === 'DIALOGUE') {
+          navigate(`/student/courses/${courseId}/dialogue`, { replace: true });
+          return;
+        }
         setCourse(data);
         // Auto-select first item
         const firstItem = data.modules[0]?.items[0];

@@ -15,6 +15,7 @@ export type EventStatus = z.infer<typeof EventStatus>;
 export const EventTopics = {
   GRADE_SUBMISSION: 'grade_submission',
   GRADE_COMPLETED: 'grade_completed',
+  GENERATE_SOURCE_GUIDE: 'generate_source_guide',
 } as const;
 export type EventTopic = (typeof EventTopics)[keyof typeof EventTopics];
 
@@ -39,3 +40,10 @@ export const GradeCompletedPayloadSchema = z.object({
   gradedBy: z.enum(['auto', 'manual']),
 });
 export type GradeCompletedPayload = z.infer<typeof GradeCompletedPayloadSchema>;
+
+export const GenerateSourceGuidePayloadSchema = z.object({
+  documentId: z.string(),
+  studentId: z.string(),
+  courseId: z.string(),
+});
+export type GenerateSourceGuidePayload = z.infer<typeof GenerateSourceGuidePayloadSchema>;

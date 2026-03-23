@@ -1,10 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 const apiTarget = process.env.DOCKER_ENV === '1' ? 'http://api:3000' : 'http://localhost:3000';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      'react-pdf': path.resolve(__dirname, 'node_modules/react-pdf'),
+      'pdfjs-dist': path.resolve(__dirname, 'node_modules/pdfjs-dist'),
+    },
+  },
   optimizeDeps: {
     include: [
       '@tiptap/react',
@@ -15,6 +22,8 @@ export default defineConfig({
       '@tiptap/extension-placeholder',
       '@tiptap/extension-text-style',
       '@tiptap/extension-font-size',
+      'react-pdf',
+      'pdfjs-dist',
     ],
   },
   server: {

@@ -1,10 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 
 interface Grader {
   id: string;
   name: string;
+}
+
+interface AiFeedbackJson {
+  levels?: string[];
+  status?: string;
+  task?: {
+    score?: number;
+    feedback?: string;
+    errors?: string[];
+    missingElements?: string[];
+    correctElements?: string[];
+  };
+  process?: {
+    feedback?: string;
+    reasoningStrengths?: string[];
+    reasoningWeaknesses?: string[];
+    suggestedApproach?: string;
+  };
+  selfRegulation?: {
+    feedback?: string;
+    selfReflectionPrompts?: string[];
+    studyStrategies?: string[];
+  };
+  self?: { feedback?: string; positiveObservations?: string[]; encouragement?: string };
 }
 
 interface GradingResult {
@@ -15,6 +39,7 @@ interface GradingResult {
   graderId: string | null;
   grader: Grader | null;
   createdAt: string;
+  aiFeedbackJson?: AiFeedbackJson | null;
 }
 
 interface Question {
@@ -179,32 +204,81 @@ export function AttemptDetailPage() {
               </thead>
               <tbody>
                 {attempt.gradingResults.map((result, index) => (
-                  <tr
-                    key={result.id}
-                    className={`border-t border-gray-100 ${index === 0 ? 'bg-yellow-50' : ''}`}
-                  >
-                    <td className="px-4 py-2 text-gray-500">
-                      {index === 0 ? (
-                        <span className="inline-block px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded text-xs font-medium">
-                          Latest
-                        </span>
-                      ) : (
-                        attempt.gradingResults.length - index
+                  <Fragment key={result.id}>
+                    <tr className={`border-t border-gray-100 ${index === 0 ? 'bg-yellow-50' : ''}`}>
+                      <td className="px-4 py-2 text-gray-500">
+                        {index === 0 ? (
+                          <span className="inline-block px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded text-xs font-medium">
+                            Latest
+                          </span>
+                        ) : (
+                          attempt.gradingResults.length - index
+                        )}
+                      </td>
+                      <td className="px-4 py-2 font-medium">
+                        {result.score} / {attempt.question.maxScore}
+                      </td>
+                      <td className="px-4 py-2 text-gray-700 max-w-xs truncate">
+                        {result.feedback}
+                      </td>
+                      <td className="px-4 py-2 text-gray-600">
+                        {result.gradedBy === 'auto'
+                          ? 'Auto-grader'
+                          : (result.grader?.name ?? 'Unknown')}
+                      </td>
+                      <td className="px-4 py-2 text-gray-500">
+                        {new Date(result.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                    {result.aiFeedbackJson &&
+                      result.aiFeedbackJson.status !== 'pending_ai_grading' && (
+                        <tr key={`${result.id}-ai`} className="border-t border-gray-50">
+                          <td colSpan={5} className="px-4 py-3">
+                            <details className="text-sm">
+                              <summary className="cursor-pointer text-indigo-600 hover:text-indigo-800 font-medium">
+                                View AI Feedback Details
+                              </summary>
+                              <div className="mt-2 space-y-2 pl-2 border-l-2 border-indigo-200">
+                                {result.aiFeedbackJson.task?.feedback && (
+                                  <div>
+                                    <span className="font-medium text-gray-700">Task:</span>{' '}
+                                    <span className="text-gray-600">
+                                      {result.aiFeedbackJson.task.feedback}
+                                    </span>
+                                  </div>
+                                )}
+                                {result.aiFeedbackJson.process?.feedback && (
+                                  <div>
+                                    <span className="font-medium text-gray-700">Process:</span>{' '}
+                                    <span className="text-gray-600">
+                                      {result.aiFeedbackJson.process.feedback}
+                                    </span>
+                                  </div>
+                                )}
+                                {result.aiFeedbackJson.selfRegulation?.feedback && (
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Self-Regulation:
+                                    </span>{' '}
+                                    <span className="text-gray-600">
+                                      {result.aiFeedbackJson.selfRegulation.feedback}
+                                    </span>
+                                  </div>
+                                )}
+                                {result.aiFeedbackJson.self?.feedback && (
+                                  <div>
+                                    <span className="font-medium text-gray-700">Self:</span>{' '}
+                                    <span className="text-gray-600">
+                                      {result.aiFeedbackJson.self.feedback}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </details>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="px-4 py-2 font-medium">
-                      {result.score} / {attempt.question.maxScore}
-                    </td>
-                    <td className="px-4 py-2 text-gray-700 max-w-xs truncate">{result.feedback}</td>
-                    <td className="px-4 py-2 text-gray-600">
-                      {result.gradedBy === 'auto'
-                        ? 'Auto-grader'
-                        : (result.grader?.name ?? 'Unknown')}
-                    </td>
-                    <td className="px-4 py-2 text-gray-500">
-                      {new Date(result.createdAt).toLocaleString()}
-                    </td>
-                  </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

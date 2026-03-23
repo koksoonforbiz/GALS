@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma';
+import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UserRole } from '@ats/shared';
 
 @Injectable()
@@ -16,11 +22,28 @@ export class CoursesService {
   };
 
   async create(teacherId: string, dto: CreateCourse) {
+    const { learningMode, dblSettings, ...rest } = dto;
+
+    // If DIALOGUE mode, validate LLM credentials exist
+    if (learningMode === 'DIALOGUE') {
+      const teacher = await this.prisma.user.findUnique({
+        where: { id: teacherId },
+        select: { encryptedApiKey: true },
+      });
+      if (!teacher?.encryptedApiKey) {
+        throw new BadRequestException(
+          'Dialogue mode requires LLM API credentials. Please configure them in LLM Settings.',
+        );
+      }
+    }
+
     return this.prisma.course.create({
       data: {
-        ...dto,
+        ...rest,
         teacherId,
         status: 'DRAFT',
+        learningMode: learningMode || 'STANDARD',
+        dblSettings: dblSettings ? (dblSettings as object) : undefined,
       },
       include: this.listInclude,
     });
@@ -201,6 +224,66 @@ export class CoursesService {
     });
 
     return newCourse;
+  }
+
+  async getDialogueSettings(id: string, teacherId: string) {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException(`Course ${id} not found`);
+    if (course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only view settings for your own courses');
+    }
+
+    const defaults = DialogueCourseSettingsSchema.parse({});
+    const current = course.dblSettings
+      ? DialogueCourseSettingsSchema.safeParse(course.dblSettings)
+      : { success: false as const };
+
+    return {
+      learningMode: course.learningMode,
+      settings: current.success ? current.data : defaults,
+    };
+  }
+
+  async updateDialogueSettings(id: string, teacherId: string, settings: Record<string, unknown>) {
+    const course = await this.prisma.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException(`Course ${id} not found`);
+    if (course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only update settings for your own courses');
+    }
+
+    // Merge existing settings with new ones
+    const existing = course.dblSettings
+      ? DialogueCourseSettingsSchema.safeParse(course.dblSettings)
+      : { success: false as const };
+
+    const merged = {
+      ...(existing.success ? existing.data : {}),
+      ...settings,
+    };
+
+    const parsed = DialogueCourseSettingsSchema.safeParse(merged);
+    if (!parsed.success) {
+      throw new BadRequestException(`Invalid DBL settings: ${parsed.error.message}`);
+    }
+
+    // If provider isn't 'fallback', check LLM credentials
+    if (parsed.data.llmProvider !== 'fallback') {
+      const teacher = await this.prisma.user.findUnique({
+        where: { id: teacherId },
+        select: { encryptedApiKey: true },
+      });
+      if (!teacher?.encryptedApiKey) {
+        throw new BadRequestException(
+          'Non-fallback LLM provider requires API credentials. Please configure them in LLM Settings.',
+        );
+      }
+    }
+
+    return this.prisma.course.update({
+      where: { id },
+      data: { dblSettings: parsed.data as object },
+      include: this.listInclude,
+    });
   }
 
   async remove(id: string, teacherId: string) {

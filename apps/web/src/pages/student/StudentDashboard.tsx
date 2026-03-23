@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
 
 interface Enrollment {
@@ -38,12 +39,17 @@ interface Assessment {
 export function StudentDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { setPageContext } = usePageContext();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [masteryData, setMasteryData] = useState<MasteryByTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [masteryLoading, setMasteryLoading] = useState(true);
   const [generatingWorksheet, setGeneratingWorksheet] = useState(false);
   const [worksheetError, setWorksheetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPageContext({ pageType: 'dashboard', courseId: null, contentId: null, contentTitle: null });
+  }, [setPageContext]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,9 +98,7 @@ export function StudentDashboard() {
   const allKcs = masteryData.flatMap((t) => t.kcs);
   const avgMastery =
     allKcs.length > 0
-      ? Math.round(
-          (allKcs.reduce((sum, kc) => sum + kc.probabilityKnown, 0) / allKcs.length) * 100,
-        )
+      ? Math.round((allKcs.reduce((sum, kc) => sum + kc.probabilityKnown, 0) / allKcs.length) * 100)
       : null;
   const weakKcs = [...allKcs].sort((a, b) => a.probabilityKnown - b.probabilityKnown).slice(0, 5);
 
@@ -210,9 +214,7 @@ export function StudentDashboard() {
                       {kc.correctAttempts}/{kc.totalAttempts} correct
                     </p>
                   </div>
-                  <div
-                    className={`text-sm font-bold ${getMasteryTextColor(kc.probabilityKnown)}`}
-                  >
+                  <div className={`text-sm font-bold ${getMasteryTextColor(kc.probabilityKnown)}`}>
                     {pct}%
                   </div>
                 </div>
