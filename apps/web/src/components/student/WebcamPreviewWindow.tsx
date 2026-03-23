@@ -24,9 +24,9 @@ export function WebcamPreviewWindow() {
   // Attach webcam stream to video element
   const attachStream = useCallback(() => {
     const stream =
+      mediaStreamRegistry.get('webgazer') ??
       mediaStreamRegistry.get('recording') ??
-      mediaStreamRegistry.get('pupil-size') ??
-      mediaStreamRegistry.get('webgazer');
+      mediaStreamRegistry.get('pupil-size');
     if (stream && videoRef.current) {
       if (videoRef.current.srcObject !== stream) {
         videoRef.current.srcObject = stream;

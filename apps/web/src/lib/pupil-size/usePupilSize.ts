@@ -43,8 +43,9 @@ export function usePupilSize(
     if (readings.length === 0) return;
     try {
       await api.post('/pupil-size/logs', { sessionId, courseId, readings });
-    } catch {
-      // Re-add failed readings
+      console.log('[PupilSize] Flushed', readings.length, 'readings');
+    } catch (err) {
+      console.error('[PupilSize] Flush failed:', err);
       bufferRef.current.unshift(...readings);
     }
   }, [sessionId, courseId]);
@@ -144,6 +145,7 @@ export function usePupilSize(
 
         await video.play();
         setIsActive(true);
+        console.log('[PupilSize] Active, sampling at 2 Hz');
 
         const ctx = canvas.getContext('2d')!;
 
@@ -162,7 +164,8 @@ export function usePupilSize(
 
         // Flush every 30 seconds
         flushIntervalRef.current = setInterval(flushBuffer, 30000);
-      } catch {
+      } catch (err) {
+        console.error('[PupilSize] Initialization failed:', err);
         setIsActive(false);
       }
     }

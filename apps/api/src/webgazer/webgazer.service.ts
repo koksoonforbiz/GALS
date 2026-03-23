@@ -21,7 +21,7 @@ export class WebgazerService {
           courseId,
           isEnabled: true,
           calibrationOnNewSession: true,
-          inactivityTimeoutSecs: 1800,
+          inactivityTimeoutSecs: 300,
           recalibrationEnabled: true,
         },
       });

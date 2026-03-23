@@ -91,7 +91,9 @@ export function useWebgazer(
     if (readings.length === 0) return;
     try {
       await api.post('/webgazer/logs', { sessionId, courseId, readings });
-    } catch {
+      console.log('[WebGazer] Flushed', readings.length, 'gaze readings');
+    } catch (err) {
+      console.error('[WebGazer] Flush failed:', err);
       bufferRef.current.unshift(...readings);
     }
   }, [sessionId, courseId]);
@@ -157,6 +159,7 @@ export function useWebgazer(
     async function start() {
       try {
         const cfg = await api.get<WebgazerConfig>(`/webgazer/config/${courseId}`);
+        console.log('[WebGazer] Config loaded:', cfg);
         if (!cfg.isEnabled || cancelled) return;
         setConfig(cfg);
 
@@ -181,12 +184,17 @@ export function useWebgazer(
           return;
         }
 
-        // Hide WebGazer's default UI elements via CSS
+        // Hide WebGazer's default UI elements via a persistent CSS rule
         // (the underlying face detection still runs for our preview window)
-        const wgVideoContainer = document.getElementById('webgazerVideoContainer');
-        if (wgVideoContainer) wgVideoContainer.style.display = 'none';
-        const wgGazeDot = document.getElementById('webgazerGazeDot');
-        if (wgGazeDot) wgGazeDot.style.display = 'none';
+        if (!document.getElementById('webgazer-hide-style')) {
+          const style = document.createElement('style');
+          style.id = 'webgazer-hide-style';
+          style.textContent = `
+            #webgazerVideoContainer { display: none !important; }
+            #webgazerGazeDot { display: none !important; }
+          `;
+          document.head.appendChild(style);
+        }
 
         // Register WebGazer's video stream in the shared registry
         // so the preview window can display it
@@ -225,9 +233,11 @@ export function useWebgazer(
         );
 
         setIsActive(true);
+        console.log('[WebGazer] Active, calibrationOnNewSession:', cfg.calibrationOnNewSession);
 
         // If calibration on new session, prompt calibration
         if (cfg.calibrationOnNewSession) {
+          console.log('[WebGazer] Triggering calibration for new session');
           setNeedsCalibration(true);
         }
 
@@ -240,7 +250,8 @@ export function useWebgazer(
           document.addEventListener(event, resetTimer);
         }
         resetTimer();
-      } catch {
+      } catch (err) {
+        console.error('[WebGazer] Initialization failed:', err);
         setIsActive(false);
       }
     }

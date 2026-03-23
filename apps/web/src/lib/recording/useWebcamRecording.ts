@@ -58,12 +58,16 @@ export function useWebcamRecording(
 
       setIsUploading(true);
       try {
-        // Direct PUT to presigned MinIO URL
-        await fetch(url, {
+        console.log('[Recording] Uploading segment', currentSegmentId, 'size:', blob.size);
+        // PUT to presigned MinIO URL (proxied via /s3/ in dev)
+        const res = await fetch(url, {
           method: 'PUT',
           body: blob,
           headers: { 'Content-Type': blob.type || 'video/webm' },
         });
+        if (!res.ok) {
+          throw new Error(`Upload returned ${res.status}: ${res.statusText}`);
+        }
 
         const endWallTime = new Date().toISOString();
         const durationMs = Date.now() - startTime;
@@ -75,6 +79,7 @@ export function useWebcamRecording(
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed';
+        console.error('[Recording] Upload failed:', msg, err);
         setError(msg);
         try {
           await api.patch(`/recording/segments/${currentSegmentId}/fail`, {
@@ -160,8 +165,10 @@ export function useWebcamRecording(
       setIsActive(true);
       setError(null);
       onRecordingActiveChange?.(true);
+      console.log('[Recording] Started, segment:', sid);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start recording';
+      console.error('[Recording] Start failed:', err);
       setError(msg);
       setIsActive(false);
       onRecordingActiveChange?.(false);
