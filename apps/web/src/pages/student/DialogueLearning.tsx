@@ -6,6 +6,7 @@ import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { useActivityLog } from '../../lib/activity-log';
+import { usePageContext } from '../../contexts/PageContext';
 import { SourcesPanel } from '../../components/dialogue/SourcesPanel';
 import { ChatPanel } from '../../components/dialogue/ChatPanel';
 import { StudioPanel } from '../../components/dialogue/StudioPanel';
@@ -36,6 +37,14 @@ export function DialogueLearning() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { track } = useActivityLog();
+  const { setPageContext } = usePageContext();
+
+  // Set page context so the floating chatbot knows we're in a course
+  useEffect(() => {
+    if (courseId) {
+      setPageContext({ courseId, pageType: 'lesson' });
+    }
+  }, [courseId, setPageContext]);
 
   // Core state
   const [course, setCourse] = useState<Course | null>(null);

@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
+import { PracticeTestingView } from '../FloatingChatbot/interventions/PracticeTestingView';
+import { DistributedPracticeView } from '../FloatingChatbot/interventions/DistributedPracticeView';
+import { StepwiseLearningView } from '../FloatingChatbot/interventions/StepwiseLearningView';
+import { InterrogativeElaborationView } from '../FloatingChatbot/interventions/InterrogativeElaborationView';
 import type { StudentSourceDocument } from './SourceCard';
 
 interface StudioOutput {
@@ -112,6 +116,7 @@ export function StudioPanel({
   selectedSourceGuide,
   activeSourceIds,
   sessionId,
+  courseId,
   courseSettings,
   studioOutputs,
   onStudioGenerate,
@@ -224,6 +229,7 @@ export function StudioPanel({
           <InterventionsTab
             enabledInterventions={enabledInterventions}
             sessionId={sessionId}
+            courseId={courseId}
             onStartIntervention={onStartIntervention}
             pastInterventions={pastInterventions}
             showPast={showPastInterventions}
@@ -738,6 +744,7 @@ function GuideTab({
 function InterventionsTab({
   enabledInterventions,
   sessionId,
+  courseId,
   onStartIntervention,
   pastInterventions,
   showPast,
@@ -745,11 +752,54 @@ function InterventionsTab({
 }: {
   enabledInterventions: string[];
   sessionId: string | null;
+  courseId: string;
   onStartIntervention: (type: string) => void;
   pastInterventions: LearningIntervention[];
   showPast: boolean;
   onTogglePast: () => void;
 }) {
+  const [activeType, setActiveType] = useState<string | null>(null);
+
+  const handleStart = (type: string) => {
+    onStartIntervention(type);
+    setActiveType(type);
+  };
+
+  const handleComplete = () => {
+    setActiveType(null);
+  };
+
+  const handleBack = () => {
+    setActiveType(null);
+  };
+
+  const noopSaveForReview = () => {};
+
+  // Show the active intervention view
+  if (activeType) {
+    const sharedProps = {
+      selectedText: 'Based on active student sources',
+      courseId,
+      contentId: null,
+      pageType: 'dialogue' as const,
+      contentTitle: 'Dialogue Session',
+      onComplete: handleComplete,
+      onBack: handleBack,
+      onSaveForReview: noopSaveForReview,
+    };
+
+    return (
+      <div className="p-2 h-full overflow-y-auto">
+        {activeType === 'PRACTICE_TESTING' && <PracticeTestingView {...sharedProps} />}
+        {activeType === 'DISTRIBUTED_PRACTICE' && <DistributedPracticeView {...sharedProps} />}
+        {activeType === 'STEPWISE_LEARNING' && <StepwiseLearningView {...sharedProps} />}
+        {activeType === 'INTERROGATIVE_ELABORATION' && (
+          <InterrogativeElaborationView {...sharedProps} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 space-y-3">
       {INTERVENTION_TYPES.map((intervention) => {
@@ -768,7 +818,7 @@ function InterventionsTab({
                 <p className="text-xs text-gray-500 mt-0.5">{intervention.description}</p>
                 <div className="flex items-center gap-2 mt-2">
                   <button
-                    onClick={() => onStartIntervention(intervention.type)}
+                    onClick={() => handleStart(intervention.type)}
                     disabled={!enabled || !sessionId}
                     className="text-xs px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
