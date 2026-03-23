@@ -62,6 +62,10 @@ export function PdfReaderPanel({
     boundingRect: DOMRect;
   } | null>(null);
 
+  // Default highlight color (yellow unless changed by user)
+  const [defaultHighlightColor, setDefaultHighlightColor] = useState<string>('yellow');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+
   const onDocumentLoadSuccess = useCallback(({ numPages: total }: { numPages: number }) => {
     setNumPages(total);
     setIsLoading(false);
@@ -119,6 +123,7 @@ export function PdfReaderPanel({
 
     const handleMouseDown = () => {
       setSelection(null);
+      setShowColorPicker(false);
     };
 
     container.addEventListener('mouseup', handleMouseUp);
@@ -229,6 +234,34 @@ export function PdfReaderPanel({
           >
             <RotateCw size={16} className="text-gray-600" />
           </button>
+          {/* Default highlight color picker */}
+          <div className="relative ml-2">
+            <button
+              onClick={() => setShowColorPicker(!showColorPicker)}
+              className="rounded-md p-1.5 hover:bg-gray-100 transition-colors flex items-center gap-1"
+              title="Default highlight color"
+            >
+              <Highlighter size={16} style={{ color: HIGHLIGHT_COLORS[defaultHighlightColor] }} />
+            </button>
+            {showColorPicker && (
+              <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-2 flex gap-1.5 z-50">
+                {Object.entries(HIGHLIGHT_COLORS).map(([name, hex]) => (
+                  <button
+                    key={name}
+                    onClick={() => {
+                      setDefaultHighlightColor(name);
+                      setShowColorPicker(false);
+                    }}
+                    className={`w-6 h-6 rounded-full border-2 hover:scale-110 transition-all ${
+                      defaultHighlightColor === name ? 'border-gray-700 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-200 hover:border-gray-500'
+                    }`}
+                    style={{ backgroundColor: hex }}
+                    title={`Set default to ${name}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
           <span className="text-sm text-gray-600 font-mono ml-2">
             {currentPage} / {numPages}
           </span>
@@ -313,6 +346,7 @@ export function PdfReaderPanel({
           onSendToIntervention={handleSendToIntervention}
           onSaveToNotes={handleSaveToNotes}
           onDismiss={handleDismissSelection}
+          defaultHighlightColor={defaultHighlightColor}
         />
       )}
     </div>
@@ -336,6 +370,7 @@ interface SelectionPopupProps {
   onSendToIntervention: (text: string, strategy: InterventionStrategy) => void;
   onSaveToNotes: (text: string, color?: string) => void;
   onDismiss: () => void;
+  defaultHighlightColor: string;
 }
 
 function SelectionPopup({
@@ -343,9 +378,16 @@ function SelectionPopup({
   onSendToIntervention,
   onSaveToNotes,
   onDismiss,
+  defaultHighlightColor,
 }: SelectionPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
+
+  // When using a learning strategy, also auto-highlight the selected text
+  const handleStrategyClick = (text: string, strategy: InterventionStrategy) => {
+    onSaveToNotes(text, defaultHighlightColor);
+    onSendToIntervention(text, strategy);
+  };
 
   // Position calculation
   const { boundingRect, text } = selection;
@@ -420,32 +462,32 @@ function SelectionPopup({
 
       {/* Intervention strategies */}
       <button
-        onClick={() => onSendToIntervention(text, 'practice_testing')}
+        onClick={() => handleStrategyClick(text, 'practice_testing')}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-indigo-50 text-gray-700 w-full text-left transition-colors"
       >
         <Lightbulb size={14} />
-        Practice Test
+        Practice Testing
       </button>
       <button
-        onClick={() => onSendToIntervention(text, 'elaboration')}
+        onClick={() => handleStrategyClick(text, 'elaboration')}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-indigo-50 text-gray-700 w-full text-left transition-colors"
       >
         <MessageSquare size={14} />
-        Explain
+        Interrogative Elaboration
       </button>
       <button
-        onClick={() => onSendToIntervention(text, 'stepwise')}
+        onClick={() => handleStrategyClick(text, 'stepwise')}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-indigo-50 text-gray-700 w-full text-left transition-colors"
       >
         <List size={14} />
-        Step-by-step
+        Stepwise Learning
       </button>
       <button
-        onClick={() => onSendToIntervention(text, 'distributed_practice')}
+        onClick={() => handleStrategyClick(text, 'distributed_practice')}
         className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md hover:bg-indigo-50 text-gray-700 w-full text-left transition-colors"
       >
         <CalendarDays size={14} />
-        Spaced Rep
+        Spaced Repetition
       </button>
     </div>
   );
