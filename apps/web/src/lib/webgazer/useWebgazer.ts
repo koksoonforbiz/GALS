@@ -1,6 +1,41 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api';
 
+/**
+ * Load WebGazer.js dynamically via script tag.
+ * Falls back gracefully if the script cannot be loaded.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function loadWebgazerScript(): Promise<any | null> {
+  // If already loaded globally
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if ((window as any).webgazer) return Promise.resolve((window as any).webgazer);
+
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[data-webgazer]');
+    if (existing) {
+      // Script tag exists but may still be loading
+      existing.addEventListener('load', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        resolve((window as any).webgazer ?? null);
+      });
+      existing.addEventListener('error', () => resolve(null));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = '/webgazer.js'; // Served from apps/web/public/webgazer.js
+    script.setAttribute('data-webgazer', 'true');
+    script.async = true;
+    script.onload = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      resolve((window as any).webgazer ?? null);
+    };
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+}
+
 interface WebgazerConfig {
   isEnabled: boolean;
   calibrationOnNewSession: boolean;
@@ -84,10 +119,10 @@ export function useWebgazer(
         if (!cfg.isEnabled || cancelled) return;
         setConfig(cfg);
 
-        // Dynamically load WebGazer
-        const webgazer = await import('webgazer').catch(() => null);
-        if (!webgazer || cancelled) return;
-        webgazerRef.current = webgazer.default || webgazer;
+        // Dynamically load WebGazer via script tag (not available as npm package)
+        const loadedWg = await loadWebgazerScript();
+        if (!loadedWg || cancelled) return;
+        webgazerRef.current = loadedWg;
 
         const wg = webgazerRef.current;
         wg.setRegression('ridge');
