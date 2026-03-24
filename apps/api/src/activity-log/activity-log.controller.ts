@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   Body,
   UseGuards,
@@ -78,6 +79,24 @@ export class ActivityLogController {
         metadata: e.metadata,
       })),
     );
+    return { ok: true };
+  }
+
+  /**
+   * PATCH /activity-log/session/course
+   * Called by the frontend when a student navigates to a course page.
+   * Associates the current activity session with a courseId so the teacher
+   * can view biometric data in the session log viewer.
+   */
+  @Patch('session/course')
+  @Roles('student')
+  async setSessionCourse(
+    @SessionId() sessionId: string,
+    @Body() body: { courseId: string },
+  ) {
+    if (sessionId && body.courseId) {
+      await this.sessionService.setCourseId(sessionId, body.courseId);
+    }
     return { ok: true };
   }
 

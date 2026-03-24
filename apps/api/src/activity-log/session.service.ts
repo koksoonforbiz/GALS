@@ -26,6 +26,15 @@ export class SessionService {
     return session.id;
   }
 
+  /** Associate a courseId with an existing session (idempotent). */
+  async setCourseId(sessionId: string, courseId: string): Promise<void> {
+    await this.prisma.studentSession.update({
+      where: { id: sessionId },
+      data: { courseId },
+    });
+    this.logger.log(`Session ${sessionId} linked to course ${courseId}`);
+  }
+
   /**
    * Called when a student logs out or a session timeout is detected.
    * Computes duration and triggers summary generation.

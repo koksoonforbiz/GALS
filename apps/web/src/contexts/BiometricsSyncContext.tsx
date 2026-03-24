@@ -40,6 +40,12 @@ export function BiometricsSyncProvider({
   const [isRecordingEnabled, setRecordingEnabled] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
 
+  // Link this activity session to the course so the teacher can view biometric data
+  useEffect(() => {
+    if (!courseId) return;
+    api.patch('/activity-log/session/course', { courseId }).catch(() => {});
+  }, [courseId]);
+
   // Fetch recording config and consent on mount
   useEffect(() => {
     if (!courseId) return;

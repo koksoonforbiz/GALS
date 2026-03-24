@@ -152,7 +152,7 @@ function BiometricsHooksInner({
       />
 
       {/* py-feat AU extraction badge */}
-      <PyfeatStatusBadge isEnabled={isPyfeatEnabled && recording.isActive} />
+      <PyfeatStatusBadge isEnabled={isPyfeatEnabled} />
 
       {/* Floating webcam preview with face bounding box */}
       {(recording.isActive || pupilSize.isActive || webgazer.isActive) && (
