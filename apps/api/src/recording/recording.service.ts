@@ -2,6 +2,8 @@ import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nest
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { PyfeatService } from '../pyfeat/pyfeat.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ActivityAction } from '../activity-log/activity-action.enum';
 import type { RecordingConfig, RecordingSegment } from '@prisma/client';
 import type { RecordingConfigDto } from './dto/recording-config.dto';
 import type { CreateSegmentDto } from './dto/create-segment.dto';
@@ -16,6 +18,7 @@ export class RecordingService {
     private readonly blob: BlobService,
     @Inject(forwardRef(() => PyfeatService))
     private readonly pyfeatService: PyfeatService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async getConfig(courseId: string): Promise<RecordingConfig> {
@@ -94,6 +97,15 @@ export class RecordingService {
       `Segment ${segmentId} completed: ${updated.filename} (${dto.fileSizeBytes} bytes, ${dto.durationMs}ms)`,
     );
 
+    // Log activity
+    this.activityLog.record({
+      sessionId: updated.sessionId,
+      userId: updated.studentId,
+      action: ActivityAction.RECORDING_SEGMENT_UPLOADED,
+      courseId: updated.courseId,
+      metadata: { segmentId, fileSizeBytes: dto.fileSizeBytes, durationMs: dto.durationMs },
+    });
+
     // If py-feat is enabled for this course, auto-enqueue a processing job
     try {
       const pyfeatConfig = await this.pyfeatService.getConfig(updated.courseId);
@@ -119,11 +131,19 @@ export class RecordingService {
   }
 
   async failSegment(segmentId: string, error: string): Promise<void> {
-    await this.prisma.recordingSegment.update({
+    const segment = await this.prisma.recordingSegment.update({
       where: { id: segmentId },
       data: { uploadStatus: 'FAILED' },
     });
     this.logger.warn(`Segment ${segmentId} failed: ${error}`);
+
+    this.activityLog.record({
+      sessionId: segment.sessionId,
+      userId: segment.studentId,
+      action: ActivityAction.RECORDING_UPLOAD_FAILED,
+      courseId: segment.courseId,
+      metadata: { segmentId, error },
+    });
   }
 
   async getSegments(studentId: string, courseId: string): Promise<RecordingSegment[]> {

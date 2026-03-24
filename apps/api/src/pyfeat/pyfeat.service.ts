@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ActivityAction } from '../activity-log/activity-action.enum';
 import type { PyfeatConfig, PyfeatJob, PyfeatAuResult } from '@prisma/client';
 import type { PyfeatConfigDto } from './dto/pyfeat-config.dto';
 import type { EnqueueJobDto } from './dto/enqueue-job.dto';
@@ -18,6 +20,7 @@ export class PyfeatService {
     private readonly prisma: PrismaService,
     private readonly blob: BlobService,
     private readonly config: ConfigService,
+    private readonly activityLog: ActivityLogService,
   ) {
     this.redis = new Redis(this.config.get<string>('REDIS_URL', 'redis://localhost:6379'));
   }
@@ -88,6 +91,14 @@ export class PyfeatService {
 
     await this.redis.rpush(PYFEAT_QUEUE_KEY, payload);
     this.logger.log(`Enqueued py-feat job ${job.id} for session ${dto.sessionId}`);
+
+    this.activityLog.record({
+      sessionId: dto.sessionId,
+      userId: dto.studentId,
+      action: ActivityAction.PYFEAT_JOB_ENQUEUED,
+      courseId: dto.courseId,
+      metadata: { jobId: job.id, sourceMinioKey: dto.sourceMinioKey },
+    });
 
     return job;
   }

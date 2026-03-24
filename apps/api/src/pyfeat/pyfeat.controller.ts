@@ -24,6 +24,7 @@ export class PyfeatController {
   }
 
   @Post('jobs')
+  @Roles('teacher')
   enqueueJob(@Body() dto: EnqueueJobDto) {
     return this.pyfeatService.enqueueJob(dto);
   }

@@ -13,6 +13,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { WebgazerService } from './webgazer.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { ActivityAction } from '../activity-log/activity-action.enum';
 import type { WebgazerConfigDto } from './dto/webgazer-config.dto';
 import type { WebgazerBatchDto } from './dto/create-gaze-log.dto';
 import type { CalibrationEventDto } from './dto/calibration-event.dto';
@@ -25,7 +27,10 @@ interface RequestUser {
 @Controller('webgazer')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class WebgazerController {
-  constructor(private readonly webgazerService: WebgazerService) {}
+  constructor(
+    private readonly webgazerService: WebgazerService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   @Get('config/:courseId')
   @Roles('teacher', 'student')
@@ -41,19 +46,37 @@ export class WebgazerController {
 
   @Post('logs')
   @Roles('student')
-  bulkCreateLogs(@Request() req: { user: RequestUser }, @Body() dto: WebgazerBatchDto) {
-    return this.webgazerService.bulkCreateLogs(
+  async bulkCreateLogs(@Request() req: { user: RequestUser }, @Body() dto: WebgazerBatchDto) {
+    await this.webgazerService.bulkCreateLogs(
       req.user.id,
       dto.sessionId,
       dto.courseId,
       dto.readings,
     );
+    this.activityLog.record({
+      sessionId: dto.sessionId,
+      userId: req.user.id,
+      action: ActivityAction.WEBGAZER_BATCH_SUBMITTED,
+      courseId: dto.courseId,
+      metadata: { readingCount: dto.readings.length },
+    });
   }
 
   @Post('calibration')
   @Roles('student')
-  recordCalibration(@Request() req: { user: RequestUser }, @Body() dto: CalibrationEventDto) {
-    return this.webgazerService.recordCalibrationEvent(req.user.id, dto);
+  async recordCalibration(@Request() req: { user: RequestUser }, @Body() dto: CalibrationEventDto) {
+    const event = await this.webgazerService.recordCalibrationEvent(req.user.id, dto);
+    const action = dto.completedAt
+      ? ActivityAction.WEBGAZER_CALIBRATION_COMPLETED
+      : ActivityAction.WEBGAZER_CALIBRATION_STARTED;
+    this.activityLog.record({
+      sessionId: dto.sessionId,
+      userId: req.user.id,
+      action,
+      courseId: dto.courseId,
+      metadata: { triggeredBy: dto.triggeredBy, accuracy: dto.accuracy },
+    });
+    return event;
   }
 
   @Get('logs/:studentId/:courseId')
