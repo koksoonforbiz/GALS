@@ -178,6 +178,7 @@ def process_job(job: dict) -> None:
 ```
 
 **Frame extraction logic**:
+
 ```python
 import cv2
 import numpy as np
@@ -201,6 +202,7 @@ cap.release()
 ```
 
 **py-feat detection**:
+
 ```python
 detector = Detector(
     face_model=job['detectorBackend'],
@@ -215,6 +217,7 @@ result_df = detector.detect_image(frame_paths)
 ```
 
 **Wall time synchronisation**:
+
 ```python
 clip_start = datetime.fromisoformat(job['clipStartWallTime'])
 for i, (frame_idx, row) in enumerate(result_df.iterrows()):
@@ -224,6 +227,7 @@ for i, (frame_idx, row) in enumerate(result_df.iterrows()):
 ```
 
 **Output CSV columns**:
+
 ```
 jobId,studentId,sessionId,frameIndex,timestamp,wallTime,AU01,AU02,AU04,...,AU28,faceConf
 ```
@@ -263,14 +267,14 @@ getConfig(courseId: string): Promise<PyfeatConfig>
 
 ### `pyfeat.controller.ts` — REST Endpoints
 
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/pyfeat/config/:courseId` | teacher | Get config |
-| PATCH | `/pyfeat/config/:courseId` | teacher | Update config |
-| POST | `/pyfeat/jobs` | system/internal | Enqueue a job (called internally by session recording feature) |
-| GET | `/pyfeat/jobs/:studentId/:courseId` | teacher | List jobs |
-| GET | `/pyfeat/jobs/:jobId/results` | teacher | Get AU results for job |
-| GET | `/pyfeat/jobs/:jobId/export` | teacher | Export results CSV |
+| Method | Path                                | Role            | Description                                                    |
+| ------ | ----------------------------------- | --------------- | -------------------------------------------------------------- |
+| GET    | `/pyfeat/config/:courseId`          | teacher         | Get config                                                     |
+| PATCH  | `/pyfeat/config/:courseId`          | teacher         | Update config                                                  |
+| POST   | `/pyfeat/jobs`                      | system/internal | Enqueue a job (called internally by session recording feature) |
+| GET    | `/pyfeat/jobs/:studentId/:courseId` | teacher         | List jobs                                                      |
+| GET    | `/pyfeat/jobs/:jobId/results`       | teacher         | Get AU results for job                                         |
+| GET    | `/pyfeat/jobs/:jobId/export`        | teacher         | Export results CSV                                             |
 
 ---
 
@@ -284,15 +288,15 @@ Mount in the **Biometrics** tab of `CourseBuilderPage`.
 
 **Fields**:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| Enable py-feat | Toggle | Master on/off per course |
-| Extraction FPS | Slider (0.5–5.0, step 0.5) | Frames per second to sample |
-| Detector backend | Select | retinaface / mtcnn / img2pose |
-| AU predictor | Select | xgb / svm / logistic |
-| Enabled AUs | Multi-checkbox | Select which AUs to display in viewer (AU01, AU04, AU06, AU07, AU12, AU17, AU25, AU26 pre-checked) |
+| Field            | Type                       | Description                                                                                        |
+| ---------------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
+| Enable py-feat   | Toggle                     | Master on/off per course                                                                           |
+| Extraction FPS   | Slider (0.5–5.0, step 0.5) | Frames per second to sample                                                                        |
+| Detector backend | Select                     | retinaface / mtcnn / img2pose                                                                      |
+| AU predictor     | Select                     | xgb / svm / logistic                                                                               |
+| Enabled AUs      | Multi-checkbox             | Select which AUs to display in viewer (AU01, AU04, AU06, AU07, AU12, AU17, AU25, AU26 pre-checked) |
 
-Tooltip on "Extraction FPS": *"Higher FPS increases processing time. 1 FPS is recommended for most use cases."*
+Tooltip on "Extraction FPS": _"Higher FPS increases processing time. 1 FPS is recommended for most use cases."_
 
 ### `PyfeatLogViewer.tsx`
 
@@ -371,7 +375,7 @@ pyfeat-worker:
   deploy:
     resources:
       limits:
-        memory: 4G  # py-feat models are large
+        memory: 4G # py-feat models are large
 ```
 
 ### `Dockerfile`

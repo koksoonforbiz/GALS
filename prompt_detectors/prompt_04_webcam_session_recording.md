@@ -5,6 +5,7 @@
 You are extending the **Adaptive Tutoring System (ATS)** monorepo. Stack: NestJS 10, React 18 + Vite, PostgreSQL + Prisma, Redis, MinIO. The system tracks student activity via `StudentSession` → `ActivityLog`.
 
 This feature **continuously records the student's webcam** during an active learning session. Recordings are:
+
 - Segmented on page refresh / session boundaries
 - Uploaded to MinIO with a structured filename
 - Synchronised to all other log data (pupil size, gaze, AU, activity logs) via a shared `wallClockOffset`
@@ -116,15 +117,15 @@ getDownloadUrl(segmentId: string): Promise<string> // presigned GET URL
 
 ### `recording.controller.ts` — REST Endpoints
 
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/recording/config/:courseId` | teacher | Get config |
-| PATCH | `/recording/config/:courseId` | teacher | Update config |
-| POST | `/recording/segments/initiate` | student | Create segment + get upload URL |
-| PATCH | `/recording/segments/:segmentId/complete` | student | Mark upload complete |
-| PATCH | `/recording/segments/:segmentId/fail` | student | Mark upload failed |
-| GET | `/recording/segments/:studentId/:courseId` | teacher | List segments |
-| GET | `/recording/segments/:segmentId/download` | teacher | Get download URL |
+| Method | Path                                       | Role    | Description                     |
+| ------ | ------------------------------------------ | ------- | ------------------------------- |
+| GET    | `/recording/config/:courseId`              | teacher | Get config                      |
+| PATCH  | `/recording/config/:courseId`              | teacher | Update config                   |
+| POST   | `/recording/segments/initiate`             | student | Create segment + get upload URL |
+| PATCH  | `/recording/segments/:segmentId/complete`  | student | Mark upload complete            |
+| PATCH  | `/recording/segments/:segmentId/fail`      | student | Mark upload failed              |
+| GET    | `/recording/segments/:studentId/:courseId` | teacher | List segments                   |
+| GET    | `/recording/segments/:segmentId/download`  | teacher | Get download URL                |
 
 ### MinIO Path Convention
 
@@ -135,6 +136,7 @@ recordings/{courseId}/{studentId}/{sessionId}/{filename}
 Where `filename` = `{studentId}_{sessionId}_{YYYY-MM-DD}_{HHmmss-SSS}_{segmentIndex}.webm`
 
 Example:
+
 ```
 recordings/clx1a2b3/usr_abc123/sess_xyz789/usr_abc123_sess_xyz789_2024-11-15_143022-000_0.webm
 ```
@@ -150,6 +152,7 @@ recordings/clx1a2b3/usr_abc123/sess_xyz789/usr_abc123_sess_xyz789_2024-11-15_143
 This is the **central recording hook**. It manages the full `MediaRecorder` lifecycle, handles page transitions, and coordinates uploads.
 
 **Initialisation**
+
 1. On mount, call `GET /recording/config/:courseId`. If `isEnabled = false`, return early.
 2. Request webcam access: `navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 15 }, audio: false })`.
 3. Compute and store the **wall clock offset**: `wallClockOffset = Date.now() - performance.now()`. This is used to convert `performance.now()` timestamps to absolute UTC across all data streams.
@@ -159,10 +162,12 @@ This is the **central recording hook**. It manages the full `MediaRecorder` life
 7. Start recording: `mediaRecorder.start(1000)` (1-second time slices for memory efficiency).
 
 **Chunk Management**
+
 - On each `ondataavailable` event: push `event.data` to `chunks` array.
 - Keep a running total of blob size. If it exceeds **50 MB**, force-stop and restart a new segment (prevents memory overflow on long sessions).
 
 **Upload Flow**
+
 ```
 mediaRecorder.stop()
   → onstop fires
@@ -198,11 +203,13 @@ window.addEventListener('pagehide', handlePageLeave);
 ```
 
 **On page return / remount after refresh**:
+
 - A new session will have a new `sessionId` from the existing session management system.
 - Increment `segmentIndex` by calling `POST /recording/segments/initiate` again with the new `sessionId`.
 - The `segmentIndex` on the server should auto-increment per `(studentId, sessionId)` pair.
 
 **sendBeacon for in-flight notifications**:
+
 ```typescript
 // On beforeunload, use sendBeacon to notify server of segment completion
 // even if the page is closing
@@ -213,11 +220,12 @@ const completionPayload = JSON.stringify({
 });
 navigator.sendBeacon(
   `/api/recording/segments/${segmentId}/complete`,
-  new Blob([completionPayload], { type: 'application/json' })
+  new Blob([completionPayload], { type: 'application/json' }),
 );
 ```
 
 **Return shape**:
+
 ```typescript
 export interface RecordingState {
   isActive: boolean;
@@ -228,7 +236,7 @@ export interface RecordingState {
   error: string | null;
 }
 
-export function useWebcamRecording(courseId: string, sessionId: string): RecordingState
+export function useWebcamRecording(courseId: string, sessionId: string): RecordingState;
 ```
 
 **Expose `wallClockOffset`** — this value must be shared with `usePupilSize` and `useWebgazer` hooks so all data streams use the same time reference. Pass it via a React context or a shared `BiometricsSyncContext`.
@@ -241,7 +249,7 @@ Create `apps/web/src/contexts/BiometricsSyncContext.tsx`:
 interface BiometricsSyncContextValue {
   sessionId: string;
   courseId: string;
-  wallClockOffset: number;  // from useWebcamRecording
+  wallClockOffset: number; // from useWebcamRecording
   isRecordingActive: boolean;
 }
 
@@ -254,8 +262,9 @@ Wrap the student layout with `BiometricsSyncProvider`, which internally calls `u
 #### `RecordingIndicator.tsx`
 
 A persistent, non-intrusive recording indicator for the student:
+
 - Small red pulsing dot in the top-right corner of the page when recording is active
-- Tooltip on hover: *"Session is being recorded for learning analytics"*
+- Tooltip on hover: _"Session is being recorded for learning analytics"_
 - Orange dot when upload is in progress
 
 ---
@@ -273,8 +282,7 @@ All four data streams (pupil size, gaze, AUs, activity logs) must be anchored to
 const wallClockOffset = Date.now() - performance.now();
 
 // Used by ALL hooks to convert a performance.now() reading to UTC:
-const toWallTime = (perfNow: number): string =>
-  new Date(perfNow + wallClockOffset).toISOString();
+const toWallTime = (perfNow: number): string => new Date(perfNow + wallClockOffset).toISOString();
 ```
 
 ### Updated Hook Signatures
@@ -304,11 +312,11 @@ Mount in the **Biometrics** tab of `CourseBuilderPage`.
 
 **Fields**:
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field            | Type   | Description              |
+| ---------------- | ------ | ------------------------ |
 | Enable recording | Toggle | Master on/off per course |
 
-Note: display a privacy warning box: *"Enabling this feature will record video of students during learning sessions. Ensure students have been informed and have consented per your institution's policies."*
+Note: display a privacy warning box: _"Enabling this feature will record video of students during learning sessions. Ensure students have been informed and have consented per your institution's policies."_
 
 ### `RecordingLogViewer.tsx`
 

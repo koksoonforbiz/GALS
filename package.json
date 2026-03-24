@@ -56,5 +56,9 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@nestjs/event-emitter": "^3.0.1",
+    "mammoth": "^1.11.0"
   }
 }

@@ -1,5 +1,17 @@
 const API_BASE = '/api';
 
+/** Background biometric paths that should NOT trigger a login redirect on 401. */
+const BACKGROUND_PATHS = [
+  '/pupil-size/logs',
+  '/webgazer/logs',
+  '/webgazer/calibration',
+  '/recording/segments/',
+];
+
+function isBackgroundPath(path: string): boolean {
+  return BACKGROUND_PATHS.some((p) => path.startsWith(p));
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -13,10 +25,12 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const token = localStorage.getItem('token');
+  const sessionId = sessionStorage.getItem('ats_session_id');
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(sessionId ? { 'X-Session-Id': sessionId } : {}),
     ...options?.headers,
   };
 
@@ -26,6 +40,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   });
 
   if (res.status === 401) {
+    // For background biometric requests, throw without clearing token/redirecting.
+    // This prevents a single 401 from killing all in-flight biometric flushes.
+    if (isBackgroundPath(path)) {
+      throw new ApiError(401, 'Unauthorized');
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';
@@ -59,6 +78,12 @@ export const api = {
   patch: <T>(path: string, data: unknown) =>
     apiFetch<T>(path, {
       method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  put: <T>(path: string, data: unknown) =>
+    apiFetch<T>(path, {
+      method: 'PUT',
       body: JSON.stringify(data),
     }),
 

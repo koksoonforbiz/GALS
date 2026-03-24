@@ -6,12 +6,12 @@ This folder contains four implementation prompts for adding multimodal biometric
 
 ## Files
 
-| File | Feature | Key Tech |
-|------|---------|----------|
-| `prompt_01_pupil_size_estimation.md` | SET Pupil Size Estimation | Client-side canvas processing, NestJS, PostgreSQL, MinIO CSV export |
-| `prompt_02_webgazer_calibration.md` | WebGazer Eye Tracking + Calibration | WebGazer.js, 9-point calibration modal, inactivity re-calibration, gaze heatmap |
-| `prompt_03_pyfeat_au_extraction.md` | py-feat Action Unit Extraction | Python microservice, Redis queue, Docker, AU timeline viewer |
-| `prompt_04_webcam_session_recording.md` | Webcam Session Recording | MediaRecorder API, presigned MinIO uploads, timestamp synchronisation |
+| File                                    | Feature                             | Key Tech                                                                        |
+| --------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------- |
+| `prompt_01_pupil_size_estimation.md`    | SET Pupil Size Estimation           | Client-side canvas processing, NestJS, PostgreSQL, MinIO CSV export             |
+| `prompt_02_webgazer_calibration.md`     | WebGazer Eye Tracking + Calibration | WebGazer.js, 9-point calibration modal, inactivity re-calibration, gaze heatmap |
+| `prompt_03_pyfeat_au_extraction.md`     | py-feat Action Unit Extraction      | Python microservice, Redis queue, Docker, AU timeline viewer                    |
+| `prompt_04_webcam_session_recording.md` | Webcam Session Recording            | MediaRecorder API, presigned MinIO uploads, timestamp synchronisation           |
 
 ---
 
@@ -69,6 +69,7 @@ const toWallTime = (perfNow: number) => new Date(perfNow + wallClockOffset).toIS
 ```
 
 This offset is stored in:
+
 - `RecordingSegment.startWallTime` (absolute wall time)
 - `ActivityLog` metadata on `RECORDING_STARTED`
 - Passed as a prop to `usePupilSize` and `useWebgazer`

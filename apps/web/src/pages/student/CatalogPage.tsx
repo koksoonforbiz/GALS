@@ -7,6 +7,7 @@ interface CatalogCourse {
   title: string;
   description: string;
   bannerBlobKey: string | null;
+  learningMode: string;
   createdAt: string;
   teacher: { id: string; name: string };
   _count: { modules: number; enrollments: number };
@@ -91,7 +92,14 @@ export function CatalogPage() {
               >
                 <div className="h-2 bg-gradient-to-r from-blue-500 to-purple-500" />
                 <div className="p-4 flex-1 flex flex-col">
-                  <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-gray-900">{course.title}</h3>
+                    {course.learningMode === 'DIALOGUE' && (
+                      <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
+                        Dialogue
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500 mt-1">by {course.teacher.name}</p>
                   {course.description && (
                     <p className="text-sm text-gray-600 mt-2 line-clamp-3 flex-1">
@@ -100,7 +108,8 @@ export function CatalogPage() {
                   )}
                   <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
                     <span className="text-xs text-gray-400">
-                      {course._count.modules} module(s) &middot; {course._count.enrollments} student(s)
+                      {course._count.modules} module(s) &middot; {course._count.enrollments}{' '}
+                      student(s)
                     </span>
                     {isEnrolled ? (
                       <span className="text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-lg font-medium">

@@ -17,10 +17,25 @@ import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
 import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
 import PublishGatePanel from '../../components/PublishGatePanel';
 import LearningPathPanel from '../../components/LearningPathPanel';
+import { DialogueCourseSettingsForm } from '../../components/teacher/DialogueCourseSettingsForm';
+import { DialogueActivityPanel } from '../../components/teacher/DialogueActivityPanel';
+import { RecordingSettings } from '../../components/teacher/biometrics/RecordingSettings';
+import { PupilSizeSettings } from '../../components/teacher/biometrics/PupilSizeSettings';
+import { WebgazerSettings } from '../../components/teacher/biometrics/WebgazerSettings';
+import { PyfeatSettings } from '../../components/teacher/biometrics/PyfeatSettings';
 
 // ─── Tab Types ──────────────────────────────────────────
 
-type TopTabKey = 'overview' | 'content' | 'sources' | 'evaluate' | 'knowledge' | 'publish' | 'settings';
+type TopTabKey =
+  | 'overview'
+  | 'content'
+  | 'sources'
+  | 'evaluate'
+  | 'knowledge'
+  | 'publish'
+  | 'settings'
+  | 'dialogue'
+  | 'biometrics';
 type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
 type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
 
@@ -32,7 +47,7 @@ const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
   'kc-eval': { top: 'knowledge', sub: 'evaluate' },
   'kc-versions': { top: 'knowledge', sub: 'versions' },
   'learning-path': { top: 'knowledge', sub: 'learning-path' },
-  'coverage': { top: 'evaluate', sub: 'coverage' },
+  coverage: { top: 'evaluate', sub: 'coverage' },
   'publish-gate': { top: 'publish' },
 };
 
@@ -66,6 +81,7 @@ interface Course {
   description: string;
   status: 'DRAFT' | 'PUBLISHED';
   visibility: 'PUBLIC' | 'PRIVATE';
+  learningMode: string;
   bannerBlobKey: string | null;
   modules: CourseModule[];
   _count: { enrollments: number; topics: number; modules: number };
@@ -110,7 +126,8 @@ export function CourseBuilderPage() {
     if (redirect) {
       setActiveTab(redirect.top);
       if (redirect.top === 'evaluate' && redirect.sub) setEvalSubTab(redirect.sub as EvalSubTab);
-      if (redirect.top === 'knowledge' && redirect.sub) setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
+      if (redirect.top === 'knowledge' && redirect.sub)
+        setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
       return;
     }
     setActiveTab(key as TopTabKey);
@@ -120,6 +137,8 @@ export function CourseBuilderPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PRIVATE');
+  const [learningMode, setLearningMode] = useState<'STANDARD' | 'DIALOGUE'>('STANDARD');
+  const [hasApiKey, setHasApiKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -225,9 +244,14 @@ export function CourseBuilderPage() {
       setTitle(data.title);
       setDescription(data.description);
       setVisibility(data.visibility);
+      setLearningMode(data.learningMode === 'DIALOGUE' ? 'DIALOGUE' : 'STANDARD');
       if (data.modules.length > 0 && !selectedModuleId) {
         setSelectedModuleId(data.modules[0]!.id);
       }
+      // Check if teacher has API key
+      apiFetch<{ provider: string | null; model: string | null; hasKey: boolean }>('/llm-settings')
+        .then((s) => setHasApiKey(s.hasKey))
+        .catch(() => {});
     } catch {
       toast('error', 'Failed to load course');
       navigate('/teacher/courses');
@@ -258,7 +282,12 @@ export function CourseBuilderPage() {
   // ─── Autosave for Overview (debounced) ──────────────────
 
   const autosave = useCallback(
-    async (data: { title?: string; description?: string; visibility?: string }) => {
+    async (data: {
+      title?: string;
+      description?: string;
+      visibility?: string;
+      learningMode?: string;
+    }) => {
       setSaving(true);
       try {
         await apiFetch(`/courses/${courseId}`, {
@@ -275,7 +304,12 @@ export function CourseBuilderPage() {
   );
 
   const debounceSave = useCallback(
-    (data: { title?: string; description?: string; visibility?: string }) => {
+    (data: {
+      title?: string;
+      description?: string;
+      visibility?: string;
+      learningMode?: string;
+    }) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = setTimeout(() => autosave(data), 1500);
     },
@@ -576,6 +610,8 @@ export function CourseBuilderPage() {
     { key: 'evaluate', label: 'Evaluate' },
     { key: 'knowledge', label: 'Knowledge' },
     { key: 'publish', label: 'Publish' },
+    ...(learningMode === 'DIALOGUE' ? [{ key: 'dialogue' as TopTabKey, label: 'Dialogue' }] : []),
+    { key: 'biometrics' as TopTabKey, label: 'Biometrics' },
     { key: 'settings', label: 'Settings' },
   ];
 
@@ -593,7 +629,6 @@ export function CourseBuilderPage() {
     { key: 'evaluate', label: 'KC Evaluate' },
     { key: 'versions', label: 'Versions' },
   ];
-
 
   return (
     <div>
@@ -616,6 +651,11 @@ export function CourseBuilderPage() {
           >
             {course.status}
           </span>
+          {learningMode === 'DIALOGUE' && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+              Dialogue
+            </span>
+          )}
           {saving && <span className="text-xs text-gray-400">Saving...</span>}
         </div>
       </div>
@@ -740,6 +780,73 @@ export function CourseBuilderPage() {
             >
               Generate Course Structure
             </button>
+          </div>
+
+          {/* Learning Mode Selector */}
+          <div className="mt-6">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">Learning Mode</h4>
+            <div className="space-y-3">
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  learningMode === 'STANDARD'
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="learningMode"
+                  checked={learningMode === 'STANDARD'}
+                  onChange={() => {
+                    setLearningMode('STANDARD');
+                    autosave({ learningMode: 'STANDARD' });
+                  }}
+                  className="mt-0.5 text-blue-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">Standard Mode</span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Traditional course with modules, pages, assessments and AI-assisted content
+                    tools.
+                  </p>
+                </div>
+              </label>
+              <label
+                className={`flex items-start gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors ${
+                  learningMode === 'DIALOGUE'
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="learningMode"
+                  checked={learningMode === 'DIALOGUE'}
+                  onChange={() => {
+                    setLearningMode('DIALOGUE');
+                    autosave({ learningMode: 'DIALOGUE' });
+                  }}
+                  className="mt-0.5 text-purple-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">
+                    Dialogue Mode{' '}
+                    <span className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium ml-1">
+                      NEW
+                    </span>
+                  </span>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Students upload their own materials and learn through AI-powered dialogue.
+                    Inspired by NotebookLM.
+                  </p>
+                </div>
+              </label>
+            </div>
+            {learningMode === 'DIALOGUE' && (
+              <p className="text-xs text-purple-600 mt-2">
+                Configure dialogue settings in the &quot;Dialogue&quot; tab above.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -1263,50 +1370,70 @@ export function CourseBuilderPage() {
       {/* ─── Evaluate Tab (sub-tabs) ─── */}
       {activeTab === 'evaluate' && courseId && (
         <>
-          {evalSubTab === 'content-eval' && (
-            <EvaluationCenterPage courseId={courseId} embedded />
-          )}
-          {evalSubTab === 'kc-eval' && (
-            <KcEvaluationDashboard courseId={courseId} />
-          )}
-          {evalSubTab === 'coverage' && (
-            <CurriculumCoveragePanel courseId={courseId} />
-          )}
+          {evalSubTab === 'content-eval' && <EvaluationCenterPage courseId={courseId} embedded />}
+          {evalSubTab === 'kc-eval' && <KcEvaluationDashboard courseId={courseId} />}
+          {evalSubTab === 'coverage' && <CurriculumCoveragePanel courseId={courseId} />}
         </>
       )}
 
       {/* ─── Knowledge Tab (sub-tabs) ─── */}
       {activeTab === 'knowledge' && courseId && (
         <>
-          {knowledgeSubTab === 'studio' && (
-            <KcStudioPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'graph' && (
-            <KcGraphStudioPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'learning-path' && (
-            <LearningPathPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'mappings' && (
-            <KcMappingPanel courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'evaluate' && (
-            <KcEvaluationDashboard courseId={courseId} />
-          )}
-          {knowledgeSubTab === 'versions' && (
-            <KnowledgeVersionPanel courseId={courseId} />
-          )}
+          {knowledgeSubTab === 'studio' && <KcStudioPanel courseId={courseId} />}
+          {knowledgeSubTab === 'graph' && <KcGraphStudioPanel courseId={courseId} />}
+          {knowledgeSubTab === 'learning-path' && <LearningPathPanel courseId={courseId} />}
+          {knowledgeSubTab === 'mappings' && <KcMappingPanel courseId={courseId} />}
+          {knowledgeSubTab === 'evaluate' && <KcEvaluationDashboard courseId={courseId} />}
+          {knowledgeSubTab === 'versions' && <KnowledgeVersionPanel courseId={courseId} />}
         </>
       )}
 
       {/* ─── Publish Tab ─── */}
-      {activeTab === 'publish' && courseId && (
-        <PublishGatePanel courseId={courseId} />
+      {activeTab === 'publish' && courseId && <PublishGatePanel courseId={courseId} />}
+
+      {/* ─── Dialogue Tab ─── */}
+      {activeTab === 'dialogue' && courseId && (
+        <div className="max-w-2xl space-y-6">
+          <DialogueCourseSettingsForm courseId={courseId} hasApiKey={hasApiKey} />
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dialogue Activity</h3>
+            <DialogueActivityPanel courseId={courseId} />
+          </div>
+        </div>
+      )}
+
+      {/* ─── Biometrics Tab ─── */}
+      {activeTab === 'biometrics' && (
+        <div className="max-w-2xl space-y-6">
+          <h2 className="text-lg font-semibold text-gray-900">Biometrics Settings</h2>
+          <p className="text-sm text-gray-500">
+            Configure biometric tracking features for this course. Settings here control what data
+            is collected from students during learning sessions.
+          </p>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <RecordingSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PupilSizeSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <WebgazerSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PyfeatSettings courseId={courseId!} />
+          </div>
+        </div>
       )}
 
       {/* ─── Settings Tab ─── */}
       {activeTab === 'settings' && (
         <div className="max-w-md space-y-4">
+          <button
+            onClick={() => navigate(`/teacher/courses/${courseId}/prompts`)}
+            className="w-full px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-left"
+          >
+            Learning Intervention Prompts
+          </button>
           <button
             onClick={handleDuplicate}
             className="w-full px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-left"

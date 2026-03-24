@@ -1,7 +1,9 @@
 # PROMPT 03 — Note-Taking Tab (Right Studio Panel)
 
 ## Goal
+
 Add a **"Notes"** tab to the right studio panel. Students can:
+
 - Save highlighted PDF text as notes with optional personal commentary
 - Write free-form notes not tied to any PDF highlight
 - View, edit, search, and delete all notes for the current dialogue session
@@ -13,6 +15,7 @@ All notes are **persisted to the database** and scoped to a `DialogueSession`.
 ---
 
 ## Prerequisites
+
 Stages 1 and 2 (PROMPT_01 and PROMPT_02) must be complete.
 
 ---
@@ -52,6 +55,7 @@ model DialogueNote {
 Add the inverse relation `DialogueNote[]` to `DialogueSession` and `User` models accordingly.
 
 Run:
+
 ```bash
 pnpm --filter api prisma migrate dev --name add_dialogue_notes
 pnpm --filter api prisma generate
@@ -64,6 +68,7 @@ pnpm --filter api prisma generate
 **New NestJS module**: `apps/api/src/dialogue-notes/`
 
 ### Files to create
+
 ```
 dialogue-notes/
   dialogue-notes.module.ts
@@ -116,6 +121,7 @@ export const DialogueNoteSchema = z.object({
 ```
 
 ### Service rules
+
 - All operations verify the `studentId` from JWT matches the note's `studentId` (ownership check).
 - `GET export` returns a formatted markdown string — no JSON:
 
@@ -123,6 +129,7 @@ export const DialogueNoteSchema = z.object({
 # Notes — [Session Date] — [Course Name]
 
 ## Note 1 — Page 4 — [Document Name]
+
 > "The highlighted text excerpt here"
 
 Student comment: My personal note goes here.
@@ -197,6 +204,7 @@ interface NotesPanelProps {
 ```
 
 ### Icons (all `lucide-react`)
+
 - `Search` — search input
 - `Download` — export notes
 - `Plus` — New Note button
@@ -214,6 +222,7 @@ interface NotesPanelProps {
 ## 5. Note Card Design
 
 Each note is a card:
+
 - Left border color: `border-l-4` where color maps to:
   - `yellow` → `border-yellow-400`
   - `green` → `border-green-400`
@@ -230,15 +239,18 @@ Each note is a card:
 ### Color picker inside note card / editor
 
 Show 5 small colored circle buttons to change the note's color:
+
 ```tsx
-{['yellow','green','blue','pink','purple'].map(c => (
-  <button
-    key={c}
-    className={`w-4 h-4 rounded-full border-2 ${activeColor === c ? 'border-gray-800 dark:border-white scale-110' : 'border-transparent'}`}
-    style={{ backgroundColor: colorMap[c] }}
-    onClick={() => handleColorChange(c)}
-  />
-))}
+{
+  ['yellow', 'green', 'blue', 'pink', 'purple'].map((c) => (
+    <button
+      key={c}
+      className={`w-4 h-4 rounded-full border-2 ${activeColor === c ? 'border-gray-800 dark:border-white scale-110' : 'border-transparent'}`}
+      style={{ backgroundColor: colorMap[c] }}
+      onClick={() => handleColorChange(c)}
+    />
+  ));
+}
 ```
 
 ---
@@ -246,6 +258,7 @@ Show 5 small colored circle buttons to change the note's color:
 ## 6. Inline Note Editor
 
 When "New Note" is clicked OR "Edit" on an existing note:
+
 - An inline form replaces / expands below the card (no modal):
 
 ```
@@ -274,9 +287,9 @@ const handleSaveHighlightToNotes = (
   text: string,
   sourceDocumentId: string,
   documentName: string,
-  pageNumber?: number
+  pageNumber?: number,
 ) => {
-  setActiveStudioTab('notes');  // switch right panel to Notes tab
+  setActiveStudioTab('notes'); // switch right panel to Notes tab
   setPendingHighlight({ text, sourceDocumentId, documentName, pageNumber });
 };
 ```
@@ -284,6 +297,7 @@ const handleSaveHighlightToNotes = (
 ### In `NotesPanel`
 
 When `pendingHighlight` prop changes (non-null):
+
 1. Open the inline note editor pre-filled with:
    - `highlightedText` = `pendingHighlight.text`
    - `sourceDocumentId` = `pendingHighlight.sourceDocumentId`
@@ -299,6 +313,7 @@ The student can then type their comment and save, or just save the highlight wit
 ## 8. "Send to Learn" from Note Card
 
 Each note card with `highlightedText` shows a `Lightbulb` button — "Send to Learn". On click:
+
 - Calls the same `onSendToIntervention(text, 'elaboration')` callback from Stage 2.
 - Switches right panel to the "Learn" tab with the note's highlighted text pre-filled.
 
@@ -318,6 +333,7 @@ Each note card with `highlightedText` shows a `Lightbulb` button — "Send to Le
 `GET /dialogue-notes/export/:sessionId` returns a markdown file.
 
 Frontend download:
+
 ```ts
 const blob = new Blob([markdownText], { type: 'text/markdown' });
 const url = URL.createObjectURL(blob);
@@ -335,6 +351,7 @@ Show a `Download` icon button in the toolbar. Disable + show `Loader2` spinner w
 ## 11. Empty State
 
 When there are no notes:
+
 ```
 [NotebookPen icon — large, muted]
 No notes yet
@@ -363,7 +380,8 @@ export const notesApi = {
   create: (data: CreateNoteDto) => api.post('/dialogue-notes', data),
   update: (id: string, data: UpdateNoteDto) => api.patch(`/dialogue-notes/${id}`, data),
   delete: (id: string) => api.delete(`/dialogue-notes/${id}`),
-  export: (sessionId: string) => api.get(`/dialogue-notes/export/${sessionId}`, { responseType: 'text' }),
+  export: (sessionId: string) =>
+    api.get(`/dialogue-notes/export/${sessionId}`, { responseType: 'text' }),
 };
 ```
 
