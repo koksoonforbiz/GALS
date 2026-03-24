@@ -1,16 +1,17 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivityLog } from '../../lib/activity-log';
 import { BiometricsSyncProvider, useBiometricsSync } from '../../contexts/BiometricsSyncContext';
 import { useWebcamRecording } from '../../lib/recording/useWebcamRecording';
 import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
 import { useWebgazer } from '../../lib/webgazer/useWebgazer';
-import { usePyfeat } from '../../lib/pyfeat/usePyfeat';
 import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { RecordingIndicator } from './RecordingIndicator';
 import { RecordingConsentModal } from './RecordingConsentModal';
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
 import { WebcamPreviewWindow } from './WebcamPreviewWindow';
+import { PupilSizeOverlay } from './PupilSizeOverlay';
+import { WebgazerStatusBadge } from './WebgazerStatusBadge';
 
 /**
  * Inner component that uses BiometricsSync context to activate all hooks.
@@ -84,15 +85,41 @@ function BiometricsHooksInner({
   // Feature 02: WebGazer
   const webgazer = useWebgazer(courseId, sessionId, wallClockOffset);
 
-  // Feature 03: PyFeat AU detection
-  const pyfeat = usePyfeat(courseId, sessionId);
+  // ── Activity log tracking for biometric state changes ──
+  const { track } = useActivityLog();
+  const prevRecording = useRef(false);
+  const prevPupil = useRef(false);
+  const prevWebgazer = useRef(false);
+  const prevCalibrating = useRef(false);
+
+  useEffect(() => {
+    if (recording.isActive && !prevRecording.current) track('RECORDING_STARTED', { courseId, metadata: { wallClockOffset } });
+    if (!recording.isActive && prevRecording.current) track('RECORDING_STOPPED', { courseId });
+    prevRecording.current = recording.isActive;
+  }, [recording.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (pupilSize.isActive && !prevPupil.current) track('PUPIL_SIZE_TRACKING_STARTED', { courseId });
+    if (!pupilSize.isActive && prevPupil.current) track('PUPIL_SIZE_TRACKING_STOPPED', { courseId });
+    prevPupil.current = pupilSize.isActive;
+  }, [pupilSize.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (webgazer.isActive && !prevWebgazer.current) track('WEBGAZER_TRACKING_STARTED', { courseId });
+    if (!webgazer.isActive && prevWebgazer.current) track('WEBGAZER_TRACKING_STOPPED', { courseId });
+    prevWebgazer.current = webgazer.isActive;
+  }, [webgazer.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (webgazer.isCalibrating && !prevCalibrating.current) track('WEBGAZER_CALIBRATION_STARTED', { courseId });
+    prevCalibrating.current = webgazer.isCalibrating;
+  }, [webgazer.isCalibrating]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build active features list for banner
   const activeFeatures: string[] = [];
   if (recording.isActive) activeFeatures.push('Session recording');
   if (pupilSize.isActive) activeFeatures.push('Pupil size monitoring');
   if (webgazer.isActive) activeFeatures.push('Eye tracking');
-  if (pyfeat.isActive) activeFeatures.push('AU detection');
 
   return (
     <>
@@ -101,6 +128,16 @@ function BiometricsHooksInner({
 
       {/* Recording indicator */}
       <RecordingIndicator isActive={recording.isActive} isUploading={recording.isUploading} />
+
+      {/* Pupil size debug badge */}
+      <PupilSizeOverlay isActive={pupilSize.isActive} latestDiameter={pupilSize.latestDiameter} />
+
+      {/* WebGazer status badge */}
+      <WebgazerStatusBadge
+        isActive={webgazer.isActive}
+        isCalibrating={webgazer.isCalibrating}
+        needsCalibration={webgazer.needsCalibration}
+      />
 
       {/* Floating webcam preview with face bounding box */}
       {(recording.isActive || pupilSize.isActive || webgazer.isActive) && (
@@ -135,9 +172,11 @@ function BiometricsHooksInner({
           getCurrentPrediction={webgazer.getCurrentPrediction}
           onComplete={() => {
             webgazer.completeCalibration();
+            track('WEBGAZER_CALIBRATION_COMPLETED', { courseId });
           }}
           onSkip={() => {
             webgazer.skipCalibration();
+            track('WEBGAZER_CALIBRATION_SKIPPED', { courseId });
           }}
         />
       )}

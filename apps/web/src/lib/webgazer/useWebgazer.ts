@@ -171,6 +171,19 @@ export function useWebgazer(
 
     async function start() {
       try {
+        // Check WebGL support before proceeding
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          if (!gl) {
+            console.warn('[WebGazer] WebGL not supported — eye tracking unavailable in this browser');
+            setIsActive(false);
+            return;
+          }
+        } catch {
+          console.warn('[WebGazer] WebGL detection failed — eye tracking may not work');
+        }
+
         const cfg = await api.get<WebgazerConfig>(`/webgazer/config/${courseId}`);
         console.log('[WebGazer] Config loaded:', cfg);
         if (!cfg.isEnabled || cancelled) return;
