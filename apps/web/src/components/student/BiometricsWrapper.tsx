@@ -177,8 +177,8 @@ function BiometricsHooksInner({
         />
       )}
 
-      {/* WebGazer calibration modal */}
-      {webgazer.needsCalibration && !webgazer.isCalibrating && (
+      {/* WebGazer calibration modal — only after consent is resolved */}
+      {!showConsentModal && webgazer.needsCalibration && !webgazer.isCalibrating && (
         <CalibrationModal
           courseId={courseId}
           sessionId={sessionId}
