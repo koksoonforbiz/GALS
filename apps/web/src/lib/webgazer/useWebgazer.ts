@@ -60,9 +60,11 @@ export function useWebgazer(
   isActive: boolean;
   isCalibrating: boolean;
   needsCalibration: boolean;
+  showGazeDot: boolean;
   triggerCalibration: () => void;
   completeCalibration: () => void;
   skipCalibration: () => void;
+  toggleGazeDot: () => void;
   trainOnPoint: (screenX: number, screenY: number) => void;
   getCurrentPrediction: () => Promise<{ x: number; y: number } | null>;
   latestGaze: { x: number; y: number } | null;
@@ -71,6 +73,7 @@ export function useWebgazer(
   const [isActive, setIsActive] = useState(false);
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [needsCalibration, setNeedsCalibration] = useState(false);
+  const [showGazeDot, setShowGazeDot] = useState(false);
   const [latestGaze, setLatestGaze] = useState<{ x: number; y: number } | null>(null);
   const [config, setConfig] = useState<WebgazerConfig | null>(null);
 
@@ -125,6 +128,16 @@ export function useWebgazer(
     setNeedsCalibration(false);
   }, []);
 
+  /** Toggle the red gaze-prediction dot on/off. */
+  const toggleGazeDot = useCallback(() => {
+    setShowGazeDot((prev) => {
+      const next = !prev;
+      const dot = document.getElementById('webgazerGazeDot');
+      if (dot) dot.style.display = next ? 'block' : 'none';
+      return next;
+    });
+  }, []);
+
   /** Feed a known screen position into WebGazer's regression model. */
   const trainOnPoint = useCallback((screenX: number, screenY: number) => {
     try {
@@ -169,7 +182,7 @@ export function useWebgazer(
         webgazerRef.current = loadedWg;
 
         const wg = webgazerRef.current;
-        wg.setRegression('ridge');
+        wg.setRegression('weightedRidge');
         wg.saveDataAcrossSessions(false);
 
         // Set absolute path for MediaPipe face_mesh WASM assets
@@ -215,12 +228,12 @@ export function useWebgazer(
         const wgGazeDot = document.getElementById('webgazerGazeDot');
         if (wgGazeDot) wgGazeDot.style.display = 'none';
 
-        // Gaze listener throttled to 5 Hz (200ms)
+        // Gaze listener throttled to 10 Hz (100ms) for better accuracy
         wg.setGazeListener(
           (data: { x: number; y: number; confidence?: number } | null, _timestamp: number) => {
             if (!data) return;
             const now = performance.now();
-            if (now - lastGazeTimeRef.current < 200) return;
+            if (now - lastGazeTimeRef.current < 100) return;
             lastGazeTimeRef.current = now;
 
             setLatestGaze({ x: data.x, y: data.y });
@@ -324,9 +337,11 @@ export function useWebgazer(
     isActive,
     isCalibrating,
     needsCalibration,
+    showGazeDot,
     triggerCalibration,
     completeCalibration,
     skipCalibration,
+    toggleGazeDot,
     trainOnPoint,
     getCurrentPrediction,
     latestGaze,
