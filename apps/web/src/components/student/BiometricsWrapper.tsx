@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivityLog } from '../../lib/activity-log';
+import { api } from '../../lib/api';
 import { BiometricsSyncProvider, useBiometricsSync } from '../../contexts/BiometricsSyncContext';
 import { useWebcamRecording } from '../../lib/recording/useWebcamRecording';
 import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
@@ -12,6 +13,7 @@ import { BiometricsActiveBanner } from './BiometricsActiveBanner';
 import { WebcamPreviewWindow } from './WebcamPreviewWindow';
 import { PupilSizeOverlay } from './PupilSizeOverlay';
 import { WebgazerStatusBadge } from './WebgazerStatusBadge';
+import { PyfeatStatusBadge } from './PyfeatStatusBadge';
 
 /**
  * Inner component that uses BiometricsSync context to activate all hooks.
@@ -68,6 +70,16 @@ function BiometricsHooksInner({
   children: ReactNode;
 }) {
   const [showConsentModal, setShowConsentModal] = useState(isRecordingEnabled && !hasConsent);
+  const [isPyfeatEnabled, setIsPyfeatEnabled] = useState(false);
+
+  // Check if py-feat AU extraction is enabled for this course
+  useEffect(() => {
+    if (!courseId) return;
+    api
+      .get<{ isEnabled: boolean }>(`/pyfeat/config/${courseId}`)
+      .then((cfg) => setIsPyfeatEnabled(cfg.isEnabled))
+      .catch(() => setIsPyfeatEnabled(false));
+  }, [courseId]);
 
   // Feature 04: Webcam recording
   const recording = useWebcamRecording(
@@ -138,6 +150,9 @@ function BiometricsHooksInner({
         isCalibrating={webgazer.isCalibrating}
         needsCalibration={webgazer.needsCalibration}
       />
+
+      {/* py-feat AU extraction badge */}
+      <PyfeatStatusBadge isEnabled={isPyfeatEnabled && recording.isActive} />
 
       {/* Floating webcam preview with face bounding box */}
       {(recording.isActive || pupilSize.isActive || webgazer.isActive) && (

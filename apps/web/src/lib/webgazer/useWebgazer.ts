@@ -132,6 +132,13 @@ export function useWebgazer(
   const toggleGazeDot = useCallback(() => {
     setShowGazeDot((prev) => {
       const next = !prev;
+      // Use WebGazer's API when available (more reliable than DOM manipulation,
+      // since WebGazer may reset display on each gaze update)
+      const wg = webgazerRef.current;
+      if (wg?.showPredictionPoints) {
+        wg.showPredictionPoints(next);
+      }
+      // Also set the DOM element as fallback
       const dot = document.getElementById('webgazerGazeDot');
       if (dot) dot.style.display = next ? 'block' : 'none';
       return next;

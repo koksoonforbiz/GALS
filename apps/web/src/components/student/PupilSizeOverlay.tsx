@@ -14,7 +14,7 @@ export function PupilSizeOverlay({ isActive, latestDiameter }: PupilSizeOverlayP
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-[90] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-gray-900/80 backdrop-blur border border-gray-700 text-white text-xs shadow-lg"
+      className="fixed bottom-4 left-48 z-[90] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-gray-900/80 backdrop-blur border border-gray-700 text-white text-xs shadow-lg"
       title="Pupil size estimation (debug)"
     >
       <Eye size={12} className="text-violet-400" />
