@@ -48,13 +48,18 @@ function formatDuration(ms: number | null): string {
 export function RecordingLogViewer({ studentId, courseId }: RecordingLogViewerProps) {
   const [segments, setSegments] = useState<RecordingSegment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     api
       .get<RecordingSegment[]>(`/recording/segments/${studentId}/${courseId}`)
       .then(setSegments)
-      .catch(() => setSegments([]))
+      .catch((err) => {
+        setSegments([]);
+        setError(err?.message || 'Failed to load recording data');
+      })
       .finally(() => setIsLoading(false));
   }, [studentId, courseId]);
 
@@ -74,6 +79,14 @@ export function RecordingLogViewer({ studentId, courseId }: RecordingLogViewerPr
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 size={20} className="animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-6 text-sm text-red-400">
+        Error loading recording data: {error}
       </div>
     );
   }

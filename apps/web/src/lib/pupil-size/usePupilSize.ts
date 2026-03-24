@@ -176,7 +176,21 @@ export function usePupilSize(
       cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
-      flushBuffer(); // Flush remaining
+
+      // Synchronous keepalive flush — the async flushBuffer() would be dropped by React cleanup
+      const remaining = bufferRef.current.splice(0, bufferRef.current.length);
+      if (remaining.length > 0) {
+        const token = localStorage.getItem('token');
+        fetch('/api/pupil-size/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId, courseId, readings: remaining }),
+          keepalive: true,
+        }).catch(() => {});
+      }
 
       streamRef.current?.getTracks().forEach((t) => t.stop());
       mediaStreamRegistry.unregister('pupil-size');

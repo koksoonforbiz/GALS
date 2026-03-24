@@ -31,22 +31,38 @@ export function WebgazerLogViewer({
   const [logs, setLogs] = useState<WebgazerLog[]>([]);
   const [calibrations, setCalibrations] = useState<CalibrationEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     Promise.all([
-      api.get<WebgazerLog[]>(`/webgazer/logs/${studentId}/${courseId}`).catch(() => []),
-      api.get<CalibrationEvent[]>(`/webgazer/calibration/${studentId}/${courseId}`).catch(() => []),
-    ]).then(([l, c]) => {
-      setLogs(l);
-      setCalibrations(c);
-      setIsLoading(false);
-    });
+      api.get<WebgazerLog[]>(`/webgazer/logs/${studentId}/${courseId}`),
+      api.get<CalibrationEvent[]>(`/webgazer/calibration/${studentId}/${courseId}`),
+    ])
+      .then(([l, c]) => {
+        setLogs(l);
+        setCalibrations(c);
+      })
+      .catch((err) => {
+        setLogs([]);
+        setCalibrations([]);
+        setError(err?.message || 'Failed to load gaze tracking data');
+      })
+      .finally(() => setIsLoading(false));
   }, [studentId, courseId]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-6">
         <Loader2 size={18} className="animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-6 text-sm text-red-400">
+        Error loading gaze tracking data: {error}
       </div>
     );
   }

@@ -295,7 +295,21 @@ export function useWebgazer(
       cancelled = true;
       if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-      flushBuffer();
+
+      // Synchronous keepalive flush — the async flushBuffer() would be dropped by React cleanup
+      const remaining = bufferRef.current.splice(0, bufferRef.current.length);
+      if (remaining.length > 0) {
+        const token = localStorage.getItem('token');
+        fetch('/api/webgazer/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId, courseId, readings: remaining }),
+          keepalive: true,
+        }).catch(() => {});
+      }
 
       try {
         webgazerRef.current?.end();
@@ -312,7 +326,21 @@ export function useWebgazer(
     const handleLogout = () => {
       if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-      flushBuffer();
+
+      // Synchronous keepalive flush on logout
+      const remaining = bufferRef.current.splice(0, bufferRef.current.length);
+      if (remaining.length > 0) {
+        const token = localStorage.getItem('token');
+        fetch('/api/webgazer/logs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ sessionId, courseId, readings: remaining }),
+          keepalive: true,
+        }).catch(() => {});
+      }
       try {
         webgazerRef.current?.end();
       } catch {

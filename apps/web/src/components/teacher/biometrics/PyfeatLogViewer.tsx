@@ -52,12 +52,17 @@ export function PyfeatLogViewer({ studentId, courseId }: { studentId: string; co
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
     api
       .get<PyfeatJob[]>(`/pyfeat/jobs/${studentId}/${courseId}`)
       .then(setJobs)
-      .catch(() => setJobs([]))
+      .catch((err) => {
+        setJobs([]);
+        setError(err?.message || 'Failed to load py-feat data');
+      })
       .finally(() => setIsLoading(false));
   }, [studentId, courseId]);
 
@@ -104,6 +109,14 @@ export function PyfeatLogViewer({ studentId, courseId }: { studentId: string; co
     return (
       <div className="flex items-center justify-center py-6">
         <Loader2 size={18} className="animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-6 text-sm text-red-400">
+        Error loading py-feat data: {error}
       </div>
     );
   }
