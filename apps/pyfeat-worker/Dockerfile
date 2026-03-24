@@ -10,11 +10,21 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip so it resolves binary wheels correctly
-RUN pip install --upgrade pip
+# Upgrade pip, then pre-install heavy deps as binary wheels.
+# This prevents py-feat's transitive deps (tables→h5py→numpy)
+# from pulling ancient versions that try to compile from source.
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir \
+    "numpy>=1.24,<2.5" \
+    "matplotlib>=3.7" \
+    "Pillow>=10.0" \
+    "h5py>=3.9" \
+    "scipy>=1.11" \
+    "torch>=2.0" \
+    "torchvision>=0.15"
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # Pre-download py-feat models at build time
 RUN python -c "from feat import Detector; Detector(face_model='retinaface', au_model='xgb')"
