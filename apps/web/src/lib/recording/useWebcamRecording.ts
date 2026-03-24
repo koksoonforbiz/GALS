@@ -220,7 +220,7 @@ export function useWebcamRecording(
       if (sid) {
         const token = localStorage.getItem('token');
         fetch(`/api/recording/segments/${sid}/complete`, {
-          method: 'POST',
+          method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),

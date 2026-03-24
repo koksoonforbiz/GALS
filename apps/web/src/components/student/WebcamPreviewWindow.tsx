@@ -1,12 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Minimize2, Maximize2, X, Video } from 'lucide-react';
+import { Minimize2, Maximize2, X, Video, Eye, EyeOff } from 'lucide-react';
 import { mediaStreamRegistry } from '../../lib/biometrics/mediaStreamRegistry';
+
+interface WebcamPreviewWindowProps {
+  showGazeDot?: boolean;
+  onToggleGazeDot?: () => void;
+}
 
 /**
  * Floating draggable window that shows the live webcam feed
  * with WebGazer's face-detection bounding box overlay.
  */
-export function WebcamPreviewWindow() {
+export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPreviewWindowProps = {}) {
   const [isOpen, setIsOpen] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [hasStream, setHasStream] = useState(false);
@@ -201,6 +206,15 @@ export function WebcamPreviewWindow() {
           Webcam Preview
         </span>
         <div className="flex items-center gap-0.5">
+          {onToggleGazeDot && (
+            <button
+              onClick={onToggleGazeDot}
+              className={`p-0.5 transition-colors ${showGazeDot ? 'text-green-400 hover:text-green-300' : 'text-gray-400 hover:text-white'}`}
+              title={showGazeDot ? 'Hide gaze dot' : 'Show gaze dot'}
+            >
+              {showGazeDot ? <Eye size={10} /> : <EyeOff size={10} />}
+            </button>
+          )}
           <button
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-0.5 text-gray-400 hover:text-white transition-colors"
