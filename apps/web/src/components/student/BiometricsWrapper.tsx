@@ -5,6 +5,7 @@ import { BiometricsSyncProvider, useBiometricsSync } from '../../contexts/Biomet
 import { useWebcamRecording } from '../../lib/recording/useWebcamRecording';
 import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
 import { useWebgazer } from '../../lib/webgazer/useWebgazer';
+import { usePyfeat } from '../../lib/pyfeat/usePyfeat';
 import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { RecordingIndicator } from './RecordingIndicator';
 import { RecordingConsentModal } from './RecordingConsentModal';
@@ -83,11 +84,15 @@ function BiometricsHooksInner({
   // Feature 02: WebGazer
   const webgazer = useWebgazer(courseId, sessionId, wallClockOffset);
 
+  // Feature 03: PyFeat AU detection
+  const pyfeat = usePyfeat(courseId, sessionId);
+
   // Build active features list for banner
   const activeFeatures: string[] = [];
   if (recording.isActive) activeFeatures.push('Session recording');
   if (pupilSize.isActive) activeFeatures.push('Pupil size monitoring');
   if (webgazer.isActive) activeFeatures.push('Eye tracking');
+  if (pyfeat.isActive) activeFeatures.push('AU detection');
 
   return (
     <>
