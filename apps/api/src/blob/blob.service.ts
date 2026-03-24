@@ -25,6 +25,7 @@ export interface PresignedUrlOptions {
 export class BlobService implements OnModuleInit {
   private readonly logger = new Logger(BlobService.name);
   private readonly client: S3Client;
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
   private readonly publicEndpoint: string | undefined;
   private readonly internalEndpoint: string;
@@ -33,13 +34,27 @@ export class BlobService implements OnModuleInit {
     this.internalEndpoint = this.config.getOrThrow<string>('BLOB_STORAGE_ENDPOINT');
     this.bucket = this.config.getOrThrow<string>('BLOB_STORAGE_BUCKET');
     this.publicEndpoint = this.config.get<string>('BLOB_STORAGE_PUBLIC_ENDPOINT');
+
+    const region = this.config.get<string>('BLOB_STORAGE_REGION', 'us-east-1');
+    const credentials = {
+      accessKeyId: this.config.getOrThrow<string>('BLOB_STORAGE_ACCESS_KEY'),
+      secretAccessKey: this.config.getOrThrow<string>('BLOB_STORAGE_SECRET_KEY'),
+    };
+
+    // Internal client for direct S3 operations (put, get, delete)
     this.client = new S3Client({
       endpoint: this.internalEndpoint,
-      region: this.config.get<string>('BLOB_STORAGE_REGION', 'us-east-1'),
-      credentials: {
-        accessKeyId: this.config.getOrThrow<string>('BLOB_STORAGE_ACCESS_KEY'),
-        secretAccessKey: this.config.getOrThrow<string>('BLOB_STORAGE_SECRET_KEY'),
-      },
+      region,
+      credentials,
+      forcePathStyle: true,
+    });
+
+    // Presigning client uses the public endpoint so browser-signed URLs
+    // have a Host header that matches what the browser actually sends.
+    this.presignClient = new S3Client({
+      endpoint: this.publicEndpoint || this.internalEndpoint,
+      region,
+      credentials,
       forcePathStyle: true,
     });
   }
@@ -106,13 +121,12 @@ export class BlobService implements OnModuleInit {
       Key: options.key,
       ContentType: options.contentType,
     });
-    let url = await getSignedUrl(this.client, command, {
+    const url = await getSignedUrl(this.presignClient, command, {
       expiresIn: options.expiresIn ?? 3600,
     });
-    if (this.publicEndpoint) {
-      url = url.replace(this.internalEndpoint, this.publicEndpoint);
-    }
-    return url;
+    // Return a relative path so the browser routes through the dev proxy,
+    // avoiding CORS issues with direct cross-origin MinIO requests.
+    return this.toRelativePath(url);
   }
 
   async getPresignedDownloadUrl(options: PresignedUrlOptions): Promise<string> {
@@ -120,13 +134,23 @@ export class BlobService implements OnModuleInit {
       Bucket: this.bucket,
       Key: options.key,
     });
-    let url = await getSignedUrl(this.client, command, {
+    const url = await getSignedUrl(this.presignClient, command, {
       expiresIn: options.expiresIn ?? 3600,
     });
-    if (this.publicEndpoint) {
-      url = url.replace(this.internalEndpoint, this.publicEndpoint);
+    return this.toRelativePath(url);
+  }
+
+  /**
+   * Convert an absolute presigned URL to a relative path.
+   * The frontend dev server proxies /s3/ to MinIO, avoiding CORS.
+   */
+  private toRelativePath(absoluteUrl: string): string {
+    try {
+      const parsed = new URL(absoluteUrl);
+      return `/s3${parsed.pathname}${parsed.search}`;
+    } catch {
+      return absoluteUrl;
     }
-    return url;
   }
 
   async isHealthy(): Promise<boolean> {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../lib/api';
@@ -13,11 +13,12 @@ export function Login() {
   const navigate = useNavigate();
 
   // Redirect if already logged in
-  if (user) {
-    const destination = user.role === 'student' ? '/student' : '/teacher';
-    navigate(destination, { replace: true });
-    return null;
-  }
+  useEffect(() => {
+    if (user) {
+      const destination = user.role === 'student' ? '/student' : '/teacher';
+      navigate(destination, { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

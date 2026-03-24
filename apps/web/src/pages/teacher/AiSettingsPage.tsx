@@ -8,12 +8,38 @@ interface LlmSettings {
   hasKey: boolean;
 }
 
-const OPENAI_MODELS = [
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini (cheapest, fast)' },
-  { value: 'gpt-4o', label: 'GPT-4o (best quality)' },
-  { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (legacy, cheapest)' },
-];
+const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
+  openai: [
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini (cheapest, fast)' },
+    { value: 'gpt-4o', label: 'GPT-4o (best quality)' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (legacy, cheapest)' },
+  ],
+  gemini: [
+    { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (fast, recommended)' },
+    { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (cheapest)' },
+    { value: 'gemini-2.5-flash-preview-05-20', label: 'Gemini 2.5 Flash (preview, best quality)' },
+    { value: 'gemini-2.5-pro-preview-05-06', label: 'Gemini 2.5 Pro (preview, most capable)' },
+  ],
+};
+
+const PROVIDER_KEY_HELP: Record<string, { placeholder: string; url: string; label: string }> = {
+  openai: {
+    placeholder: 'sk-...',
+    url: 'https://platform.openai.com/api-keys',
+    label: 'platform.openai.com/api-keys',
+  },
+  gemini: {
+    placeholder: 'AIza...',
+    url: 'https://aistudio.google.com/apikey',
+    label: 'aistudio.google.com/apikey',
+  },
+};
+
+const DEFAULT_MODELS: Record<string, string> = {
+  openai: 'gpt-4o-mini',
+  gemini: 'gemini-2.0-flash',
+};
 
 export function AiSettingsPage() {
   const { toast } = useToast();
@@ -82,8 +108,8 @@ export function AiSettingsPage() {
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Settings</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Configure your OpenAI API key to enable AI-powered content generation in the Course Studio.
-        Your key is encrypted at rest and only used for your requests.
+        Configure your AI provider API key to enable AI-powered content generation and learning
+        strategies. Your key is encrypted at rest and only used for your requests.
       </p>
 
       {/* Current Status */}
@@ -113,7 +139,7 @@ export function AiSettingsPage() {
         {!settings?.hasKey && (
           <p className="text-xs text-yellow-700 mt-2">
             Without an API key, the Course Studio will use template-based content generation.
-            To use real AI, enter your OpenAI API key below.
+            To use real AI, enter your API key below.
           </p>
         )}
       </div>
@@ -124,10 +150,15 @@ export function AiSettingsPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
           <select
             value={provider}
-            onChange={(e) => setProvider(e.target.value)}
+            onChange={(e) => {
+              const newProvider = e.target.value;
+              setProvider(newProvider);
+              setModel(DEFAULT_MODELS[newProvider] || 'gpt-4o-mini');
+            }}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
           </select>
         </div>
 
@@ -138,14 +169,16 @@ export function AiSettingsPage() {
             onChange={(e) => setModel(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
-            {OPENAI_MODELS.map((m) => (
+            {(PROVIDER_MODELS[provider] || []).map((m) => (
               <option key={m.value} value={m.value}>
                 {m.label}
               </option>
             ))}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            GPT-4o Mini is recommended for a balance of cost and quality.
+            {provider === 'gemini'
+              ? 'Gemini 2.0 Flash is recommended for a balance of cost and quality.'
+              : 'GPT-4o Mini is recommended for a balance of cost and quality.'}
           </p>
         </div>
 
@@ -158,7 +191,7 @@ export function AiSettingsPage() {
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={settings?.hasKey ? 'Enter new key to replace...' : 'sk-...'}
+              placeholder={settings?.hasKey ? 'Enter new key to replace...' : (PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...')}
               className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
               required={!settings?.hasKey}
             />
@@ -173,12 +206,12 @@ export function AiSettingsPage() {
           <p className="text-xs text-gray-400 mt-1">
             Get your API key from{' '}
             <a
-              href="https://platform.openai.com/api-keys"
+              href={PROVIDER_KEY_HELP[provider]?.url || '#'}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 hover:underline"
             >
-              platform.openai.com/api-keys
+              {PROVIDER_KEY_HELP[provider]?.label || 'your provider'}
             </a>
           </p>
         </div>

@@ -3,6 +3,7 @@
 ## Context
 
 You are building a new feature inside an existing **Adaptive Tutoring System (ATS)** monorepo with the following stack:
+
 - **Monorepo**: pnpm + Turbo
 - **Backend**: NestJS 10 (TypeScript), REST + Socket.io WebSockets
 - **Frontend**: React 18 + React Router 6, Vite, Tailwind CSS 4
@@ -19,6 +20,7 @@ Reference repository for the pupil size algorithm: https://github.com/kianyu/SET
 ## Feature Overview
 
 Implement **SET (Simple Eye Tracking) Pupil Size Estimation** using the webcam directly in the browser. This feature:
+
 - Runs client-side using the student's webcam
 - Estimates pupil size in real time
 - Logs timestamped pupil diameter readings to a CSV file per student per session
@@ -99,13 +101,13 @@ exportSessionCsv(studentId: string, sessionId: string): Promise<string> // retur
 
 Register these REST endpoints (guard with `JwtAuthGuard` + role guards from existing auth system):
 
-| Method | Path | Role | Description |
-|--------|------|------|-------------|
-| GET | `/pupil-size/config/:courseId` | teacher | Get config |
-| PATCH | `/pupil-size/config/:courseId` | teacher | Update config |
-| POST | `/pupil-size/logs` | student | Batch submit readings |
-| GET | `/pupil-size/logs/:studentId/:courseId` | teacher | View logs |
-| GET | `/pupil-size/logs/:studentId/:sessionId/export` | teacher/student | Download CSV |
+| Method | Path                                            | Role            | Description           |
+| ------ | ----------------------------------------------- | --------------- | --------------------- |
+| GET    | `/pupil-size/config/:courseId`                  | teacher         | Get config            |
+| PATCH  | `/pupil-size/config/:courseId`                  | teacher         | Update config         |
+| POST   | `/pupil-size/logs`                              | student         | Batch submit readings |
+| GET    | `/pupil-size/logs/:studentId/:courseId`         | teacher         | View logs             |
+| GET    | `/pupil-size/logs/:studentId/:sessionId/export` | teacher/student | Download CSV          |
 
 ### CSV Export Format
 
@@ -139,6 +141,7 @@ Create the following files:
 #### `usePupilSize.ts` (React hook)
 
 This hook:
+
 1. On mount, checks via `GET /pupil-size/config/:courseId` whether the feature is enabled.
 2. If enabled, requests webcam access (`navigator.mediaDevices.getUserMedia`).
 3. Loads the SET pupil size algorithm from the reference repo. Adapt the JavaScript port of the algorithm:
@@ -159,15 +162,19 @@ export interface PupilReading {
   pupilDiameter: number;
 }
 
-export function usePupilSize(courseId: string, sessionId: string): {
+export function usePupilSize(
+  courseId: string,
+  sessionId: string,
+): {
   isActive: boolean;
   latestDiameter: number | null;
-}
+};
 ```
 
 #### `PupilSizeOverlay.tsx` (optional debug overlay)
 
 A small floating badge (bottom-right corner, only in development mode) that shows:
+
 - Current pupil diameter in px
 - Status: `active | calibrating | error | disabled`
 
@@ -192,6 +199,7 @@ Add a new tab to the existing **8-tab interface**: **"Biometrics"** (or append t
 Location: `apps/web/src/components/teacher/biometrics/PupilSizeSettings.tsx`
 
 UI elements:
+
 - **Toggle switch**: Enable / Disable pupil size tracking for this course
 - **Status badge**: Shows current config state (Enabled / Disabled)
 - **Save button**: Calls `PATCH /pupil-size/config/:courseId`
@@ -203,6 +211,7 @@ Location: `apps/web/src/components/teacher/biometrics/PupilSizeLogViewer.tsx`
 This is embedded in the **StudentLogPage** (`/teacher/students/:studentId/logs`) as a new tab alongside the existing Summary, Conversation, Timeline, and Interventions tabs. Name it **"Biometrics"**.
 
 UI elements:
+
 - **Date range picker**: Filter logs by date range
 - **Session selector dropdown**: Filter by specific session
 - **Line chart** (use recharts): X-axis = timestamp, Y-axis = pupilDiameter. One series per session if multiple are shown.
@@ -266,7 +275,7 @@ Log `PUPIL_SIZE_BATCH_SUBMITTED` on every successful flush with metadata: `{ cou
 
 ## Key Notes
 
-- **Privacy**: Display a persistent, dismissible banner on the student page when biometric tracking is active: *"Pupil size monitoring is active for this course."*
+- **Privacy**: Display a persistent, dismissible banner on the student page when biometric tracking is active: _"Pupil size monitoring is active for this course."_
 - **Performance**: The canvas processing runs on a `OffscreenCanvas` in a Web Worker if available, to avoid blocking the main thread.
 - **Data retention**: CSV files in MinIO should have a lifecycle policy of 90 days (configure in MinIO bucket settings, document this in the README).
 - **No face data is stored** — only the scalar pupil diameter value is persisted.

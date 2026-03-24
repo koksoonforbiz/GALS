@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { AttemptsService } from './attempts.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
-import { ZodValidationPipe } from '../common';
+import { ZodValidationPipe, SessionId } from '../common';
 import {
   CreateAttemptSchema,
   UpdateAttemptSchema,
@@ -39,8 +39,12 @@ export class AttemptsController {
   @Post()
   @Roles('student')
   @UsePipes(new ZodValidationPipe(CreateAttemptSchema))
-  create(@Request() req: { user: RequestUser }, @Body() dto: CreateAttempt) {
-    return this.attemptsService.create(req.user.id, dto);
+  create(
+    @Request() req: { user: RequestUser },
+    @Body() dto: CreateAttempt,
+    @SessionId() sessionId?: string,
+  ) {
+    return this.attemptsService.create(req.user.id, dto, sessionId);
   }
 
   @Get()
@@ -82,8 +86,9 @@ export class AttemptsController {
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
     @Body(new ZodValidationPipe(SubmitAttemptSchema)) dto: SubmitAttempt,
+    @SessionId() sessionId?: string,
   ) {
-    return this.attemptsService.submit(id, req.user.id, dto);
+    return this.attemptsService.submit(id, req.user.id, dto, sessionId);
   }
 
   @Post(':id/grade')

@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Put,
   Post,
   Patch,
   Delete,
@@ -13,7 +14,7 @@ import {
 import { CoursesService } from './courses.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { ZodValidationPipe } from '../common';
-import { CreateCourseSchema, UpdateCourseSchema } from '@ats/shared';
+import { CreateCourseSchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -82,5 +83,21 @@ export class CoursesController {
   @Roles('teacher', 'admin')
   remove(@Request() req: { user: RequestUser }, @Param('id') id: string) {
     return this.coursesService.remove(id, req.user.id);
+  }
+
+  @Get(':id/dialogue-settings')
+  @Roles('teacher', 'admin')
+  getDialogueSettings(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    return this.coursesService.getDialogueSettings(id, req.user.id);
+  }
+
+  @Put(':id/dialogue-settings')
+  @Roles('teacher', 'admin')
+  updateDialogueSettings(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Body() settings: Record<string, unknown>,
+  ) {
+    return this.coursesService.updateDialogueSettings(id, req.user.id, settings);
   }
 }

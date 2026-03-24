@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
 import {
   connectSocket,
@@ -9,6 +10,7 @@ import {
   disconnectSocket,
 } from '../../lib/socket';
 import { MDXRenderer } from '../../components/MDXRenderer';
+import { useActivityLog } from '../../lib/activity-log';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -29,12 +31,48 @@ interface Question {
   explanation: unknown | null;
 }
 
+interface AiFeedbackJson {
+  levels?: string[];
+  status?: string;
+  // Task-level feedback
+  task?: {
+    score?: number;
+    maxScore?: number;
+    isCorrect?: boolean;
+    errors?: string[];
+    missingElements?: string[];
+    correctElements?: string[];
+    feedback?: string;
+  };
+  // Process-level feedback
+  process?: {
+    structureAssessment?: string;
+    reasoningStrengths?: string[];
+    reasoningWeaknesses?: string[];
+    suggestedApproach?: string;
+    feedback?: string;
+  };
+  // Self-regulation feedback
+  selfRegulation?: {
+    selfReflectionPrompts?: string[];
+    studyStrategies?: string[];
+    feedback?: string;
+  };
+  // Self-level feedback
+  self?: {
+    positiveObservations?: string[];
+    encouragement?: string;
+    feedback?: string;
+  };
+}
+
 interface GradingResult {
   id: string;
   score: number;
   feedback: string;
   gradedBy: string;
   createdAt?: string;
+  aiFeedbackJson?: AiFeedbackJson | null;
 }
 
 interface Attempt {
@@ -86,6 +124,8 @@ export function AttemptPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { setPageContext } = usePageContext();
+  const { track } = useActivityLog();
 
   /* ---- core state ---- */
   const [attempt, setAttempt] = useState<Attempt | null>(null);
@@ -126,6 +166,13 @@ export function AttemptPage() {
         } else if (data.status === 'submitted' || data.status === 'grading') {
           setGradingStatus('pending');
         }
+
+        track('QUESTION_VIEWED', {
+          attemptId: data.id,
+          assessmentId: data.assessmentId,
+          questionId: data.questionId,
+          metadata: { summary: `Viewed question ${data.questionId}` },
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load attempt');
       } finally {
@@ -134,7 +181,19 @@ export function AttemptPage() {
     };
 
     fetchAttempt();
-  }, [attemptId]);
+  }, [attemptId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update page context when attempt loads
+  useEffect(() => {
+    if (attempt) {
+      setPageContext({
+        pageType: 'quiz',
+        courseId: null,
+        contentId: attempt.assessmentId || attempt.id,
+        contentTitle: attempt.question.prompt.slice(0, 60),
+      });
+    }
+  }, [attempt, setPageContext]);
 
   /* ================================================================ */
   /*  WebSocket for grade updates                                      */
@@ -228,6 +287,13 @@ export function AttemptPage() {
           textResponse: textResponse || null,
           selectedOptionIds: selectedOptionIds.length > 0 ? selectedOptionIds : null,
         }),
+      });
+
+      track('ASSESSMENT_SUBMITTED', {
+        attemptId,
+        assessmentId: attempt.assessmentId,
+        questionId: attempt.questionId,
+        metadata: { summary: `Submitted attempt ${attemptId}` },
       });
 
       // Update local state from server response (contains autoFeedback / currentScore for MCQ)
@@ -404,6 +470,154 @@ export function AttemptPage() {
     );
   };
 
+  const renderAiFeedback = (aiFeedback: AiFeedbackJson) => {
+    if (aiFeedback.status === 'pending_ai_grading') {
+      return (
+        <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <p className="text-sm text-yellow-700">AI feedback is being generated...</p>
+        </div>
+      );
+    }
+
+    const sections: React.ReactNode[] = [];
+
+    // Task-level feedback
+    if (aiFeedback.task) {
+      const t = aiFeedback.task;
+      sections.push(
+        <div key="task" className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-medium text-blue-800 mb-2">Task-Level Feedback</h4>
+          {t.feedback && <p className="text-blue-700 mb-2">{t.feedback}</p>}
+          {t.correctElements && t.correctElements.length > 0 && (
+            <div className="mb-2">
+              <span className="text-sm font-medium text-green-700">Correct:</span>
+              <ul className="list-disc list-inside text-sm text-green-700 ml-2">
+                {t.correctElements.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {t.errors && t.errors.length > 0 && (
+            <div className="mb-2">
+              <span className="text-sm font-medium text-red-700">Errors:</span>
+              <ul className="list-disc list-inside text-sm text-red-700 ml-2">
+                {t.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {t.missingElements && t.missingElements.length > 0 && (
+            <div>
+              <span className="text-sm font-medium text-amber-700">Missing:</span>
+              <ul className="list-disc list-inside text-sm text-amber-700 ml-2">
+                {t.missingElements.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>,
+      );
+    }
+
+    // Process-level feedback
+    if (aiFeedback.process) {
+      const p = aiFeedback.process;
+      sections.push(
+        <div key="process" className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <h4 className="font-medium text-purple-800 mb-2">Process-Level Feedback</h4>
+          {p.feedback && <p className="text-purple-700 mb-2">{p.feedback}</p>}
+          {p.reasoningStrengths && p.reasoningStrengths.length > 0 && (
+            <div className="mb-2">
+              <span className="text-sm font-medium text-green-700">Strengths:</span>
+              <ul className="list-disc list-inside text-sm text-green-700 ml-2">
+                {p.reasoningStrengths.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {p.reasoningWeaknesses && p.reasoningWeaknesses.length > 0 && (
+            <div className="mb-2">
+              <span className="text-sm font-medium text-amber-700">Areas to improve:</span>
+              <ul className="list-disc list-inside text-sm text-amber-700 ml-2">
+                {p.reasoningWeaknesses.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {p.suggestedApproach && (
+            <p className="text-sm text-purple-600 italic">{p.suggestedApproach}</p>
+          )}
+        </div>,
+      );
+    }
+
+    // Self-regulation feedback
+    if (aiFeedback.selfRegulation) {
+      const sr = aiFeedback.selfRegulation;
+      sections.push(
+        <div key="self-reg" className="p-3 bg-teal-50 border border-teal-200 rounded-lg">
+          <h4 className="font-medium text-teal-800 mb-2">Self-Regulation Feedback</h4>
+          {sr.feedback && <p className="text-teal-700 mb-2">{sr.feedback}</p>}
+          {sr.selfReflectionPrompts && sr.selfReflectionPrompts.length > 0 && (
+            <div className="mb-2">
+              <span className="text-sm font-medium text-teal-700">Reflect on:</span>
+              <ul className="list-disc list-inside text-sm text-teal-700 ml-2">
+                {sr.selfReflectionPrompts.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {sr.studyStrategies && sr.studyStrategies.length > 0 && (
+            <div>
+              <span className="text-sm font-medium text-teal-700">Study strategies:</span>
+              <ul className="list-disc list-inside text-sm text-teal-700 ml-2">
+                {sr.studyStrategies.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>,
+      );
+    }
+
+    // Self-level feedback
+    if (aiFeedback.self) {
+      const s = aiFeedback.self;
+      sections.push(
+        <div key="self" className="p-3 bg-pink-50 border border-pink-200 rounded-lg">
+          <h4 className="font-medium text-pink-800 mb-2">Encouragement</h4>
+          {s.feedback && <p className="text-pink-700 mb-2">{s.feedback}</p>}
+          {s.positiveObservations && s.positiveObservations.length > 0 && (
+            <ul className="list-disc list-inside text-sm text-pink-700 ml-2">
+              {s.positiveObservations.map((o, i) => (
+                <li key={i}>{o}</li>
+              ))}
+            </ul>
+          )}
+          {s.encouragement && (
+            <p className="text-sm text-pink-600 italic mt-2">{s.encouragement}</p>
+          )}
+        </div>,
+      );
+    }
+
+    if (sections.length === 0) return null;
+
+    return (
+      <div className="mt-3 space-y-3">
+        <p className="text-xs text-gray-500 italic">AI-generated feedback</p>
+        {sections}
+      </div>
+    );
+  };
+
   const renderGradingResults = () => {
     if (!isGraded || attempt.gradingResults.length === 0) return null;
 
@@ -427,6 +641,7 @@ export function AttemptPage() {
               Graded by: {gr.gradedBy}
               {gr.createdAt && ` on ${new Date(gr.createdAt).toLocaleString()}`}
             </p>
+            {gr.aiFeedbackJson && renderAiFeedback(gr.aiFeedbackJson)}
           </div>
         ))}
       </div>

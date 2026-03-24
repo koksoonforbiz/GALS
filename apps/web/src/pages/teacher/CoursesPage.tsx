@@ -17,6 +17,7 @@ interface Course {
   description: string | null;
   status: 'DRAFT' | 'PUBLISHED';
   visibility: 'PUBLIC' | 'PRIVATE';
+  learningMode: string;
   topics: Topic[];
   _count: { topics: number; enrollments: number; modules: number };
   createdAt: string;
@@ -239,10 +240,7 @@ export function CoursesPage() {
             const isExpanded = expandedCourseId === course.id;
 
             return (
-              <div
-                key={course.id}
-                className="bg-white rounded-lg shadow-sm border border-gray-200"
-              >
+              <div key={course.id} className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="p-4">
                   <div className="flex items-start justify-between">
                     <div
@@ -263,6 +261,11 @@ export function CoursesPage() {
                         <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
                           {course.visibility}
                         </span>
+                        {course.learningMode === 'DIALOGUE' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">
+                            Dialogue
+                          </span>
+                        )}
                       </div>
                       {course.description && (
                         <p className="text-gray-600 mt-1 text-sm">{course.description}</p>

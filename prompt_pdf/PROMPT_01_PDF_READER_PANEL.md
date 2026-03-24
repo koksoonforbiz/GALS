@@ -1,6 +1,7 @@
 # PROMPT 01 — PDF Reader Panel (replaces Chat Panel)
 
 ## Goal
+
 When a student clicks a PDF document in the left sources panel of the Dialogue Learning page, the **center chat panel is replaced** by a full PDF reader. The right studio panel stays untouched and fully functional. A clear UI affordance lets the student switch back to the chat view at any time.
 
 ---
@@ -34,10 +35,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 ```ts
 interface PdfReaderPanelProps {
-  documentId: string;        // StudentSourceDocument.id
-  documentName: string;      // display name
-  documentUrl: string;       // presigned MinIO URL
-  onClose: () => void;       // callback to return to chat view
+  documentId: string; // StudentSourceDocument.id
+  documentName: string; // display name
+  documentUrl: string; // presigned MinIO URL
+  onClose: () => void; // callback to return to chat view
 }
 ```
 
@@ -56,6 +57,7 @@ interface PdfReaderPanelProps {
 ```
 
 ### Toolbar icons (all from `lucide-react`)
+
 - `ArrowLeft` — back to chat
 - `ZoomIn` / `ZoomOut` — scale PDF (min 0.5, max 2.5, step 0.25)
 - `RotateCw` — rotate 90°
@@ -63,10 +65,11 @@ interface PdfReaderPanelProps {
 - `FileText` — shown next to document name
 
 ### Behaviour
+
 - Default zoom: `1.0` (100%)
 - All pages are rendered in a scrollable column (not paginated, continuous scroll). Page number in the toolbar updates on scroll.
 - Show a `Loader2` (spinning) icon while the PDF loads.
-- On load error, show an inline error state with `AlertCircle` icon: *"Could not load PDF. Please try again."*
+- On load error, show an inline error state with `AlertCircle` icon: _"Could not load PDF. Please try again."_
 - The component must **NOT** render anything related to the studio/right panel — it only owns the center column.
 
 ---
@@ -85,11 +88,13 @@ Authorization: Bearer <token>  (student role)
 ```
 
 **Logic**:
+
 1. Look up `StudentSourceDocument` by `id`, verify it belongs to the authenticated student.
 2. Call MinIO `presignedGetObject` with a 15-minute expiry.
 3. Return `{ url: string }`.
 
 **DTO** (`packages/shared/src/blob.schema.ts`):
+
 ```ts
 export const PresignedUrlResponseSchema = z.object({
   url: z.string().url(),
@@ -106,10 +111,12 @@ export type PresignedUrlResponse = z.infer<typeof PresignedUrlResponseSchema>;
 ### Changes
 
 For each document in the list:
+
 - If `mimeType === 'application/pdf'` (or filename ends with `.pdf`): show a `BookOpen` icon button labelled **"Read"** next to the document name.
-- If the document is NOT a PDF: show a `BookOpen` icon button with a `title` tooltip: *"Reading is available for PDF files only"* and the button must be **disabled** (`opacity-50 cursor-not-allowed`).
+- If the document is NOT a PDF: show a `BookOpen` icon button with a `title` tooltip: _"Reading is available for PDF files only"_ and the button must be **disabled** (`opacity-50 cursor-not-allowed`).
 
 ### On "Read" click (PDF only)
+
 1. Call `GET /blob/presign/:documentId` to get the presigned URL.
 2. Set view mode to `'pdf-reader'` with `{ documentId, documentName, documentUrl }` stored in local state.
 

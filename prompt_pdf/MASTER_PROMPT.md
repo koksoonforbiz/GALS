@@ -1,15 +1,16 @@
 # Master Build Instructions — ATS Reading & Note-Taking Interface
 
 ## Overview
+
 You are building a **PDF Reading & Note-Taking Interface** inside the existing **Dialogue Learning** page of the Adaptive Tutoring System (ATS).
 
 This feature spans **3 stages**. You must complete them in order. Each stage has its own prompt file:
 
-| Stage | File | Description |
-|-------|------|-------------|
-| 1 | `PROMPT_01_PDF_READER_PANEL.md` | PDF reader replaces chat panel when student opens a document |
-| 2 | `PROMPT_02_HIGHLIGHT_INTERVENTIONS.md` | Text highlighting on PDF triggers learning intervention panel |
-| 3 | `PROMPT_03_NOTE_TAKING_TAB.md` | Note-taking tab: save highlights, write comments, manage notes |
+| Stage | File                                   | Description                                                    |
+| ----- | -------------------------------------- | -------------------------------------------------------------- |
+| 1     | `PROMPT_01_PDF_READER_PANEL.md`        | PDF reader replaces chat panel when student opens a document   |
+| 2     | `PROMPT_02_HIGHLIGHT_INTERVENTIONS.md` | Text highlighting on PDF triggers learning intervention panel  |
+| 3     | `PROMPT_03_NOTE_TAKING_TAB.md`         | Note-taking tab: save highlights, write comments, manage notes |
 
 ---
 
@@ -59,6 +60,7 @@ Read and implement each prompt file **one at a time**, in order:
 ## When All Stages Are Complete
 
 Run a final check:
+
 - [ ] PDF reader opens and renders correctly
 - [ ] Switching back to chat view works
 - [ ] Text highlight popup appears on selection
