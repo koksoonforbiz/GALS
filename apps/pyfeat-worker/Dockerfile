@@ -2,12 +2,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for OpenCV
+# System deps for OpenCV, Pillow (freetype/png), and build tools
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglx-mesa0 \
     libglib2.0-0 \
     ffmpeg \
+    libfreetype6-dev \
+    libpng-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
