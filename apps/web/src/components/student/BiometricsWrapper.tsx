@@ -8,7 +8,7 @@ import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
 import { useWebgazer } from '../../lib/webgazer/useWebgazer';
 import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { RecordingIndicator } from './RecordingIndicator';
-import { RecordingConsentModal } from './RecordingConsentModal';
+// RecordingConsentModal removed — consent is implied by login
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
 import { WebcamPreviewWindow } from './WebcamPreviewWindow';
 import { PupilSizeOverlay } from './PupilSizeOverlay';
@@ -29,7 +29,6 @@ function BiometricsHooks({ children }: { children: ReactNode }) {
     isRecordingEnabled,
     hasConsent,
     setRecordingActive,
-    setHasConsent,
   } = sync;
 
   return (
@@ -40,8 +39,6 @@ function BiometricsHooks({ children }: { children: ReactNode }) {
       isRecordingEnabled={isRecordingEnabled}
       hasConsent={hasConsent}
       onRecordingActiveChange={setRecordingActive}
-      onConsentGiven={() => setHasConsent(true)}
-      onConsentDeclined={() => {}}
     >
       {children}
     </BiometricsHooksInner>
@@ -55,8 +52,6 @@ function BiometricsHooksInner({
   isRecordingEnabled,
   hasConsent,
   onRecordingActiveChange,
-  onConsentGiven,
-  onConsentDeclined,
   children,
 }: {
   sessionId: string;
@@ -65,11 +60,9 @@ function BiometricsHooksInner({
   isRecordingEnabled: boolean;
   hasConsent: boolean;
   onRecordingActiveChange: (active: boolean) => void;
-  onConsentGiven: () => void;
-  onConsentDeclined: () => void;
   children: ReactNode;
 }) {
-  const [showConsentModal, setShowConsentModal] = useState(isRecordingEnabled && !hasConsent);
+  // Consent is implied by login — recording starts automatically.
   const [isPyfeatEnabled, setIsPyfeatEnabled] = useState(false);
 
   // Check if py-feat AU extraction is enabled for this course
@@ -162,23 +155,8 @@ function BiometricsHooksInner({
         />
       )}
 
-      {/* Consent modal */}
-      {showConsentModal && (
-        <RecordingConsentModal
-          courseId={courseId}
-          onAccept={() => {
-            setShowConsentModal(false);
-            onConsentGiven();
-          }}
-          onDecline={() => {
-            setShowConsentModal(false);
-            onConsentDeclined();
-          }}
-        />
-      )}
-
-      {/* WebGazer calibration modal — only after consent is resolved */}
-      {!showConsentModal && webgazer.needsCalibration && !webgazer.isCalibrating && (
+      {/* WebGazer calibration modal */}
+      {webgazer.needsCalibration && !webgazer.isCalibrating && (
         <CalibrationModal
           courseId={courseId}
           sessionId={sessionId}

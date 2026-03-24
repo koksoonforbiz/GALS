@@ -38,7 +38,8 @@ export function BiometricsSyncProvider({
 
   const [isRecordingActive, setRecordingActive] = useState(false);
   const [isRecordingEnabled, setRecordingEnabled] = useState(false);
-  const [hasConsent, setHasConsent] = useState(false);
+  // Consent is implied by login — no explicit consent dialog needed.
+  const [hasConsent, setHasConsent] = useState(true);
 
   // Link this activity session to the course so the teacher can view biometric data
   useEffect(() => {
@@ -46,18 +47,13 @@ export function BiometricsSyncProvider({
     api.patch('/activity-log/session/course', { courseId }).catch(() => {});
   }, [courseId]);
 
-  // Fetch recording config and consent on mount
+  // Fetch recording config on mount (consent is always granted)
   useEffect(() => {
     if (!courseId) return;
     api
       .get<RecordingConfig>(`/recording/config/${courseId}`)
       .then((config) => setRecordingEnabled(config.isEnabled))
       .catch(() => setRecordingEnabled(false));
-
-    api
-      .get<boolean>(`/recording/consent/${courseId}`)
-      .then((consent) => setHasConsent(consent))
-      .catch(() => setHasConsent(false));
   }, [courseId]);
 
   const value = useMemo<BiometricsSyncContextValue>(
