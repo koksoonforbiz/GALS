@@ -12,7 +12,7 @@ export class PyfeatController {
   constructor(private readonly pyfeatService: PyfeatService) {}
 
   @Get('config/:courseId')
-  @Roles('teacher')
+  @Roles('teacher', 'student')
   getConfig(@Param('courseId') courseId: string) {
     return this.pyfeatService.getConfig(courseId);
   }
