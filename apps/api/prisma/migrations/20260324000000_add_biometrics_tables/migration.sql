@@ -1,11 +1,16 @@
--- CreateEnum
-CREATE TYPE "RecordingUploadStatus" AS ENUM ('PENDING', 'UPLOADING', 'COMPLETED', 'FAILED');
+-- CreateEnum (idempotent)
+DO $$ BEGIN
+  CREATE TYPE "RecordingUploadStatus" AS ENUM ('PENDING', 'UPLOADING', 'COMPLETED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateEnum
-CREATE TYPE "PyfeatJobStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
+DO $$ BEGIN
+  CREATE TYPE "PyfeatJobStatus" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
-CREATE TABLE "recording_configs" (
+CREATE TABLE IF NOT EXISTS "recording_configs" (
     "id" TEXT NOT NULL,
     "course_id" UUID NOT NULL,
     "is_enabled" BOOLEAN NOT NULL DEFAULT false,
@@ -16,7 +21,7 @@ CREATE TABLE "recording_configs" (
 );
 
 -- CreateTable
-CREATE TABLE "recording_segments" (
+CREATE TABLE IF NOT EXISTS "recording_segments" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "session_id" UUID NOT NULL,
@@ -38,7 +43,7 @@ CREATE TABLE "recording_segments" (
 );
 
 -- CreateTable
-CREATE TABLE "recording_consents" (
+CREATE TABLE IF NOT EXISTS "recording_consents" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "course_id" UUID NOT NULL,
@@ -49,7 +54,7 @@ CREATE TABLE "recording_consents" (
 );
 
 -- CreateTable
-CREATE TABLE "pupil_size_configs" (
+CREATE TABLE IF NOT EXISTS "pupil_size_configs" (
     "id" TEXT NOT NULL,
     "course_id" UUID NOT NULL,
     "is_enabled" BOOLEAN NOT NULL DEFAULT false,
@@ -60,7 +65,7 @@ CREATE TABLE "pupil_size_configs" (
 );
 
 -- CreateTable
-CREATE TABLE "pupil_size_logs" (
+CREATE TABLE IF NOT EXISTS "pupil_size_logs" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "session_id" UUID NOT NULL,
@@ -74,7 +79,7 @@ CREATE TABLE "pupil_size_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "webgazer_configs" (
+CREATE TABLE IF NOT EXISTS "webgazer_configs" (
     "id" TEXT NOT NULL,
     "course_id" UUID NOT NULL,
     "is_enabled" BOOLEAN NOT NULL DEFAULT false,
@@ -88,7 +93,7 @@ CREATE TABLE "webgazer_configs" (
 );
 
 -- CreateTable
-CREATE TABLE "webgazer_logs" (
+CREATE TABLE IF NOT EXISTS "webgazer_logs" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "session_id" UUID NOT NULL,
@@ -104,7 +109,7 @@ CREATE TABLE "webgazer_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "webgazer_calibration_events" (
+CREATE TABLE IF NOT EXISTS "webgazer_calibration_events" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "session_id" UUID NOT NULL,
@@ -118,7 +123,7 @@ CREATE TABLE "webgazer_calibration_events" (
 );
 
 -- CreateTable
-CREATE TABLE "pyfeat_configs" (
+CREATE TABLE IF NOT EXISTS "pyfeat_configs" (
     "id" TEXT NOT NULL,
     "course_id" UUID NOT NULL,
     "is_enabled" BOOLEAN NOT NULL DEFAULT false,
@@ -133,7 +138,7 @@ CREATE TABLE "pyfeat_configs" (
 );
 
 -- CreateTable
-CREATE TABLE "pyfeat_jobs" (
+CREATE TABLE IF NOT EXISTS "pyfeat_jobs" (
     "id" TEXT NOT NULL,
     "student_id" UUID NOT NULL,
     "session_id" UUID NOT NULL,
@@ -151,7 +156,7 @@ CREATE TABLE "pyfeat_jobs" (
 );
 
 -- CreateTable
-CREATE TABLE "pyfeat_au_results" (
+CREATE TABLE IF NOT EXISTS "pyfeat_au_results" (
     "id" TEXT NOT NULL,
     "job_id" TEXT NOT NULL,
     "frame_index" INTEGER NOT NULL,
@@ -182,110 +187,129 @@ CREATE TABLE "pyfeat_au_results" (
     CONSTRAINT "pyfeat_au_results_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "recording_configs_course_id_key" ON "recording_configs"("course_id");
+-- CreateIndex (idempotent)
+CREATE UNIQUE INDEX IF NOT EXISTS "recording_configs_course_id_key" ON "recording_configs"("course_id");
+CREATE INDEX IF NOT EXISTS "recording_segments_student_id_session_id_idx" ON "recording_segments"("student_id", "session_id");
+CREATE INDEX IF NOT EXISTS "recording_segments_course_id_idx" ON "recording_segments"("course_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "recording_consents_student_id_course_id_key" ON "recording_consents"("student_id", "course_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "pupil_size_configs_course_id_key" ON "pupil_size_configs"("course_id");
+CREATE INDEX IF NOT EXISTS "pupil_size_logs_student_id_session_id_idx" ON "pupil_size_logs"("student_id", "session_id");
+CREATE INDEX IF NOT EXISTS "pupil_size_logs_course_id_idx" ON "pupil_size_logs"("course_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "webgazer_configs_course_id_key" ON "webgazer_configs"("course_id");
+CREATE INDEX IF NOT EXISTS "webgazer_logs_student_id_session_id_idx" ON "webgazer_logs"("student_id", "session_id");
+CREATE INDEX IF NOT EXISTS "webgazer_logs_course_id_idx" ON "webgazer_logs"("course_id");
+CREATE INDEX IF NOT EXISTS "webgazer_calibration_events_student_id_course_id_idx" ON "webgazer_calibration_events"("student_id", "course_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "pyfeat_configs_course_id_key" ON "pyfeat_configs"("course_id");
+CREATE INDEX IF NOT EXISTS "pyfeat_jobs_student_id_course_id_idx" ON "pyfeat_jobs"("student_id", "course_id");
+CREATE INDEX IF NOT EXISTS "pyfeat_au_results_job_id_idx" ON "pyfeat_au_results"("job_id");
 
--- CreateIndex
-CREATE INDEX "recording_segments_student_id_session_id_idx" ON "recording_segments"("student_id", "session_id");
+-- AddForeignKey (idempotent)
+DO $$ BEGIN
+  ALTER TABLE "recording_configs" ADD CONSTRAINT "recording_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "recording_segments_course_id_idx" ON "recording_segments"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE UNIQUE INDEX "recording_consents_student_id_course_id_key" ON "recording_consents"("student_id", "course_id");
+DO $$ BEGIN
+  ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE UNIQUE INDEX "pupil_size_configs_course_id_key" ON "pupil_size_configs"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "pupil_size_logs_student_id_session_id_idx" ON "pupil_size_logs"("student_id", "session_id");
+DO $$ BEGIN
+  ALTER TABLE "recording_consents" ADD CONSTRAINT "recording_consents_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "pupil_size_logs_course_id_idx" ON "pupil_size_logs"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "recording_consents" ADD CONSTRAINT "recording_consents_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE UNIQUE INDEX "webgazer_configs_course_id_key" ON "webgazer_configs"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "pupil_size_configs" ADD CONSTRAINT "pupil_size_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "webgazer_logs_student_id_session_id_idx" ON "webgazer_logs"("student_id", "session_id");
+DO $$ BEGIN
+  ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "webgazer_logs_course_id_idx" ON "webgazer_logs"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "webgazer_calibration_events_student_id_course_id_idx" ON "webgazer_calibration_events"("student_id", "course_id");
+DO $$ BEGIN
+  ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE UNIQUE INDEX "pyfeat_configs_course_id_key" ON "pyfeat_configs"("course_id");
+DO $$ BEGIN
+  ALTER TABLE "webgazer_configs" ADD CONSTRAINT "webgazer_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "pyfeat_jobs_student_id_course_id_idx" ON "pyfeat_jobs"("student_id", "course_id");
+DO $$ BEGIN
+  ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateIndex
-CREATE INDEX "pyfeat_au_results_job_id_idx" ON "pyfeat_au_results"("job_id");
+DO $$ BEGIN
+  ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_configs" ADD CONSTRAINT "recording_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_segments" ADD CONSTRAINT "recording_segments_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_consents" ADD CONSTRAINT "recording_consents_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "pyfeat_configs" ADD CONSTRAINT "pyfeat_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "recording_consents" ADD CONSTRAINT "recording_consents_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "pupil_size_configs" ADD CONSTRAINT "pupil_size_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pupil_size_logs" ADD CONSTRAINT "pupil_size_logs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_configs" ADD CONSTRAINT "webgazer_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_logs" ADD CONSTRAINT "webgazer_logs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "webgazer_calibration_events" ADD CONSTRAINT "webgazer_calibration_events_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pyfeat_configs" ADD CONSTRAINT "pyfeat_configs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_session_id_fkey" FOREIGN KEY ("session_id") REFERENCES "student_sessions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pyfeat_jobs" ADD CONSTRAINT "pyfeat_jobs_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pyfeat_au_results" ADD CONSTRAINT "pyfeat_au_results_job_id_fkey" FOREIGN KEY ("job_id") REFERENCES "pyfeat_jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "pyfeat_au_results" ADD CONSTRAINT "pyfeat_au_results_job_id_fkey" FOREIGN KEY ("job_id") REFERENCES "pyfeat_jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
