@@ -7,13 +7,9 @@ import { useWebcamRecording } from '../../lib/recording/useWebcamRecording';
 import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
 import { useWebgazer } from '../../lib/webgazer/useWebgazer';
 import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
-import { RecordingIndicator } from './RecordingIndicator';
-// RecordingConsentModal removed — consent is implied by login
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
+import { BiometricsPanel } from './BiometricsPanel';
 import { WebcamPreviewWindow } from './WebcamPreviewWindow';
-import { PupilSizeOverlay } from './PupilSizeOverlay';
-import { WebgazerStatusBadge } from './WebgazerStatusBadge';
-import { PyfeatStatusBadge } from './PyfeatStatusBadge';
 
 /**
  * Inner component that uses BiometricsSync context to activate all hooks.
@@ -131,21 +127,13 @@ function BiometricsHooksInner({
       {/* Privacy banner */}
       <BiometricsActiveBanner activeFeatures={activeFeatures} />
 
-      {/* Recording indicator */}
-      <RecordingIndicator isActive={recording.isActive} isUploading={recording.isUploading} />
-
-      {/* Pupil size debug badge */}
-      <PupilSizeOverlay isActive={pupilSize.isActive} latestDiameter={pupilSize.latestDiameter} />
-
-      {/* WebGazer status badge */}
-      <WebgazerStatusBadge
-        isActive={webgazer.isActive}
-        isCalibrating={webgazer.isCalibrating}
-        needsCalibration={webgazer.needsCalibration}
+      {/* Unified biometrics status panel (bottom-left, collapsible) */}
+      <BiometricsPanel
+        recording={recording}
+        pupilSize={pupilSize}
+        webgazer={webgazer}
+        isPyfeatEnabled={isPyfeatEnabled}
       />
-
-      {/* py-feat AU extraction badge */}
-      <PyfeatStatusBadge isEnabled={isPyfeatEnabled} />
 
       {/* Floating webcam preview with face bounding box */}
       {(recording.isActive || pupilSize.isActive || webgazer.isActive) && (
