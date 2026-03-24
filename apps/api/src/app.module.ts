@@ -34,6 +34,9 @@ import { RecordingModule } from './recording';
 import { PupilSizeModule } from './pupil-size';
 import { WebgazerModule } from './webgazer';
 import { PyfeatModule } from './pyfeat';
+import { LogsModule } from './logs';
+import { AnalyticsModule } from './analytics';
+import { JobsModule } from './jobs';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -79,6 +82,9 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     PupilSizeModule,
     WebgazerModule,
     PyfeatModule,
+    LogsModule,
+    AnalyticsModule,
+    JobsModule,
   ],
   controllers: [HealthController],
 })

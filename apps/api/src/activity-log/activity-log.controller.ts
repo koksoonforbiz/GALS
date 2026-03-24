@@ -90,10 +90,7 @@ export class ActivityLogController {
    */
   @Patch('session/course')
   @Roles('student')
-  async setSessionCourse(
-    @SessionId() sessionId: string,
-    @Body() body: { courseId: string },
-  ) {
+  async setSessionCourse(@SessionId() sessionId: string, @Body() body: { courseId: string }) {
     if (sessionId && body.courseId) {
       await this.sessionService.setCourseId(sessionId, body.courseId);
     }
@@ -148,6 +145,16 @@ export class ActivityLogController {
 
     // For in-progress sessions, compute a live summary from raw logs
     return this.activityLogService.computeLiveSummary(sessionId);
+  }
+
+  /**
+   * GET /activity-log/teacher/sessions/:sessionId/timeline-data
+   * Returns all data needed for the session timeline visualisation.
+   */
+  @Get('teacher/sessions/:sessionId/timeline-data')
+  @Roles('teacher')
+  async getTimelineData(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+    return this.sessionService.getTimelineData(sessionId);
   }
 
   /**
