@@ -1,4 +1,6 @@
 import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
+import { BarChart2 } from 'lucide-react';
 
 interface Session {
   id: string;
@@ -46,6 +48,14 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
                 <Chip label={`${s.summary.interventionsTriggered} int.`} color="purple" />
               </div>
             )}
+            <Link
+              to={`/dashboard/sessions/${s.id}/timeline`}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <BarChart2 size={14} />
+              Timeline
+            </Link>
           </button>
         </li>
       ))}

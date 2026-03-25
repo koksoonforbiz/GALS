@@ -6,6 +6,7 @@ const BACKGROUND_PATHS = [
   '/webgazer/logs',
   '/webgazer/calibration',
   '/recording/segments/',
+  '/logs/',
 ];
 
 function isBackgroundPath(path: string): boolean {

@@ -23,6 +23,7 @@ import { PromptSettingsPage } from './pages/teacher/PromptSettingsPage';
 import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 import { UserManagementPage } from './pages/teacher/UserManagementPage';
 import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
+import { SessionTimelinePage } from './pages/dashboard/SessionTimelinePage';
 import { ChangePassword } from './pages/ChangePassword';
 
 // Student pages
@@ -37,9 +38,23 @@ import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
 import { DialogueLearning } from './pages/student/DialogueLearning';
 import { DialogueSessionHistory } from './pages/student/DialogueSessionHistory';
 import { BiometricsWrapper } from './components/student/BiometricsWrapper';
+import { LoggingProvider } from './components/LoggingProvider';
+import { useAuth } from './contexts/AuthContext';
+import { useActivityLog } from './lib/activity-log';
 
 function getToken() {
   return localStorage.getItem('token');
+}
+
+function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const { sessionId } = useActivityLog();
+  if (!user || !sessionId) return <>{children}</>;
+  return (
+    <LoggingProvider sessionId={sessionId} userId={user.id}>
+      {children}
+    </LoggingProvider>
+  );
 }
 
 function App() {
@@ -59,7 +74,9 @@ function App() {
               <Route
                 element={
                   <ProtectedRoute>
-                    <Layout />
+                    <AuthenticatedLoggingWrapper>
+                      <Layout />
+                    </AuthenticatedLoggingWrapper>
                   </ProtectedRoute>
                 }
               >
@@ -165,6 +182,14 @@ function App() {
                   element={
                     <RoleRoute allowedRoles={['teacher', 'admin']}>
                       <StudentLogPage />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/dashboard/sessions/:sessionId/timeline"
+                  element={
+                    <RoleRoute allowedRoles={['teacher', 'admin']}>
+                      <SessionTimelinePage />
                     </RoleRoute>
                   }
                 />
