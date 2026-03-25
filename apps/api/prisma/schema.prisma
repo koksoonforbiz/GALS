@@ -1789,7 +1789,7 @@ model error_logs {
 
 model session_sync_anchors {
   id              String   @id @default(cuid())
-  sessionId       String   @unique
+  sessionId       String   @unique @db.Uuid
   userId          String
   wallClockMs     BigInt
   monotonicMs     BigInt
