@@ -15,9 +15,9 @@ export class JobsController {
   @Post('export-session')
   async exportSession(@Body() dto: { sessionId: string; uploadToMinio?: boolean }) {
     const uploadFlag = dto.uploadToMinio ? '--upload' : '';
-    const cmd = `python analysis/export_logs.py ${dto.sessionId} ${uploadFlag}`;
+    const cmd = `python ../../analysis/export_logs.py ${dto.sessionId} ${uploadFlag}`;
 
-    exec(cmd, { cwd: process.cwd() }, (error, stdout, stderr) => {
+    exec(cmd, (error, stdout, stderr) => {
       if (error) {
         this.logger.error(`Export failed for ${dto.sessionId}: ${error.message}`);
         this.logger.error(stderr);

@@ -64,14 +64,10 @@ export class SessionService {
   private triggerExport(sessionId: string): void {
     import('child_process')
       .then(({ exec }) => {
-        exec(
-          `python analysis/export_logs.py ${sessionId} --upload`,
-          { cwd: process.cwd() },
-          (error) => {
-            if (error) this.logger.error(`Auto-export failed for ${sessionId}: ${error.message}`);
-            else this.logger.log(`Auto-export completed for ${sessionId}`);
-          },
-        );
+        exec(`python ../../analysis/export_logs.py ${sessionId} --upload`, (error) => {
+          if (error) this.logger.error(`Auto-export failed for ${sessionId}: ${error.message}`);
+          else this.logger.log(`Auto-export completed for ${sessionId}`);
+        });
       })
       .catch((e) => {
         this.logger.error(`Export trigger failed for ${sessionId}`, e);
