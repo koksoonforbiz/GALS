@@ -24,7 +24,7 @@ RUN pip install --upgrade pip && \
     "torchvision>=0.15"
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download py-feat models at build time
 RUN python -c "from feat import Detector; Detector(face_model='retinaface', au_model='xgb')"
