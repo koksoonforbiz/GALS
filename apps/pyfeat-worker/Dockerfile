@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir \
     "numpy>=1.24,<2.5" \
+    "scipy>=1.11" \
+    "h5py>=3.9" \
+    "tables>=3.8" \
     "matplotlib>=3.7" \
     "Pillow>=10.0" \
     "torch>=2.0" \
