@@ -26,6 +26,11 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
   const containerRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x: 16, y: 64 });
 
+  // Staleness detection: if positions don't change for N frames, face is gone
+  const prevPosHashRef = useRef<string>('');
+  const staleCountRef = useRef(0);
+  const STALE_THRESHOLD = 8; // frames of identical positions before declaring "no face"
+
   // Attach webcam stream to video element
   const attachStream = useCallback(() => {
     const stream =
@@ -87,7 +92,9 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
       // Draw the video frame
       ctx.drawImage(video, 0, 0, w, h);
 
-      // Use WebGazer's tracker to get actual face detection positions
+      // Use WebGazer's tracker to get face detection positions.
+      // getPositions() returns stale (cached) data when the face leaves,
+      // so we hash a few landmark coords each frame and detect staleness.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wg = (window as any).webgazer;
       let drewFace = false;
@@ -97,41 +104,59 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
           const tracker = wg.getTracker?.();
           const positions = tracker?.getPositions?.();
 
-          // positions is an array of [x, y] face landmark coordinates
           if (positions && positions.length > 0) {
-            // Compute bounding box from landmark positions
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            for (const pt of positions) {
-              if (pt && pt.length >= 2) {
-                if (pt[0] < minX) minX = pt[0];
-                if (pt[0] > maxX) maxX = pt[0];
-                if (pt[1] < minY) minY = pt[1];
-                if (pt[1] > maxY) maxY = pt[1];
+            // Build a lightweight hash from a few sampled landmarks
+            // to detect whether positions actually changed between frames.
+            const sample = [0, 10, 50, 100, 200].map((i) => {
+              const pt = positions[Math.min(i, positions.length - 1)];
+              return pt ? `${pt[0]?.toFixed(1)},${pt[1]?.toFixed(1)}` : '';
+            }).join('|');
+
+            if (sample === prevPosHashRef.current) {
+              staleCountRef.current += 1;
+            } else {
+              staleCountRef.current = 0;
+              prevPosHashRef.current = sample;
+            }
+
+            // Only draw if positions are fresh (changing between frames)
+            if (staleCountRef.current < STALE_THRESHOLD) {
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              for (const pt of positions) {
+                if (pt && pt.length >= 2) {
+                  if (pt[0] < minX) minX = pt[0];
+                  if (pt[0] > maxX) maxX = pt[0];
+                  if (pt[1] < minY) minY = pt[1];
+                  if (pt[1] > maxY) maxY = pt[1];
+                }
+              }
+
+              if (minX < Infinity && maxX > -Infinity) {
+                const srcW = video.videoWidth || 640;
+                const srcH = video.videoHeight || 480;
+                const scaleX = w / srcW;
+                const scaleY = h / srcH;
+
+                const pad = 15;
+                const bx = Math.max(0, (minX - pad) * scaleX);
+                const by = Math.max(0, (minY - pad) * scaleY);
+                const bw = Math.min(w - bx, (maxX - minX + pad * 2) * scaleX);
+                const bh = Math.min(h - by, (maxY - minY + pad * 2) * scaleY);
+
+                ctx.strokeStyle = '#22c55e';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(bx, by, bw, bh);
+
+                ctx.fillStyle = '#22c55e';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
+                drewFace = true;
               }
             }
-
-            if (minX < Infinity && maxX > -Infinity) {
-              // Get the source video dimensions for scaling
-              const srcW = video.videoWidth || 640;
-              const srcH = video.videoHeight || 480;
-              const scaleX = w / srcW;
-              const scaleY = h / srcH;
-
-              const pad = 15;
-              const bx = Math.max(0, (minX - pad) * scaleX);
-              const by = Math.max(0, (minY - pad) * scaleY);
-              const bw = Math.min(w - bx, (maxX - minX + pad * 2) * scaleX);
-              const bh = Math.min(h - by, (maxY - minY + pad * 2) * scaleY);
-
-              ctx.strokeStyle = '#22c55e';
-              ctx.lineWidth = 2;
-              ctx.strokeRect(bx, by, bw, bh);
-
-              ctx.fillStyle = '#22c55e';
-              ctx.font = '10px sans-serif';
-              ctx.fillText('Face detected', bx + 2, by - 4 > 0 ? by - 4 : by + 12);
-              drewFace = true;
-            }
+          } else {
+            // Empty positions array — no face at all
+            staleCountRef.current = STALE_THRESHOLD;
+            prevPosHashRef.current = '';
           }
         } catch {
           // WebGazer may not be fully initialized

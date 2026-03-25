@@ -56,6 +56,102 @@ export class SessionService {
 
     await this.buildSummary(sessionId);
     this.logger.log(`Session closed: ${sessionId} — ${durationSecs}s`);
+
+    // Fire-and-forget export trigger
+    this.triggerExport(sessionId);
+  }
+
+  private triggerExport(sessionId: string): void {
+    import('child_process')
+      .then(({ exec }) => {
+        exec(
+          `python analysis/export_logs.py ${sessionId} --upload`,
+          { cwd: process.cwd() },
+          (error) => {
+            if (error) this.logger.error(`Auto-export failed for ${sessionId}: ${error.message}`);
+            else this.logger.log(`Auto-export completed for ${sessionId}`);
+          },
+        );
+      })
+      .catch((e) => {
+        this.logger.error(`Export trigger failed for ${sessionId}`, e);
+      });
+  }
+
+  /** Returns all data needed for the session timeline visualisation. */
+  async getTimelineData(sessionId: string) {
+    // Get session for userId and time bounds
+    const session = await this.prisma.studentSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { userId: true, startedAt: true, endedAt: true },
+    });
+
+    const [
+      recordingSegments,
+      interventions,
+      visibilityLogs,
+      keyActivityLogs,
+      attempts,
+      sessionSummary,
+      syncAnchor,
+    ] = await Promise.all([
+      this.prisma.recordingSegment.findMany({
+        where: { sessionId },
+        orderBy: { startWallTime: 'asc' },
+      }),
+      this.prisma.learningIntervention.findMany({
+        where: {
+          userId: session.userId,
+          createdAt: {
+            gte: session.startedAt,
+            ...(session.endedAt ? { lte: session.endedAt } : {}),
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.visibility_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.prisma.activityLog.findMany({
+        where: {
+          sessionId,
+          action: {
+            in: [
+              'MODULE_OPENED',
+              'ASSESSMENT_SUBMITTED',
+              'DIALOGUE_SESSION_STARTED',
+              'STUDY_MATERIAL_UPLOADED',
+              'INTERVENTION_TRIGGERED',
+            ],
+          },
+        },
+        orderBy: { occurredAt: 'asc' },
+      }),
+      this.prisma.attempt.findMany({
+        where: {
+          studentId: session.userId,
+          submittedAt: {
+            gte: session.startedAt,
+            ...(session.endedAt ? { lte: session.endedAt } : {}),
+          },
+        },
+        select: { id: true, currentScore: true, submittedAt: true, status: true },
+        orderBy: { submittedAt: 'asc' },
+      }),
+      this.prisma.sessionSummary.findUnique({ where: { sessionId } }),
+      this.prisma.session_sync_anchors.findUnique({ where: { sessionId } }),
+    ]);
+
+    return {
+      recordingSegments,
+      interventions,
+      visibilityLogs,
+      keyActivityLogs,
+      attempts,
+      sessionSummary,
+      syncAnchor,
+    };
   }
 
   /** Compute and upsert a SessionSummary from all ActivityLog rows for this session. */
