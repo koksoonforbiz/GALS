@@ -2,32 +2,29 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for OpenCV and ffmpeg
+# System deps for OpenCV, ffmpeg, and building native extensions
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglx-mesa0 \
     libglib2.0-0 \
     ffmpeg \
+    gcc \
+    g++ \
+    libhdf5-dev \
+    pkg-config \
+    libfreetype6-dev \
+    libpng-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip to get proper wheel resolution, then pre-install
-# heavy deps as wheels to avoid source compilation
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir \
-    "numpy>=1.24,<2.5" \
-    "scipy>=1.11" \
-    "h5py>=3.9" \
-    "tables>=3.8" \
-    "matplotlib>=3.7" \
-    "Pillow>=10.0" \
-    "torch>=2.0" \
-    "torchvision>=0.15"
+# Upgrade pip first for proper wheel resolution
+RUN pip install --upgrade pip setuptools wheel
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download py-feat models at build time
-RUN python -c "from feat import Detector; Detector(face_model='retinaface', au_model='xgb')"
+# Pre-download py-feat models at build time (skip gracefully if import path changed)
+RUN python -c "exec('try:\n from feat import Detector\nexcept ImportError:\n from feat.detector import Detector\nDetector(face_model=\"retinaface\", au_model=\"xgb\")')" \
+    || echo "Model pre-download skipped, will download at runtime"
 
 COPY . .
 

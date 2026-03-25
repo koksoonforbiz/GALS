@@ -9,7 +9,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pandas as pd
-from feat import Detector
+try:
+    from feat import Detector
+except ImportError:
+    from feat.detector import Detector
 
 from minio_client import download_file, upload_file
 from db import bulk_insert_au_results
