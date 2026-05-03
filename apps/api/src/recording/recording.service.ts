@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nest
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { PyfeatService } from '../pyfeat/pyfeat.service';
+import { Openface3Service } from '../openface3/openface3.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ActivityAction } from '../activity-log/activity-action.enum';
 import type { RecordingConfig, RecordingSegment } from '@prisma/client';
@@ -18,6 +19,8 @@ export class RecordingService {
     private readonly blob: BlobService,
     @Inject(forwardRef(() => PyfeatService))
     private readonly pyfeatService: PyfeatService,
+    @Inject(forwardRef(() => Openface3Service))
+    private readonly openface3Service: Openface3Service,
     private readonly activityLog: ActivityLogService,
   ) {}
 
@@ -125,6 +128,20 @@ export class RecordingService {
       }
     } catch (err) {
       this.logger.warn(`Failed to enqueue py-feat job for segment ${segmentId}: ${err}`);
+    }
+
+    // Also enqueue OpenFace 3 emotion detection (runs in parallel with py-feat)
+    try {
+      await this.openface3Service.enqueueJob({
+        recordingSegmentId: updated.id,
+        sessionId: updated.sessionId,
+        studentId: updated.studentId,
+        courseId: updated.courseId,
+        minioKey: updated.minioKey,
+        segmentStartWallMs: updated.startWallTime.getTime(),
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to enqueue OpenFace 3 job for segment ${segmentId}: ${err}`);
     }
 
     return updated;

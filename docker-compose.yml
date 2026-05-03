@@ -122,6 +122,44 @@ services:
         limits:
           memory: 4G
 
+  openface3-worker:
+    build:
+      context: ./apps/openface3-worker
+      dockerfile: Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
+      OPENFACE3_MODEL_PATH: /models/openface3
+      OPENFACE3_DEVICE: cpu
+      WORKER_CONCURRENCY: "2"
+    networks:
+      - local-dev
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    # Uncomment for GPU/CUDA support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
   # Infrastructure services (also in infra/docker-compose.yml for standalone use)
   postgres:
     image: postgres:16-alpine

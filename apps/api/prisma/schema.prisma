@@ -1492,6 +1492,8 @@ model RecordingSegment {
   createdAt     DateTime              @default(now()) @map("created_at") @db.Timestamptz
   updatedAt     DateTime              @updatedAt @map("updated_at") @db.Timestamptz
 
+  openface3Job Openface3Job?
+
   @@index([studentId, sessionId])
   @@index([courseId])
   @@map("recording_segments")
@@ -1988,4 +1990,75 @@ model EfTeacherSettings {
   updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("ef_teacher_settings")
+}
+
+// ─── OpenFace 3 Emotion Detection ───────────────────────
+
+enum Openface3JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Openface3Job {
+  id                 String             @id @default(cuid())
+  recordingSegmentId String             @unique @map("recording_segment_id")
+  recordingSegment   RecordingSegment   @relation(fields: [recordingSegmentId], references: [id], onDelete: Cascade)
+  status             Openface3JobStatus @default(PENDING)
+  extractionFps      Int                @default(5) @map("extraction_fps")
+  detectorBackend    String             @default("retinaface") @map("detector_backend")
+  framesProcessed    Int                @default(0) @map("frames_processed")
+  framesWithFace     Int                @default(0) @map("frames_with_face")
+  errorMessage       String?            @map("error_message")
+  retries            Int                @default(0)
+  startedAt          DateTime?          @map("started_at") @db.Timestamptz
+  completedAt        DateTime?          @map("completed_at") @db.Timestamptz
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  emotionFrames EmotionFrame[]
+
+  @@index([status])
+  @@index([recordingSegmentId])
+  @@map("openface3_jobs")
+}
+
+model EmotionFrame {
+  id    String       @id @default(cuid())
+  jobId String       @map("job_id")
+  job   Openface3Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  sessionId String @map("session_id")
+  userId    String @map("user_id")
+  courseId  String @map("course_id")
+
+  frameWallMs  BigInt  @map("frame_wall_ms")
+  frameIndex   Int     @map("frame_index")
+  faceDetected Boolean @map("face_detected")
+
+  pHappiness Float? @map("p_happiness")
+  pSadness   Float? @map("p_sadness")
+  pSurprise  Float? @map("p_surprise")
+  pFear      Float? @map("p_fear")
+  pAnger     Float? @map("p_anger")
+  pDisgust   Float? @map("p_disgust")
+  pContempt  Float? @map("p_contempt")
+  pNeutral   Float? @map("p_neutral")
+
+  dominantEmotion     String? @map("dominant_emotion")
+  dominantProbability Float?  @map("dominant_probability")
+
+  headPoseYaw   Float? @map("head_pose_yaw")
+  headPosePitch Float? @map("head_pose_pitch")
+  headPoseRoll  Float? @map("head_pose_roll")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([sessionId, frameWallMs])
+  @@index([userId, frameWallMs])
+  @@index([courseId, frameWallMs])
+  @@index([jobId])
+  @@map("emotion_frames")
 }
