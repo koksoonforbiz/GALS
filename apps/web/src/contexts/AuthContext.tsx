@@ -156,17 +156,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           Authorization: `Bearer ${token}`,
           'X-Session-Id': sid,
         },
+        keepalive: true,
       }).catch(() => {});
     }
     clearActivitySession();
 
     // Stop all active webcam/media streams before clearing auth
+    // NOTE: keep token in localStorage during cleanup so that async
+    // handlers (recorder.onstop → uploadSegment → api.patch) can still
+    // read it. Remove it after a short delay.
     mediaStreamRegistry.stopAll();
     // Signal biometric hooks (e.g. WebGazer) to clean up
     window.dispatchEvent(new CustomEvent('ats:logout'));
 
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    // Delay token removal so in-flight biometric flushes can still authenticate
+    setTimeout(() => {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }, 2000);
     disconnectSocket();
     setUser(null);
   }, []);
