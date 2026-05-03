@@ -1,8 +1,16 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { LlmService } from '../rag/llm.service';
 import { RagService } from '../rag/rag.service';
 import { ActivityLogService, ActivityAction } from '../activity-log';
+import { TextMiningService } from '../text-mining';
 import type { DialogueCourseSettings } from '@ats/shared';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateSessionDto, SendMessageDto } from './dto';
@@ -16,6 +24,8 @@ export class DialogueService {
     private readonly llmService: LlmService,
     private readonly ragService: RagService,
     private readonly activityLogService: ActivityLogService,
+    @Inject(forwardRef(() => TextMiningService))
+    private readonly textMining: TextMiningService,
   ) {}
 
   // ─── Session CRUD ─────────────────────────────────────────
@@ -211,6 +221,18 @@ export class DialogueService {
         },
       }),
     ]);
+
+    // Fire-and-forget EF text-mining detection on the user message
+    this.textMining
+      .ingest({
+        messageId: userMsg.id,
+        sessionId,
+        studentId,
+        courseId: session.courseId,
+        teacherId,
+        utterance: dto.content,
+      })
+      .catch((err) => this.logger.error('text-mining ingest failed', err));
 
     if (activitySessionId) {
       void this.activityLogService.record({

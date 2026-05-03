@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { RagModule } from '../rag';
 import { TextMiningController } from './text-mining.controller';
 import { TextMiningService } from './text-mining.service';
 import { TextMiningGateway } from './text-mining.gateway';
@@ -8,6 +9,7 @@ import { DashboardService } from './dashboard/dashboard.service';
 import { TeacherSettingsService } from './settings/teacher-settings.service';
 
 @Module({
+  imports: [RagModule],
   controllers: [TextMiningController],
   providers: [
     TextMiningService,
