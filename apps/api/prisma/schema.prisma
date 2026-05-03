@@ -1933,3 +1933,59 @@ model aligned_frames {
   @@unique([sessionId, frameId])
   @@index([sessionId, frameTMs])
 }
+
+// ─── EF / Learning-Construct Text-Mining ────────────────
+
+model EfDetection {
+  id            String   @id @default(cuid())
+  messageId     String
+  sessionId     String
+  studentId     String
+  courseId      String?
+  constructKey  String
+  label         String
+  confidence    Float?
+  severity      Int?
+  rationale     String?
+  warning       String?
+  rawJson       Json?
+  provider      String
+  model         String
+  promptVersion Int
+  latencyMs     Int?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([sessionId, constructKey, createdAt])
+  @@index([studentId, constructKey, createdAt])
+  @@index([messageId])
+  @@map("ef_detections")
+}
+
+model EfConstructPrompt {
+  id           String   @id @default(cuid())
+  courseId     String?
+  constructKey String
+  promptText   String   @db.Text
+  version      Int
+  updatedBy    String
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([courseId, constructKey, version])
+  @@index([courseId, constructKey])
+  @@map("ef_construct_prompts")
+}
+
+model EfTeacherSettings {
+  id                        String   @id @default(cuid())
+  teacherId                 String   @unique @map("teacher_id")
+  rollingWindowN            Int      @default(5) @map("rolling_window_n")
+  detectionConcurrency      Int      @default(6) @map("detection_concurrency")
+  disableLowFeasibility     Boolean  @default(false) @map("disable_low_feasibility")
+  detectionProviderOverride String?  @map("detection_provider_override")
+  detectionModelOverride    String?  @map("detection_model_override")
+  pauseIngestion            Boolean  @default(false) @map("pause_ingestion")
+  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("ef_teacher_settings")
+}

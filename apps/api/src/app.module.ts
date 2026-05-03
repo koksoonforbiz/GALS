@@ -37,6 +37,7 @@ import { PyfeatModule } from './pyfeat';
 import { LogsModule } from './logs';
 import { AnalyticsModule } from './analytics';
 import { JobsModule } from './jobs';
+import { TextMiningModule } from './text-mining';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -85,6 +86,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     LogsModule,
     AnalyticsModule,
     JobsModule,
+    TextMiningModule,
   ],
   controllers: [HealthController],
 })
