@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, MessageSquare } from 'lucide-react';
+import { SessionTextMiningTab } from '../../features/text-mining/pages/SessionTextMiningTab';
 import { api } from '../../lib/api';
 import { StatCard } from '../../components/dashboard/StatCard';
 import { SessionTimeline } from '../../components/dashboard/SessionTimeline';
@@ -132,8 +133,17 @@ export function SessionTimelinePage() {
       </div>
 
       {/* Timeline */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
         <SessionTimeline data={data} />
+      </div>
+
+      {/* Text-mining tab */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+          <MessageSquare size={16} className="text-blue-500" aria-hidden="true" />
+          <h3 className="font-semibold text-gray-700">Text-mining</h3>
+        </div>
+        {sessionId && <SessionTextMiningTab sessionId={sessionId} />}
       </div>
     </div>
   );
