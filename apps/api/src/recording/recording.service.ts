@@ -130,16 +130,25 @@ export class RecordingService {
       this.logger.warn(`Failed to enqueue py-feat job for segment ${segmentId}: ${err}`);
     }
 
-    // Also enqueue OpenFace 3 emotion detection (runs in parallel with py-feat)
+    // Enqueue OpenFace 3 if enabled for this course
     try {
-      await this.openface3Service.enqueueJob({
-        recordingSegmentId: updated.id,
-        sessionId: updated.sessionId,
-        studentId: updated.studentId,
-        courseId: updated.courseId,
-        minioKey: updated.minioKey,
-        segmentStartWallMs: updated.startWallTime.getTime(),
-      });
+      const recordingConfig = await this.getConfig(updated.courseId);
+      if (recordingConfig.openface3Enabled && recordingConfig.openface3RunOnNewSegments) {
+        await this.openface3Service.enqueueJob({
+          recordingSegmentId: updated.id,
+          sessionId: updated.sessionId,
+          studentId: updated.studentId,
+          courseId: updated.courseId,
+          minioKey: updated.minioKey,
+          segmentStartWallMs: updated.startWallTime.getTime(),
+          extractionFps: recordingConfig.openface3ExtractionFps,
+          detectorBackend: recordingConfig.openface3DetectorBackend,
+        });
+      } else {
+        this.logger.debug(
+          `openface3.enqueue.skipped: course=${updated.courseId} enabled=${recordingConfig.openface3Enabled} autoRun=${recordingConfig.openface3RunOnNewSegments}`,
+        );
+      }
     } catch (err) {
       this.logger.warn(`Failed to enqueue OpenFace 3 job for segment ${segmentId}: ${err}`);
     }

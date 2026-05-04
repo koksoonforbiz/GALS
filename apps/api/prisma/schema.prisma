@@ -318,16 +318,17 @@ model Course {
   studentSessions  StudentSession[]
 
   // Biometrics relations
-  recordingConfig      RecordingConfig?
-  recordingSegments    RecordingSegment[]
-  recordingConsents    RecordingConsent[]
-  pupilSizeConfig      PupilSizeConfig?
-  pupilSizeLogs        PupilSizeLog[]
-  webgazerConfig       WebgazerConfig?
-  webgazerLogs         WebgazerLog[]
-  webgazerCalibrations WebgazerCalibrationEvent[]
-  pyfeatConfig         PyfeatConfig?
-  pyfeatJobs           PyfeatJob[]
+  recordingConfig        RecordingConfig?
+  recordingSegments      RecordingSegment[]
+  recordingConsents      RecordingConsent[]
+  pupilSizeConfig        PupilSizeConfig?
+  pupilSizeLogs          PupilSizeLog[]
+  webgazerConfig         WebgazerConfig?
+  webgazerLogs           WebgazerLog[]
+  webgazerCalibrations   WebgazerCalibrationEvent[]
+  pyfeatConfig           PyfeatConfig?
+  affectiveMappingConfig AffectiveMappingConfig?
+  pyfeatJobs             PyfeatJob[]
 
   @@index([teacherId])
   @@map("courses")
@@ -1461,12 +1462,16 @@ model SessionSummary {
 // ─── Biometrics: Recording (Feature 04) ─────────────────
 
 model RecordingConfig {
-  id        String   @id @default(cuid())
-  courseId  String   @unique @map("course_id") @db.Uuid
-  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  isEnabled Boolean  @default(false) @map("is_enabled")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  id                        String   @id @default(cuid())
+  courseId                  String   @unique @map("course_id") @db.Uuid
+  course                    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  isEnabled                 Boolean  @default(false) @map("is_enabled")
+  openface3Enabled          Boolean  @default(false) @map("openface3_enabled")
+  openface3ExtractionFps    Int      @default(5) @map("openface3_extraction_fps")
+  openface3DetectorBackend  String   @default("retinaface") @map("openface3_detector_backend")
+  openface3RunOnNewSegments Boolean  @default(true) @map("openface3_run_on_new_segments")
+  createdAt                 DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("recording_configs")
 }
@@ -2061,4 +2066,76 @@ model EmotionFrame {
   @@index([courseId, frameWallMs])
   @@index([jobId])
   @@map("emotion_frames")
+}
+
+// ─── Affective State Mapping (Stage 3) ──────────────────
+
+model AffectiveMappingConfig {
+  id                 String   @id @default(cuid())
+  courseId           String   @unique @map("course_id") @db.Uuid
+  course             Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  windowSeconds      Int      @default(30) @map("window_seconds")
+  strideSeconds      Int      @default(10) @map("stride_seconds")
+  minFramesPerWindow Int      @default(5) @map("min_frames_per_window")
+  rules              Json
+  version            Int      @default(1)
+  updatedById        String?  @map("updated_by_id")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  history AffectiveMappingConfigHistory[]
+  windows AffectiveStateWindow[]
+
+  @@map("affective_mapping_configs")
+}
+
+model AffectiveMappingConfigHistory {
+  id                 String                 @id @default(cuid())
+  configId           String                 @map("config_id")
+  config             AffectiveMappingConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  version            Int
+  windowSeconds      Int                    @map("window_seconds")
+  strideSeconds      Int                    @map("stride_seconds")
+  minFramesPerWindow Int                    @map("min_frames_per_window")
+  rules              Json
+  changedById        String?                @map("changed_by_id")
+  changedAt          DateTime               @default(now()) @map("changed_at") @db.Timestamptz
+
+  @@unique([configId, version])
+  @@index([configId])
+  @@map("affective_mapping_config_history")
+}
+
+model AffectiveStateWindow {
+  id                String                 @id @default(cuid())
+  sessionId         String                 @map("session_id")
+  userId            String                 @map("user_id")
+  courseId          String                 @map("course_id")
+  configId          String                 @map("config_id")
+  config            AffectiveMappingConfig @relation(fields: [configId], references: [id])
+  configVersion     Int                    @map("config_version")
+  windowStartWallMs BigInt                 @map("window_start_wall_ms")
+  windowEndWallMs   BigInt                 @map("window_end_wall_ms")
+  framesInWindow    Int                    @map("frames_in_window")
+  framesWithFace    Int                    @map("frames_with_face")
+  engagement        Float
+  boredom           Float
+  confusion         Float
+  frustration       Float
+  dominantState     String                 @map("dominant_state")
+  meanHappiness     Float?                 @map("mean_happiness")
+  meanSadness       Float?                 @map("mean_sadness")
+  meanSurprise      Float?                 @map("mean_surprise")
+  meanFear          Float?                 @map("mean_fear")
+  meanAnger         Float?                 @map("mean_anger")
+  meanDisgust       Float?                 @map("mean_disgust")
+  meanContempt      Float?                 @map("mean_contempt")
+  meanNeutral       Float?                 @map("mean_neutral")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([sessionId, windowStartWallMs, configVersion])
+  @@index([sessionId, windowStartWallMs])
+  @@index([userId, courseId, windowStartWallMs])
+  @@index([courseId, windowStartWallMs])
+  @@map("affective_state_windows")
 }

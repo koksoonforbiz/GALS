@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -21,10 +21,50 @@ export class Openface3Controller {
     return this.service.listJobs({ sessionId, status });
   }
 
+  @Get('jobs/stats')
+  @Roles('teacher', 'admin')
+  getJobStats(@Query('courseId') courseId?: string) {
+    return this.service.getJobStats(courseId);
+  }
+
   @Post('jobs/:id/retry')
   @Roles('teacher', 'admin')
   retryJob(@Param('id') id: string) {
     return this.service.retryJob(id);
+  }
+
+  @Post('backfill')
+  @Roles('teacher', 'admin')
+  backfill(
+    @Body()
+    body: {
+      courseId: string;
+      sessionIds?: string[];
+      studentIds?: string[];
+      fromDate?: string;
+      toDate?: string;
+      overwrite?: boolean;
+    },
+  ) {
+    return this.service.backfill(body);
+  }
+
+  @Get('health')
+  @Roles('teacher', 'admin')
+  getHealth() {
+    return this.service.getWorkerHealth();
+  }
+
+  @Get('dead-letter')
+  @Roles('admin')
+  getDeadLetter() {
+    return this.service.getDeadLetterQueue();
+  }
+
+  @Post('dead-letter/:jobId/requeue')
+  @Roles('admin')
+  requeueDeadLetter(@Param('jobId') jobId: string) {
+    return this.service.retryJob(jobId);
   }
 
   @Get('frames')

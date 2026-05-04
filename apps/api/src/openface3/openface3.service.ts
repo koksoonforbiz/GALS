@@ -193,4 +193,113 @@ export class Openface3Service {
       meanProbabilities: means,
     };
   }
+
+  async getJobStats(courseId?: string) {
+    const where: Record<string, unknown> = {};
+    if (courseId) {
+      where.recordingSegment = { courseId };
+    }
+
+    const [pending, processing, completed, failed, cancelled] = await Promise.all([
+      this.prisma.openface3Job.count({ where: { ...where, status: 'PENDING' } }),
+      this.prisma.openface3Job.count({ where: { ...where, status: 'PROCESSING' } }),
+      this.prisma.openface3Job.count({ where: { ...where, status: 'COMPLETED' } }),
+      this.prisma.openface3Job.count({ where: { ...where, status: 'FAILED' } }),
+      this.prisma.openface3Job.count({ where: { ...where, status: 'CANCELLED' } }),
+    ]);
+
+    return { pending, processing, completed, failed, cancelled };
+  }
+
+  async backfill(args: {
+    courseId: string;
+    sessionIds?: string[];
+    studentIds?: string[];
+    fromDate?: string;
+    toDate?: string;
+    overwrite?: boolean;
+  }) {
+    const where: Record<string, unknown> = {
+      courseId: args.courseId,
+      uploadStatus: 'COMPLETED',
+    };
+    if (args.sessionIds?.length) where.sessionId = { in: args.sessionIds };
+    if (args.studentIds?.length) where.studentId = { in: args.studentIds };
+    if (args.fromDate || args.toDate) {
+      where.startWallTime = {};
+      if (args.fromDate)
+        (where.startWallTime as Record<string, unknown>).gte = new Date(args.fromDate);
+      if (args.toDate) (where.startWallTime as Record<string, unknown>).lte = new Date(args.toDate);
+    }
+
+    const segments = await this.prisma.recordingSegment.findMany({
+      where,
+      take: 200,
+      include: { openface3Job: true },
+    });
+
+    let enqueuedJobs = 0;
+    let skipped = 0;
+    let alreadyComplete = 0;
+
+    for (const seg of segments) {
+      if (seg.openface3Job) {
+        if (args.overwrite) {
+          await this.prisma.emotionFrame.deleteMany({ where: { jobId: seg.openface3Job.id } });
+          await this.prisma.openface3Job.delete({ where: { id: seg.openface3Job.id } });
+        } else {
+          if (seg.openface3Job.status === 'COMPLETED') {
+            alreadyComplete++;
+          } else {
+            skipped++;
+          }
+          continue;
+        }
+      }
+
+      await this.enqueueJob({
+        recordingSegmentId: seg.id,
+        sessionId: seg.sessionId,
+        studentId: seg.studentId,
+        courseId: seg.courseId,
+        minioKey: seg.minioKey,
+        segmentStartWallMs: seg.startWallTime.getTime(),
+      });
+      enqueuedJobs++;
+    }
+
+    return { enqueuedJobs, skipped, alreadyComplete };
+  }
+
+  async getWorkerHealth() {
+    try {
+      const heartbeat = await this.redis.get('openface3:worker:heartbeat');
+      const queueDepth = await this.redis.llen(OPENFACE3_QUEUE_KEY);
+      const lastHeartbeatMs = heartbeat ? parseInt(heartbeat, 10) : 0;
+      const workerReachable = lastHeartbeatMs > 0 && Date.now() - lastHeartbeatMs < 60_000;
+
+      return {
+        workerReachable,
+        lastHeartbeatAt: lastHeartbeatMs ? new Date(lastHeartbeatMs).toISOString() : null,
+        queueDepth,
+      };
+    } catch {
+      return { workerReachable: false, lastHeartbeatAt: null, queueDepth: -1 };
+    }
+  }
+
+  async getDeadLetterQueue() {
+    try {
+      const items = await this.redis.lrange('openface3:dead_letter', 0, 99);
+      return items.map((item) => {
+        try {
+          return JSON.parse(item);
+        } catch {
+          return { raw: item };
+        }
+      });
+    } catch {
+      return [];
+    }
+  }
 }
