@@ -11,3 +11,4 @@ export * from './recording.schema';
 export * from './pupil-size.schema';
 export * from './webgazer.schema';
 export * from './pyfeat.schema';
+export * from './affective-mapping';
