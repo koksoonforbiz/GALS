@@ -1,7 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { BookOpen, Pencil, Check, X, Trash2, Maximize2, Minimize2 } from 'lucide-react';
+import {
+  BookOpen,
+  Pencil,
+  Check,
+  X,
+  Trash2,
+  Maximize2,
+  Minimize2,
+  Plus,
+  MessageSquare,
+} from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -129,14 +139,12 @@ export function DialogueLearning() {
         setCourse(courseData);
         setSessions(sessionsData);
 
-        // Restore session from URL param or use most recent
+        // Restore session from URL param only — no auto-select.
+        // First-time visitors and returning users land on the session picker.
         const sessionId = searchParams.get('session');
-        let selectedSession: DialogueSession | null = null;
-        if (sessionId) {
-          selectedSession = sessionsData.find((s) => s.id === sessionId) || null;
-        } else if (sessionsData.length > 0 && sessionsData[0]) {
-          selectedSession = sessionsData[0];
-        }
+        const selectedSession: DialogueSession | null = sessionId
+          ? sessionsData.find((s) => s.id === sessionId) || null
+          : null;
 
         if (selectedSession) {
           setActiveSession(selectedSession);
@@ -869,20 +877,25 @@ export function DialogueLearning() {
             for (const file of Array.from(e.target.files)) {
               formData.append('file', file);
             }
-            // Use the direct upload flow
+            // Uploads always happen inside an active session
+            if (!activeSession) {
+              toast('error', 'Start or select a session before uploading materials');
+              e.target.value = '';
+              return;
+            }
             Array.from(e.target.files).forEach(async (file) => {
               const fd = new FormData();
               fd.append('file', file);
               const token = localStorage.getItem('token');
               try {
-                const uploadUrl = activeSession
-                  ? `/api/student-rag/courses/${courseId}/documents?sessionId=${activeSession.id}`
-                  : `/api/student-rag/courses/${courseId}/documents`;
-                const res = await fetch(uploadUrl, {
-                  method: 'POST',
-                  headers: token ? { Authorization: `Bearer ${token}` } : {},
-                  body: fd,
-                });
+                const res = await fetch(
+                  `/api/student-rag/courses/${courseId}/documents?sessionId=${activeSession.id}`,
+                  {
+                    method: 'POST',
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                    body: fd,
+                  },
+                );
                 if (res.ok) {
                   const doc = await res.json();
                   handleUploadComplete(doc as StudentSourceDocument);
@@ -897,37 +910,14 @@ export function DialogueLearning() {
         }}
       />
 
-      {/* Empty state - no sources uploaded */}
-      {!isLoading && sources.length === 0 && messages.length === 0 && !activeSession ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center max-w-md px-6 py-12">
-            <div className="text-gray-400 mb-4">
-              <BookOpen size={48} />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Start Your Learning Space</h2>
-            <p className="text-sm text-gray-500 mb-6">
-              Upload your study materials to begin. PDFs, documents, images, code — anything.
-            </p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Upload Your First Document
-            </button>
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-400 mb-3">Or try with a quick prompt</p>
-              <button
-                onClick={() => {
-                  setChatInputOverride('What is machine learning?');
-                }}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                &quot;What is machine learning?&quot; →
-              </button>
-              <p className="text-xs text-gray-400 mt-1">(uses fallback mode without sources)</p>
-            </div>
-          </div>
-        </div>
+      {/* Session picker - shown whenever no session is active */}
+      {!activeSession ? (
+        <SessionPicker
+          sessions={sessions}
+          onCreate={handleCreateSession}
+          onSelect={handleSelectSession}
+          onDelete={handleDeleteSession}
+        />
       ) : (
         /* Three-panel layout */
         <div ref={containerRef} className="flex-1 flex min-h-0">
@@ -1073,6 +1063,118 @@ export function DialogueLearning() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Session Picker ─────────────────────────────────────
+
+function SessionPicker({
+  sessions,
+  onCreate,
+  onSelect,
+  onDelete,
+}: {
+  sessions: DialogueSession[];
+  onCreate: () => Promise<void> | void;
+  onSelect: (session: DialogueSession) => Promise<void> | void;
+  onDelete: (sessionId: string) => Promise<void> | void;
+}) {
+  const formatRelative = (iso: string) => {
+    const d = new Date(iso);
+    const diffMs = Date.now() - d.getTime();
+    const m = Math.floor(diffMs / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m} min ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} hr ago`;
+    const days = Math.floor(h / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return d.toLocaleDateString();
+  };
+
+  if (sessions.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md px-6 py-12">
+          <div className="text-gray-400 mb-4 flex justify-center">
+            <BookOpen size={48} />
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Welcome to your learning space
+          </h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Start a session to begin chatting with your materials. You can upload PDFs, documents,
+            or images once you're inside.
+          </p>
+          <button
+            onClick={() => onCreate()}
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={16} />
+            Start New Session
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-gray-50">
+      <div className="max-w-2xl mx-auto px-6 py-10">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Your sessions</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Pick up where you left off, or start something new.
+            </p>
+          </div>
+          <button
+            onClick={() => onCreate()}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            <Plus size={14} />
+            Start New Session
+          </button>
+        </div>
+        <ul className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
+          {sessions.map((s) => {
+            const messageCount = s._count?.messages ?? 0;
+            return (
+              <li key={s.id} className="group">
+                <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                  <button onClick={() => onSelect(s)} className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center gap-2">
+                      <MessageSquare size={14} className="text-gray-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {s.title || 'Untitled session'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                      <span>
+                        {messageCount} message{messageCount === 1 ? '' : 's'}
+                      </span>
+                      <span>·</span>
+                      <span>Updated {formatRelative(s.updatedAt)}</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Delete this session? This cannot be undone.')) {
+                        onDelete(s.id);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 p-1.5 rounded transition-all"
+                    title="Delete session"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }

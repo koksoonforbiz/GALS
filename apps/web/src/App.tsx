@@ -24,6 +24,7 @@ import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 import { UserManagementPage } from './pages/teacher/UserManagementPage';
 import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
 import { SessionTimelinePage } from './pages/dashboard/SessionTimelinePage';
+import { StudentTextMiningPage } from './features/text-mining/pages/StudentTextMiningPage';
 import { ChangePassword } from './pages/ChangePassword';
 
 // Student pages
@@ -182,6 +183,14 @@ function App() {
                   element={
                     <RoleRoute allowedRoles={['teacher', 'admin']}>
                       <StudentLogPage />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/teacher/students/:studentId/text-mining"
+                  element={
+                    <RoleRoute allowedRoles={['teacher', 'admin']}>
+                      <StudentTextMiningPage />
                     </RoleRoute>
                   }
                 />
