@@ -150,8 +150,25 @@ export class TextMiningController {
   @Post('prompts/try')
   @Roles('teacher', 'admin')
   @HttpCode(HttpStatus.OK)
-  tryPrompt() {
-    throw new NotImplementedException(); // TODO stage 4
+  tryPrompt(
+    @Body()
+    body: {
+      constructKey: string;
+      promptText: string;
+      utterance: string;
+      courseTopic?: string;
+      courseId?: string;
+    },
+    @Request() req: { user: RequestUser },
+  ) {
+    return this.prompts.tryPrompt({
+      teacherId: req.user.id,
+      constructKey: body.constructKey,
+      promptText: body.promptText,
+      utterance: body.utterance,
+      courseTopic: body.courseTopic,
+      courseId: body.courseId,
+    });
   }
 
   // ─── Teacher Settings ─────────────────────────────────
