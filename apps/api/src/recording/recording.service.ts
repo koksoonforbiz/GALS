@@ -37,10 +37,36 @@ export class RecordingService {
   }
 
   async updateConfig(courseId: string, dto: RecordingConfigDto): Promise<RecordingConfig> {
+    // Patch only the fields the caller provided. This lets a focused form
+    // (e.g. OpenFace3 settings) update its own subset without clobbering
+    // the webcam-recording toggle or vice versa.
+    const update: Record<string, unknown> = {};
+    if (dto.isEnabled !== undefined) update.isEnabled = dto.isEnabled;
+    if (dto.openface3Enabled !== undefined) update.openface3Enabled = dto.openface3Enabled;
+    if (dto.openface3ExtractionFps !== undefined)
+      update.openface3ExtractionFps = dto.openface3ExtractionFps;
+    if (dto.openface3DetectorBackend !== undefined)
+      update.openface3DetectorBackend = dto.openface3DetectorBackend;
+    if (dto.openface3RunOnNewSegments !== undefined)
+      update.openface3RunOnNewSegments = dto.openface3RunOnNewSegments;
+
     return this.prisma.recordingConfig.upsert({
       where: { courseId },
-      update: { isEnabled: dto.isEnabled },
-      create: { courseId, isEnabled: dto.isEnabled },
+      update,
+      create: {
+        courseId,
+        isEnabled: dto.isEnabled ?? false,
+        ...(dto.openface3Enabled !== undefined && { openface3Enabled: dto.openface3Enabled }),
+        ...(dto.openface3ExtractionFps !== undefined && {
+          openface3ExtractionFps: dto.openface3ExtractionFps,
+        }),
+        ...(dto.openface3DetectorBackend !== undefined && {
+          openface3DetectorBackend: dto.openface3DetectorBackend,
+        }),
+        ...(dto.openface3RunOnNewSegments !== undefined && {
+          openface3RunOnNewSegments: dto.openface3RunOnNewSegments,
+        }),
+      },
     });
   }
 
