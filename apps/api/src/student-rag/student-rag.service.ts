@@ -1,9 +1,17 @@
 import * as crypto from 'crypto';
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  forwardRef,
+} from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { LlmService } from '../rag/llm.service';
+import { DialogueGateway } from '../dialogue/dialogue.gateway';
 import { FileParserService } from './file-parser.service';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
@@ -36,6 +44,8 @@ export class StudentRagService {
     private readonly chunkingService: ChunkingService,
     private readonly embeddingService: EmbeddingService,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(forwardRef(() => DialogueGateway))
+    private readonly dialogueGateway: DialogueGateway,
   ) {}
 
   // ─── Upload & create document record ────────────────────
@@ -112,6 +122,10 @@ export class StudentRagService {
       await this.prisma.studentSourceDocument.update({
         where: { id: documentId },
         data: { processingStatus: 'PROCESSING' },
+      });
+      this.dialogueGateway.emitProcessingUpdate(document.studentId, {
+        documentId,
+        status: 'PROCESSING',
       });
 
       // 2. Fetch blob from MinIO
@@ -209,6 +223,10 @@ export class StudentRagService {
           processingError: null,
         },
       });
+      this.dialogueGateway.emitProcessingUpdate(document.studentId, {
+        documentId,
+        status: 'COMPLETED',
+      });
 
       // 12. Publish generate_source_guide event
       this.eventEmitter.emit('student-document.processed', { documentId });
@@ -224,6 +242,10 @@ export class StudentRagService {
           processingStatus: 'FAILED',
           processingError: errorMessage,
         },
+      });
+      this.dialogueGateway.emitProcessingUpdate(document.studentId, {
+        documentId,
+        status: 'FAILED',
       });
     }
   }
