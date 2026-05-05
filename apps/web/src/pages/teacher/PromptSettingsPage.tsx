@@ -2,8 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
-import { FlaskConical, Footprints, Layers, MessageCircleQuestion, Target, Cog, Compass, UserCircle } from 'lucide-react';
+import {
+  FlaskConical,
+  Footprints,
+  Layers,
+  MessageCircleQuestion,
+  Target,
+  Cog,
+  Compass,
+  UserCircle,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
+import { TextMiningPromptsTab } from './TextMiningPromptsTab';
 
 interface PromptConfig {
   interventionType: string;
@@ -27,7 +37,7 @@ interface FeedbackConfig {
   description: string;
 }
 
-type TabKey = 'interventions' | 'feedback' | 'questiongen';
+type TabKey = 'interventions' | 'feedback' | 'questiongen' | 'text-mining';
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   PRACTICE_TESTING: <FlaskConical size={20} />,
@@ -268,6 +278,7 @@ export function PromptSettingsPage() {
           { key: 'interventions' as TabKey, label: 'Learning Interventions' },
           { key: 'feedback' as TabKey, label: 'AI Feedback' },
           { key: 'questiongen' as TabKey, label: 'Question Gen' },
+          { key: 'text-mining' as TabKey, label: 'Text-mining (EF)' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -506,7 +517,8 @@ export function PromptSettingsPage() {
                   onChange={() => toggleLevel(level)}
                 />
                 <span className="text-sm flex items-center gap-1.5">
-                  <span className="text-gray-600">{FEEDBACK_ICONS[level]}</span> {level.replace('_', '-').toLowerCase()}-level
+                  <span className="text-gray-600">{FEEDBACK_ICONS[level]}</span>{' '}
+                  {level.replace('_', '-').toLowerCase()}-level
                   {level === 'TASK' && (
                     <span className="text-xs text-gray-400 ml-1">
                       (recommended — always include)
@@ -632,6 +644,9 @@ export function PromptSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Text-mining (EF construct prompts) Tab ─────── */}
+      {activeTab === 'text-mining' && courseId && <TextMiningPromptsTab courseId={courseId} />}
     </div>
   );
 }
