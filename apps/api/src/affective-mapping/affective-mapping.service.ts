@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MappingEngineService } from './mapping-engine.service';
-import { DEFAULT_MAPPING } from '@ats/shared/src/affective-mapping';
-import type { MappingRuleSet } from '@ats/shared/src/affective-mapping';
+import { DEFAULT_MAPPING } from '@ats/shared';
+import type { MappingRuleSet } from '@ats/shared';
 
 @Injectable()
 export class AffectiveMappingService {

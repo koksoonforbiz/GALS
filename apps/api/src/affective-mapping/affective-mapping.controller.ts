@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { AffectiveMappingService } from './affective-mapping.service';
-import type { MappingRuleSet } from '@ats/shared/src/affective-mapping';
+import type { MappingRuleSet } from '@ats/shared';
 
 interface RequestUser {
   id: string;

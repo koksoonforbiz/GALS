@@ -1,10 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  MappingRuleSet,
-  AffectiveStateRule,
-  Term,
-  EmotionGroup,
-} from '@ats/shared/src/affective-mapping';
+import type { MappingRuleSet, AffectiveStateRule, Term, EmotionGroup } from '@ats/shared';
 
 interface EmotionMeans {
   pHappiness: number;
