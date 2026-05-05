@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSessionLogs } from './hooks/useSessionLogs';
 import { useSessionSummary } from './hooks/useSessionSummary';
 import { SummaryTab } from './tabs/SummaryTab';
@@ -9,6 +9,8 @@ import { RecordingLogViewer } from '../../../components/teacher/biometrics/Recor
 import { PupilSizeLogViewer } from '../../../components/teacher/biometrics/PupilSizeLogViewer';
 import { WebgazerLogViewer } from '../../../components/teacher/biometrics/WebgazerLogViewer';
 import { PyfeatLogViewer } from '../../../components/teacher/biometrics/PyfeatLogViewer';
+import { SessionEmotionTab } from '../../../features/openface3/pages/SessionEmotionTab';
+import { SessionTextMiningTab } from '../../../features/text-mining/pages/SessionTextMiningTab';
 
 const TABS = ['Summary', 'Timeline', 'Conversations', 'Interventions', 'Biometrics'] as const;
 type Tab = (typeof TABS)[number];
@@ -25,6 +27,26 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
   const { summary, isLoading: summaryLoading } = useSessionSummary(sessionId);
 
   const isLoading = logsLoading || summaryLoading;
+
+  // Derive a wall-clock window for the emotion timeline from activity logs.
+  // Any session that's been touched will have at least one log entry; if not,
+  // we fall back to a 1-minute window ending now so the lane still renders.
+  const { sessionStartMs, sessionEndMs } = useMemo(() => {
+    const times = (logs ?? [])
+      .map((l) => {
+        const ts = l?.occurredAt ?? l?.createdAt;
+        return ts ? new Date(ts).getTime() : NaN;
+      })
+      .filter((n) => Number.isFinite(n)) as number[];
+    if (times.length === 0) {
+      const now = Date.now();
+      return { sessionStartMs: now - 60_000, sessionEndMs: now };
+    }
+    const start = Math.min(...times);
+    let end = Math.max(...times);
+    if (end <= start) end = start + 60_000;
+    return { sessionStartMs: start, sessionEndMs: end };
+  }, [logs]);
 
   function handleExport() {
     const token = localStorage.getItem('token');
@@ -92,6 +114,26 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
                 <PupilSizeLogViewer studentId={studentId} courseId={courseId} />
                 <WebgazerLogViewer studentId={studentId} courseId={courseId} />
                 <PyfeatLogViewer studentId={studentId} courseId={courseId} />
+
+                {/* OpenFace 3 emotion timeline */}
+                <section>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">
+                    OpenFace 3 — Emotion & Affective States
+                  </h3>
+                  <SessionEmotionTab
+                    sessionId={sessionId}
+                    sessionStartMs={sessionStartMs}
+                    sessionEndMs={sessionEndMs}
+                  />
+                </section>
+
+                {/* Text-mining EF detection */}
+                <section>
+                  <h3 className="text-sm font-semibold text-gray-800 mb-3">
+                    Text-mining — Executive Function detection
+                  </h3>
+                  <SessionTextMiningTab sessionId={sessionId} />
+                </section>
               </div>
             )}
             {activeTab === 'Biometrics' && !courseId && (

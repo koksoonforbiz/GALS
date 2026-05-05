@@ -23,6 +23,8 @@ import { RecordingSettings } from '../../components/teacher/biometrics/Recording
 import { PupilSizeSettings } from '../../components/teacher/biometrics/PupilSizeSettings';
 import { WebgazerSettings } from '../../components/teacher/biometrics/WebgazerSettings';
 import { PyfeatSettings } from '../../components/teacher/biometrics/PyfeatSettings';
+import { Openface3Settings } from '../../components/teacher/biometrics/Openface3Settings';
+import { TextMiningTeacherSettings } from '../../components/teacher/biometrics/TextMiningTeacherSettings';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -1421,6 +1423,12 @@ export function CourseBuilderPage() {
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
             <PyfeatSettings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <Openface3Settings courseId={courseId!} />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <TextMiningTeacherSettings />
           </div>
         </div>
       )}
