@@ -101,9 +101,6 @@ export class DetectionService {
       }
     }
 
-    // Resolve which user ID to use for LLM calls
-    const teacherId = settings.detectionProviderOverride ? args.teacherId : args.teacherId;
-
     // Get LLM settings to know provider/model for storage
     const llmSettings = await this.llmService.getUserLlmSettings(args.teacherId);
     const provider = settings.detectionProviderOverride ?? llmSettings.provider ?? 'openai';
@@ -161,7 +158,7 @@ export class DetectionService {
         }
 
         const result = await this.llmService.callLlmForUser(
-          teacherId,
+          args.teacherId,
           'You are a learning analytics classifier. Output only valid JSON.',
           filledPrompt,
           { feature: 'text_mining_detection', courseId: args.courseId ?? undefined },
