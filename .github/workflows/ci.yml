@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'milestone-*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Lint & Typecheck ──────────────────────────────────────────────
+  lint-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  # ─── API Integration Tests ────────────────────────────────────────
+  test-api:
+    name: API Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ats_user
+          POSTGRES_PASSWORD: ats_password
+          POSTGRES_DB: ats_db_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ats_user -d ats_db_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+      minio:
+        image: minio/minio:latest
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd="mc ready local || exit 1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ats_user:ats_password@localhost:5432/ats_db_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret-at-least-sixteen-characters
+      BLOB_STORAGE_ENDPOINT: http://localhost:9000
+      BLOB_STORAGE_BUCKET: ats-blobs-test
+      BLOB_STORAGE_ACCESS_KEY: minioadmin
+      BLOB_STORAGE_SECRET_KEY: minioadmin
+      BLOB_STORAGE_REGION: us-east-1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client & run migrations
+        run: |
+          pnpm --filter @ats/api prisma:generate
+          pnpm --filter @ats/api prisma:migrate:deploy
+
+      - name: Run API tests
+        run: pnpm --filter @ats/api test
+
+  # ─── E2E Tests (Playwright) ───────────────────────────────────────
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start full stack via Docker Compose
+        run: |
+          docker compose up -d --build
+          echo "Waiting for services to become healthy..."
+          # Wait up to 120s for API health
+          timeout 120 bash -c 'until curl -sf http://localhost:3000/api/health > /dev/null 2>&1; do sleep 3; echo "Waiting for API..."; done'
+          echo "API is healthy"
+          # Wait up to 60s for Web
+          timeout 60 bash -c 'until curl -sf http://localhost:5173 > /dev/null 2>&1; do sleep 3; echo "Waiting for Web..."; done'
+          echo "Web is healthy"
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Stop Docker Compose
+        if: always()
+        run: docker compose down -v
+
+  # ─── Build ────────────────────────────────────────────────────────
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build

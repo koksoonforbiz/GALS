@@ -1,0 +1,67 @@
+export type ActivityAction =
+  | 'SESSION_START'
+  | 'SESSION_END'
+  | 'SESSION_HEARTBEAT'
+  | 'MODULE_OPENED'
+  | 'MODULE_ITEM_VIEWED'
+  | 'KC_GRAPH_VIEWED'
+  | 'ASSESSMENT_STARTED'
+  | 'QUESTION_VIEWED'
+  | 'QUESTION_ANSWERED'
+  | 'ASSESSMENT_SUBMITTED'
+  | 'ASSESSMENT_GRADED'
+  | 'DIALOGUE_SESSION_STARTED'
+  | 'DIALOGUE_MESSAGE_SENT'
+  | 'DIALOGUE_MESSAGE_RECEIVED'
+  | 'DIALOGUE_SESSION_ENDED'
+  | 'INTERVENTION_TRIGGERED'
+  | 'INTERVENTION_VIEWED'
+  | 'INTERVENTION_COMPLETED'
+  | 'INTERVENTION_DISMISSED'
+  | 'SPACED_REP_CARD_VIEWED'
+  | 'SPACED_REP_CARD_RATED'
+  | 'STUDY_MATERIAL_UPLOADED'
+  | 'STUDY_GUIDE_GENERATED'
+  | 'STUDIO_OUTPUT_REQUESTED'
+  | 'STUDIO_OUTPUT_VIEWED'
+  | 'MASTERY_UPDATED'
+  | 'FEEDBACK_RECEIVED'
+  // Recording (Feature 04)
+  | 'RECORDING_STARTED'
+  | 'RECORDING_STOPPED'
+  | 'RECORDING_SEGMENT_UPLOADED'
+  | 'RECORDING_UPLOAD_FAILED'
+  | 'RECORDING_RESUMED'
+  // Pupil Size (Feature 01)
+  | 'PUPIL_SIZE_TRACKING_STARTED'
+  | 'PUPIL_SIZE_TRACKING_STOPPED'
+  | 'PUPIL_SIZE_BATCH_SUBMITTED'
+  // WebGazer (Feature 02)
+  | 'WEBGAZER_TRACKING_STARTED'
+  | 'WEBGAZER_TRACKING_STOPPED'
+  | 'WEBGAZER_CALIBRATION_STARTED'
+  | 'WEBGAZER_CALIBRATION_COMPLETED'
+  | 'WEBGAZER_CALIBRATION_SKIPPED'
+  | 'WEBGAZER_BATCH_SUBMITTED'
+  | 'WEBGAZER_RECALIBRATION_PROMPTED'
+  // py-feat (Feature 03)
+  | 'PYFEAT_JOB_ENQUEUED'
+  | 'PYFEAT_JOB_COMPLETED'
+  | 'PYFEAT_JOB_FAILED';
+
+export interface ActivityEvent {
+  action: ActivityAction;
+  occurredAt: string; // ISO string
+
+  courseId?: string;
+  moduleId?: string;
+  moduleItemId?: string;
+  assessmentId?: string;
+  attemptId?: string;
+  questionId?: string;
+  dialogueSessionId?: string;
+  interventionId?: string;
+  kcId?: string;
+
+  metadata?: Record<string, unknown>;
+}

@@ -1,0 +1,12 @@
+# Worker glue libs.
+redis>=5.0.0
+psycopg2-binary>=2.9.0
+minio>=7.2.0
+python-dotenv>=1.0.0
+cuid>=0.4
+
+# OpenFace 3.0 (CMU MultiComp Lab). Pulls a strict pin set: numpy==1.26.4,
+# Pillow==9.4.0, opencv_python==4.11.0.86, scipy==1.13, etc. The Dockerfile
+# installs CPU-only torch *before* this line so `openface-test`'s unpinned
+# torch dep gets satisfied without pulling the multi-GB CUDA build.
+openface-test>=0.1.26
