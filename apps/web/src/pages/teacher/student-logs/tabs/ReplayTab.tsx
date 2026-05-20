@@ -248,7 +248,16 @@ function predictLearningState(
 }
 
 export function ReplayTab({ sessionId }: { sessionId: string }) {
-  const { data, isLoading, error, refresh } = useSessionReplay(sessionId);
+  const {
+    data,
+    isLoading,
+    isLoadingSnapshots,
+    snapshotLoadProgress,
+    snapshotContentById,
+    fetchSnapshotContent,
+    error,
+    refresh,
+  } = useSessionReplay(sessionId);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const viewportHostRef = useRef<HTMLDivElement | null>(null);
@@ -347,11 +356,39 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     return selected;
   }, [currentAbsoluteMs, data?.snapshots]);
 
-  const currentSnapshotImageDataUrl = useMemo(() => {
+  const currentSnapshotWithContent = useMemo(() => {
     if (!currentSnapshot) return null;
-    if (currentSnapshot.screenshotDataUrl) return currentSnapshot.screenshotDataUrl;
-    return buildSnapshotImageDataUrl(currentSnapshot.html, currentSnapshot.width, currentSnapshot.height);
-  }, [currentSnapshot]);
+    return snapshotContentById[currentSnapshot.id] ?? currentSnapshot;
+  }, [currentSnapshot, snapshotContentById]);
+
+  useEffect(() => {
+    if (!currentSnapshot?.id) return;
+    void fetchSnapshotContent(currentSnapshot.id, { includeScreenshot: true });
+  }, [currentSnapshot?.id, fetchSnapshotContent]);
+
+  const currentSnapshotImageDataUrl = useMemo(() => {
+    if (!currentSnapshotWithContent) return null;
+    if (currentSnapshotWithContent.screenshotDataUrl) return currentSnapshotWithContent.screenshotDataUrl;
+    if (!currentSnapshotWithContent.html) return null;
+    return buildSnapshotImageDataUrl(
+      currentSnapshotWithContent.html,
+      currentSnapshotWithContent.width,
+      currentSnapshotWithContent.height,
+    );
+  }, [currentSnapshotWithContent]);
+  const hasCurrentSnapshotContent = useMemo(
+    () => Boolean(currentSnapshot?.id && snapshotContentById[currentSnapshot.id]),
+    [currentSnapshot?.id, snapshotContentById],
+  );
+  const isUsingDomFallbackImage = useMemo(
+    () =>
+      Boolean(
+        currentSnapshotWithContent &&
+          !currentSnapshotWithContent.screenshotDataUrl &&
+          currentSnapshotWithContent.html,
+      ),
+    [currentSnapshotWithContent],
+  );
 
   const currentViewport = useMemo(() => {
     if (!data) return null;
@@ -675,7 +712,24 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     return <div className="text-sm text-red-500">Failed to load replay: {error}</div>;
   }
 
-  if (!data || data.snapshots.length === 0) {
+  if (!data) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-sm text-gray-500">
+        Replay metadata not available.
+      </div>
+    );
+  }
+
+  if (isLoadingSnapshots && data.snapshots.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-sm text-gray-500">
+        Loading full-detail replay snapshots ({snapshotLoadProgress.loaded} /{' '}
+        {snapshotLoadProgress.total || '?'}).
+      </div>
+    );
+  }
+
+  if (data.snapshots.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-sm text-gray-500">
         No DOM replay snapshots have been recorded for this session yet.
@@ -848,7 +902,10 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
             <div className="mb-3 rounded-lg border border-slate-700 bg-slate-950/50 p-2">
               <div className="mb-2 flex items-center justify-between text-[11px] text-slate-300">
                 <span>Pixel Replay (1 FPS)</span>
-                <span className="font-mono">{formatTimestamp(currentAbsoluteMs)}</span>
+                <span className="font-mono">
+                  {formatTimestamp(currentAbsoluteMs)}
+                  {isUsingDomFallbackImage ? ' • DOM fallback' : ''}
+                </span>
               </div>
               {currentSnapshotImageDataUrl ? (
                 <img
@@ -857,6 +914,10 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                   className="w-full rounded-md border border-slate-700 bg-black object-contain"
                   style={{ aspectRatio: `${Math.max(1, viewportWidth)} / ${Math.max(1, viewportHeight)}` }}
                 />
+              ) : !hasCurrentSnapshotContent ? (
+                <div className="flex aspect-video items-center justify-center rounded-md bg-slate-900 text-xs text-slate-400">
+                  Loading pixel snapshot...
+                </div>
               ) : (
                 <div className="flex aspect-video items-center justify-center rounded-md bg-slate-900 text-xs text-slate-400">
                   No pixel snapshot available.
@@ -877,7 +938,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                 ref={iframeRef}
                 title="Session replay"
                 sandbox="allow-same-origin"
-                srcDoc={currentSnapshot?.html}
+                srcDoc={currentSnapshotWithContent?.html}
                 className="absolute left-0 top-0 bg-white"
                 style={{
                   width: `${viewportWidth}px`,
@@ -1146,6 +1207,12 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
             <h3 className="text-sm font-semibold text-gray-900">Coverage</h3>
             <div className="mt-3 space-y-2">
               <p>{data.snapshots.length} DOM snapshots captured</p>
+              {isLoadingSnapshots && (
+                <p className="text-gray-500">
+                  Loading remaining snapshots: {snapshotLoadProgress.loaded} /{' '}
+                  {snapshotLoadProgress.total || data.snapshotCount || '?'}
+                </p>
+              )}
               <p>
                 DOM cadence:{' '}
                 {snapshotStats.averageGapMs

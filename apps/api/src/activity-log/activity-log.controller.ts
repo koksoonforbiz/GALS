@@ -9,6 +9,7 @@ import {
   Res,
   Request,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -161,8 +162,41 @@ export class ActivityLogController {
 
   @Get('teacher/sessions/:sessionId/replay')
   @Roles('teacher')
-  async getSessionReplay(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
-    return this.logsService.getSessionReplayData(sessionId);
+  async getSessionReplay(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Query('includeSnapshots') includeSnapshots?: string,
+  ) {
+    return this.logsService.getSessionReplayData(sessionId, {
+      includeSnapshots: includeSnapshots !== 'false',
+    });
+  }
+
+  @Get('teacher/sessions/:sessionId/replay/snapshots')
+  @Roles('teacher')
+  async getSessionReplaySnapshots(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+    @Query('includeContent') includeContent?: string,
+  ) {
+    const parsedLimit = Number(limit);
+    return this.logsService.getSessionReplaySnapshots(sessionId, {
+      cursor: cursor || undefined,
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      includeContent: includeContent === 'true',
+    });
+  }
+
+  @Get('teacher/sessions/:sessionId/replay/snapshots/:snapshotId')
+  @Roles('teacher')
+  async getSessionReplaySnapshotById(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Param('snapshotId') snapshotId: string,
+    @Query('includeScreenshot') includeScreenshot?: string,
+  ) {
+    return this.logsService.getSessionReplaySnapshotById(sessionId, snapshotId, {
+      includeScreenshot: includeScreenshot === 'true',
+    });
   }
 
   /**

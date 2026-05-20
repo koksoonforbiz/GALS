@@ -292,10 +292,33 @@ export class LogsService {
     }
   }
 
-  async getSessionReplayData(sessionId: string) {
+  async getSessionReplayData(sessionId: string, options?: { includeSnapshots?: boolean }) {
+    const includeSnapshots = options?.includeSnapshots ?? true;
+    const snapshotCountPromise = this.prisma.sessionReplaySnapshot.count({
+      where: { sessionId },
+    });
+    const snapshotsPromise = includeSnapshots
+      ? this.prisma.sessionReplaySnapshot.findMany({
+          where: { sessionId },
+          orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            pageUrl: true,
+            html: true,
+            screenshotDataUrl: true,
+            width: true,
+            height: true,
+            scrollX: true,
+            scrollY: true,
+            capturedAt: true,
+            trigger: true,
+          },
+        })
+      : Promise.resolve([]);
     const [
       session,
       syncAnchor,
+      snapshotCount,
       snapshots,
       clickLogs,
       scrollLogs,
@@ -323,22 +346,8 @@ export class LogsService {
         this.prisma.session_sync_anchors.findUnique({
           where: { sessionId },
         }),
-        this.prisma.sessionReplaySnapshot.findMany({
-          where: { sessionId },
-          orderBy: { capturedAt: 'asc' },
-          select: {
-            id: true,
-            pageUrl: true,
-            html: true,
-            screenshotDataUrl: true,
-            width: true,
-            height: true,
-            scrollX: true,
-            scrollY: true,
-            capturedAt: true,
-            trigger: true,
-          },
-        }),
+        snapshotCountPromise,
+        snapshotsPromise,
         this.prisma.click_logs.findMany({
           where: { sessionId },
           orderBy: { timestamp: 'asc' },
@@ -463,6 +472,8 @@ export class LogsService {
 
     return {
       session,
+      snapshotCount,
+      snapshotsSampled: false,
       syncAnchor: syncAnchor
         ? {
             ...syncAnchor,
@@ -515,6 +526,80 @@ export class LogsService {
     };
   }
 
+  async getSessionReplaySnapshots(
+    sessionId: string,
+    options?: { cursor?: string; limit?: number; includeContent?: boolean },
+  ) {
+    const safeLimit = Math.min(Math.max(options?.limit ?? 50, 1), 200);
+    const includeContent = options?.includeContent ?? false;
+    const rows = await this.prisma.sessionReplaySnapshot.findMany({
+      where: { sessionId },
+      orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+      take: safeLimit + 1,
+      ...(options?.cursor
+        ? {
+            cursor: { id: options.cursor },
+            skip: 1,
+          }
+        : {}),
+      select: {
+        id: true,
+        pageUrl: true,
+        ...(includeContent ? { html: true, screenshotDataUrl: true } : {}),
+        width: true,
+        height: true,
+        scrollX: true,
+        scrollY: true,
+        capturedAt: true,
+        trigger: true,
+      },
+    });
+
+    const hasMore = rows.length > safeLimit;
+    const page = hasMore ? rows.slice(0, safeLimit) : rows;
+    const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
+
+    return {
+      snapshots: page.map((snapshot) => ({
+        ...snapshot,
+        capturedAt: Number(snapshot.capturedAt),
+      })),
+      nextCursor,
+      hasMore,
+      limit: safeLimit,
+    };
+  }
+
+  async getSessionReplaySnapshotById(
+    sessionId: string,
+    snapshotId: string,
+    options?: { includeScreenshot?: boolean },
+  ) {
+    const includeScreenshot = options?.includeScreenshot ?? false;
+    const snapshot = await this.prisma.sessionReplaySnapshot.findFirst({
+      where: { sessionId, id: snapshotId },
+      select: {
+        id: true,
+        pageUrl: true,
+        html: true,
+        ...(includeScreenshot ? { screenshotDataUrl: true } : {}),
+        width: true,
+        height: true,
+        scrollX: true,
+        scrollY: true,
+        capturedAt: true,
+        trigger: true,
+      },
+    });
+
+    if (!snapshot) return null;
+
+    return {
+      ...snapshot,
+      capturedAt: Number(snapshot.capturedAt),
+    };
+  }
+
   // ─── Helpers ────────────────────────────────────────────
 
   private validateBatch(sessionId: string, userId: string) {
@@ -522,4 +607,5 @@ export class LogsService {
       throw new BadRequestException('sessionId and userId are required');
     }
   }
+
 }

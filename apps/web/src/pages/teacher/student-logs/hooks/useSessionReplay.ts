@@ -4,7 +4,7 @@ import { api } from '../../../../lib/api';
 export interface SessionReplaySnapshot {
   id: string;
   pageUrl: string;
-  html: string;
+  html?: string;
   screenshotDataUrl?: string | null;
   width: number;
   height: number;
@@ -115,6 +115,8 @@ interface SessionReplayResponse {
     userAgent: string;
   } | null;
   snapshots: SessionReplaySnapshot[];
+  snapshotCount?: number;
+  snapshotsSampled?: boolean;
   clickLogs: SessionReplayClickLog[];
   scrollLogs: SessionReplayScrollLog[];
   viewportLogs: SessionReplayViewportLog[];
@@ -150,27 +152,120 @@ interface SessionReplayResponse {
   };
 }
 
+interface SessionReplaySnapshotPage {
+  snapshots: SessionReplaySnapshot[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  limit: number;
+}
+
 export function useSessionReplay(sessionId: string) {
   const [data, setData] = useState<SessionReplayResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
+  const [snapshotLoadProgress, setSnapshotLoadProgress] = useState<{ loaded: number; total: number }>({
+    loaded: 0,
+    total: 0,
+  });
   const [error, setError] = useState<string | null>(null);
+  const [snapshotContentById, setSnapshotContentById] = useState<Record<string, SessionReplaySnapshot>>(
+    {},
+  );
 
   const refresh = useCallback(() => {
     if (!sessionId) return;
 
     setIsLoading(true);
+    setIsLoadingSnapshots(false);
+    setSnapshotLoadProgress({ loaded: 0, total: 0 });
+    setSnapshotContentById({});
     setError(null);
 
-    api
-      .get<SessionReplayResponse>(`/activity-log/teacher/sessions/${sessionId}/replay`)
-      .then((response) => setData(response))
-      .catch((err: Error) => setError(err.message || 'Failed to load session replay'))
-      .finally(() => setIsLoading(false));
+    void (async () => {
+      try {
+        const response = await api.get<SessionReplayResponse>(
+          `/activity-log/teacher/sessions/${sessionId}/replay?includeSnapshots=false`,
+        );
+        const totalSnapshots = response.snapshotCount ?? 0;
+        setData({ ...response, snapshots: [] });
+        setSnapshotLoadProgress({ loaded: 0, total: totalSnapshots });
+        setIsLoading(false);
+
+        setIsLoadingSnapshots(true);
+        const loadedSnapshots: SessionReplaySnapshot[] = [];
+        let cursor: string | null = null;
+        let hasMore = true;
+
+        while (hasMore) {
+          const query = cursor
+            ? `?cursor=${encodeURIComponent(cursor)}&limit=120&includeContent=false`
+            : '?limit=120&includeContent=false';
+          const page = await api.get<SessionReplaySnapshotPage>(
+            `/activity-log/teacher/sessions/${sessionId}/replay/snapshots${query}`,
+          );
+          loadedSnapshots.push(...page.snapshots);
+          setSnapshotLoadProgress({
+            loaded: loadedSnapshots.length,
+            total: totalSnapshots || loadedSnapshots.length,
+          });
+          hasMore = page.hasMore;
+          cursor = page.nextCursor;
+        }
+        setData((prev) => (prev ? { ...prev, snapshots: loadedSnapshots } : prev));
+      } catch (err) {
+        const typedError = err as Error;
+        setError(typedError.message || 'Failed to load session replay');
+      } finally {
+        setIsLoading(false);
+        setIsLoadingSnapshots(false);
+      }
+    })();
   }, [sessionId]);
+
+  const fetchSnapshotContent = useCallback(
+    async (snapshotId: string, options?: { includeScreenshot?: boolean }) => {
+      if (!sessionId || !snapshotId) return null;
+      const includeScreenshot = options?.includeScreenshot ?? false;
+      const cached = snapshotContentById[snapshotId];
+      if (cached && (!includeScreenshot || Boolean(cached.screenshotDataUrl))) return cached;
+
+      const fullSnapshot = await api.get<SessionReplaySnapshot | null>(
+        `/activity-log/teacher/sessions/${sessionId}/replay/snapshots/${snapshotId}?includeScreenshot=${
+          includeScreenshot ? 'true' : 'false'
+        }`,
+      );
+      if (!fullSnapshot) return null;
+
+      setSnapshotContentById((prev) => {
+        if (prev[snapshotId]) return prev;
+        const next = { ...prev, [snapshotId]: fullSnapshot };
+        const keys = Object.keys(next);
+        const maxEntries = 12;
+        if (keys.length > maxEntries) {
+          const toDelete = keys.slice(0, keys.length - maxEntries);
+          toDelete.forEach((key) => {
+            delete next[key];
+          });
+        }
+        return next;
+      });
+      return fullSnapshot;
+    },
+    [sessionId, snapshotContentById],
+  );
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { data, isLoading, error, refresh };
+  return {
+    data,
+    isLoading,
+    isLoadingSnapshots,
+    snapshotLoadProgress,
+    snapshotContentById,
+    fetchSnapshotContent,
+    error,
+    refresh,
+  };
 }
