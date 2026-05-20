@@ -34,6 +34,16 @@ PYFEAT_AU_MAP = {
     "AU26": "au26", "AU28": "au28",
 }
 
+def _safe_float(value):
+    """Return finite float or None."""
+    if value is None:
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if np.isfinite(numeric) else None
+
 
 def process_job(job: dict) -> str:
     """
@@ -132,20 +142,24 @@ def process_job(job: dict) -> str:
 
             au_values = {}
             for pyfeat_col, db_col in PYFEAT_AU_MAP.items():
-                val = row.get(pyfeat_col)
-                au_values[db_col] = float(val) if pd.notna(val) else None
+                au_values[db_col] = _safe_float(row.get(pyfeat_col))
 
             face_conf = None
             face_box = None
             if "FaceScore" in row:
-                face_conf = float(row["FaceScore"]) if pd.notna(row["FaceScore"]) else None
+                face_conf = _safe_float(row.get("FaceScore"))
             if all(k in row for k in ["FaceRectX", "FaceRectY", "FaceRectWidth", "FaceRectHeight"]):
-                face_box = json.dumps({
-                    "x": float(row["FaceRectX"]),
-                    "y": float(row["FaceRectY"]),
-                    "w": float(row["FaceRectWidth"]),
-                    "h": float(row["FaceRectHeight"]),
-                })
+                x = _safe_float(row.get("FaceRectX"))
+                y = _safe_float(row.get("FaceRectY"))
+                w = _safe_float(row.get("FaceRectWidth"))
+                h = _safe_float(row.get("FaceRectHeight"))
+                if all(v is not None for v in [x, y, w, h]):
+                    face_box = json.dumps({
+                        "x": x,
+                        "y": y,
+                        "w": w,
+                        "h": h,
+                    })
 
             db_row = {
                 "id": str(uuid.uuid4())[:25],  # cuid-like

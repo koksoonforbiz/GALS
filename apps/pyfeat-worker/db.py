@@ -1,6 +1,8 @@
 """PostgreSQL helpers for the py-feat worker."""
 
 import os
+import json
+import math
 from datetime import datetime
 from typing import Optional
 import psycopg2
@@ -59,7 +61,33 @@ def bulk_insert_au_results(rows: list[dict]) -> None:
 
             values = []
             for r in rows:
-                values.append(tuple(r.get(c) for c in columns))
+                # Defensive guard: reject invalid JSON payloads such as NaN/Infinity
+                # in face_box before sending to PostgreSQL JSON column.
+                face_box = r.get("face_box")
+                if face_box is not None:
+                    try:
+                        parsed = json.loads(face_box)
+                        if not isinstance(parsed, dict):
+                            face_box = None
+                        else:
+                            coords = [parsed.get("x"), parsed.get("y"), parsed.get("w"), parsed.get("h")]
+                            if not all(isinstance(v, (int, float)) and math.isfinite(float(v)) for v in coords):
+                                face_box = None
+                            else:
+                                face_box = json.dumps(
+                                    {
+                                        "x": float(parsed["x"]),
+                                        "y": float(parsed["y"]),
+                                        "w": float(parsed["w"]),
+                                        "h": float(parsed["h"]),
+                                    }
+                                )
+                    except Exception:
+                        face_box = None
+
+                row_for_insert = dict(r)
+                row_for_insert["face_box"] = face_box
+                values.append(tuple(row_for_insert.get(c) for c in columns))
 
             execute_values(
                 cur,

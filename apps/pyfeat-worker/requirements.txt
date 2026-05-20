@@ -6,6 +6,7 @@ matplotlib==3.8.3
 Pillow==10.2.0
 torch==2.1.2
 torchvision==0.16.2
+kornia==0.7.1
 py-feat==0.5.1
 opencv-python-headless==4.9.0.80
 redis==5.0.1
