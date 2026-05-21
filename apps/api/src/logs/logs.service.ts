@@ -15,6 +15,7 @@ import type { SyncAnchorDto } from './dto/sync-anchor.dto';
 @Injectable()
 export class LogsService {
   constructor(private readonly prisma: PrismaService) {}
+  private static readonly MAX_REPLAY_BIOMETRIC_FRAMES = 50000;
 
   // ─── Batch Inserts ──────────────────────────────────────
 
@@ -384,7 +385,7 @@ export class LogsService {
         this.prisma.emotionFrame.findMany({
           where: { sessionId },
           orderBy: { frameWallMs: 'asc' },
-          take: 5000,
+          take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
           select: {
             id: true,
             frameWallMs: true,
@@ -405,7 +406,7 @@ export class LogsService {
         this.prisma.pyfeatAuResult.findMany({
           where: { job: { sessionId } },
           orderBy: { wallTime: 'asc' },
-          take: 5000,
+          take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
           select: {
             id: true,
             frameIndex: true,
