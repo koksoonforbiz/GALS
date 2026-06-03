@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "studio-import": "./src/import/cli.ts"
+    "studio-import": "./src/import/cli.ts",
+    "studio-analyze": "./src/analysis/cli.ts"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
