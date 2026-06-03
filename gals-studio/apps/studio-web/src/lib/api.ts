@@ -64,8 +64,10 @@ export const api = {
 
   // Coding (stage 04)
   codebook: () => jget<any>('/api/codebook'),
+  saveCodebook: (body: unknown) => jsend<any>('/api/codebook', 'POST', body),
   coders: () => jget<any>('/api/coders'),
   createCoder: (name: string, role: string) => jsend<any>('/api/coders', 'POST', { name, role }),
+  clearAnnotation: (body: unknown) => jsend<any>('/api/annotations/clear', 'POST', body),
   codingState: (id: string, coderId: string, pass: string) =>
     jget<any>(`/api/coding/${id}/state?coderId=${coderId}&pass=${pass}`),
   upsertAnnotation: (body: unknown) => jsend<any>('/api/annotations', 'POST', body),
