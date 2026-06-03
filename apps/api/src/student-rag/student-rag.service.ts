@@ -1,4 +1,3 @@
-import * as crypto from 'crypto';
 import {
   Inject,
   Injectable,
@@ -15,6 +14,13 @@ import { DialogueGateway } from '../dialogue/dialogue.gateway';
 import { FileParserService } from './file-parser.service';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
+import {
+  ContextualizeService,
+  contextualRetrievalEnabled,
+} from '../rag/shared/contextualize.service';
+import { PdfRasterizerService } from '../rag/shared/pdf-rasterizer.service';
+import { PageCaptionService } from '../rag/shared/page-caption.service';
+import { multimodalPdfEnabled } from '../rag/shared/multimodal.flags';
 import { StudentFileType, Prisma } from '@prisma/client';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 
@@ -43,9 +49,13 @@ export class StudentRagService {
     private readonly fileParser: FileParserService,
     private readonly chunkingService: ChunkingService,
     private readonly embeddingService: EmbeddingService,
+    private readonly contextualizeService: ContextualizeService,
     private readonly eventEmitter: EventEmitter2,
     @Inject(forwardRef(() => DialogueGateway))
     private readonly dialogueGateway: DialogueGateway,
+    // Stage 05 — multimodal ingest (gated by `RAG_MULTIMODAL_PDF`).
+    private readonly pdfRasterizer: PdfRasterizerService,
+    private readonly pageCaption: PageCaptionService,
   ) {}
 
   // ─── Upload & create document record ────────────────────
@@ -96,6 +106,123 @@ export class StudentRagService {
   @OnEvent('student-document.uploaded')
   async handleDocumentUploaded(payload: { documentId: string }) {
     await this.processDocument(payload.documentId);
+  }
+
+  /**
+   * Stage 3 re-embed worker.
+   *
+   * Listens for `student-document.needs-reembed` (emitted by the teacher
+   * Settings save flow when the embedding-model preference changes via
+   * `LlmService.markCorporaForReembedIfChanged`, or by a manual admin
+   * trigger). Walks every chunk on the doc, re-embeds with the current
+   * funnel-resolved model, updates the chunks' pinned (model, dim), and
+   * clears the parent doc's `needsReembed` flag.
+   *
+   * Until this finishes, retrieval continues to serve the OLD pinned
+   * model (option (b) from the Stage 3 spec) — there's no read-side
+   * stall.
+   *
+   * This is a Promise-based inline worker; the repo has no BullMQ
+   * wiring today. If/when BullMQ lands, swap the EventEmitter trigger
+   * for a queued job; the body below stays identical.
+   */
+  @OnEvent('student-document.needs-reembed')
+  async reembedDocument(payload: { documentId: string }): Promise<void> {
+    const documentId = payload.documentId;
+    const doc = await this.prisma.studentSourceDocument.findUnique({
+      where: { id: documentId },
+      select: { id: true, studentId: true, courseId: true, course: { select: { teacherId: true } } },
+    });
+    if (!doc) {
+      this.logger.warn(`Re-embed: document ${documentId} not found`);
+      return;
+    }
+
+    try {
+      const chunks = await this.prisma.studentRagChunk.findMany({
+        where: { documentId },
+        orderBy: { chunkIndex: 'asc' },
+        select: { id: true, content: true },
+      });
+      if (chunks.length === 0) {
+        await this.prisma.studentSourceDocument.update({
+          where: { id: documentId },
+          data: { needsReembed: false },
+        });
+        return;
+      }
+
+      let pinnedModel: string | null = null;
+      let pinnedDim: number | null = null;
+      for (let i = 0; i < chunks.length; i += EMBEDDING_BATCH_SIZE) {
+        const batch = chunks.slice(i, i + EMBEDDING_BATCH_SIZE);
+        const texts = batch.map((c) => c.content);
+        const result = await this.embeddingService.callEmbeddingForUser(
+          doc.course.teacherId,
+          texts,
+        );
+        pinnedModel = result.model;
+        pinnedDim = result.dimensions;
+
+        await Promise.all(
+          batch.map((chunk, idx) =>
+            this.prisma.studentRagChunk.update({
+              where: { id: chunk.id },
+              data: {
+                embedding: result.vectors[idx] as unknown as Prisma.InputJsonValue,
+                embeddingModel: result.model,
+                embeddingDimensions: result.dimensions,
+              },
+            }),
+          ),
+        );
+      }
+
+      await this.prisma.studentSourceDocument.update({
+        where: { id: documentId },
+        data: {
+          embeddingModel: pinnedModel,
+          embeddingDimensions: pinnedDim,
+          needsReembed: false,
+        },
+      });
+
+      this.logger.log(
+        `Re-embedded ${chunks.length} chunks for student doc ${documentId} → ${pinnedModel}/${pinnedDim}`,
+      );
+    } catch (err) {
+      // Leave needsReembed=true so the next trigger can retry; never
+      // throw because we're invoked from an event listener.
+      this.logger.error(`Re-embed failed for ${documentId}: ${(err as Error).message}`);
+    }
+  }
+
+  @OnEvent('student-document.reembed-teacher')
+  async handleReembedTeacher(payload: { teacherId: string }) {
+    // Fire-and-forget background worker. Errors are logged per-doc.
+    void this.reembedAllPendingForTeacher(payload.teacherId).catch((err) =>
+      this.logger.error(
+        `reembedAllPendingForTeacher(${payload.teacherId}) threw: ${(err as Error).message}`,
+      ),
+    );
+  }
+
+  /**
+   * Public batch entry point: re-embed every student document whose
+   * `needsReembed` is true. Convenience wrapper around the per-doc
+   * worker. Called by the teacher save flow as a one-shot, and safe to
+   * call repeatedly (it's a no-op once flags are cleared).
+   */
+  async reembedAllPendingForTeacher(teacherId: string): Promise<{ processed: number }> {
+    const docs = await this.prisma.studentSourceDocument.findMany({
+      where: { course: { teacherId }, needsReembed: true },
+      select: { id: true },
+    });
+    for (const d of docs) {
+      // Sequential to avoid blowing through API rate limits.
+      await this.reembedDocument({ documentId: d.id });
+    }
+    return { processed: docs.length };
   }
 
   async processDocument(documentId: string): Promise<void> {
@@ -192,35 +319,141 @@ export class StudentRagService {
         select: { id: true, content: true },
       });
 
-      // 9. Get teacher's LLM credentials
-      const { apiKey, provider } = await this.getTeacherCredentials(
-        document.course.teacherId,
-        dblSettings,
+      // 8b. Contextualise chunks (Stage 03 — Anthropic Contextual
+      // Retrieval). Same shape as the teacher ingest path
+      // (`RagService.chunkDocument`): for each chunk, generate a
+      // 50-100 token blurb that situates it inside the parent doc,
+      // persist it to `contextual_text`, and remember the
+      // `contextualText + content` string to embed in step 9. Gated
+      // by `RAG_CONTEXTUAL_RETRIEVAL` env flag +
+      // `DialogueCourseSettings.contextualRetrieval` per-course
+      // override. When disabled OR per-chunk blurb fails, ingest is
+      // identical to Stage 02 — bare text is embedded.
+      const perCourseCtx = this.parseContextualRetrievalOverride(
+        document.course.dblSettings,
       );
+      let textsForEmbedding: Map<string, string> | null = null;
+      if (contextualRetrievalEnabled(perCourseCtx) && createdChunks.length > 0) {
+        textsForEmbedding = new Map();
+        for (const chunk of createdChunks) {
+          let blurb = '';
+          try {
+            blurb = await this.contextualizeService.contextualizeChunk(
+              parsed.text,
+              chunk.content,
+              {
+                teacherId: document.course.teacherId,
+                documentTitle: document.originalName,
+                usageContext: {
+                  feature: 'rag.contextualize.student',
+                  courseId: document.courseId,
+                  triggeredByUserId: document.studentId,
+                },
+              },
+            );
+          } catch (err) {
+            this.logger.warn(
+              `Contextualize threw for student chunk ${chunk.id}: ${(err as Error).message}`,
+            );
+            blurb = '';
+          }
+          if (blurb) {
+            try {
+              await this.prisma.studentRagChunk.update({
+                where: { id: chunk.id },
+                data: { contextualText: blurb },
+              });
+              textsForEmbedding.set(chunk.id, `${blurb}\n\n${chunk.content}`);
+            } catch (err) {
+              this.logger.warn(
+                `Persisting contextualText for student chunk ${chunk.id} failed: ${(err as Error).message}`,
+              );
+              textsForEmbedding.set(chunk.id, chunk.content);
+            }
+          } else {
+            textsForEmbedding.set(chunk.id, chunk.content);
+          }
+        }
+      }
 
-      // 10. Generate embeddings in batches and update
+      // 9. Generate embeddings in batches via the registry-driven
+      // funnel. The funnel resolves the teacher's provider/model/key
+      // internally and returns the (model, dimensions) actually used so
+      // we can pin them on the corpus rows (Stage 3 contract).
+      //
+      // Stage 03 — when `textsForEmbedding` is populated, embed
+      // `contextualText\n\ncontent`; otherwise embed bare `content`.
+      let pinnedModel: string | null = null;
+      let pinnedDim: number | null = null;
       for (let i = 0; i < createdChunks.length; i += EMBEDDING_BATCH_SIZE) {
         const batch = createdChunks.slice(i, i + EMBEDDING_BATCH_SIZE);
-        const texts = batch.map((c) => c.content);
-        const embeddings = await this.embeddingService.embed(texts, apiKey, provider);
+        const texts = batch.map((c) => textsForEmbedding?.get(c.id) ?? c.content);
+        const result = await this.embeddingService.callEmbeddingForUser(
+          document.course.teacherId,
+          texts,
+        );
+        pinnedModel = result.model;
+        pinnedDim = result.dimensions;
 
-        // Update each chunk's embedding as JSON (JSONB column)
+        // Update each chunk's embedding + pinned (model, dim) so a
+        // mid-flight re-embed can be incremental.
         await Promise.all(
           batch.map((chunk, idx) =>
             this.prisma.studentRagChunk.update({
               where: { id: chunk.id },
-              data: { embedding: embeddings[idx] as unknown as Prisma.InputJsonValue },
+              data: {
+                embedding: result.vectors[idx] as unknown as Prisma.InputJsonValue,
+                embeddingModel: result.model,
+                embeddingDimensions: result.dimensions,
+              },
             }),
           ),
         );
       }
 
-      // 11. Set processingStatus = COMPLETED
+      // 10b. (Stage 05) Multimodal page-image ingest for PDFs. Runs
+      // only when `RAG_MULTIMODAL_PDF` is on (or per-course override
+      // forces it on) AND the file is a PDF. Triple-defensive — any
+      // failure logs + continues; text chunks above are already
+      // persisted.
+      const perCourseMm = this.parseMultimodalPdfOverride(
+        document.course.dblSettings,
+      );
+      if (
+        multimodalPdfEnabled(perCourseMm) &&
+        document.mimeType === 'application/pdf'
+      ) {
+        try {
+          const imageChunks = await this.ingestPdfPageImages({
+            buffer: blob.body,
+            documentId,
+            teacherId: document.course.teacherId,
+            studentId: document.studentId,
+            courseId: document.courseId,
+            existingTextChunkCount: createdChunks.length,
+          });
+          if (imageChunks > 0) {
+            this.logger.log(
+              `Multimodal ingest (student): +${imageChunks} page_image chunks for doc ${documentId}`,
+            );
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Multimodal ingest (student) failed for ${documentId}: ${(err as Error).message}`,
+          );
+        }
+      }
+
+      // 11. Set processingStatus = COMPLETED + pin embedding model on
+      // the parent doc so retrieval can assert compatibility.
       await this.prisma.studentSourceDocument.update({
         where: { id: documentId },
         data: {
           processingStatus: 'COMPLETED',
           processingError: null,
+          embeddingModel: pinnedModel,
+          embeddingDimensions: pinnedDim,
+          needsReembed: false,
         },
       });
       this.dialogueGateway.emitProcessingUpdate(document.studentId, {
@@ -415,43 +648,175 @@ export class StudentRagService {
     }
   }
 
-  private async getTeacherCredentials(
-    teacherId: string,
-    dblSettings: { llmProvider: string },
-  ): Promise<{ apiKey: string; provider: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: teacherId },
-      select: { encryptedApiKey: true, llmProvider: true },
-    });
-
-    // If teacher has API key, decrypt and use their credentials
-    if (user?.encryptedApiKey) {
-      try {
-        const apiKey = this.decryptApiKey(user.encryptedApiKey);
-        return {
-          apiKey,
-          provider: user.llmProvider || dblSettings.llmProvider || 'fallback',
-        };
-      } catch (err) {
-        this.logger.error(`Failed to decrypt API key for teacher ${teacherId}`, err);
-        return { apiKey: '', provider: 'fallback' };
-      }
+  /**
+   * Stage 03 — see RagService.parseContextualRetrievalOverride. Returns
+   * the per-course Contextual Retrieval flag override or null to defer
+   * to the env var.
+   */
+  private parseContextualRetrievalOverride(raw: unknown): boolean | null {
+    try {
+      const parsed = DialogueCourseSettingsSchema.safeParse(raw || {});
+      if (!parsed.success) return null;
+      const v = parsed.data.contextualRetrieval;
+      return v === true || v === false ? v : null;
+    } catch {
+      return null;
     }
-
-    // No API key — use fallback
-    return { apiKey: '', provider: 'fallback' };
   }
 
-  private decryptApiKey(encrypted: string): string {
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
+  /**
+   * Stage 05 — Public entry point for the multimodal backfill script.
+   * Mirror of RagService.backfillTeacherMultimodal. Idempotent.
+   * Never throws.
+   */
+  async backfillStudentMultimodal(documentId: string): Promise<number> {
+    const doc = await this.prisma.studentSourceDocument.findUnique({
+      where: { id: documentId },
+      include: { course: { select: { teacherId: true } } },
+    });
+    if (!doc || doc.mimeType !== 'application/pdf') return 0;
+    try {
+      const { body } = await this.blobService.get(doc.blobKey);
+      const existingText = await this.prisma.studentRagChunk.count({
+        where: { documentId, OR: [{ chunkKind: null }, { chunkKind: 'text' }] },
+      });
+      return await this.ingestPdfPageImages({
+        buffer: body,
+        documentId,
+        teacherId: doc.course.teacherId,
+        studentId: doc.studentId,
+        courseId: doc.courseId,
+        existingTextChunkCount: existingText,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `backfillStudentMultimodal(${documentId}) failed: ${(err as Error).message}`,
+      );
+      return 0;
+    }
+  }
+
+  /** Stage 05 — see RagService.parseMultimodalPdfOverride. */
+  private parseMultimodalPdfOverride(raw: unknown): boolean | null {
+    try {
+      const parsed = DialogueCourseSettingsSchema.safeParse(raw || {});
+      if (!parsed.success) return null;
+      const v = parsed.data.multimodalPdf;
+      return v === true || v === false ? v : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Stage 05 — Multimodal page-image ingest for the STUDENT corpus.
+   * Mirror of `RagService.ingestPdfPageImages` but writes to
+   * `studentRagChunk` instead of `documentChunk` and uses the
+   * `student-docs/...` MinIO key convention.
+   */
+  private async ingestPdfPageImages(args: {
+    buffer: Buffer;
+    documentId: string;
+    teacherId: string;
+    studentId: string;
+    courseId: string;
+    existingTextChunkCount: number;
+  }): Promise<number> {
+    const pages = await this.pdfRasterizer.rasterizePdf(args.buffer);
+    if (pages.length === 0) return 0;
+
+    // Idempotency guard.
+    const existingImage = await this.prisma.studentRagChunk.findFirst({
+      where: { documentId: args.documentId, chunkKind: 'page_image' },
+      select: { id: true },
+    });
+    if (existingImage) {
+      this.logger.log(
+        `Multimodal ingest (student): doc ${args.documentId} already has page_image chunks; skipping`,
+      );
+      return 0;
+    }
+
+    const uploads = await Promise.all(
+      pages.map(async (page) => {
+        const key = `student-docs/${args.studentId}/${args.courseId}/${args.documentId}/pages/${page.pageNumber}.png`;
+        try {
+          await this.blobService.put({
+            key,
+            body: page.pngBuffer,
+            contentType: 'image/png',
+          });
+          return { ...page, imageObjectKey: key };
+        } catch (err) {
+          this.logger.warn(
+            `[multimodal][student] PNG upload failed for page ${page.pageNumber}: ${(err as Error).message}`,
+          );
+          return null;
+        }
+      }),
+    );
+    const uploaded = uploads.filter(
+      (u): u is NonNullable<typeof u> => u !== null,
+    );
+    if (uploaded.length === 0) return 0;
+
+    const embedResult = await this.embeddingService.callMultimodalEmbedding(
+      args.teacherId,
+      uploaded.map((u) => ({
+        kind: 'image' as const,
+        bytes: u.pngBuffer,
+        mimeType: 'image/png' as const,
+      })),
+    );
+
+    let persisted = 0;
+    for (let i = 0; i < uploaded.length; i++) {
+      const page = uploaded[i]!;
+      const vector = embedResult.vectors[i];
+      if (!vector) {
+        this.logger.warn(
+          `[multimodal][student] No embedding for page ${page.pageNumber}; skipping chunk persist`,
+        );
+        continue;
+      }
+
+      const caption = await this.pageCaption.captionPageImage(
+        page.pngBuffer,
+        'image/png',
+        {
+          teacherId: args.teacherId,
+          courseId: args.courseId,
+          pageNumber: page.pageNumber,
+        },
+      );
+
+      try {
+        await this.prisma.studentRagChunk.create({
+          data: {
+            documentId: args.documentId,
+            studentId: args.studentId,
+            courseId: args.courseId,
+            chunkIndex: args.existingTextChunkCount + i,
+            content: caption
+              ? `[Page ${page.pageNumber} image] ${caption}`
+              : `[Page ${page.pageNumber} image]`,
+            pageNumber: page.pageNumber,
+            embedding: vector as unknown as Prisma.InputJsonValue,
+            embeddingModel: embedResult.model,
+            embeddingDimensions: embedResult.dimensions,
+            chunkKind: 'page_image',
+            imageObjectKey: page.imageObjectKey,
+            caption: caption || null,
+          },
+        });
+        persisted += 1;
+      } catch (err) {
+        this.logger.warn(
+          `[multimodal][student] persist failed for page ${page.pageNumber}: ${(err as Error).message}`,
+        );
+      }
+    }
+    return persisted;
   }
 
   private async verifyOwnership(documentId: string, studentId: string) {

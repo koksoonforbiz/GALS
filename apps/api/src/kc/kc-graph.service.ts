@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LlmService } from '../rag/llm.service';
 import {
   buildGraphGenerationSystemPrompt,
   buildGraphGenerationUserPrompt,
@@ -65,7 +66,10 @@ interface GraphLayoutData {
 export class KcGraphService {
   private readonly logger = new Logger(KcGraphService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmService: LlmService,
+  ) {}
 
   /**
    * Generate knowledge graph edges using LLM for approved KCs in a course.
@@ -88,9 +92,9 @@ export class KcGraphService {
     });
     if (!course) throw new NotFoundException('Course not found');
 
-    // 3. Get LLM credentials
-    const credentials = await this.getLlmCredentials(userId);
-    if (!credentials) {
+    // 3. Verify the teacher has a key configured
+    const hasKey = await this.llmService.hasApiKey(userId);
+    if (!hasKey) {
       throw new BadRequestException('No LLM API key configured');
     }
 
@@ -98,16 +102,17 @@ export class KcGraphService {
     const systemPrompt = buildGraphGenerationSystemPrompt();
     const userPrompt = buildGraphGenerationUserPrompt(course.title, kcs);
 
-    // 5. Call LLM
-    const llmResult = await this.callOpenAiApi(
+    // 5. Call LLM through the registry-driven funnel
+    const llmResponse = await this.llmService.callLlmForUser(
+      userId,
       systemPrompt,
       userPrompt,
-      credentials.apiKey,
-      credentials.model,
+      { feature: 'kc_graph_generation', courseId },
+      { jsonMode: true, maxTokens: 4096, temperature: 0.3 },
     );
 
     // 6. Parse response
-    const edges = this.parseEdgesResponse(llmResult);
+    const edges = this.parseEdgesResponse(llmResponse.content);
 
     // 7. Validate edges — only allow edges between existing approved KCs
     const kcIds = new Set(kcs.map((k) => k.id));
@@ -532,66 +537,4 @@ export class KcGraphService {
     return false;
   }
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<string> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return data.choices?.[0]?.message?.content || '';
-  }
 }

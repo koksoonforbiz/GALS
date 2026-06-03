@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RagService, ChunkWithScore } from '../rag/rag.service';
+import { LlmService, type FunnelContentPart } from '../rag/llm.service';
+import { BlobService } from '../blob/blob.service';
 import { KcSuggestionService } from '../kc/kc-suggestion.service';
 import {
   buildPageContentSystemPrompt,
@@ -39,6 +41,17 @@ export interface PageContentResult {
   message?: string;
 }
 
+/**
+ * A PDF source attached to a generation request. Two flavours:
+ *  - `file_id`: the PDF was previously uploaded to OpenAI's Files API at
+ *    ingest time. We just reference the id (tiny payload).
+ *  - `inline`: no cached id available, so we ship the base64 bytes with
+ *    this request. Heavier but works for any source.
+ */
+type PdfAttachment =
+  | { kind: 'file_id'; filename: string; fileId: string }
+  | { kind: 'inline'; filename: string; base64: string; byteLength: number };
+
 export interface BatchGenerateInput {
   courseId: string;
   userId: string;
@@ -57,8 +70,17 @@ export class PageContentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ragService: RagService,
+    private readonly llmService: LlmService,
+    private readonly blobService: BlobService,
     private readonly kcSuggestionService: KcSuggestionService,
   ) {}
+
+  // Max bytes per attached PDF; OpenAI inline file_data should stay modest.
+  private readonly MAX_PDF_BYTES = 10 * 1024 * 1024; // 10 MB
+  // Max total bytes across all attached PDFs in a single call.
+  private readonly MAX_TOTAL_PDF_BYTES = 25 * 1024 * 1024; // 25 MB
+  // Max number of PDFs to attach per call (avoid blowing context window).
+  private readonly MAX_PDF_ATTACHMENTS = 3;
 
   // ─── Suggest Prompt ────────────────────────────────────
 
@@ -193,25 +215,75 @@ export class PageContentService {
         return result;
       }
 
-      // 6. Get LLM credentials
-      const credentials = await this.getLlmCredentials(input.userId);
-      if (!credentials) {
+      // 6. Resolve the teacher's provider/model spec so we can choose
+      // between native multimodal (OpenAI Files API) and chunked-text
+      // fallback (everything else, including Gemini).
+      const resolved = await this.llmService.getResolvedChatModelForUser(input.userId);
+      if (!resolved) {
         throw new BadRequestException(
-          'No LLM API key configured. Add your OpenAI API key in AI Settings first.',
+          'No LLM API key configured. Add your API key in AI Settings first.',
         );
       }
+      const supportsFilesApi = resolved.spec.supportsOpenAiFilesApi === true;
 
       // 7. Build prompts
       const selectedSourceNames = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
       const systemPrompt = buildPageContentSystemPrompt(input.strictSources);
       const userPrompt = buildPageContentUserPrompt(pageContext, chunks, input.adminPrompt, selectedSourceNames);
 
-      // 8. Call LLM
-      const llmResult = await this.callOpenAiApi(
-        systemPrompt,
-        userPrompt,
-        credentials.apiKey,
-        credentials.model,
+      // 7b. Multimodal PDFs are an OpenAI-only path today (the Files API).
+      // Under Gemini we deliberately fall back to the chunked-text RAG
+      // context that's already in `userPrompt` — no new column required.
+      // See LLM_20260602/stage3 §5: chose option (b).
+      const pdfAttachments = supportsFilesApi
+        ? await this.fetchPdfAttachments(input.courseId, input.selectedSourceIds)
+        : [];
+      if (pdfAttachments.length > 0) {
+        const cached = pdfAttachments.filter((a) => a.kind === 'file_id').length;
+        const inlineBytes = pdfAttachments
+          .filter((a): a is Extract<PdfAttachment, { kind: 'inline' }> => a.kind === 'inline')
+          .reduce((s, p) => s + p.byteLength, 0);
+        this.logger.log(
+          `Attaching ${pdfAttachments.length} PDF(s) to LLM call for page "${pageItem.title}" — ${cached} via cached file_id, ${pdfAttachments.length - cached} inline (${inlineBytes} bytes)`,
+        );
+      } else if (!supportsFilesApi) {
+        this.logger.log(
+          `Provider ${resolved.provider} does not support OpenAI Files API — falling back to chunked-text RAG for page "${pageItem.title}"`,
+        );
+      }
+
+      // 8. Call LLM through the registry-driven funnel. When the model
+      // supports OpenAI Files API and we have PDF attachments, send them
+      // as multimodal content parts. Otherwise the funnel hands a plain
+      // string to the provider.
+      const userContent: string | FunnelContentPart[] =
+        pdfAttachments.length > 0
+          ? [
+              { type: 'text', text: userPrompt },
+              ...pdfAttachments.map<FunnelContentPart>((p) =>
+                p.kind === 'file_id'
+                  ? { type: 'file', file: { file_id: p.fileId } }
+                  : {
+                      type: 'file',
+                      file: {
+                        filename: p.filename,
+                        file_data: `data:application/pdf;base64,${p.base64}`,
+                      },
+                    },
+              ),
+            ]
+          : userPrompt;
+
+      const llmResult = await this.llmService.callLlmStructured(
+        input.userId,
+        {
+          systemPrompt,
+          messages: [{ role: 'user', content: userContent }],
+          jsonMode: true,
+          maxTokens: 8192,
+          temperature: 0.3,
+        },
+        { feature: 'page_content_generation', courseId: input.courseId },
       );
 
       // 9. Parse output
@@ -232,13 +304,14 @@ export class PageContentService {
 
       // 11. Update job
       const durationMs = Date.now() - startTime;
+      const resolvedModel = llmResult.model ?? resolved.spec.id;
       await this.prisma.llmGenerationJob.update({
         where: { id: job.id },
         data: {
           status: 'COMPLETED',
           outputPayload: parsed as any,
           retrievedChunkIds: chunks.map((c) => c.id),
-          model: credentials.model,
+          model: resolvedModel,
           promptTokens: llmResult.promptTokens,
           completionTokens: llmResult.completionTokens,
           durationMs,
@@ -251,7 +324,7 @@ export class PageContentService {
         courseId: input.courseId,
         userId: input.userId,
         action: 'generate_page_content',
-        model: credentials.model,
+        model: resolvedModel,
         promptTokens: llmResult.promptTokens,
         completionTokens: llmResult.completionTokens,
         durationMs,
@@ -421,75 +494,86 @@ export class PageContentService {
     return docs.map((d) => ({ sourceId: d.id, name: d.title || d.filename }));
   }
 
-  // ─── Private: LLM ─────────────────────────────────────
+  /**
+   * Fetch selected source documents that are PDFs and return them in a form
+   * suitable for attaching to a multimodal OpenAI request. Prefers the
+   * cached OpenAI file_id (set at ingest time) so the request payload stays
+   * small; falls back to inline base64 when no file_id is available.
+   * Skips non-PDF sources (text sources already arrive via RAG chunks).
+   * Enforces per-file and total size caps when falling back to inline bytes.
+   *
+   * Stage 3 note: Only called when the resolved chat model spec has
+   * `supportsOpenAiFilesApi === true`. Gemini teachers fall back to the
+   * chunked-text RAG path that's already injected into the user prompt.
+   */
+  private async fetchPdfAttachments(
+    courseId: string,
+    selectedSourceIds: string[],
+  ): Promise<PdfAttachment[]> {
+    if (!selectedSourceIds || selectedSourceIds.length === 0) return [];
 
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+    const docs = await this.prisma.sourceDocument.findMany({
+      where: {
+        id: { in: selectedSourceIds },
+        courseId,
+        mimeType: 'application/pdf',
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8192,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
+      select: {
+        id: true,
+        filename: true,
+        blobKey: true,
+        sizeBytes: true,
+        openaiFileId: true,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: this.MAX_PDF_ATTACHMENTS,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
-      throw new BadRequestException(`LLM API error (${response.status}). Check your API key.`);
-    }
+    const attachments: PdfAttachment[] = [];
+    let totalInlineBytes = 0;
 
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-    };
+    for (const doc of docs) {
+      // Preferred path: cached file_id, no bytes need to ride along.
+      if (doc.openaiFileId) {
+        attachments.push({
+          kind: 'file_id',
+          filename: doc.filename,
+          fileId: doc.openaiFileId,
+        });
+        continue;
+      }
+
+      // Fallback: inline base64. Apply size caps to avoid blowing context.
+      if (doc.sizeBytes && doc.sizeBytes > this.MAX_PDF_BYTES) {
+        this.logger.warn(
+          `Skipping PDF "${doc.filename}" (${doc.sizeBytes} bytes) — exceeds per-file cap of ${this.MAX_PDF_BYTES}`,
+        );
+        continue;
+      }
+      if (totalInlineBytes + (doc.sizeBytes ?? 0) > this.MAX_TOTAL_PDF_BYTES) {
+        this.logger.warn(
+          `Stopping PDF attachments at "${doc.filename}" — total would exceed ${this.MAX_TOTAL_PDF_BYTES} bytes`,
+        );
+        break;
+      }
+      try {
+        const { body } = await this.blobService.get(doc.blobKey);
+        if (body.length > this.MAX_PDF_BYTES) {
+          this.logger.warn(`Skipping "${doc.filename}" — actual body ${body.length} bytes exceeds cap`);
+          continue;
+        }
+        attachments.push({
+          kind: 'inline',
+          filename: doc.filename,
+          base64: body.toString('base64'),
+          byteLength: body.length,
+        });
+        totalInlineBytes += body.length;
+      } catch (err) {
+        this.logger.error(`Failed to fetch PDF blob "${doc.blobKey}": ${(err as Error).message}`);
+      }
+    }
+    return attachments;
   }
 
   // ─── Private: Parse & Render ───────────────────────────

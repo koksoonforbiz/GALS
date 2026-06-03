@@ -1,6 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../Toast';
+import {
+  useLlmModels,
+  recommendedChatModel,
+  type ChatModelSpec,
+} from '../../lib/llm/useLlmModels';
 
 interface DialogueSettings {
   llmProvider: string;
@@ -19,9 +24,17 @@ interface DialogueSettings {
   enabledStudioTools: string[];
 }
 
+// Stage 2 of the LLM upgrade (LLM_20260602/): the model picker is now
+// driven by the server-side registry via `/llm/models`. The hard-coded
+// dropdown lists this file used to ship (with the dead
+// `gemini-2.0-flash` default, no less) have been replaced with the
+// `useLlmModels` hook. `DEFAULT_SETTINGS.llmModel` stays empty here so
+// the first effect after the registry loads can fill it with the
+// registry's recommended default — that way a teacher who hits Save
+// with no edits still posts a registry-valid model id.
 const DEFAULT_SETTINGS: DialogueSettings = {
   llmProvider: 'openai',
-  llmModel: 'gpt-4o-mini',
+  llmModel: '',
   systemPromptOverride: '',
   citationMode: 'inline',
   allowStudentUploads: true,
@@ -39,22 +52,6 @@ const DEFAULT_SETTINGS: DialogueSettings = {
     'INTERROGATIVE_ELABORATION',
   ],
   enabledStudioTools: ['BRIEFING_DOC', 'FLASHCARD_SET', 'TABLE_COMPARISON', 'FAQ'],
-};
-
-const MODEL_OPTIONS: Record<string, { label: string; value: string }[]> = {
-  openai: [
-    { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-    { label: 'GPT-4o', value: 'gpt-4o' },
-    { label: 'GPT-4 Turbo', value: 'gpt-4-turbo' },
-    { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
-  ],
-  gemini: [
-    { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
-    { label: 'Gemini 2.0 Flash Lite', value: 'gemini-2.0-flash-lite' },
-    { label: 'Gemini 2.5 Flash Preview', value: 'gemini-2.5-flash-preview' },
-    { label: 'Gemini 2.5 Pro Preview', value: 'gemini-2.5-pro-preview' },
-  ],
-  fallback: [{ label: 'Fallback (no API key)', value: 'fallback' }],
 };
 
 const ALL_FILE_TYPES = [
@@ -111,6 +108,19 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
   const [saving, setSaving] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Stage 2 LLM upgrade: chat-model dropdown is driven by the registry.
+  const { models: registry, loading: registryLoading, error: registryError } = useLlmModels();
+
+  const modelOptionsForProvider = useMemo<ChatModelSpec[]>(() => {
+    if (!registry) return [];
+    if (settings.llmProvider === 'openai' || settings.llmProvider === 'gemini') {
+      return registry.chat.filter((m) => m.provider === settings.llmProvider);
+    }
+    // `fallback` provider has no real model id — the form hides the
+    // model dropdown entirely below in that branch.
+    return [];
+  }, [registry, settings.llmProvider]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -127,21 +137,41 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
     load();
   }, [courseId]);
 
+  // After the registry loads, if the form's current model is empty
+  // (newly-initialised course or post-provider-flip), fill it with the
+  // registry's recommended default for the current provider so the form
+  // never submits a blank/invalid `llmModel`.
+  useEffect(() => {
+    if (!registry) return;
+    if (settings.llmProvider !== 'openai' && settings.llmProvider !== 'gemini') return;
+    if (settings.llmModel) return;
+    const rec = recommendedChatModel(registry, settings.llmProvider);
+    if (rec) {
+      setSettings((prev) => ({ ...prev, llmModel: rec.id }));
+    }
+  }, [registry, settings.llmProvider, settings.llmModel]);
+
   const updateField = useCallback(
     <K extends keyof DialogueSettings>(key: K, value: DialogueSettings[K]) => {
       setSettings((prev) => {
         const next = { ...prev, [key]: value };
-        // Auto-switch model when provider changes
+        // Auto-switch model when provider changes. Stage 2: ask the
+        // registry for the new provider's recommended default instead
+        // of indexing into a hard-coded dictionary.
         if (key === 'llmProvider') {
-          const models = MODEL_OPTIONS[value as string];
-          if (models && models[0]) {
-            next.llmModel = models[0].value;
+          if (value === 'openai' || value === 'gemini') {
+            const rec = recommendedChatModel(registry, value);
+            if (rec) next.llmModel = rec.id;
+            else next.llmModel = '';
+          } else {
+            // fallback provider has no model.
+            next.llmModel = '';
           }
         }
         return next;
       });
     },
-    [],
+    [registry],
   );
 
   const toggleArrayItem = useCallback(
@@ -224,16 +254,60 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
               <select
                 value={settings.llmModel}
                 onChange={(e) => updateField('llmModel', e.target.value)}
-                className="w-full max-w-xs px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={registryLoading || modelOptionsForProvider.length === 0}
+                className="w-full max-w-xs px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
               >
-                {(MODEL_OPTIONS[settings.llmProvider] || []).map((m) => (
-                  <option key={m.value} value={m.value}>
+                {registryLoading && <option value="">Loading models…</option>}
+                {!registryLoading && modelOptionsForProvider.length === 0 && (
+                  <option value="">(no models available)</option>
+                )}
+                {modelOptionsForProvider.map((m) => (
+                  <option key={m.id} value={m.id}>
                     {m.label}
+                    {m.deprecated ? ' — legacy' : ''}
                   </option>
                 ))}
+                {/* Preserve the persisted choice if it's no longer in the
+                    registry list (e.g. the course was saved on a model
+                    that has since been retired). The retired-model banner
+                    above the form surfaces this case to the teacher. */}
+                {settings.llmModel &&
+                  !modelOptionsForProvider.some((m) => m.id === settings.llmModel) && (
+                    <option key={settings.llmModel} value={settings.llmModel}>
+                      {settings.llmModel} (current — not in {settings.llmProvider} list)
+                    </option>
+                  )}
               </select>
               <p className="text-xs text-gray-500 mt-1">Uses your API key from AI Settings</p>
+              {(() => {
+                const currentSpec = registry?.chat.find((m) => m.id === settings.llmModel);
+                if (!settings.llmModel || !registry) return null;
+                if (!currentSpec) {
+                  // Persisted id no longer in the registry at all = fully retired.
+                  const rec = recommendedChatModel(registry, settings.llmProvider as 'openai' | 'gemini');
+                  return (
+                    <p className="text-xs text-amber-700 mt-1">
+                      Your selected model is retired
+                      {rec ? `; switch to ${rec.label}.` : '.'}
+                    </p>
+                  );
+                }
+                if (currentSpec.deprecated) {
+                  return (
+                    <p className="text-xs text-amber-700 mt-1">
+                      This is a legacy model. Newer options are recommended.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
+          )}
+
+          {registryError && (
+            <p className="text-xs text-red-600">
+              Could not load the model registry: {registryError}.
+            </p>
           )}
 
           {showApiKeyWarning && (

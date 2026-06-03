@@ -8,9 +8,17 @@ import { DialogueService } from './dialogue.service';
 import { StudioService } from './studio.service';
 import { DialogueGateway } from './dialogue.gateway';
 import { GuideGenerationPoller } from './guide-generation.poller';
+// Stage 02: `StudentRagRetrievalService` + `EmbeddingService` are
+// exported from RagModule so we get them transitively without needing
+// to import StudentRagModule (which would create a cycle).
 
 @Module({
-  imports: [PrismaModule, RagModule, ActivityLogModule, forwardRef(() => TextMiningModule)],
+  imports: [
+    PrismaModule,
+    RagModule,
+    ActivityLogModule,
+    forwardRef(() => TextMiningModule),
+  ],
   controllers: [DialogueController],
   providers: [DialogueService, StudioService, DialogueGateway, GuideGenerationPoller],
   exports: [DialogueService, DialogueGateway],

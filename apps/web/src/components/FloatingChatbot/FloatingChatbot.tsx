@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { ChatbotPanel } from './ChatbotPanel';
 import { api } from '../../lib/api';
+import { usePageContext } from '../../contexts/PageContext';
 import { MessageCircle } from 'lucide-react';
 
 const STORAGE_KEY = 'chatbot-position';
@@ -52,6 +53,11 @@ function clamp(value: number, min: number, max: number) {
 }
 
 export function FloatingChatbot() {
+  // When a page mounts the docked variant of the chatbot (e.g. the
+  // student standard-mode course view), the floating version hides
+  // itself so we never show two chatbots at once.
+  const { chatbotDocked } = usePageContext();
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [position, setPosition] = useState<Position>(loadPosition);
@@ -232,6 +238,13 @@ export function FloatingChatbot() {
     }
   }, [isMaximized, position, preMaxPosition]);
 
+  // ─── Suppressed by docked variant ──────────────────────
+  // Pages that render the chatbot inline (DockedChatbot) set
+  // chatbotDocked=true via PageContext. Bail out before rendering
+  // anything so the floating bubble + window don't appear on top of
+  // the docked panel.
+  if (chatbotDocked) return null;
+
   // ─── Collapsed State (Floating Button) ─────────────────
 
   if (!isOpen) {
@@ -257,6 +270,17 @@ export function FloatingChatbot() {
     <div
       ref={containerRef}
       onMouseDown={handleDragStart}
+      // data-replay-region="chatbot" tags this draggable window as the
+      // chatbot AOI for the session replay's coverage panel and CSV
+      // export. The docked variant (DockedChatbot) is tagged by its
+      // wrapper in StudentCourseViewPage; this duplicate tag is safe
+      // because the two never render simultaneously — PageContext's
+      // `chatbotDocked` flag suppresses this floating variant whenever
+      // DockedChatbot is mounted (see the `if (chatbotDocked) return
+      // null;` bail-out above). Tagging here ensures the floating
+      // chatbot is also visible to the replay coverage panel on pages
+      // that don't dock it (Dialogue, dashboard, etc.).
+      data-replay-region="chatbot"
       style={{
         position: 'fixed',
         left: position.x,

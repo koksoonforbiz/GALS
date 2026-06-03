@@ -7,6 +7,7 @@ import SourceSelector from '../../components/SourceSelector';
 import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
 import BulkProgressPanel from '../../components/BulkProgressPanel';
 import BlockEditor from '../../components/editor/BlockEditor';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
 import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
 import { EvaluationCenterPage } from './EvaluationCenterPage';
 import KcStudioPanel from '../../components/KcStudioPanel';
@@ -148,6 +149,12 @@ export function CourseBuilderPage() {
   const [newModuleTitle, setNewModuleTitle] = useState('');
   const [addingModule, setAddingModule] = useState(false);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [editingModuleTitle, setEditingModuleTitle] = useState('');
+  const [savingModuleEdit, setSavingModuleEdit] = useState(false);
+  const [bulkDeletingModules, setBulkDeletingModules] = useState(false);
+  const [reorderingModules, setReorderingModules] = useState(false);
+  const [reorderingItems, setReorderingItems] = useState(false);
 
   // Add item state
   const [addItemType, setAddItemType] = useState<ModuleItem['type'] | ''>('');
@@ -366,6 +373,102 @@ export function CourseBuilderPage() {
     }
   };
 
+  const handleStartEditModule = (mod: CourseModule) => {
+    setEditingModuleId(mod.id);
+    setEditingModuleTitle(mod.title);
+  };
+
+  const handleCancelEditModule = () => {
+    setEditingModuleId(null);
+    setEditingModuleTitle('');
+  };
+
+  const handleSaveModuleTitle = async (moduleId: string) => {
+    const title = editingModuleTitle.trim();
+    if (!title) {
+      toast('error', 'Module title cannot be empty');
+      return;
+    }
+    const current = course?.modules.find((m) => m.id === moduleId);
+    if (current && title === current.title) {
+      handleCancelEditModule();
+      return;
+    }
+    setSavingModuleEdit(true);
+    try {
+      await apiFetch(`/courses/${courseId}/modules/${moduleId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      });
+      handleCancelEditModule();
+      toast('success', 'Module renamed');
+      fetchCourse();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to rename module');
+    } finally {
+      setSavingModuleEdit(false);
+    }
+  };
+
+  const handleDeleteAllModules = async () => {
+    if (!course || course.modules.length === 0) return;
+    const n = course.modules.length;
+    if (
+      !confirm(
+        `Delete ALL ${n} module${n === 1 ? '' : 's'} and every item inside them? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBulkDeletingModules(true);
+    try {
+      const results = await Promise.allSettled(
+        course.modules.map((m) =>
+          apiFetch(`/courses/${courseId}/modules/${m.id}`, { method: 'DELETE' }),
+        ),
+      );
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      setSelectedModuleId(null);
+      if (failed === 0) {
+        toast('success', `Deleted ${n} module${n === 1 ? '' : 's'}`);
+      } else {
+        toast(
+          'error',
+          `Deleted ${n - failed} of ${n} module${n === 1 ? '' : 's'}; ${failed} failed`,
+        );
+      }
+      fetchCourse();
+    } finally {
+      setBulkDeletingModules(false);
+    }
+  };
+
+  const handleMoveModule = async (moduleId: string, direction: 'up' | 'down') => {
+    if (!course || reorderingModules) return;
+    const ordered = [...course.modules]
+      .sort((a, b) => a.orderIndex - b.orderIndex)
+      .map((m) => m.id);
+    const idx = ordered.indexOf(moduleId);
+    if (idx === -1) return;
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= ordered.length) return;
+    const temp = ordered[idx]!;
+    ordered[idx] = ordered[swapWith]!;
+    ordered[swapWith] = temp;
+    setReorderingModules(true);
+    try {
+      await apiFetch(`/courses/${courseId}/modules/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ orderedIds: ordered }),
+      });
+      fetchCourse();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to reorder modules');
+    } finally {
+      setReorderingModules(false);
+    }
+  };
+
   // ─── Item operations ───────────────────────────────────
 
   const handleAddItem = async (e: React.FormEvent) => {
@@ -404,6 +507,59 @@ export function CourseBuilderPage() {
       fetchCourse();
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to delete item');
+    }
+  };
+
+  // Within-module reorder: mirrors handleMoveModule. Optimistic UI update
+  // (so the row swaps immediately), POST the full ordered list to the
+  // existing items-reorder endpoint, and revert + toast on failure so
+  // the list never sits desynced from the server.
+  const handleMoveItem = async (
+    itemId: string,
+    moduleId: string,
+    direction: 'up' | 'down',
+  ) => {
+    if (!course || reorderingItems) return;
+    const mod = course.modules.find((m) => m.id === moduleId);
+    if (!mod) return;
+    const orderedItems = [...mod.items].sort((a, b) => a.orderIndex - b.orderIndex);
+    const idx = orderedItems.findIndex((i) => i.id === itemId);
+    if (idx === -1) return;
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= orderedItems.length) return;
+
+    // Snapshot for revert
+    const previousCourse = course;
+
+    // Optimistic: swap in local state and renumber so subsequent moves
+    // operate on the new order without waiting for the server round-trip.
+    const next = [...orderedItems];
+    const tmp = next[idx]!;
+    next[idx] = next[swapWith]!;
+    next[swapWith] = tmp;
+    const renumbered = next.map((it, i) => ({ ...it, orderIndex: i }));
+    setCourse({
+      ...course,
+      modules: course.modules.map((m) =>
+        m.id === moduleId ? { ...m, items: renumbered } : m,
+      ),
+    });
+
+    setReorderingItems(true);
+    try {
+      await apiFetch(`/modules/${moduleId}/items/reorder`, {
+        method: 'POST',
+        body: JSON.stringify({ orderedIds: renumbered.map((i) => i.id) }),
+      });
+      // Refresh from server to pick up canonical orderIndex values.
+      fetchCourse();
+    } catch (err) {
+      // Triple-defensive: revert to the snapshot so the UI doesn't drift
+      // from the persisted order, then surface the error.
+      setCourse(previousCourse);
+      toast('error', err instanceof Error ? err.message : 'Failed to reorder items');
+    } finally {
+      setReorderingItems(false);
     }
   };
 
@@ -874,29 +1030,95 @@ export function CourseBuilderPage() {
           <div className="w-64 shrink-0">
             <h3 className="text-sm font-semibold text-gray-700 mb-2">Modules</h3>
             <div className="space-y-1 mb-3">
-              {course.modules.map((mod) => (
-                <div
-                  key={mod.id}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                    selectedModuleId === mod.id
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'hover:bg-gray-50 text-gray-700'
-                  }`}
-                  onClick={() => setSelectedModuleId(mod.id)}
-                >
-                  <span className="truncate">{mod.title}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteModule(mod.id);
+              {[...course.modules]
+                .sort((a, b) => a.orderIndex - b.orderIndex)
+                .map((mod, idx, arr) => (
+                  <div
+                    key={mod.id}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                      selectedModuleId === mod.id
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                    onClick={() => {
+                      if (editingModuleId !== mod.id) setSelectedModuleId(mod.id);
                     }}
-                    className="text-gray-400 hover:text-red-500 text-xs ml-2"
-                    title="Delete module"
                   >
-                    &times;
-                  </button>
-                </div>
-              ))}
+                    {editingModuleId === mod.id ? (
+                      <input
+                        type="text"
+                        value={editingModuleTitle}
+                        onChange={(e) => setEditingModuleTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={() => handleSaveModuleTitle(mod.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveModuleTitle(mod.id);
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            handleCancelEditModule();
+                          }
+                        }}
+                        autoFocus
+                        disabled={savingModuleEdit}
+                        className="flex-1 min-w-0 px-1.5 py-0.5 text-sm border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-800 disabled:opacity-60"
+                      />
+                    ) : (
+                      <>
+                        <span className="truncate flex-1 min-w-0">{mod.title}</span>
+                        <div className="flex items-center gap-1 ml-2 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveModule(mod.id, 'up');
+                            }}
+                            disabled={idx === 0 || reorderingModules}
+                            className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Move up"
+                            aria-label="Move module up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMoveModule(mod.id, 'down');
+                            }}
+                            disabled={idx === arr.length - 1 || reorderingModules}
+                            className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Move down"
+                            aria-label="Move module down"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartEditModule(mod);
+                            }}
+                            className="text-gray-400 hover:text-blue-600 text-xs"
+                            title="Rename module"
+                            aria-label="Rename module"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteModule(mod.id);
+                            }}
+                            className="text-gray-400 hover:text-red-500 text-xs"
+                            title="Delete module"
+                            aria-label="Delete module"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
             </div>
             <form onSubmit={handleAddModule} className="flex gap-1">
               <input
@@ -915,6 +1137,16 @@ export function CourseBuilderPage() {
                 +
               </button>
             </form>
+            {course.modules.length > 0 && (
+              <button
+                onClick={handleDeleteAllModules}
+                disabled={bulkDeletingModules}
+                className="mt-2 w-full px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete all modules"
+              >
+                {bulkDeletingModules ? 'Deleting…' : `Delete all (${course.modules.length})`}
+              </button>
+            )}
           </div>
 
           {/* Right panel: Module items */}
@@ -926,6 +1158,13 @@ export function CourseBuilderPage() {
                     Items in &quot;{selectedModule.title}&quot;
                   </h3>
                 </div>
+
+                {/* AI Generation Toolbar - empty-state hint when no pages yet */}
+                {selectedModule.items.filter((i) => i.type === 'PAGE').length === 0 && (
+                  <div className="mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-500 italic">
+                    Add a page below to enable AI content generation.
+                  </div>
+                )}
 
                 {/* AI Generation Toolbar */}
                 {selectedModule.items.filter((i) => i.type === 'PAGE').length > 0 && (
@@ -1035,12 +1274,16 @@ export function CourseBuilderPage() {
                   </div>
                 )}
 
-                {/* Items list */}
+                {/* Items list — sort by orderIndex so reorders show
+                    immediately and the order matches what students see
+                    on the course view page. */}
                 <div className="space-y-2 mb-4">
                   {selectedModule.items.length === 0 ? (
                     <p className="text-sm text-gray-400">No items yet. Add one below.</p>
                   ) : (
-                    selectedModule.items.map((item) => (
+                    [...selectedModule.items]
+                      .sort((a, b) => a.orderIndex - b.orderIndex)
+                      .map((item, itemIdx, itemArr) => (
                       <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -1074,6 +1317,29 @@ export function CourseBuilderPage() {
                             )}
                           </div>
                           <div className="flex items-center gap-1">
+                            {/* Reorder within module. Mirrors the
+                                module-list up/down arrow pattern so all
+                                four item types (PAGE/PDF/LINK/ASSESSMENT)
+                                reorder uniformly. Disabled at list
+                                edges and while a reorder is in flight. */}
+                            <button
+                              onClick={() => handleMoveItem(item.id, item.moduleId, 'up')}
+                              disabled={itemIdx === 0 || reorderingItems}
+                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                              title="Move up"
+                              aria-label="Move item up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              onClick={() => handleMoveItem(item.id, item.moduleId, 'down')}
+                              disabled={itemIdx === itemArr.length - 1 || reorderingItems}
+                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                              title="Move down"
+                              aria-label="Move item down"
+                            >
+                              ↓
+                            </button>
                             {/* AI Generate button per page */}
                             {item.type === 'PAGE' && (
                               <button
@@ -1145,15 +1411,29 @@ export function CourseBuilderPage() {
                           <p className="text-xs text-gray-500 mt-1 truncate">{item.url}</p>
                         )}
 
-                        {/* PAGE editor */}
+                        {/* PAGE editor. Wrap in ErrorBoundary so a
+                            crash in any block (e.g. RichTextEditor
+                            TDZ, malformed JSON content) shows a
+                            fallback inside the item card instead of
+                            blanking the entire CourseBuilderPage. The
+                            `key` ensures a fresh boundary per item so
+                            recovering from one item's error doesn't
+                            leak into the next. */}
                         {editingItemId === item.id && (
                           <div className="mt-2">
-                            <BlockEditor
-                              content={editContent}
-                              onSave={(json) => handleSaveItemContent(item.id, item.moduleId, json)}
-                              autoSaveMs={2000}
-                              onOpenHistory={() => setHistoryItemId(item.id)}
-                            />
+                            <ErrorBoundary
+                              key={item.id}
+                              label="the lesson editor"
+                            >
+                              <BlockEditor
+                                content={editContent}
+                                onSave={(json) =>
+                                  handleSaveItemContent(item.id, item.moduleId, json)
+                                }
+                                autoSaveMs={2000}
+                                onOpenHistory={() => setHistoryItemId(item.id)}
+                              />
+                            </ErrorBoundary>
                           </div>
                         )}
                       </div>

@@ -182,10 +182,10 @@ export class CourseStructureService {
       }
 
       // 6. Check LLM credentials — require an API key (no fake generation)
-      const credentials = await this.getLlmCredentials(input.userId);
-      if (!credentials) {
+      const hasKey = await this.llmService.hasApiKey(input.userId);
+      if (!hasKey) {
         throw new BadRequestException(
-          'No LLM API key configured. Please add your OpenAI API key in AI Settings before generating a course structure.',
+          'No LLM API key configured. Please add your API key in AI Settings before generating a course structure.',
         );
       }
 
@@ -206,12 +206,13 @@ export class CourseStructureService {
       const systemPrompt = buildStructureSystemPrompt(promptInput);
       const userPrompt = buildStructureUserPrompt(promptInput);
 
-      // 8. Call LLM
-      const llmResult = await this.callOpenAiApi(
+      // 8. Call LLM through the registry-driven funnel
+      const llmResult = await this.llmService.callLlmForUser(
+        input.userId,
         systemPrompt,
         userPrompt,
-        credentials.apiKey,
-        credentials.model,
+        { feature: 'course_structure_generation', courseId: input.courseId },
+        { jsonMode: true, maxTokens: 8192, temperature: 0.3 },
       );
 
       // 9. Parse the LLM output
@@ -224,13 +225,14 @@ export class CourseStructureService {
 
       // 10. Store results
       const durationMs = Date.now() - startTime;
+      const resolvedModel = llmResult.model ?? 'template';
       await this.prisma.llmGenerationJob.update({
         where: { id: job.id },
         data: {
           status: 'COMPLETED',
           outputPayload: outlineDraft as any,
           retrievedChunkIds: chunks.map((c) => c.id),
-          model: credentials.model,
+          model: resolvedModel,
           promptTokens: llmResult.promptTokens,
           completionTokens: llmResult.completionTokens,
           durationMs,
@@ -243,7 +245,7 @@ export class CourseStructureService {
         courseId: input.courseId,
         userId: input.userId,
         action: 'generate_course_structure',
-        model: credentials.model,
+        model: resolvedModel,
         promptTokens: llmResult.promptTokens,
         completionTokens: llmResult.completionTokens,
         durationMs,
@@ -470,82 +472,6 @@ export class CourseStructureService {
       sourceId: d.id,
       name: d.title || d.filename,
     }));
-  }
-
-  // ─── Private: LLM Interaction ─────────────────────────
-
-  private async getLlmCredentials(
-    userId: string,
-  ): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 8192,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
-      throw new BadRequestException(
-        `LLM API error (${response.status}). Check your API key and try again.`,
-      );
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-    };
   }
 
   // ─── Private: Parse LLM Output ────────────────────────

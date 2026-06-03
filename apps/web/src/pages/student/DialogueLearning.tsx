@@ -340,6 +340,41 @@ export function DialogueLearning() {
 
   // ─── Handlers ─────────────────────────────────────────────
 
+  // Emit DIALOGUE_SESSION_ENDED when the student leaves an active
+   // dialogue session — either switches to a different one or
+   // navigates away entirely. Pairs with DIALOGUE_SESSION_STARTED so
+   // time-in-session can be derived from start/end timestamps for the
+   // teacher's replay tab. Uses a ref so we capture the *previous*
+   // session id (the one we're leaving), not the current one.
+  const lastActiveSessionRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = lastActiveSessionRef.current;
+    const curr = activeSession?.id ?? null;
+    if (prev && prev !== curr) {
+      track('DIALOGUE_SESSION_ENDED', {
+        dialogueSessionId: prev,
+        courseId: courseId ?? undefined,
+        metadata: { reason: curr ? 'switched_session' : 'left_dialogue' },
+      });
+    }
+    lastActiveSessionRef.current = curr;
+  }, [activeSession?.id, courseId, track]);
+  useEffect(() => {
+    // Fire on unmount with whatever the final active session was.
+    return () => {
+      const final = lastActiveSessionRef.current;
+      if (final) {
+        track('DIALOGUE_SESSION_ENDED', {
+          dialogueSessionId: final,
+          courseId: courseId ?? undefined,
+          metadata: { reason: 'unmount' },
+        });
+      }
+    };
+    // Intentionally empty deps — we want this to fire only on unmount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleCreateSession = useCallback(async () => {
     if (!courseId) return;
     try {

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LlmService } from '../rag/llm.service';
 import { MathNormalizerService } from './math-normalizer.service';
 import {
   buildEvaluationSystemPrompt,
@@ -71,6 +72,7 @@ export class EvaluationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mathNormalizer: MathNormalizerService,
+    private readonly llmService: LlmService,
   ) {}
 
   // ─── Start Evaluation Run ─────────────────────────────
@@ -363,8 +365,9 @@ export class EvaluationService {
     courseTitle: string,
   ) {
     try {
-      // Get LLM credentials
-      const credentials = await this.getLlmCredentials(userId);
+      // Stage 3: funnel-routed. Just check that the teacher has a key;
+      // model + provider resolution happens inside `LlmService`.
+      const hasKey = await this.llmService.hasApiKey(userId);
 
       // Get module info for each page
       const pages = await this.prisma.moduleItem.findMany({
@@ -378,7 +381,13 @@ export class EvaluationService {
       // Process pages sequentially (to avoid rate-limiting)
       for (const page of pages) {
         try {
-          const evalResult = await this.evaluateSinglePage(page, config, credentials, courseTitle);
+          const evalResult = await this.evaluateSinglePage(
+            page,
+            config,
+            hasKey ? userId : null,
+            courseTitle,
+            courseId,
+          );
 
           // Store result
           await this.prisma.pageEvalResult.create({
@@ -448,8 +457,9 @@ export class EvaluationService {
   private async evaluateSinglePage(
     page: { id: string; title: string; contentMdx: string | null; module: { title: string } },
     config: EvalConfig,
-    credentials: { apiKey: string; model: string } | null,
+    userId: string | null,
     courseTitle: string,
+    courseId: string,
   ) {
     const contentJson = page.contentMdx || '{"version":2,"blocks":[]}';
 
@@ -462,7 +472,7 @@ export class EvaluationService {
       ['pedagogy', 'rigor', 'formatting', 'equations'].includes(r),
     );
 
-    if (needsLlm && credentials) {
+    if (needsLlm && userId) {
       const systemPrompt = buildEvaluationSystemPrompt(config);
       const userPrompt = buildEvaluationUserPrompt(
         page.title,
@@ -471,14 +481,14 @@ export class EvaluationService {
         page.module.title,
       );
 
-      const response = await this.callOpenAiApi(
-        systemPrompt,
-        userPrompt,
-        credentials.apiKey,
-        credentials.model,
-      );
-
       try {
+        const response = await this.llmService.callLlmForUser(
+          userId,
+          systemPrompt,
+          userPrompt,
+          { feature: 'page_evaluation', courseId },
+          { jsonMode: true, maxTokens: 4096, temperature: 0.2 },
+        );
         llmResult = this.parseLlmEvalOutput(response.content);
       } catch (err: unknown) {
         this.logger.warn(`Failed to parse LLM eval output for page ${page.id}: ${errMsg(err)}`);
@@ -541,78 +551,7 @@ export class EvaluationService {
     };
   }
 
-  // ─── Private: LLM Helpers ─────────────────────────────
-
-  private async getLlmCredentials(
-    userId: string,
-  ): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
-      throw new BadRequestException(`LLM API error (${response.status}). Check your API key.`);
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      promptTokens: data.usage?.prompt_tokens || 0,
-      completionTokens: data.usage?.completion_tokens || 0,
-    };
-  }
+  // ─── Private: LLM output parsing ──────────────────────
 
   private parseLlmEvalOutput(raw: string): LlmEvalOutput {
     let jsonStr = raw.trim();

@@ -56,6 +56,16 @@ export class TextMiningController {
     return this.dashboard.getSessionDashboard(sessionId, settings.rollingWindowN);
   }
 
+  @Get('activity-sessions/:activitySessionId/dashboard')
+  @Roles('teacher', 'admin')
+  async getActivitySessionDashboard(
+    @Param('activitySessionId') activitySessionId: string,
+    @Request() req: { user: RequestUser },
+  ) {
+    const settings = await this.teacherSettings.getSettings(req.user.id);
+    return this.dashboard.getActivitySessionDashboard(activitySessionId, settings.rollingWindowN);
+  }
+
   @Get('sessions/:sessionId/detections')
   @Roles('teacher', 'admin')
   getDetections(
@@ -66,6 +76,23 @@ export class TextMiningController {
     @Query('limit') limit?: string,
   ) {
     return this.dashboard.getDetections(sessionId, {
+      constructKey,
+      label,
+      cursor,
+      limit: Math.min(200, Math.max(1, parseInt(limit ?? '50', 10) || 50)),
+    });
+  }
+
+  @Get('activity-sessions/:activitySessionId/detections')
+  @Roles('teacher', 'admin')
+  getActivitySessionDetections(
+    @Param('activitySessionId') activitySessionId: string,
+    @Query('constructKey') constructKey?: string,
+    @Query('label') label?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.dashboard.getActivitySessionDetections(activitySessionId, {
       constructKey,
       label,
       cursor,
@@ -90,6 +117,29 @@ export class TextMiningController {
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="text-mining-${sessionId}.csv"`);
+    res.send([header, ...rows].join('\n'));
+  }
+
+  @Get('activity-sessions/:activitySessionId/detections.csv')
+  @Roles('teacher', 'admin')
+  async getActivitySessionDetectionsCsv(
+    @Param('activitySessionId') activitySessionId: string,
+    @Res() res: Response,
+  ) {
+    const detections = await this.dashboard.getActivitySessionCsvRows(activitySessionId);
+
+    const header =
+      'timestamp,messageId,studentId,constructKey,label,severity,confidence,rationale,warning,model,promptVersion';
+    const rows = detections.map(
+      (d) =>
+        `${d.createdAt.toISOString()},${d.messageId},${d.studentId},${d.constructKey},${d.label},${d.severity ?? ''},${d.confidence ?? ''},${csvEscape(d.rationale ?? '')},${csvEscape(d.warning ?? '')},${d.model},${d.promptVersion}`,
+    );
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="text-mining-activity-${activitySessionId}.csv"`,
+    );
     res.send([header, ...rows].join('\n'));
   }
 

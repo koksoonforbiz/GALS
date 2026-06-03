@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LlmService } from '../rag/llm.service';
 import {
   buildKcExtractionSystemPrompt,
   buildKcExtractionUserPrompt,
@@ -30,7 +31,10 @@ interface ProposedKcRaw {
 export class KcSuggestionService {
   private readonly logger = new Logger(KcSuggestionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmService: LlmService,
+  ) {}
 
   /**
    * Extract and store proposed KCs from generated page content.
@@ -38,9 +42,9 @@ export class KcSuggestionService {
    */
   async suggestKcsForPage(input: KcExtractionInput): Promise<void> {
     try {
-      // 1. Get LLM credentials
-      const credentials = await this.getLlmCredentials(input.userId);
-      if (!credentials) {
+      // 1. Verify the teacher has a key configured
+      const hasKey = await this.llmService.hasApiKey(input.userId);
+      if (!hasKey) {
         this.logger.warn('No LLM credentials for KC suggestion — skipping');
         return;
       }
@@ -54,16 +58,17 @@ export class KcSuggestionService {
         input.contentJson,
       );
 
-      // 3. Call LLM
-      const llmResult = await this.callOpenAiApi(
+      // 3. Call LLM through the registry-driven funnel
+      const llmResponse = await this.llmService.callLlmForUser(
+        input.userId,
         systemPrompt,
         userPrompt,
-        credentials.apiKey,
-        credentials.model,
+        { feature: 'kc_suggestion', courseId: input.courseId },
+        { jsonMode: true, maxTokens: 4096, temperature: 0.3 },
       );
 
       // 4. Parse response
-      const proposed = this.parseKcResponse(llmResult);
+      const proposed = this.parseKcResponse(llmResponse.content);
       if (proposed.length === 0) {
         this.logger.log('No KCs extracted from page content');
         return;
@@ -162,68 +167,4 @@ export class KcSuggestionService {
     return null;
   }
 
-  // ─── Private: LLM ───────────────────────────────────────
-
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<string> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return data.choices?.[0]?.message?.content || '';
-  }
 }

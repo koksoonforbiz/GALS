@@ -115,11 +115,16 @@ export class Openface3Service {
       if (filters.to) (where.frameWallMs as Record<string, unknown>).lte = BigInt(filters.to);
     }
 
-    return this.prisma.emotionFrame.findMany({
+    const rows = await this.prisma.emotionFrame.findMany({
       where,
       orderBy: { frameWallMs: 'asc' },
       take: Math.min(filters.limit ?? 1000, 5000),
     });
+    // frameWallMs is a Postgres BIGINT → JS BigInt. Express's res.json()
+    // can't serialize BigInt (`Do not know how to serialize a BigInt`),
+    // so we cast to Number here. Safe: ms-since-epoch won't exceed
+    // Number.MAX_SAFE_INTEGER (~9e15) until year 287,396 AD.
+    return rows.map((r) => ({ ...r, frameWallMs: Number(r.frameWallMs) }));
   }
 
   async getStudentFrames(
@@ -134,11 +139,12 @@ export class Openface3Service {
       if (filters.to) (where.frameWallMs as Record<string, unknown>).lte = BigInt(filters.to);
     }
 
-    return this.prisma.emotionFrame.findMany({
+    const rows = await this.prisma.emotionFrame.findMany({
       where,
       orderBy: { frameWallMs: 'asc' },
       take: 5000,
     });
+    return rows.map((r) => ({ ...r, frameWallMs: Number(r.frameWallMs) }));
   }
 
   async getSessionSummary(sessionId: string) {

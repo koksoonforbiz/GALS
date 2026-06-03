@@ -15,7 +15,9 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:reset": "prisma migrate reset",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "rag:eval": "ts-node --transpile-only -P tsconfig.json src/rag/eval/runner.ts",
+    "reindex": "ts-node --transpile-only -P tsconfig.json prisma/scripts/reindex-embeddings.ts"
   },
   "dependencies": {
     "@ats/shared": "workspace:*",
@@ -37,6 +39,7 @@
     "mammoth": "^1.11.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdf-img-convert": "^2.0.0",
     "pdf-parse": "^2.4.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -63,6 +66,7 @@
     "prisma": "^6.19.2",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
     "typescript": "^5.5.0"
   }
 }

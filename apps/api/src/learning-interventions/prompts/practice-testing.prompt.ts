@@ -3,12 +3,22 @@ import { DEFAULT_PROMPTS } from './default-prompts';
 export function buildPracticeTestingPrompt(
   systemPrompt: string,
   selectedText: string,
-  questionCount: number,
+  args: { mcqCount: number; shortAnswerCount: number },
 ) {
-  const resolvedSystem = systemPrompt.replace(/\{\{questionCount\}\}/g, String(questionCount));
+  const { mcqCount, shortAnswerCount } = args;
+  const total = mcqCount + shortAnswerCount;
+
+  // Back-compat: teachers' custom system prompts may still reference the
+  // pre-split `{{questionCount}}` placeholder. Treat it as the sum.
+  const resolvedSystem = systemPrompt
+    .replace(/\{\{mcqCount\}\}/g, String(mcqCount))
+    .replace(/\{\{shortAnswerCount\}\}/g, String(shortAnswerCount))
+    .replace(/\{\{questionCount\}\}/g, String(total));
 
   const userPrompt = DEFAULT_PROMPTS.PRACTICE_TESTING.userPromptTemplate
-    .replace(/\{\{questionCount\}\}/g, String(questionCount))
+    .replace(/\{\{mcqCount\}\}/g, String(mcqCount))
+    .replace(/\{\{shortAnswerCount\}\}/g, String(shortAnswerCount))
+    .replace(/\{\{questionCount\}\}/g, String(total))
     .replace(/\{\{selectedText\}\}/g, selectedText);
 
   return { system: resolvedSystem, user: userPrompt };

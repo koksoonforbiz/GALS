@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { BlobService } from '../blob/blob.service';
 
@@ -162,6 +167,33 @@ export class ItemsService {
 
   async reorder(moduleId: string, teacherId: string, orderedIds: string[]) {
     await this.verifyModuleOwnership(moduleId, teacherId);
+
+    // Validate: every id must belong to this module, and the payload must
+    // cover the module's current items exactly (no duplicates, no strays,
+    // no missing items). This prevents a malformed reorder from moving an
+    // item out of its module or leaving holes in orderIndex.
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      throw new BadRequestException('orderedIds must be a non-empty array');
+    }
+    const unique = new Set(orderedIds);
+    if (unique.size !== orderedIds.length) {
+      throw new BadRequestException('orderedIds contains duplicate ids');
+    }
+    const existing = await this.prisma.moduleItem.findMany({
+      where: { moduleId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map((i) => i.id));
+    if (existingIds.size !== unique.size) {
+      throw new BadRequestException(
+        `orderedIds must contain exactly the ${existingIds.size} item(s) in this module`,
+      );
+    }
+    for (const id of orderedIds) {
+      if (!existingIds.has(id)) {
+        throw new BadRequestException(`Item ${id} does not belong to module ${moduleId}`);
+      }
+    }
 
     await this.prisma.$transaction(
       orderedIds.map((id, index) =>

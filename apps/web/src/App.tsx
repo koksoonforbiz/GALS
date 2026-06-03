@@ -22,10 +22,12 @@ import { AiSettingsPage } from './pages/teacher/AiSettingsPage';
 import { PromptSettingsPage } from './pages/teacher/PromptSettingsPage';
 import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 import { UserManagementPage } from './pages/teacher/UserManagementPage';
+import { BulkUserProvisioningPage } from './pages/teacher/BulkUserProvisioningPage';
 import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
 import { SessionTimelinePage } from './pages/dashboard/SessionTimelinePage';
 import { StudentTextMiningPage } from './features/text-mining/pages/StudentTextMiningPage';
-import { ChangePassword } from './pages/ChangePassword';
+// Prompt 05: the student-facing /change-password page was removed.
+// Only teachers/admins reset passwords now, via UserManagementPage.
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -38,6 +40,7 @@ import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
 import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
 import { DialogueLearning } from './pages/student/DialogueLearning';
 import { DialogueSessionHistory } from './pages/student/DialogueSessionHistory';
+import { ChatHistoryPage } from './pages/student/ChatHistoryPage';
 import { BiometricsWrapper } from './components/student/BiometricsWrapper';
 import { LoggingProvider } from './components/LoggingProvider';
 import { useAuth } from './contexts/AuthContext';
@@ -68,7 +71,8 @@ function App() {
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              <Route path="/change-password" element={<ChangePassword />} />
+              {/* Prompt 05: /change-password removed (no student self-
+                  service password flow). Teacher/admin resets only. */}
               <Route path="/health" element={<Health />} />
 
               {/* Protected routes with layout */}
@@ -175,6 +179,14 @@ function App() {
                   element={
                     <RoleRoute allowedRoles={['teacher', 'admin']}>
                       <UserManagementPage />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/teacher/users/bulk"
+                  element={
+                    <RoleRoute allowedRoles={['teacher', 'admin']}>
+                      <BulkUserProvisioningPage />
                     </RoleRoute>
                   }
                 />
@@ -287,6 +299,14 @@ function App() {
                   element={
                     <RoleRoute allowedRoles={['student']}>
                       <DialogueSessionHistory />
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/student/chat-history"
+                  element={
+                    <RoleRoute allowedRoles={['student']}>
+                      <ChatHistoryPage />
                     </RoleRoute>
                   }
                 />

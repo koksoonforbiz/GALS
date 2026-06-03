@@ -89,6 +89,130 @@ function formatFeatureName(feature: string): string {
   return feature.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// ─── Reset Password Modal (prompt 05) ───────────────────
+//
+// Teacher/admin picks a new password and POSTs it to
+// /user-management/users/:userId/reset-password. Plaintext is sent
+// once over HTTPS and never echoed back. Students never see this UI —
+// students do not have any self-service password flow as of prompt 05.
+
+function ResetPasswordModal({
+  student,
+  onClose,
+  onReset,
+}: {
+  student: { id: string; name: string; email: string };
+  onClose: () => void;
+  onReset: () => void;
+}) {
+  const { toast } = useToast();
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Match the schema in @ats/shared (ResetStudentPasswordSchema):
+  // backend enforces min 8, max 128. Kept loose intentionally so
+  // teachers can hand out a simple memorable password.
+  const lenOk = newPassword.length >= 8 && newPassword.length <= 128;
+  const matchOk = newPassword.length > 0 && newPassword === confirm;
+  const canSubmit = lenOk && matchOk && !saving;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+
+    // Belt-and-braces confirm. We're about to overwrite a real
+    // person's password — the teacher should consciously click
+    // through this even after typing it.
+    const ok = window.confirm(
+      `Reset password for "${student.name}" (${student.email})?\n\n` +
+        `This will immediately replace their current password. They will need ` +
+        `the new password to sign in. The plaintext password is never stored or ` +
+        `displayed after this dialog closes — copy it now if you need to share it.`,
+    );
+    if (!ok) return;
+
+    setSaving(true);
+    try {
+      await api.post(`/user-management/users/${student.id}/reset-password`, {
+        newPassword,
+      });
+      toast('success', `Password reset for ${student.name}.`);
+      onReset();
+      onClose();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to reset password');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 className="text-lg font-semibold mb-1">Reset student password</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          <strong>{student.name}</strong> &middot; {student.email}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">New password</label>
+            <input
+              type="text"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Teacher-chosen password"
+              autoFocus
+              autoComplete="new-password"
+            />
+            <p className={`mt-1 text-xs ${lenOk ? 'text-green-600' : 'text-gray-400'}`}>
+              {lenOk ? 'OK' : '8-128 characters'}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+            <input
+              type="text"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              autoComplete="new-password"
+            />
+            {confirm.length > 0 && !matchOk && (
+              <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
+            )}
+          </div>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-xs text-yellow-800">
+            The plaintext password is shown only in this dialog. Copy it now if you need to share it
+            with the student manually — there is no recovery and no email reset link.
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Resetting...' : 'Reset Password'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Add Student Modal ──────────────────────────────────
 
 function AddStudentModal({
@@ -449,11 +573,18 @@ function AddStudentModal({
 function StudentDetailModal({
   student,
   onClose,
-  onResendInvitation,
+  onResetPassword,
+  onRemoveFromCourse,
 }: {
   student: Student;
   onClose: () => void;
-  onResendInvitation: (id: string) => void;
+  // Prompt 05: opens the teacher-chosen-password modal. Replaced the
+  // older "send random temp password" flow because Prompt 05 requires
+  // the teacher to set passwords explicitly.
+  onResetPassword: (student: { id: string; name: string; email: string }) => void;
+  // Prompt 03: teacher-initiated drop from a single course. Confirmed
+  // by the parent before the request is sent.
+  onRemoveFromCourse: (courseId: string, courseName: string) => void;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -477,7 +608,19 @@ function StudentDetailModal({
         <h4 className="font-medium text-gray-900 mb-2 mt-4">Course Progress</h4>
         {student.enrolledCourses.map((course) => (
           <div key={course.courseId} className="bg-gray-50 rounded-lg p-3 mb-2">
-            <p className="font-medium text-sm">{course.courseName}</p>
+            <div className="flex items-start justify-between">
+              <p className="font-medium text-sm">{course.courseName}</p>
+              {/* Prompt 03: teacher-only "Remove from course" action.
+                  Parent handles the confirm + API call so the modal
+                  stays focused on display logic. */}
+              <button
+                onClick={() => onRemoveFromCourse(course.courseId, course.courseName)}
+                className="text-xs text-red-600 hover:text-red-800 ml-2"
+                title={`Remove ${student.name} from ${course.courseName}`}
+              >
+                Remove from course
+              </button>
+            </div>
             <div className="mt-1">
               <ProgressBar percentage={course.progress.percentage} />
             </div>
@@ -555,14 +698,19 @@ function StudentDetailModal({
 
         {/* Actions */}
         <div className="flex gap-2 mt-4 pt-4 border-t">
-          {student.isTemporaryPassword && (
-            <button
-              onClick={() => onResendInvitation(student.id)}
-              className="px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200"
-            >
-              Reset Password
-            </button>
-          )}
+          {/* Prompt 05: teacher-issued password reset. Always shown
+              (not gated on isTemporaryPassword) because the teacher
+              must be able to reset for forgotten-password support
+              regardless of whether the student already rotated theirs.
+              The student has no self-service equivalent. */}
+          <button
+            onClick={() =>
+              onResetPassword({ id: student.id, name: student.name, email: student.email })
+            }
+            className="px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200"
+          >
+            Reset Password
+          </button>
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50 ml-auto"
@@ -590,6 +738,14 @@ export function UserManagementPage() {
   const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  // Prompt 05: teacher-issued password reset target. Holds the student
+  // whose password is currently being reset; the modal closes by
+  // clearing this back to null.
+  const [resetTarget, setResetTarget] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
 
   // Teacher usage tab state
   const [teacherUsage, setTeacherUsage] = useState<TokenUsage | null>(null);
@@ -658,15 +814,45 @@ export function UserManagementPage() {
     }
   }, [activeTab, courseOverviews.length, toast]);
 
-  const handleResendInvitation = async (studentId: string) => {
+  // Note: legacy auto-generated resend-invitation flow is no longer
+  // wired into the UI as of prompt 05 — teachers now choose the
+  // password directly via ResetPasswordModal. The backend endpoint
+  // (`POST /user-management/students/:studentId/resend-invitation`) is
+  // still present for scripted use cases, but no front-end button
+  // calls it.
+
+  // Prompt 03: teacher/admin removes a student from one of their
+  // courses. Hits POST /enrollments/:courseId/drop-student which soft-
+  // marks the enrollment DROPPED — prior work, attempts, and logs
+  // stay queryable. Idempotent on the backend; UI also reflects
+  // already-DROPPED rows by simply refreshing the list. NEVER gated by
+  // the per-course `allowStudentSelfDrop` flag.
+  const handleRemoveFromCourse = async (
+    studentName: string,
+    courseId: string,
+    courseName: string,
+    studentId: string,
+  ) => {
+    const ok = window.confirm(
+      `Remove "${studentName}" from "${courseName}"?\n\n` +
+        `Their existing attempts, logs and notes will be preserved, but they will no longer see ` +
+        `this course in their list. You can re-enroll them later.`,
+    );
+    if (!ok) return;
     try {
-      const result = await api.post<{ temporaryPassword: string }>(
-        `/user-management/students/${studentId}/resend-invitation`,
-      );
-      toast('success', `New temporary password: ${result.temporaryPassword}`);
+      await api.post(`/enrollments/${courseId}/drop-student`, { userId: studentId });
+      toast('success', `Removed ${studentName} from ${courseName}`);
+      // If the detail modal is open for this student, also refresh that
+      // view so the dropped course disappears from it.
+      if (selectedStudent?.id === studentId) {
+        setSelectedStudent({
+          ...selectedStudent,
+          enrolledCourses: selectedStudent.enrolledCourses.filter((c) => c.courseId !== courseId),
+        });
+      }
       loadStudents();
-    } catch {
-      toast('error', 'Failed to reset password');
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to remove student from course');
     }
   };
 
@@ -802,9 +988,30 @@ export function UserManagementPage() {
                         </td>
                         <td className="py-3 pr-4">
                           {student.enrolledCourses.map((c) => (
-                            <p key={c.courseId} className="text-xs text-gray-600">
-                              {c.courseName}
-                            </p>
+                            <div
+                              key={c.courseId}
+                              className="flex items-center gap-1.5 text-xs text-gray-600 group"
+                            >
+                              <span>{c.courseName}</span>
+                              {/* Prompt 03: teacher-only "Remove from course"
+                                  action. Confirms before hitting the soft-drop
+                                  endpoint. Never gated by the per-course
+                                  self-drop flag. */}
+                              <button
+                                onClick={() =>
+                                  handleRemoveFromCourse(
+                                    student.name,
+                                    c.courseId,
+                                    c.courseName,
+                                    student.id,
+                                  )
+                                }
+                                title={`Remove ${student.name} from ${c.courseName}`}
+                                className="opacity-0 group-hover:opacity-100 text-red-600 hover:text-red-800 transition-opacity text-[10px] px-1"
+                              >
+                                Remove
+                              </button>
+                            </div>
                           ))}
                         </td>
                         <td className="py-3 pr-4">
@@ -830,6 +1037,23 @@ export function UserManagementPage() {
                           >
                             Logs
                           </Link>
+                          {/* Prompt 05: teacher-issued password reset.
+                              Opens a modal where the teacher types the
+                              new password (no token round-trip; no
+                              student self-service equivalent exists). */}
+                          <button
+                            onClick={() =>
+                              setResetTarget({
+                                id: student.id,
+                                name: student.name,
+                                email: student.email,
+                              })
+                            }
+                            className="text-sm text-amber-700 hover:underline"
+                            title="Set this student's password to a teacher-chosen value"
+                          >
+                            Reset pwd
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1004,7 +1228,26 @@ export function UserManagementPage() {
         <StudentDetailModal
           student={selectedStudent}
           onClose={() => setSelectedStudent(null)}
-          onResendInvitation={handleResendInvitation}
+          onResetPassword={setResetTarget}
+          onRemoveFromCourse={(courseId, courseName) =>
+            handleRemoveFromCourse(
+              selectedStudent.name,
+              courseId,
+              courseName,
+              selectedStudent.id,
+            )
+          }
+        />
+      )}
+
+      {/* Prompt 05: teacher-chosen password modal. Same handler is
+          opened both from the per-row "Reset pwd" button and from the
+          detail-modal "Reset Password" action. */}
+      {resetTarget && (
+        <ResetPasswordModal
+          student={resetTarget}
+          onClose={() => setResetTarget(null)}
+          onReset={loadStudents}
         />
       )}
     </div>

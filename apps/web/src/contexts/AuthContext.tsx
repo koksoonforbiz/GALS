@@ -20,16 +20,14 @@ interface AuthResponse {
   sessionId?: string;
 }
 
-interface PasswordChangeResponse {
-  requirePasswordChange: true;
-  passwordChangeToken: string;
-  message: string;
-}
-
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  // Prompt 05: `identifier` may be the user's email OR their teacher-
+  // assigned login ID. The backend resolves which by inspecting the
+  // value (contains `@` → email lookup; otherwise loginId lookup) and
+  // both columns are UNIQUE, so the resolution is deterministic.
+  login: (identifier: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
   logout: () => void;
 }
@@ -95,29 +93,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const response = await api.post<AuthResponse | PasswordChangeResponse>('/auth/login', {
-      email,
+  const login = useCallback(async (identifier: string, password: string) => {
+    // Prompt 05: send a single canonical `identifier` field. Backend
+    // (`AuthService.login`) decides email-vs-loginId by checking for
+    // `@`. The old `requirePasswordChange` / `/change-password`
+    // redirect path was removed — students can no longer change their
+    // own password, so a temporary-password user simply logs in
+    // normally and a teacher resets it via UserManagementPage.
+    const response = await api.post<AuthResponse>('/auth/login', {
+      identifier,
       password,
     });
 
-    // Check if password change is required
-    if ('requirePasswordChange' in response && response.requirePasswordChange) {
-      localStorage.setItem('passwordChangeToken', response.passwordChangeToken);
-      window.location.href = '/change-password';
-      return;
-    }
+    localStorage.setItem('token', response.accessToken);
+    localStorage.setItem('user', JSON.stringify(response.user));
+    setUser(response.user);
 
-    const authResponse = response as AuthResponse;
-    localStorage.setItem('token', authResponse.accessToken);
-    localStorage.setItem('user', JSON.stringify(authResponse.user));
-    setUser(authResponse.user);
-
-    if (authResponse.user.role === 'student') {
-      if (authResponse.sessionId) {
-        initActivitySession(authResponse.sessionId);
+    if (response.user.role === 'student') {
+      if (response.sessionId) {
+        initActivitySession(response.sessionId);
       }
-      joinStudentRoom(authResponse.user.id);
+      joinStudentRoom(response.user.id);
     } else {
       // Clear any stale activity session for non-student roles
       clearActivitySession();

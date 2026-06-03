@@ -35,13 +35,13 @@ Return ONLY valid JSON in this exact format, with no markdown or extra text:
 }
 
 Rules:
-- Generate exactly {{questionCount}} questions
-- Mix of MCQ and short answer (roughly 60% MCQ, 40% short answer)
+- Generate exactly {{mcqCount}} multiple-choice questions and exactly {{shortAnswerCount}} short-answer questions
+- Return them as a single \`questions\` array in the order: MCQ first, short-answer second
 - Questions should test comprehension, not just surface recall
 - Each MCQ must have exactly 4 options
 - Explanations should be educational and reference the source text
 - For short answers, include 2-4 keywords that a correct answer should contain`,
-    userPromptTemplate: `Generate {{questionCount}} quiz questions from this text:\n\n"{{selectedText}}"`,
+    userPromptTemplate: `Generate exactly {{mcqCount}} multiple-choice and exactly {{shortAnswerCount}} short-answer questions from this text. Return them as a single \`questions\` array in the order: MCQ first, short-answer second.\n\n"{{selectedText}}"`,
   },
 
   INTERROGATIVE_ELABORATION: {

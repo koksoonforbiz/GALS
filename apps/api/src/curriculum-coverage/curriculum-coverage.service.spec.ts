@@ -8,8 +8,9 @@ import {
 // ─── Test Helpers ───────────────────────────────────────
 
 function makeService(): CurriculumCoverageService {
-  // Create with null prisma — we only test pure analysis methods
-  return new CurriculumCoverageService(null as any);
+  // Create with null prisma + null llmService — we only test pure
+  // analysis methods that don't touch either.
+  return new CurriculumCoverageService(null as any, null as any);
 }
 
 function makeOutcomes(count: number): SyllabusOutcome[] {

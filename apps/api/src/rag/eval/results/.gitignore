@@ -1,0 +1,4 @@
+# Per-run results are SHA-tagged and not committed.
+# Only the canonical BASELINE-*.json files should be tracked.
+*.json
+!BASELINE-*.json

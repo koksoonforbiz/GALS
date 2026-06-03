@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
+import { useActivityLog } from '../../../lib/activity-log';
 import type { SaveForReviewInput } from '../types';
 import { Footprints, Trophy, AlertTriangle, Loader, HelpCircle } from 'lucide-react';
 
@@ -85,6 +86,21 @@ export function StepwiseLearningView({
   } | null>(null);
   const initialGenDone = useRef(false);
 
+  const { track } = useActivityLog();
+  // Per-step timing + typing pattern. The current step ID, when it
+  // was entered, first keystroke time, edit count, and peak char
+  // count — all reset on step transition. Captures hesitation +
+  // effort signals that the existing keystroke_log can't express on
+  // its own (the keystroke log doesn't know which intervention step
+  // a given keystroke belongs to).
+  const interventionStartedAtRef = useRef<number>(Date.now());
+  const interventionViewedFiredRef = useRef(false);
+  const stepEnteredAtRef = useRef<number>(Date.now());
+  const stepFirstKeyAtRef = useRef<number | null>(null);
+  const stepEditCountRef = useRef(0);
+  const stepPeakCharsRef = useRef(0);
+  const hintShownThisStepRef = useRef(false);
+
   // Generate or resume on mount
   const generate = useCallback(async () => {
     setPhase('loading');
@@ -98,6 +114,7 @@ export function StepwiseLearningView({
         courseId,
         contentId: contentId || undefined,
         pageType,
+        topic: contentTitle || undefined,
       });
       setInterventionId(result.interventionId);
       setTotalSteps(result.totalSteps);
@@ -186,6 +203,60 @@ export function StepwiseLearningView({
     }
   }, [generate, resumeSession, resumeSessionId]);
 
+  // Fire INTERVENTION_VIEWED once when the first step becomes
+  // interactive. Pairs with the server-side INTERVENTION_TRIGGERED.
+  useEffect(() => {
+    if (phase === 'step' && !interventionViewedFiredRef.current && interventionId) {
+      interventionViewedFiredRef.current = true;
+      interventionStartedAtRef.current = Date.now();
+      stepEnteredAtRef.current = Date.now();
+      track('INTERVENTION_VIEWED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        interventionId,
+        metadata: {
+          interventionType: 'STEPWISE_LEARNING',
+          totalSteps,
+          contentTitle: contentTitle || null,
+          hasSelection: Boolean(selectedText && selectedText.length >= 20),
+          resumed: Boolean(resumeSessionId),
+        },
+      });
+    }
+  }, [
+    phase,
+    interventionId,
+    totalSteps,
+    track,
+    courseId,
+    contentId,
+    contentTitle,
+    selectedText,
+    resumeSessionId,
+  ]);
+
+  // Fire QUESTION_VIEWED each time the student enters a new step
+  // (currentStep changes while we're in 'step' phase). Reset
+  // per-step counters so typing metrics scope to this step.
+  useEffect(() => {
+    if (phase !== 'step' || !interventionId) return;
+    stepEnteredAtRef.current = Date.now();
+    stepFirstKeyAtRef.current = null;
+    stepEditCountRef.current = 0;
+    stepPeakCharsRef.current = 0;
+    hintShownThisStepRef.current = false;
+    track('QUESTION_VIEWED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'STEPWISE_LEARNING',
+        stepNumber: currentStep,
+        totalSteps,
+      },
+    });
+  }, [currentStep, phase, interventionId, totalSteps, track, courseId, contentId]);
+
   const currentStepData = steps.find((s) => s.stepNumber === currentStep);
   const currentResult = stepResults[currentStep];
 
@@ -206,6 +277,38 @@ export function StepwiseLearningView({
 
       setLastCheck(result);
       setPhase('feedback');
+
+      // Emit QUESTION_ANSWERED per step submission with all signals
+      // we can derive locally — server-side feedback (isCorrect) is
+      // known here from the API result.
+      const wordsTyped = inputValue
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length;
+      const latencyMsToFirstKey =
+        stepFirstKeyAtRef.current !== null
+          ? stepFirstKeyAtRef.current - stepEnteredAtRef.current
+          : null;
+      track('QUESTION_ANSWERED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        interventionId,
+        metadata: {
+          interventionType: 'STEPWISE_LEARNING',
+          stepNumber: currentStep,
+          totalSteps,
+          isCorrect: result.isCorrect,
+          attempts: result.attempts,
+          showAnswer: result.showAnswer,
+          latencyMsToFirstKey,
+          latencyMsToSubmit: Date.now() - stepEnteredAtRef.current,
+          wordsTyped,
+          editCount: stepEditCountRef.current,
+          peakChars: stepPeakCharsRef.current,
+          hintShown: hintShownThisStepRef.current,
+          answer: inputValue.slice(0, 500),
+        },
+      });
 
       // Update local step results
       if (result.isCorrect || result.showAnswer) {
@@ -326,6 +429,26 @@ export function StepwiseLearningView({
     }
 
     setPhase('complete');
+    // Roll up per-step results into the completion metadata. We use
+    // local stepResults because completionData might be from the
+    // fallback path (API failure) and could be stale.
+    const stepsPassed = Object.values(stepResults).filter((r) => r.passed).length;
+    const totalAttempts = Object.values(stepResults).reduce((sum, r) => sum + r.attempts, 0);
+    track('INTERVENTION_COMPLETED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'STEPWISE_LEARNING',
+        totalSteps,
+        stepsPassed,
+        totalAttempts,
+        averageAttemptsPerStep:
+          totalSteps > 0 ? Math.round((totalAttempts / totalSteps) * 100) / 100 : 0,
+        totalDurationMs: Date.now() - interventionStartedAtRef.current,
+        completed: true,
+      },
+    });
   };
 
   const handleSave = () => {
@@ -580,7 +703,14 @@ export function StepwiseLearningView({
               {currentStepData.comprehensionCheck.hint && (
                 <div className="mb-2">
                   <button
-                    onClick={() => setShowHint(!showHint)}
+                    onClick={() => {
+                      // Latch hintShown=true (don't unlatch on hide) so
+                      // the QUESTION_ANSWERED metadata correctly reports
+                      // whether a hint was consulted at all during the
+                      // student's attempt at this step.
+                      if (!showHint) hintShownThisStepRef.current = true;
+                      setShowHint(!showHint);
+                    }}
                     className="text-[10px] text-blue-600 hover:text-blue-800"
                   >
                     {showHint ? '\u25BC Hide hint' : '\u25B6 Show hint'}
@@ -634,7 +764,17 @@ export function StepwiseLearningView({
           <>
             <textarea
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (stepFirstKeyAtRef.current === null && next.length > 0) {
+                  stepFirstKeyAtRef.current = Date.now();
+                }
+                stepEditCountRef.current += 1;
+                if (next.length > stepPeakCharsRef.current) {
+                  stepPeakCharsRef.current = next.length;
+                }
+                setInputValue(next);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();

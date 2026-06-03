@@ -1,8 +1,11 @@
 export interface GenerateCardsDto {
-  selectedText: string; // min 20 chars
+  /** Either ≥20 chars or empty — empty triggers RAG-over-course fallback. */
+  selectedText: string;
   courseId: string;
   contentId?: string;
   pageType?: string;
+  /** Optional topic hint for the RAG fallback. */
+  topic?: string;
   cardCount?: number; // default 5, min 1, max 15
 }
 

@@ -1,9 +1,15 @@
 import { Loader2 } from 'lucide-react';
 import { DashboardPanel } from '../components/DashboardPanel';
-import { useTextMiningDashboard } from '../hooks/useDashboard';
+import { useTextMiningDashboard, TextMiningSessionScope } from '../hooks/useDashboard';
 
-export function SessionTextMiningTab({ sessionId }: { sessionId: string }) {
-  const { data, loading, error, refetch } = useTextMiningDashboard(sessionId);
+export function SessionTextMiningTab({
+  sessionId,
+  scope = 'dialogue',
+}: {
+  sessionId: string;
+  scope?: TextMiningSessionScope;
+}) {
+  const { data, loading, error, refetch } = useTextMiningDashboard(sessionId, scope);
 
   if (loading && !data) {
     return (
@@ -19,5 +25,13 @@ export function SessionTextMiningTab({ sessionId }: { sessionId: string }) {
 
   if (!data) return null;
 
-  return <DashboardPanel sessionId={sessionId} data={data} onRefresh={refetch} loading={loading} />;
+  return (
+    <DashboardPanel
+      sessionId={sessionId}
+      scope={scope}
+      data={data}
+      onRefresh={refetch}
+      loading={loading}
+    />
+  );
 }

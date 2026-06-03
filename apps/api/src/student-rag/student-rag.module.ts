@@ -12,6 +12,17 @@ import { StudentSourceGuideService } from './student-source-guide.service';
 import { FileParserService } from './file-parser.service';
 import { ChunkingService } from './chunking.service';
 import { EmbeddingService } from './embedding.service';
+// Stage 04 — the local StudentRagRetrievalService instance needs the
+// reranker services to resolve. RagModule exports them but Nest
+// resolves provider deps per-module; we re-declare them here so the
+// student-side instance can see its own copy. They're stateless
+// (modulo Cohere's per-call context which is reset every invocation),
+// so a separate Nest instance is safe — same rationale as
+// `StudentRagRetrievalService` itself, per `rag.module.ts` comment.
+import { NoopRerankerService } from '../rag/reranker/noop-reranker.service';
+import { CohereRerankerService } from '../rag/reranker/cohere-reranker.service';
+import { RERANKER_SERVICE } from '../rag/reranker/reranker.types';
+import { rerankEnabled } from '../rag/reranker/reranker.flags';
 
 @Module({
   imports: [
@@ -32,6 +43,14 @@ import { EmbeddingService } from './embedding.service';
     FileParserService,
     ChunkingService,
     EmbeddingService,
+    NoopRerankerService,
+    CohereRerankerService,
+    {
+      provide: RERANKER_SERVICE,
+      useFactory: (cohere: CohereRerankerService, noop: NoopRerankerService) =>
+        rerankEnabled() ? cohere : noop,
+      inject: [CohereRerankerService, NoopRerankerService],
+    },
   ],
   exports: [StudentRagService, StudentRagRetrievalService],
 })

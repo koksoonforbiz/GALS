@@ -9,11 +9,48 @@ interface PageContextType {
   contentTitle: string | null;
   contentText: string | null;
   selectedText: string | null;
+  /**
+   * Id of the teacher-uploaded source document the student is currently
+   * reading (typically a PDF inside a PDF-type module item). Used by the
+   * floating chatbot to tell the backend which source to ground on when
+   * the student has not highlighted anything.
+   */
+  sourceDocumentId: string | null;
+  /**
+   * P3 — total page count of the currently-rendered PDF, when one is
+   * open. The student-facing PracticeTestingView reads this to default
+   * the page-range upper bound (and enforce an upper `max` on the
+   * input) so the student doesn't pick pp.40-50 on a 20-page PDF. Null
+   * when no PDF is open, or while the PDF is still loading.
+   */
+  pdfNumPages: number | null;
+  /**
+   * True when a page (e.g. StudentCourseViewPage) renders the chatbot
+   * inline as a docked right-side panel. The global FloatingChatbot reads
+   * this and hides itself so we never show both at once. Pages opt in by
+   * calling setChatbotDocked(true) on mount and setChatbotDocked(false)
+   * on unmount.
+   */
+  chatbotDocked: boolean;
   setPageContext: (
-    ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle' | 'contentText'>>,
+    ctx: Partial<
+      Pick<
+        PageContextType,
+        | 'pageType'
+        | 'courseId'
+        | 'contentId'
+        | 'contentTitle'
+        | 'contentText'
+        | 'sourceDocumentId'
+      >
+    >,
   ) => void;
   setSelectedText: (text: string | null) => void;
   clearSelectedText: () => void;
+  setChatbotDocked: (docked: boolean) => void;
+  /** Set by the PdfReader (via the lifting prop `onPdfMeta`) so
+   *  intervention views can default page-range inputs sensibly. */
+  setPdfNumPages: (n: number | null) => void;
 }
 
 const PageContext = createContext<PageContextType | null>(null);
@@ -24,17 +61,31 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [contentId, setContentId] = useState<string | null>(null);
   const [contentTitle, setContentTitle] = useState<string | null>(null);
   const [contentText, setContentText] = useState<string | null>(null);
+  const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(null);
   const [selectedText, setSelectedTextState] = useState<string | null>(null);
+  const [chatbotDocked, setChatbotDockedState] = useState<boolean>(false);
+  const [pdfNumPages, setPdfNumPagesState] = useState<number | null>(null);
 
   const setPageContext = useCallback(
     (
-      ctx: Partial<Pick<PageContextType, 'pageType' | 'courseId' | 'contentId' | 'contentTitle' | 'contentText'>>,
+      ctx: Partial<
+        Pick<
+          PageContextType,
+          | 'pageType'
+          | 'courseId'
+          | 'contentId'
+          | 'contentTitle'
+          | 'contentText'
+          | 'sourceDocumentId'
+        >
+      >,
     ) => {
       if (ctx.pageType !== undefined) setPageType(ctx.pageType);
       if (ctx.courseId !== undefined) setCourseId(ctx.courseId);
       if (ctx.contentId !== undefined) setContentId(ctx.contentId);
       if (ctx.contentTitle !== undefined) setContentTitle(ctx.contentTitle);
       if (ctx.contentText !== undefined) setContentText(ctx.contentText);
+      if (ctx.sourceDocumentId !== undefined) setSourceDocumentId(ctx.sourceDocumentId);
     },
     [],
   );
@@ -47,14 +98,43 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
     setSelectedTextState(null);
   }, []);
 
-  // Global text selection listener
+  const setChatbotDocked = useCallback((docked: boolean) => {
+    setChatbotDockedState(docked);
+  }, []);
+
+  const setPdfNumPages = useCallback((n: number | null) => {
+    setPdfNumPagesState(n);
+  }, []);
+
+  // Global text selection listener. Scoped: only captures selections that
+  // BEGIN inside an element marked `data-selectable="true"` (or a
+  // descendant of one). This stops accidental selections in the navbar,
+  // sidebar, header, or other UI chrome from leaking into the chatbot as
+  // if they were lesson highlights — previously you could end up with
+  // "username Sign out Session recording…" arriving as `selectedText`
+  // and confusing the LLM.
+  //
+  // Pages that want their content to feed the chatbot should put
+  // `data-selectable="true"` on the lesson-content container (e.g.
+  // StudentCourseViewPage marks the right-hand content panel).
   useEffect(() => {
     const handleMouseUp = () => {
       const selection = window.getSelection();
       const text = selection?.toString().trim();
-      if (text && text.length >= 20) {
-        setSelectedTextState(text);
-      }
+      if (!text || text.length < 20) return;
+
+      const anchor = selection?.anchorNode;
+      if (!anchor) return;
+      // Selection origin's Element. Text nodes have parentElement; element
+      // nodes are themselves Elements.
+      const startEl: Element | null =
+        anchor.nodeType === Node.ELEMENT_NODE
+          ? (anchor as Element)
+          : anchor.parentElement;
+      if (!startEl) return;
+      if (!startEl.closest('[data-selectable="true"]')) return;
+
+      setSelectedTextState(text);
     };
     document.addEventListener('mouseup', handleMouseUp);
     return () => document.removeEventListener('mouseup', handleMouseUp);
@@ -69,9 +149,14 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         contentTitle,
         contentText,
         selectedText,
+        sourceDocumentId,
+        pdfNumPages,
+        chatbotDocked,
         setPageContext,
         setSelectedText,
         clearSelectedText,
+        setChatbotDocked,
+        setPdfNumPages,
       }}
     >
       {children}

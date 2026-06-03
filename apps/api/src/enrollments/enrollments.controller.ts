@@ -71,4 +71,24 @@ export class EnrollmentsController {
   remove(@Request() req: { user: RequestUser }, @Param('id') id: string) {
     return this.enrollmentsService.remove(id, req.user.id);
   }
+
+  // Teacher/admin-initiated drop by { courseId, userId } (prompt 03).
+  // Soft-marks the enrollment DROPPED so prior work + logs survive.
+  // Never gated by the per-course `allowStudentSelfDrop` flag — that
+  // flag only affects STUDENT-initiated drops.
+  //
+  // Why a separate route instead of `DELETE /enrollments/:id`:
+  //   - the teacher roster view has { courseId, studentId } in hand,
+  //     not the enrollment row id; this avoids a lookup round-trip;
+  //   - matches the bulk-enroll endpoint's `{ courseId, userIds[] }`
+  //     shape so the two teacher actions are symmetric.
+  @Post(':courseId/drop-student')
+  @Roles('teacher', 'admin')
+  dropStudent(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Body() body: { userId: string },
+  ) {
+    return this.enrollmentsService.dropStudent(req.user.id, courseId, body.userId);
+  }
 }

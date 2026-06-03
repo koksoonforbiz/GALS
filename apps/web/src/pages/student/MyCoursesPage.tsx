@@ -17,12 +17,18 @@ interface Enrollment {
   };
 }
 
+// Prompt 03: student self-drop is disabled by default and gated by the
+// per-course `allowStudentSelfDrop` flag (backend-enforced). The Drop
+// button + handler that used to live here have been removed so the UI
+// is consistent with the default-off policy; teachers do the drop from
+// the User Management roster. The backend still rejects student-
+// initiated drops with 403 when the flag is off — UI hiding is purely
+// cosmetic.
 export function MyCoursesPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dropping, setDropping] = useState<string | null>(null);
 
   const fetchEnrollments = async () => {
     try {
@@ -38,22 +44,6 @@ export function MyCoursesPage() {
   useEffect(() => {
     fetchEnrollments();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleDrop = async (courseId: string, courseTitle: string) => {
-    if (!confirm(`Drop "${courseTitle}"? Your work will be preserved, but you won't see this course.`))
-      return;
-
-    setDropping(courseId);
-    try {
-      await apiFetch(`/enrollments/${courseId}/drop`, { method: 'POST' });
-      toast('success', `Dropped "${courseTitle}"`);
-      fetchEnrollments();
-    } catch (err) {
-      toast('error', err instanceof Error ? err.message : 'Failed to drop course');
-    } finally {
-      setDropping(null);
-    }
-  };
 
   if (loading) return <div className="text-gray-500">Loading your courses...</div>;
 
@@ -117,13 +107,6 @@ export function MyCoursesPage() {
                       className="px-3 py-1.5 text-sm bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
                     >
                       View
-                    </button>
-                    <button
-                      onClick={() => handleDrop(course.id, course.title)}
-                      disabled={dropping === course.id}
-                      className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 transition-colors"
-                    >
-                      {dropping === course.id ? 'Dropping...' : 'Drop'}
                     </button>
                   </div>
                 </div>

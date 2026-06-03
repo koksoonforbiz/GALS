@@ -38,7 +38,9 @@ function createMockPrisma() {
 }
 
 function createService(prisma: any): KcGraphService {
-  return new KcGraphService(prisma);
+  // LlmService is only used by `generateGraph`, which these unit tests
+  // don't exercise — pass a stub so the constructor is satisfied.
+  return new KcGraphService(prisma, null as any);
 }
 
 // ─── Tests ──────────────────────────────────────────────
@@ -153,7 +155,7 @@ describe('KcGraphService', () => {
       prisma.proposedKC.findUnique.mockResolvedValue({ id: 'kc1', topicId: null, subtopicId: null });
       prisma.proposedKC.update.mockResolvedValue({ id: 'kc1', topicId: 't1', subtopicId: 's1' });
 
-      const result = await service.updateKcHierarchy('kc1', { topicId: 't1', subtopicId: 's1' });
+      await service.updateKcHierarchy('kc1', { topicId: 't1', subtopicId: 's1' });
 
       expect(prisma.proposedKC.update).toHaveBeenCalledWith({
         where: { id: 'kc1' },
@@ -236,7 +238,7 @@ describe('KcGraphService', () => {
     it('should create an edge', async () => {
       prisma.kcEdge.create.mockResolvedValue({ id: 'e1', fromKcId: 'kc1', toKcId: 'kc2' });
 
-      const result = await service.addEdge('course1', 'kc1', 'kc2', 'prerequisite', 1);
+      await service.addEdge('course1', 'kc1', 'kc2', 'prerequisite', 1);
 
       expect(prisma.kcEdge.create).toHaveBeenCalledWith({
         data: { courseId: 'course1', fromKcId: 'kc1', toKcId: 'kc2', relationship: 'prerequisite', weight: 1, createdBy: 'human' },
@@ -285,7 +287,7 @@ describe('KcGraphService', () => {
       prisma.kcEdge.findUnique.mockResolvedValue({ id: 'e1' });
       prisma.kcEdge.update.mockResolvedValue({ id: 'e1', relationship: 'builds_on', weight: 0.8 });
 
-      const result = await service.updateEdge('e1', { relationship: 'builds_on', weight: 0.8 });
+      await service.updateEdge('e1', { relationship: 'builds_on', weight: 0.8 });
 
       expect(prisma.kcEdge.update).toHaveBeenCalledWith({
         where: { id: 'e1' },

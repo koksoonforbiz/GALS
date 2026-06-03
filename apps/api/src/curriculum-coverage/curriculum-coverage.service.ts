@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { LlmService } from '../rag/llm.service';
 import {
   StartCoverageInput,
   SyllabusOutcome,
@@ -54,7 +55,10 @@ function errMsg(err: unknown): string {
 export class CurriculumCoverageService {
   private readonly logger = new Logger(CurriculumCoverageService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llmService: LlmService,
+  ) {}
 
   // ─── Public API ─────────────────────────────────────────
 
@@ -214,16 +218,16 @@ export class CurriculumCoverageService {
 
   private async runCoverage(runId: string, input: StartCoverageInput) {
     try {
-      // 1. Get LLM credentials
-      const credentials = await this.getLlmCredentials(input.userId);
+      // 1. Check whether the teacher has a key (funnel handles auth)
+      const hasKey = await this.llmService.hasApiKey(input.userId);
 
       // 2. Parse syllabus into outcomes
       let outcomes: SyllabusOutcome[];
-      if (credentials) {
+      if (hasKey) {
         outcomes = await this.parseSyllabusWithLLM(
           input.syllabusText,
-          credentials.apiKey,
-          credentials.model,
+          input.userId,
+          input.courseId,
         );
       } else {
         outcomes = this.parseSyllabusHeuristic(input.syllabusText);
@@ -243,12 +247,12 @@ export class CurriculumCoverageService {
 
       // 4. Map outcomes to KCs
       let maps: OutcomeKcMap[];
-      if (credentials && kcs.length > 0) {
+      if (hasKey && kcs.length > 0) {
         maps = await this.mapOutcomesToKCsWithLLM(
           outcomes,
           kcs,
-          credentials.apiKey,
-          credentials.model,
+          input.userId,
+          input.courseId,
         );
       } else {
         maps = this.mapOutcomesToKCsHeuristic(outcomes, kcs);
@@ -294,12 +298,26 @@ export class CurriculumCoverageService {
 
   private async parseSyllabusWithLLM(
     syllabusText: string,
-    apiKey: string,
-    model: string,
+    userId: string,
+    courseId: string,
   ): Promise<SyllabusOutcome[]> {
     const systemPrompt = buildSyllabusParserSystemPrompt();
     const userPrompt = buildSyllabusParserUserPrompt(syllabusText);
-    const raw = await this.callOpenAiApi(systemPrompt, userPrompt, apiKey, model);
+
+    let raw: string;
+    try {
+      const response = await this.llmService.callLlmForUser(
+        userId,
+        systemPrompt,
+        userPrompt,
+        { feature: 'curriculum_coverage_parse', courseId },
+        { jsonMode: true, maxTokens: 4096, temperature: 0.3 },
+      );
+      raw = response.content;
+    } catch (err) {
+      this.logger.warn(`Syllabus LLM parse failed: ${errMsg(err)}`);
+      return [];
+    }
 
     try {
       let jsonStr = raw.trim();
@@ -393,15 +411,29 @@ export class CurriculumCoverageService {
   private async mapOutcomesToKCsWithLLM(
     outcomes: SyllabusOutcome[],
     kcs: KcInfo[],
-    apiKey: string,
-    model: string,
+    userId: string,
+    courseId: string,
   ): Promise<OutcomeKcMap[]> {
     const systemPrompt = buildOutcomeMappingSystemPrompt();
     const userPrompt = buildOutcomeMappingUserPrompt(
       outcomes.map((o) => ({ code: o.code, description: o.description })),
       kcs,
     );
-    const raw = await this.callOpenAiApi(systemPrompt, userPrompt, apiKey, model);
+
+    let raw: string;
+    try {
+      const response = await this.llmService.callLlmForUser(
+        userId,
+        systemPrompt,
+        userPrompt,
+        { feature: 'curriculum_coverage_mapping', courseId },
+        { jsonMode: true, maxTokens: 4096, temperature: 0.3 },
+      );
+      raw = response.content;
+    } catch (err) {
+      this.logger.warn(`Outcome→KC mapping LLM call failed: ${errMsg(err)}`);
+      return [];
+    }
 
     try {
       let jsonStr = raw.trim();
@@ -799,71 +831,6 @@ export class CurriculumCoverageService {
       }
     }
     return allPages;
-  }
-
-  // ─── LLM Utilities ────────────────────────────────────────
-
-  private async getLlmCredentials(userId: string): Promise<{ apiKey: string; model: string } | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
-    });
-    if (!user?.encryptedApiKey) return null;
-    try {
-      const apiKey = this.decryptApiKey(user.encryptedApiKey);
-      return { apiKey, model: user.llmModel || 'gpt-4o-mini' };
-    } catch {
-      return null;
-    }
-  }
-
-  private decryptApiKey(encrypted: string): string {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-    const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
-    const parts = encrypted.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const authTag = Buffer.from(parts[1]!, 'hex');
-    const encryptedBuf = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-    return decipher.update(encryptedBuf) + decipher.final('utf8');
-  }
-
-  private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
-    apiKey: string,
-    model: string,
-  ): Promise<string> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error (${response.status}): ${errorText}`);
-    }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    return data.choices?.[0]?.message?.content || '';
   }
 
   private normalizeWords(text: string): string[] {

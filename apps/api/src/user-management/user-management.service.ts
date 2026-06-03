@@ -10,6 +10,16 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import type { Prisma } from '@prisma/client';
 import type { QueryUsersDto } from './dto';
+import type {
+  BulkProvisionUsers,
+  BulkProvisionUserResult,
+  BulkProvisionUsersResponse,
+  BulkEnroll,
+  BulkEnrollResultRow,
+  BulkEnrollResponse,
+  ResetStudentPassword,
+  ResetStudentPasswordResponse,
+} from '@ats/shared';
 
 function generateTemporaryPassword(): string {
   const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -629,6 +639,93 @@ export class UserManagementService {
     return { created, alreadyExisted, failed, results };
   }
 
+  // ─── Teacher-issued password reset (prompt 05) ─────────────────
+  //
+  // The caller (teacher/admin, role-checked by RolesGuard at the
+  // controller) supplies the new plaintext password directly. We:
+  //   1. Re-verify the teacher actually has access to this student
+  //      (i.e. the student is enrolled in at least one of their
+  //      courses). Admins bypass this check.
+  //   2. Re-hash with bcryptjs at salt rounds 10 — same library and
+  //      cost factor used everywhere else in this codebase (register,
+  //      bulk-provision, resendInvitation), so a hash produced here is
+  //      indistinguishable from any other.
+  //   3. Set `isTemporaryPassword = true` so the teacher roster still
+  //      shows the "Temp pwd" badge — useful as a visual hint that the
+  //      teacher just touched this account. There is intentionally NO
+  //      force-rotate-on-login enforcement (prompt 05 removed that
+  //      flow); the flag is purely informational now.
+  //
+  // We DO NOT echo the plaintext password back to the client. The
+  // teacher already knows what they typed and we don't want it landing
+  // in any analytics/log replay surface.
+  async resetStudentPassword(
+    callerId: string,
+    studentId: string,
+    dto: ResetStudentPassword,
+  ): Promise<ResetStudentPasswordResponse> {
+    const student = await this.prisma.user.findUnique({
+      where: { id: studentId },
+      select: { id: true, email: true, role: true },
+    });
+    if (!student) {
+      throw new NotFoundException(`User ${studentId} not found`);
+    }
+    // Only students get teacher-issued passwords. Refuse on
+    // teacher/admin accounts so a malicious teacher can't pivot to
+    // someone else's privileged account through this route.
+    if (student.role !== 'student') {
+      throw new ForbiddenException(
+        'Teacher-issued password reset is only available for student accounts',
+      );
+    }
+
+    const caller = await this.prisma.user.findUnique({
+      where: { id: callerId },
+      select: { role: true },
+    });
+    if (!caller) {
+      throw new ForbiddenException('Caller not found');
+    }
+
+    // Admins can reset any student. Teachers can only reset students
+    // who are currently enrolled in at least one of their courses —
+    // mirrors the access scoping used in getStudentDetail().
+    if (caller.role !== 'admin') {
+      const teacherCourses = await this.prisma.course.findMany({
+        where: { teacherId: callerId },
+        select: { id: true },
+      });
+      const courseIds = teacherCourses.map((c) => c.id);
+
+      const sharedEnrollment = await this.prisma.enrollment.findFirst({
+        where: { studentId, courseId: { in: courseIds }, status: 'ACTIVE' },
+      });
+      if (!sharedEnrollment) {
+        throw new ForbiddenException(
+          'You can only reset passwords for students enrolled in your courses',
+        );
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: studentId },
+      data: {
+        passwordHash,
+        isTemporaryPassword: true,
+        passwordChangedAt: new Date(),
+      },
+    });
+
+    return {
+      userId: student.id,
+      email: student.email,
+      message: 'Password reset. Share the new password with the student manually.',
+    };
+  }
+
   async resendInvitation(teacherId: string, studentId: string) {
     // Verify access
     const teacherCourses = await this.prisma.course.findMany({
@@ -672,6 +769,323 @@ export class UserManagementService {
       emailSent: false,
       message: 'New temporary password generated. Please share it manually.',
     };
+  }
+
+  // ─── Bulk Provisioning (prompt 02) ──────────────────────
+  //
+  // Teacher-driven creation of N users at once from a spreadsheet
+  // (email, loginId, password, optional name/role). Hashes every
+  // password with the same bcryptjs library used in AuthService —
+  // plaintext is never logged or returned. Per-row results so the UI
+  // can mark which rows succeeded/failed without losing the rest of
+  // the batch on a single conflict.
+  //
+  // When `enrollCourseId` is supplied, every successfully-resolved row
+  // (newly created OR existing user matched by email/loginId) is also
+  // enrolled in the course. Idempotent via the [studentId, courseId]
+  // unique constraint.
+
+  async bulkProvisionUsers(
+    teacherId: string,
+    dto: BulkProvisionUsers,
+  ): Promise<BulkProvisionUsersResponse> {
+    // If enrollCourseId was passed, verify ownership upfront. This
+    // also protects against teachers accidentally enrolling users into
+    // courses they don't own.
+    let enrollCourseId: string | undefined;
+    if (dto.enrollCourseId) {
+      const course = await this.prisma.course.findUnique({
+        where: { id: dto.enrollCourseId },
+        select: { id: true, teacherId: true },
+      });
+      if (!course) {
+        throw new NotFoundException(`Course ${dto.enrollCourseId} not found`);
+      }
+      // Admins can enroll into any course; teachers only their own.
+      const teacher = await this.prisma.user.findUnique({
+        where: { id: teacherId },
+        select: { role: true },
+      });
+      if (teacher?.role !== 'admin' && course.teacherId !== teacherId) {
+        throw new ForbiddenException('You can only enroll into your own courses');
+      }
+      enrollCourseId = course.id;
+    }
+
+    // Pre-scan: detect within-batch duplicate emails/loginIds so we
+    // mark them as errors instead of letting only the first one win.
+    const emailCount = new Map<string, number>();
+    const loginIdCount = new Map<string, number>();
+    for (const row of dto.rows) {
+      const e = row.email.toLowerCase();
+      emailCount.set(e, (emailCount.get(e) || 0) + 1);
+      loginIdCount.set(row.loginId, (loginIdCount.get(row.loginId) || 0) + 1);
+    }
+
+    const results: BulkProvisionUserResult[] = [];
+    let createdCount = 0;
+    let skippedCount = 0;
+    let erroredCount = 0;
+    let enrolledCount = 0;
+
+    for (let i = 0; i < dto.rows.length; i++) {
+      const row = dto.rows[i]!;
+      const emailLower = row.email.toLowerCase();
+
+      const baseResult: BulkProvisionUserResult = {
+        rowIndex: i,
+        email: row.email,
+        loginId: row.loginId,
+        status: 'error',
+      };
+
+      // In-batch duplicate guards. Only the first occurrence is
+      // allowed through; subsequent duplicates error.
+      if ((emailCount.get(emailLower) || 0) > 1) {
+        const firstIndex = dto.rows.findIndex((r) => r.email.toLowerCase() === emailLower);
+        if (firstIndex !== i) {
+          results.push({
+            ...baseResult,
+            status: 'error',
+            message: `Duplicate email in batch (also appears at row ${firstIndex + 1})`,
+          });
+          erroredCount++;
+          continue;
+        }
+      }
+      if ((loginIdCount.get(row.loginId) || 0) > 1) {
+        const firstIndex = dto.rows.findIndex((r) => r.loginId === row.loginId);
+        if (firstIndex !== i) {
+          results.push({
+            ...baseResult,
+            status: 'error',
+            message: `Duplicate loginId in batch (also appears at row ${firstIndex + 1})`,
+          });
+          erroredCount++;
+          continue;
+        }
+      }
+
+      try {
+        // Look up by email AND by loginId — if either matches, treat
+        // as an existing-user skip. The two lookups are separate so
+        // we can report which column conflicted.
+        const [byEmail, byLoginId] = await Promise.all([
+          this.prisma.user.findUnique({
+            where: { email: emailLower },
+            select: { id: true, email: true, loginId: true },
+          }),
+          this.prisma.user.findUnique({
+            where: { loginId: row.loginId },
+            select: { id: true, email: true, loginId: true },
+          }),
+        ]);
+
+        // Conflict cases first: an email collides with one user and a
+        // loginId collides with a DIFFERENT user → can't safely
+        // assign loginId to either, so it's an error.
+        if (byEmail && byLoginId && byEmail.id !== byLoginId.id) {
+          results.push({
+            ...baseResult,
+            status: 'error',
+            message: 'Email and loginId map to different existing users',
+          });
+          erroredCount++;
+          continue;
+        }
+
+        const existing = byEmail || byLoginId;
+        let userId: string;
+
+        if (existing) {
+          // Already exists. We don't overwrite password and we don't
+          // change the loginId (a teacher silently mutating someone
+          // else's account is a footgun). If the existing row lacks a
+          // loginId but the email matches, we DO populate the
+          // loginId — that's a non-destructive enrichment.
+          if (byEmail && !byEmail.loginId && (!byLoginId || byLoginId.id === byEmail.id)) {
+            await this.prisma.user.update({
+              where: { id: byEmail.id },
+              data: { loginId: row.loginId },
+            });
+          }
+          userId = existing.id;
+          results.push({
+            ...baseResult,
+            status: 'skipped',
+            userId,
+            message: 'User already exists; no changes to password',
+          });
+          skippedCount++;
+        } else {
+          const passwordHash = await bcrypt.hash(row.password, 10);
+          const created = await this.prisma.user.create({
+            data: {
+              email: emailLower,
+              loginId: row.loginId,
+              passwordHash,
+              name: row.name?.trim() || row.loginId,
+              role: row.role || 'student',
+              isTemporaryPassword: true,
+              invitedBy: teacherId,
+              invitedAt: new Date(),
+            },
+            select: { id: true },
+          });
+          userId = created.id;
+          results.push({
+            ...baseResult,
+            status: 'created',
+            userId,
+          });
+          createdCount++;
+        }
+
+        // Optional enrollment for THIS row. Only attempt for student
+        // accounts — refuse to enroll teachers/admins as students.
+        if (enrollCourseId) {
+          const enrollRes = await this.enrollOne(userId, enrollCourseId);
+          if (enrollRes.status === 'enrolled' || enrollRes.status === 'reactivated') {
+            enrolledCount++;
+          }
+          const last = results[results.length - 1]!;
+          last.enrollment = {
+            status: enrollRes.status,
+            message: enrollRes.message,
+          };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        // NEVER include the plaintext password in the error message.
+        results.push({
+          ...baseResult,
+          status: 'error',
+          message,
+        });
+        erroredCount++;
+        this.logger.warn(
+          `bulkProvisionUsers row ${i} failed for email=${emailLower}: ${message}`,
+        );
+      }
+    }
+
+    return {
+      results,
+      summary: {
+        created: createdCount,
+        skipped: skippedCount,
+        errored: erroredCount,
+        ...(enrollCourseId ? { enrolled: enrolledCount } : {}),
+      },
+    };
+  }
+
+  // ─── Bulk Enrollment (prompt 02) ─────────────────────────
+  //
+  // Idempotent enrollment of N users into a single course. The
+  // single-enroll endpoint (`EnrollmentsService.create`) throws on
+  // duplicates; this variant skips them and reports per-row results
+  // so a teacher's UI doesn't have to do N separate POSTs.
+
+  async bulkEnroll(teacherId: string, dto: BulkEnroll): Promise<BulkEnrollResponse> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: dto.courseId },
+      select: { id: true, teacherId: true },
+    });
+    if (!course) {
+      throw new NotFoundException(`Course ${dto.courseId} not found`);
+    }
+    const teacher = await this.prisma.user.findUnique({
+      where: { id: teacherId },
+      select: { role: true },
+    });
+    if (teacher?.role !== 'admin' && course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only enroll into your own courses');
+    }
+
+    const results: BulkEnrollResultRow[] = [];
+    let enrolled = 0;
+    let alreadyEnrolled = 0;
+    let errored = 0;
+
+    // De-dupe userIds while preserving order so the per-row UI feedback
+    // stays meaningful.
+    const seen = new Set<string>();
+    for (const userId of dto.userIds) {
+      if (seen.has(userId)) continue;
+      seen.add(userId);
+
+      const res = await this.enrollOne(userId, course.id);
+      const row: BulkEnrollResultRow = {
+        userId,
+        status: res.status,
+      };
+      if (res.enrollmentId) row.enrollmentId = res.enrollmentId;
+      if (res.message) row.message = res.message;
+      results.push(row);
+
+      if (res.status === 'enrolled' || res.status === 'reactivated') enrolled++;
+      else if (res.status === 'already_enrolled') alreadyEnrolled++;
+      else if (res.status === 'error') errored++;
+    }
+
+    return {
+      results,
+      summary: { enrolled, alreadyEnrolled, errored },
+    };
+  }
+
+  // Single-user enrollment with idempotent semantics. Used by both
+  // bulkProvisionUsers (when enrollCourseId is set) and bulkEnroll.
+  // Returns a discriminated status so the caller can aggregate.
+  private async enrollOne(
+    userId: string,
+    courseId: string,
+  ): Promise<{
+    status: 'enrolled' | 'already_enrolled' | 'reactivated' | 'error' | 'skipped';
+    enrollmentId?: string;
+    message?: string;
+  }> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true },
+      });
+      if (!user) {
+        return { status: 'error', message: 'User not found' };
+      }
+      if (user.role !== 'student') {
+        return { status: 'skipped', message: 'User is not a student' };
+      }
+
+      const existing = await this.prisma.enrollment.findUnique({
+        where: { studentId_courseId: { studentId: userId, courseId } },
+      });
+
+      if (existing) {
+        if (existing.status === 'ACTIVE') {
+          return {
+            status: 'already_enrolled',
+            enrollmentId: existing.id,
+          };
+        }
+        const updated = await this.prisma.enrollment.update({
+          where: { id: existing.id },
+          data: { status: 'ACTIVE' },
+        });
+        return { status: 'reactivated', enrollmentId: updated.id };
+      }
+
+      const created = await this.prisma.enrollment.create({
+        data: { studentId: userId, courseId, status: 'ACTIVE' },
+      });
+      return { status: 'enrolled', enrollmentId: created.id };
+    } catch (err) {
+      return {
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
   }
 
   // ─── Pricing ────────────────────────────────────────────

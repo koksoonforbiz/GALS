@@ -73,6 +73,53 @@ export default function RichTextEditor({
   const lastSavedRef = useRef(content);
   const editorRef = useRef<HTMLDivElement>(null);
 
+  // Mirror the changing props into refs so `debounceSave` can stay
+  // referentially stable (empty deps) while still calling the LATEST
+  // onSave / using the LATEST autoSaveMs / respecting the LATEST
+  // readOnly. Without this we'd hit one of two bugs:
+  //
+  //   - List `[onSave, autoSaveMs, readOnly]` in deps → debounceSave
+  //     identity churns on every parent re-render, but useEditor's
+  //     onUpdate closure (created exactly once on mount) keeps calling
+  //     the FIRST debounceSave, so prop changes silently desync.
+  //
+  //   - Skip deps entirely → stale closure.
+  //
+  // Refs sidestep both.
+  const onSaveRef = useRef(onSave);
+  const autoSaveMsRef = useRef(autoSaveMs);
+  const readOnlyRef = useRef(readOnly);
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+  useEffect(() => {
+    autoSaveMsRef.current = autoSaveMs;
+  }, [autoSaveMs]);
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+  }, [readOnly]);
+
+  // Autosave with debounce. MUST be declared before `useEditor` —
+  // tiptap can fire `onUpdate` synchronously during initialization
+  // (e.g. when seeding initial content), which would otherwise hit
+  // the temporal dead zone for `debounceSave` and crash the entire
+  // editor render. Stable identity (empty deps) means useEditor's
+  // captured closure stays valid for the life of the component.
+  const debounceSave = useCallback((html: string) => {
+    if (readOnlyRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    setSaveStatus('idle');
+    saveTimerRef.current = setTimeout(() => {
+      if (html !== lastSavedRef.current) {
+        setSaveStatus('saving');
+        onSaveRef.current(html);
+        lastSavedRef.current = html;
+        setTimeout(() => setSaveStatus('saved'), 300);
+        setTimeout(() => setSaveStatus('idle'), 2500);
+      }
+    }, autoSaveMsRef.current);
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -101,25 +148,6 @@ export default function RichTextEditor({
       debounceSave(ed.getHTML());
     },
   });
-
-  // Autosave with debounce
-  const debounceSave = useCallback(
-    (html: string) => {
-      if (readOnly) return;
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      setSaveStatus('idle');
-      saveTimerRef.current = setTimeout(() => {
-        if (html !== lastSavedRef.current) {
-          setSaveStatus('saving');
-          onSave(html);
-          lastSavedRef.current = html;
-          setTimeout(() => setSaveStatus('saved'), 300);
-          setTimeout(() => setSaveStatus('idle'), 2500);
-        }
-      }, autoSaveMs);
-    },
-    [onSave, autoSaveMs, readOnly],
-  );
 
   // Update content when prop changes externally (e.g. AI generation)
   useEffect(() => {

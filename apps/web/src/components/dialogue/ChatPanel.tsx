@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { MessageSquare, SendHorizontal } from 'lucide-react';
+import { ChatMessageContent } from '../ChatMessageContent';
 import { CitationChip } from './CitationChip';
 import type { Citation } from './CitationChip';
 
@@ -122,34 +121,34 @@ export function ChatPanel({
     [handleSend],
   );
 
-  // Parse inline citations from message content
+  // Render assistant message content with full GFM + math + code support
+  // via the shared `ChatMessageContent`. Citation chips render *after*
+  // the body when present; the previous implementation split the text on
+  // the citation marker and ran a separate markdown pass per fragment,
+  // which broke tables, multi-line code blocks, and block math whenever
+  // a citation landed mid-element. Citations now appear as a row of
+  // chips below the message — simpler, and the user can still click
+  // through to the source.
   const renderMessageContent = (msg: DialogueMessage) => {
-    const content = msg.content;
-    // Split on citation patterns [Source: DocName, p.X] or [Source N: DocName, p.X]
-    const citationRegex = /\[Source\s*\d*:\s*[^\]]+\]/g;
-    const parts = content.split(citationRegex);
-    const matches = content.match(citationRegex) || [];
-
-    if (matches.length === 0) {
-      return (
-        <div className="prose prose-sm max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-        </div>
-      );
-    }
-
+    // Stage 06 — accept both text citations (`[Source N: name, p.X]`)
+    // and visual citations (`[Figure: name, p.X]`) so the chip row
+    // surfaces references to retrieved figures/charts/tables too.
+    const citationRegex = /\[(?:Source\s*\d*|Figure):\s*[^\]]+\]/g;
+    const matches = msg.content.match(citationRegex) || [];
+    // Strip the inline [Source: …] / [Figure: …] markers from the
+    // rendered text — the chips below carry the same information and
+    // the inline form clutters tables / equations.
+    const bodyText = msg.content.replace(citationRegex, '').replace(/\s+$/g, '');
     return (
       <div>
-        {parts.map((part, i) => (
-          <span key={i}>
-            <span className="prose prose-sm max-w-none inline">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{part}</ReactMarkdown>
-            </span>
-            {matches[i] && msg.citations && msg.citations[i] && (
-              <CitationChip citation={msg.citations[i]} onClick={onCitationClick} />
-            )}
-          </span>
-        ))}
+        <ChatMessageContent content={bodyText} className="text-sm" />
+        {matches.length > 0 && msg.citations && msg.citations.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {msg.citations.map((c, i) => (
+              <CitationChip key={i} citation={c} onClick={onCitationClick} />
+            ))}
+          </div>
+        )}
       </div>
     );
   };

@@ -12,11 +12,20 @@ import { ActivityAction, ActivityEvent } from './types';
 interface ActivityLogContextValue {
   sessionId: string | null;
   track: (action: ActivityAction, extras?: Omit<ActivityEvent, 'action' | 'occurredAt'>) => void;
+  /**
+   * Force the buffered events to be POSTed immediately instead of waiting
+   * for the 30s timer. Use this when latency-to-DB matters, e.g. the
+   * floating chatbot whose events power the teacher's text-mining and
+   * conversation views — those need to be visible the moment the teacher
+   * opens the session log, not 30 seconds after the student stops typing.
+   */
+  flush: () => Promise<void>;
 }
 
 const ActivityLogContext = createContext<ActivityLogContextValue>({
   sessionId: null,
   track: () => {},
+  flush: async () => {},
 });
 
 const SESSION_KEY = 'ats_session_id';
@@ -141,7 +150,7 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   }, [getToken]);
 
   return (
-    <ActivityLogContext.Provider value={{ sessionId, track }}>
+    <ActivityLogContext.Provider value={{ sessionId, track, flush }}>
       {children}
     </ActivityLogContext.Provider>
   );

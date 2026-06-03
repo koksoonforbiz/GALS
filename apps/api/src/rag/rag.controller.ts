@@ -251,16 +251,46 @@ export class RagController {
   @Roles('teacher', 'admin')
   async saveLlmSettings(
     @Request() req: { user: RequestUser },
-    @Body() body: { provider: string; apiKey: string; model?: string },
+    @Body() body: { provider: string; apiKey: string; model?: string; embeddingModel?: string },
   ) {
     if (!body.provider?.trim()) throw new BadRequestException('Provider is required');
     if (!body.apiKey?.trim()) throw new BadRequestException('API key is required');
-    return this.llmService.saveApiKey(req.user.id, body.provider, body.apiKey, body.model);
+    return this.llmService.saveApiKey(
+      req.user.id,
+      body.provider,
+      body.apiKey,
+      body.model,
+      body.embeddingModel,
+    );
   }
 
   @Delete('llm-settings')
   @Roles('teacher', 'admin')
   async removeLlmSettings(@Request() req: { user: RequestUser }) {
     return this.llmService.removeApiKey(req.user.id);
+  }
+
+  // ─── Cohere Rerank Key (Stage 04 — separate vendor) ────────
+  //
+  // A separate POST/DELETE pair (vs reusing /llm-settings) because
+  // the Cohere key is independent from the chat LLM key. A teacher
+  // can keep their chat key on OpenAI and opt-in to Cohere reranking
+  // without re-saving everything; they can also revoke Cohere
+  // without affecting chat. GET status lives on /llm-settings.
+
+  @Post('llm-settings/cohere')
+  @Roles('teacher', 'admin')
+  async saveCohereKey(
+    @Request() req: { user: RequestUser },
+    @Body() body: { apiKey: string },
+  ) {
+    if (!body.apiKey?.trim()) throw new BadRequestException('Cohere API key is required');
+    return this.llmService.saveCohereApiKey(req.user.id, body.apiKey);
+  }
+
+  @Delete('llm-settings/cohere')
+  @Roles('teacher', 'admin')
+  async removeCohereKey(@Request() req: { user: RequestUser }) {
+    return this.llmService.removeCohereApiKey(req.user.id);
   }
 }

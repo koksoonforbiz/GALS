@@ -9,6 +9,8 @@ const ACTION_COLORS: Record<string, string> = {
   DIALOGUE_SESSION_STARTED: 'bg-teal-400',
   DIALOGUE_MESSAGE_SENT: 'bg-teal-300',
   DIALOGUE_MESSAGE_RECEIVED: 'bg-teal-200',
+  CHATBOT_MESSAGE_SENT: 'bg-indigo-300',
+  CHATBOT_MESSAGE_RECEIVED: 'bg-indigo-200',
   INTERVENTION_TRIGGERED: 'bg-purple-400',
   INTERVENTION_COMPLETED: 'bg-purple-600',
   MASTERY_UPDATED: 'bg-green-400',

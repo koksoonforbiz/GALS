@@ -1,13 +1,34 @@
 export function ConversationTab({ logs }: { logs: any[] }) {
+  const CHAT_ACTIONS = [
+    'DIALOGUE_MESSAGE_SENT',
+    'DIALOGUE_MESSAGE_RECEIVED',
+    'CHATBOT_MESSAGE_SENT',
+    'CHATBOT_MESSAGE_RECEIVED',
+  ];
   const messages = logs
-    .filter((l) => ['DIALOGUE_MESSAGE_SENT', 'DIALOGUE_MESSAGE_RECEIVED'].includes(l.action))
-    .map((l) => ({
-      id: l.id,
-      role: (l.metadata as any)?.role ?? 'unknown',
-      text: (l.metadata as any)?.messageText ?? '',
-      timestamp: l.occurredAt,
-      dialogueSessionId: l.dialogueSessionId,
-    }));
+    .filter((l) => CHAT_ACTIONS.includes(l.action))
+    .map((l) => {
+      const meta = (l.metadata as Record<string, unknown> | null) ?? {};
+      // Role: derive from the action when metadata.role is absent.
+      const role =
+        (typeof meta.role === 'string' && meta.role) ||
+        (l.action.endsWith('_SENT') ? 'student' : 'assistant');
+      // Text: dialogue mode stores `messageText`; standard-mode chatbot
+      // stores `message` (sent) or `reply` (received).
+      const text =
+        (typeof meta.messageText === 'string' && meta.messageText) ||
+        (typeof meta.message === 'string' && meta.message) ||
+        (typeof meta.reply === 'string' && meta.reply) ||
+        '';
+      return {
+        id: l.id,
+        role,
+        text,
+        timestamp: l.occurredAt,
+        dialogueSessionId: l.dialogueSessionId,
+        action: l.action,
+      };
+    });
 
   if (messages.length === 0) {
     return <p className="text-xs text-gray-400">No conversation history in this session.</p>;

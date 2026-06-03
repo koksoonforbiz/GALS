@@ -159,7 +159,7 @@ export function SessionTimelinePage() {
           <MessageSquare size={16} className="text-blue-500" aria-hidden="true" />
           <h3 className="font-semibold text-gray-700">Text-mining</h3>
         </div>
-        {sessionId && <SessionTextMiningTab sessionId={sessionId} />}
+        {sessionId && <SessionTextMiningTab sessionId={sessionId} scope="activity" />}
       </div>
     </div>
   );

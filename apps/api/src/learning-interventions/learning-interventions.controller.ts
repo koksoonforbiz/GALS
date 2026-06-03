@@ -85,6 +85,25 @@ export class LearningInterventionsController {
     return this.service.deletePromptConfig(courseId, interventionType);
   }
 
+  // P4 — Practice Testing default counts editor. Separate from the
+  // prompt PUT so we don't pollute the system-prompt validation
+  // path with optional numeric body fields. Always targets the
+  // PRACTICE_TESTING row.
+  @Patch('prompt-config/:courseId/PRACTICE_TESTING/defaults')
+  @UseGuards(RolesGuard)
+  @Roles('teacher', 'admin')
+  updatePracticeTestDefaults(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Body()
+    body: {
+      defaultMcqCount: number | null;
+      defaultShortAnswerCount: number | null;
+    },
+  ) {
+    return this.service.updatePracticeTestDefaults(courseId, req.user.id, body);
+  }
+
   @Post('prompt-config/preview')
   @UseGuards(RolesGuard)
   @Roles('teacher', 'admin')
@@ -297,7 +316,11 @@ export class LearningInterventionsController {
   // ─── Chat ──────────────────────────────────────────────────
 
   @Post('chat')
-  chat(@Request() req: { user: RequestUser }, @Body() dto: ChatRequestDto) {
-    return this.service.chat(req.user.id, dto);
+  chat(
+    @Request() req: { user: RequestUser },
+    @Body() dto: ChatRequestDto,
+    @SessionId() activitySessionId?: string,
+  ) {
+    return this.service.chat(req.user.id, dto, activitySessionId);
   }
 }

@@ -39,6 +39,61 @@ export const DialogueCourseSettingsSchema = z.object({
   chunkOverlap: z.number().int().min(0).max(512).default(100),
   topKChunks: z.number().int().min(1).max(20).default(8),
   citationMode: z.enum(['inline', 'footnote', 'none']).default('inline'),
+  // Stage 03 (RAG) — per-course override for Anthropic Contextual
+  // Retrieval. When unset (null), `RAG_CONTEXTUAL_RETRIEVAL` env flag
+  // is the source of truth. `true` forces it ON for this course,
+  // `false` forces it OFF. The flag controls BOTH:
+  //   (a) whether ingest computes the 50-100 token blurb and stores
+  //       it on `contextual_text`, and
+  //   (b) whether the embedded + lexical scan use
+  //       `contextual_text || ' ' || text` (vs bare text).
+  // Off-by-default for two reasons: contextualisation adds a per-
+  // chunk LLM call at ingest (one-time cost), and the corpus must be
+  // re-ingested or backfilled for retrieval to actually use the new
+  // signal — both of which deserve a deliberate flip.
+  contextualRetrieval: z.boolean().nullable().optional(),
+  // Stage 04 (RAG) — Final top-k after the cross-encoder reranker.
+  // Two-stage retrieval (`retrieveCandidateK` → rerank → topK) ships
+  // candidateK=30 from RRF into the reranker and then returns this
+  // many docs to the generator. When `RAG_RERANK=false` or no
+  // reranker key is configured per teacher, the no-op fallback
+  // simply preserves the first `rerankTopK` of the RRF order — so
+  // changing this knob is always safe, even with the reranker off.
+  // Range 1-20 mirrors `topKChunks` (latency budget headroom).
+  // Default 8 preserves Stage-03 effective top-k.
+  rerankTopK: z.number().int().min(1).max(20).default(8),
+  // Stage 05 (RAG) — per-course override for the multimodal PDF
+  // ingest pipeline. When unset (null), `RAG_MULTIMODAL_PDF` env
+  // flag is the source of truth. `true` forces multimodal ON for
+  // this course, `false` forces it OFF. Controls BOTH:
+  //   (a) whether student/teacher PDF ingest rasterizes pages and
+  //       creates `page_image` chunks alongside text, and
+  //   (b) whether the retriever surfaces image chunks (when off,
+  //       no `page_image` rows exist for this corpus, so retrieval
+  //       is byte-identical to Stage 04).
+  // Off-by-default for two reasons: rasterizing + Cohere Embed 4
+  // image embeddings + VLM captions cost real money per page (3
+  // API calls per page) and storage/CPU per PDF; and the operator
+  // should opt in once they've seeded `rag:eval`'s figure/table
+  // gold questions and confirmed the lift.
+  multimodalPdf: z.boolean().nullable().optional(),
+  // Stage 06 (RAG) — per-course override for multimodal grounded
+  // generation. When unset (null), `RAG_MULTIMODAL_GENERATION` env
+  // flag is the source of truth. `true` forces image attachment ON
+  // for this course, `false` forces it OFF (image chunks degrade to
+  // caption-as-text — Stage 05 behaviour). Off-by-default at the
+  // env level because passing image bytes to the LLM costs more
+  // input tokens per call than text-only context.
+  multimodalGeneration: z.boolean().nullable().optional(),
+  // Stage 06 (RAG) — per-course override for the post-generation
+  // faithfulness self-check. NULL ⇒ defer to env / per-surface
+  // defaults (chat OFF, intervention ON). When set, takes
+  // precedence over env. Adds one extra LLM call per generation.
+  faithfulnessCheck: z.boolean().nullable().optional(),
+  // Stage 06 (RAG) — per-course cap on attached images per call.
+  // NULL ⇒ defer to `RAG_MAX_IMAGES_PER_CALL` env (default 4).
+  // Caller clamps to [0, 10] so accidental misconfig is bounded.
+  maxImagesPerCall: z.number().int().min(0).max(10).nullable().optional(),
 });
 
 export type DialogueCourseSettings = z.infer<typeof DialogueCourseSettingsSchema>;

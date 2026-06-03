@@ -2,13 +2,7 @@
 
 ## 1. Origin and intent
 
-This repo started from:
-
-`C:\Users\npanh\Downloads\GALS-claude-text-mining-prompt-editor\GALS-claude-text-mining-prompt-editor`
-
-The imported base landed in this repo as commit `9639418` (`Initial commit`).
-
-After that, the main additions were:
+The main additions were:
 
 1. A session replay pipeline so teachers can replay what the student saw and did.
 2. More session data being persisted into Prisma/PostgreSQL for replay and analysis.

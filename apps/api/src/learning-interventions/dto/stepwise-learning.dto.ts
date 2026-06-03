@@ -1,9 +1,12 @@
 /** Generate stepwise learning steps from selected text */
 export interface GenerateStepwiseDto {
-  selectedText: string; // min 20 chars
+  /** Either ≥20 chars or empty — empty triggers RAG-over-course fallback. */
+  selectedText: string;
   courseId: string;
   contentId?: string;
   pageType?: string;
+  /** Optional topic hint for the RAG fallback. */
+  topic?: string;
 }
 
 /** Submit a comprehension check response */

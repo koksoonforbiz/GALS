@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UserRole } from '@ats/shared';
+import { getChatModel, isSelectable, type LlmProvider } from '../llm/model-registry';
 
 @Injectable()
 export class CoursesService {
@@ -98,10 +99,54 @@ export class CoursesService {
         description: true,
         bannerBlobKey: true,
         createdAt: true,
+        // Prompt 03: surface the self-enroll flag so the student
+        // CatalogPage can hide the Enroll button when it's off.
+        // (Backend `selfEnroll()` still enforces it as the source of
+        // truth — this is purely cosmetic UI hiding.)
+        allowStudentSelfEnroll: true,
         teacher: { select: { id: true, name: true } },
         _count: { select: { modules: true, enrollments: true } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // Prompt 03: per-course enrollment policy update. Lives next to the
+  // existing per-course PATCH but exposed as a dedicated method so the
+  // controller can validate the partial DTO independently.
+  async updateEnrollmentPolicy(
+    id: string,
+    teacherId: string,
+    flags: { allowStudentSelfEnroll?: boolean; allowStudentSelfDrop?: boolean },
+  ) {
+    const course = await this.prisma.course.findUnique({
+      where: { id },
+      select: { id: true, teacherId: true },
+    });
+    if (!course) throw new NotFoundException(`Course ${id} not found`);
+    const teacher = await this.prisma.user.findUnique({
+      where: { id: teacherId },
+      select: { role: true },
+    });
+    if (teacher?.role !== 'admin' && course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only update settings for your own courses');
+    }
+
+    return this.prisma.course.update({
+      where: { id },
+      data: {
+        ...(flags.allowStudentSelfEnroll !== undefined && {
+          allowStudentSelfEnroll: flags.allowStudentSelfEnroll,
+        }),
+        ...(flags.allowStudentSelfDrop !== undefined && {
+          allowStudentSelfDrop: flags.allowStudentSelfDrop,
+        }),
+      },
+      select: {
+        id: true,
+        allowStudentSelfEnroll: true,
+        allowStudentSelfDrop: true,
+      },
     });
   }
 
@@ -264,6 +309,29 @@ export class CoursesService {
     const parsed = DialogueCourseSettingsSchema.safeParse(merged);
     if (!parsed.success) {
       throw new BadRequestException(`Invalid DBL settings: ${parsed.error.message}`);
+    }
+
+    // Stage 2 LLM upgrade: validate the chat model against the registry,
+    // not just trust whatever string the client posted. `fallback`
+    // provider (no API key) skips this — it has no real model id.
+    if (parsed.data.llmProvider !== 'fallback') {
+      const provider = parsed.data.llmProvider as LlmProvider;
+      const spec = getChatModel(parsed.data.llmModel);
+      if (!spec) {
+        throw new BadRequestException(
+          `Unknown chat model "${parsed.data.llmModel}". Pick a model from /llm/models?provider=${provider}.`,
+        );
+      }
+      if (spec.provider !== provider) {
+        throw new BadRequestException(
+          `Chat model "${parsed.data.llmModel}" belongs to provider "${spec.provider}", not "${provider}".`,
+        );
+      }
+      if (!isSelectable(spec.id)) {
+        throw new BadRequestException(
+          `Chat model "${parsed.data.llmModel}" is retired and can no longer be selected.`,
+        );
+      }
     }
 
     // If provider isn't 'fallback', check LLM credentials

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { X, ExternalLink, Inbox, Loader2 } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { TextMiningSessionScope } from '../hooks/useDashboard';
 
 interface TraceDrawerProps {
   sessionId: string;
+  scope: TextMiningSessionScope;
   constructKey: string;
   displayName: string;
   onClose: () => void;
@@ -22,7 +24,21 @@ interface Detection {
   promptVersion: number;
 }
 
-export function TraceDrawer({ sessionId, constructKey, displayName, onClose }: TraceDrawerProps) {
+function getDetectionsPath(scope: TextMiningSessionScope, sessionId: string, params: string) {
+  const base =
+    scope === 'activity'
+      ? `/text-mining/activity-sessions/${sessionId}/detections`
+      : `/text-mining/sessions/${sessionId}/detections`;
+  return `${base}?${params}`;
+}
+
+export function TraceDrawer({
+  sessionId,
+  scope,
+  constructKey,
+  displayName,
+  onClose,
+}: TraceDrawerProps) {
   const [items, setItems] = useState<Detection[]>([]);
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -38,9 +54,7 @@ export function TraceDrawer({ sessionId, constructKey, displayName, onClose }: T
       params.set('limit', '50');
 
       api
-        .get<{ items: Detection[]; nextCursor: string | null }>(
-          `/text-mining/sessions/${sessionId}/detections?${params}`,
-        )
+        .get<{ items: Detection[]; nextCursor: string | null }>(getDetectionsPath(scope, sessionId, params.toString()))
         .then((res) => {
           if (cursor) {
             setItems((prev) => [...prev, ...res.items]);
@@ -52,7 +66,7 @@ export function TraceDrawer({ sessionId, constructKey, displayName, onClose }: T
         .catch(() => {})
         .finally(() => setLoading(false));
     },
-    [sessionId, constructKey, labelFilter],
+    [scope, sessionId, constructKey, labelFilter],
   );
 
   useEffect(() => {

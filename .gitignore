@@ -51,3 +51,10 @@ uploads/
 
 # Windows artifacts
 nul
+
+# Local Postgres backups — too big for git AND may contain real student data
+backup_*.sql
+*.dump
+
+# Test env (test-only creds, but still keep out of git)
+.env.test

@@ -4,7 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../lib/api';
 
 export function Login() {
-  const [email, setEmail] = useState('');
+  // Prompt 05: a single identifier input that accepts either the
+  // user's email OR their teacher-assigned login ID. Backend
+  // (`AuthService.login`) routes the value to the right `users.*`
+  // unique index based on whether it contains an `@`.
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,7 +30,7 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login(identifier.trim(), password);
       // Navigation happens via useEffect in AuthContext
     } catch (err) {
       if (err instanceof ApiError) {
@@ -43,7 +47,10 @@ export function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
-          <h1 className="text-center text-3xl font-bold text-gray-900">Adaptive Tutoring System</h1>
+          <h1 className="text-center text-4xl font-bold tracking-tight text-gray-900">GALS</h1>
+          <p className="mt-2 text-center text-base text-gray-600">
+            Generative AI Learning System
+          </p>
           <h2 className="mt-6 text-center text-2xl font-semibold text-gray-700">
             Sign in to your account
           </h2>
@@ -58,19 +65,23 @@ export function Login() {
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
+              <label htmlFor="identifier" className="block text-sm font-medium text-gray-700">
+                Email or login ID
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="identifier"
+                name="identifier"
+                type="text"
+                autoComplete="username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                placeholder="you@example.com or your login ID"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Use the email you registered with, or the login ID your teacher gave you.
+              </p>
             </div>
 
             <div>

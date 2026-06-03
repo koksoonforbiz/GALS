@@ -1,7 +1,123 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePageContext } from '../../contexts/PageContext';
+import { useActivityLog } from '../../lib/activity-log';
 import { api } from '../../lib/api';
+
+/**
+ * Strip HTML tags from a string. Keeps text content of the elements but
+ * drops `<p>`, `<h1>`, etc. and any attributes. Decodes a few common HTML
+ * entities so the output reads naturally to the LLM.
+ */
+function stripHtmlToText(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<\/?[A-Za-z][\w.-]*[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Walk a BlockDocument JSON value (the shape the AI generator writes into
+ * `contentMdx`: `{ version: 2, blocks: [{ type, data: { html, ... }, ... }] }`)
+ * and extract human-readable text from every block. Falls back to scanning
+ * arbitrary object trees for `html` / `text` / `caption` string fields so
+ * we tolerate block schema drift without producing garbage.
+ */
+function extractTextFromBlockDocument(doc: unknown): string {
+  const parts: string[] = [];
+  const visit = (node: unknown) => {
+    if (!node) return;
+    if (typeof node === 'string') {
+      const t = node.trim();
+      if (t) parts.push(t);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const x of node) visit(x);
+      return;
+    }
+    if (typeof node === 'object') {
+      const o = node as Record<string, unknown>;
+      // Common text-bearing fields in our block schema. Prioritise html
+      // so we strip tags below; fall back to plain-text equivalents.
+      const textFields = ['html', 'text', 'caption', 'problem', 'solution',
+        'misconception', 'correction', 'question', 'answer', 'explanation'];
+      for (const f of textFields) {
+        if (typeof o[f] === 'string') {
+          parts.push(stripHtmlToText(o[f] as string));
+        }
+      }
+      // Recurse into data + nested arrays/objects (skip the metadata/id
+      // bookkeeping fields entirely so we don't leak block ids etc.).
+      const skip = new Set(['id', 'metadata', 'generationJobId', 'generatedBy', 'version']);
+      for (const [k, v] of Object.entries(o)) {
+        if (skip.has(k)) continue;
+        if (textFields.includes(k)) continue; // already handled above
+        if (typeof v === 'object' && v !== null) visit(v);
+      }
+    }
+  };
+  visit(doc);
+  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Best-effort page content → plain-text conversion for the "use entire page"
+ * intervention fallback. Handles two formats the platform actually uses:
+ *  - BlockDocument JSON (AI-generated lessons: `{ version, blocks: [...] }`)
+ *    — parse and walk, pulling text/html out of every block
+ *  - Real MDX (legacy / hand-authored): strip `<Component/>` tags,
+ *    curly-brace expressions, imports, markdown markers
+ * Returns the cleanest plain text we can produce. Crucially, on the JSON
+ * path we DO NOT run the MDX regex passes — those treat `{...}` as JSX
+ * expressions and butcher the JSON, producing fragments like
+ * `,"metadata":}` that confuse the LLM.
+ */
+function stripMdxToPlainText(mdx: string): string {
+  if (!mdx) return '';
+
+  // Try JSON block document first — that's what AI-generated pages store.
+  const trimmed = mdx.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const text = extractTextFromBlockDocument(parsed);
+      if (text.length > 0) return text;
+    } catch {
+      // Not valid JSON — fall through to the MDX path.
+    }
+  }
+
+  let s = mdx;
+  // Drop import / export statements (frontmatter-style top blocks).
+  s = s.replace(/^(?:import|export)\s+[^\n]+\n/gm, '');
+  // Drop JSX element tags (`<Foo bar="..." />`, `<Foo>`, `</Foo>`) but keep
+  // the inner text. We strip just the angle-bracketed pieces.
+  s = s.replace(/<\/?[A-Za-z][\w.-]*[^>]*>/g, '');
+  // Drop curly-brace JS expressions: `{ foo.bar }`, `{value}`. Keep
+  // multi-line ones too (non-greedy, with newlines).
+  s = s.replace(/\{[\s\S]*?\}/g, '');
+  // Drop markdown link / image syntax — keep the visible label.
+  s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+  // Drop heading hashes, list markers, blockquote angles, code fences.
+  s = s.replace(/^#{1,6}\s+/gm, '');
+  s = s.replace(/^[*\-+]\s+/gm, '');
+  s = s.replace(/^>\s+/gm, '');
+  s = s.replace(/^```[\s\S]*?```$/gm, '');
+  // Collapse runs of whitespace.
+  s = s.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+import { ChatMessageContent } from '../ChatMessageContent';
 import { ReviewTabView } from './ReviewTabView';
 import { PracticeTestingView } from './interventions/PracticeTestingView';
 import { InterrogativeElaborationView } from './interventions/InterrogativeElaborationView';
@@ -27,11 +143,34 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 
-const STRATEGY_META: Record<string, { label: string; mode: ChatbotMode; icon: React.ReactNode; description: string }> = {
-  PRACTICE_TESTING: { label: 'Practice Testing', mode: 'practice-testing', icon: <FlaskConical size={12} />, description: 'Test your knowledge with quiz questions' },
-  DISTRIBUTED_PRACTICE: { label: 'Distributed Practice', mode: 'distributed-practice', icon: <Layers size={12} />, description: 'Create flashcards for spaced repetition' },
-  STEPWISE_LEARNING: { label: 'Stepwise Learning', mode: 'stepwise-learning', icon: <Footprints size={12} />, description: 'Break it down into guided steps' },
-  INTERROGATIVE_ELABORATION: { label: 'Interrogative Elaboration', mode: 'interrogative-elaboration', icon: <MessageCircleQuestion size={12} />, description: 'Explore why and how through Q&A' },
+const STRATEGY_META: Record<
+  string,
+  { label: string; mode: ChatbotMode; icon: React.ReactNode; description: string }
+> = {
+  PRACTICE_TESTING: {
+    label: 'Practice Testing',
+    mode: 'practice-testing',
+    icon: <FlaskConical size={12} />,
+    description: 'Test your knowledge with quiz questions',
+  },
+  DISTRIBUTED_PRACTICE: {
+    label: 'Distributed Practice',
+    mode: 'distributed-practice',
+    icon: <Layers size={12} />,
+    description: 'Create flashcards for spaced repetition',
+  },
+  STEPWISE_LEARNING: {
+    label: 'Stepwise Learning',
+    mode: 'stepwise-learning',
+    icon: <Footprints size={12} />,
+    description: 'Break it down into guided steps',
+  },
+  INTERROGATIVE_ELABORATION: {
+    label: 'Interrogative Elaboration',
+    mode: 'interrogative-elaboration',
+    icon: <MessageCircleQuestion size={12} />,
+    description: 'Explore why and how through Q&A',
+  },
 };
 
 const PAGE_TYPE_LABELS: Record<string, string> = {
@@ -44,19 +183,60 @@ const PAGE_TYPE_LABELS: Record<string, string> = {
 };
 
 interface ChatbotPanelProps {
-  onMinimize: () => void;
-  onToggleMaximize: () => void;
-  isMaximized: boolean;
+  /**
+   * Optional minimize / maximize handlers. Only the floating wrapper
+   * provides these; the docked variant on StudentCourseViewPage leaves
+   * them undefined and the corresponding header buttons disappear.
+   */
+  onMinimize?: () => void;
+  onToggleMaximize?: () => void;
+  isMaximized?: boolean;
 }
 
-export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: ChatbotPanelProps) {
-  const { pageType, courseId, contentId, contentTitle, contentText, selectedText, setSelectedText, clearSelectedText } =
-    usePageContext();
+export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false }: ChatbotPanelProps) {
+  const {
+    pageType,
+    courseId,
+    contentId,
+    contentTitle,
+    contentText,
+    selectedText,
+    setSelectedText,
+    clearSelectedText,
+  } = usePageContext();
+  const { track, sessionId, flush: flushActivityLog } = useActivityLog();
 
   const navigate = useNavigate();
 
+  // Persist chatbot history in sessionStorage so closing/reopening the
+  // floating panel doesn't wipe the conversation. Keyed by sessionId so
+  // a new login starts fresh and different students never see each
+  // other's messages.
+  const storageKey = sessionId ? `chatbot_history_${sessionId}` : null;
+
   const [mode, setMode] = useState<ChatbotMode>('chat');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (!storageKey) return [];
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as Array<ChatMessage & { timestamp: string }>;
+      // Rehydrate Date objects from the JSON string form.
+      return parsed.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
+    } catch {
+      return [];
+    }
+  });
+  // Persist on every change. Cheap because sessionStorage is sync and
+  // chat history rarely exceeds a few KB.
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify(messages));
+    } catch {
+      // Quota errors or sessionStorage unavailable — non-fatal.
+    }
+  }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -112,6 +292,26 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
     setInputValue('');
     setIsSending(true);
 
+    // Log the outbound chat message to activity log so the teacher's
+    // replay timeline shows the student's chatbot conversation. Without
+    // this, standard-mode chatbot interactions never appeared in replay
+    // (only dialogue-mode messages were tracked).
+    track('CHATBOT_MESSAGE_SENT', {
+      courseId: courseId ?? undefined,
+      moduleItemId: contentId ?? undefined,
+      metadata: {
+        message: userMsg.content.slice(0, 1000),
+        hasSelection: Boolean(selectedText && selectedText.length >= 20),
+        selectionLength: selectedText?.length ?? 0,
+        contentTitle: contentTitle ?? null,
+        pageType,
+      },
+    });
+    // Push immediately so the teacher's conversation/text-mining view sees
+    // this message without waiting for the 30s buffer flush. Best-effort;
+    // a failure here just defers persistence to the next timer tick.
+    void flushActivityLog();
+
     if (!courseId) {
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -137,6 +337,7 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
           conversationHistory,
           courseId,
           pageType,
+          contentId: contentId || undefined,
           contentTitle: contentTitle || undefined,
           selectedText: selectedText || undefined,
         },
@@ -150,11 +351,22 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
         suggestedStrategy: result.suggestedStrategy || undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
+      track('CHATBOT_MESSAGE_RECEIVED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        metadata: {
+          reply: result.reply.slice(0, 1000),
+          suggestedStrategy: result.suggestedStrategy ?? null,
+          contentTitle: contentTitle ?? null,
+        },
+      });
+      void flushActivityLog();
     } catch {
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: "Sorry, I couldn't process your message. Try selecting some text and using a learning strategy instead!",
+        content:
+          "Sorry, I couldn't process your message. Try selecting some text and using a learning strategy instead!",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -175,9 +387,20 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
   };
 
   const handleUseEntirePage = () => {
-    if (!pendingStrategy || !contentText) return;
-    setSelectedText(contentText);
-    // Small delay so context updates before the view renders
+    if (!pendingStrategy) return;
+    // Previously this set `selectedText = contentText` (raw MDX), which
+    // sent the LLM a wall of `<Component>` tags + curly braces + import
+    // statements. The LLM treated that markup as the content and
+    // produced noise about syntax — what users perceived as "random
+    // output". Strip to plain text first; if there's nothing extractable
+    // (PDF page, missing contentMdx) clear instead so the backend's
+    // Q2 RAG resolver fires against the course's uploaded materials.
+    const plain = stripMdxToPlainText(contentText ?? '');
+    if (plain.trim().length >= 20) {
+      setSelectedText(plain);
+    } else {
+      clearSelectedText();
+    }
     setTimeout(() => {
       setMode(pendingStrategy);
       setPendingStrategy(null);
@@ -385,20 +608,37 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 text-xs py-8">
-            <div className="mb-2 flex justify-center"><GraduationCap size={28} className="text-gray-400" /></div>
+            <div className="mb-2 flex justify-center">
+              <GraduationCap size={28} className="text-gray-400" />
+            </div>
             <p>Hi! I&apos;m your learning assistant.</p>
-            <p className="mt-1">Ask me anything about your course material, or select text to use a learning strategy.</p>
+            <p className="mt-1">
+              Ask me anything about your course material, or select text to use a learning strategy.
+            </p>
           </div>
         ) : (
           messages.map((msg) => (
             <div key={msg.id}>
-              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
+                  className={`max-w-[80%] min-w-0 overflow-hidden px-3 py-2 rounded-lg text-xs ${
                     msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'user' ? (
+                    /* User bubbles render verbatim — no markdown / math
+                       parsing on the student's own input. Preserves
+                       newlines and avoids accidental rendering of
+                       user-typed markup. */
+                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                  ) : (
+                    /* `min-w-0` + `overflow-hidden` on the bubble are
+                       what let the KaTeX overflow CSS in index.css
+                       actually take effect — without them, the
+                       inline-block math forces the bubble to grow past
+                       80% of the column. */
+                    <ChatMessageContent content={msg.content} className="text-xs" />
+                  )}
                 </div>
               </div>
               {/* Strategy suggestion card */}
@@ -420,7 +660,9 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
                   >
                     {STRATEGY_META[msg.suggestedStrategy]!.icon}
                     <div className="text-left">
-                      <div className="font-medium">Try: {STRATEGY_META[msg.suggestedStrategy]!.label}</div>
+                      <div className="font-medium">
+                        Try: {STRATEGY_META[msg.suggestedStrategy]!.label}
+                      </div>
                       <div className="text-[10px] opacity-75">
                         {STRATEGY_META[msg.suggestedStrategy]!.description}
                       </div>
@@ -450,7 +692,11 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
             How would you like to apply {STRATEGY_META[pendingStrategy]?.label || 'this strategy'}?
           </div>
           <div className="flex flex-col gap-1.5">
-            {contentText && (
+            {/* Show "use entire page" whenever we're on a lesson — for
+                PAGE-type items the handler extracts text from contentText,
+                for PDF-type items it clears selection and lets the backend
+                find the matching source PDF via contentId. */}
+            {(contentText || contentId) && (
               <button
                 onClick={handleUseEntirePage}
                 className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2"
@@ -458,7 +704,9 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
                 <BookOpen size={14} />
                 <div>
                   <div className="font-medium">Use entire page content</div>
-                  <div className="text-[10px] text-blue-500">Apply to the full lesson on this page</div>
+                  <div className="text-[10px] text-blue-500">
+                    Apply to the full lesson on this page
+                  </div>
                 </div>
               </button>
             )}
@@ -469,7 +717,9 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized }: Chat
               <TextSelect size={14} />
               <div>
                 <div className="font-medium">Select specific text first</div>
-                <div className="text-[10px] text-blue-500">Highlight text on the page, then try again</div>
+                <div className="text-[10px] text-blue-500">
+                  Highlight text on the page, then try again
+                </div>
               </div>
             </button>
           </div>
@@ -570,8 +820,13 @@ function PanelHeader({
   onReviewTab,
   isReviewTab,
 }: {
-  onMinimize: () => void;
-  onToggleMaximize: () => void;
+  // Optional — the docked variant (StudentCourseViewPage) doesn't provide
+  // these because the panel is already part of the page layout, not a
+  // floating window. When undefined, the minimize / maximize / close
+  // buttons aren't rendered. The header still works as a drag handle for
+  // the floating wrapper because that uses the .chatbot-drag-handle class.
+  onMinimize?: () => void;
+  onToggleMaximize?: () => void;
   isMaximized: boolean;
   onReviewTab: () => void;
   isReviewTab: boolean;
@@ -595,36 +850,42 @@ function PanelHeader({
         >
           <BookMarked size={14} />
         </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onMinimize();
-          }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
-          title="Minimize"
-        >
-          <Minus size={14} />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleMaximize();
-          }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
-          title={isMaximized ? 'Restore' : 'Maximize'}
-        >
-          {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onMinimize();
-          }}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
-          title="Close"
-        >
-          <X size={14} />
-        </button>
+        {onMinimize && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMinimize();
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
+            title="Minimize"
+          >
+            <Minus size={14} />
+          </button>
+        )}
+        {onToggleMaximize && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleMaximize();
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
+            title={isMaximized ? 'Restore' : 'Maximize'}
+          >
+            {isMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+        )}
+        {onMinimize && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMinimize();
+            }}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-blue-500 transition-colors"
+            title="Close"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

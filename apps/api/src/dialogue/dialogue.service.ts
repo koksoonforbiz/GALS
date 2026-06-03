@@ -14,6 +14,24 @@ import { TextMiningService } from '../text-mining';
 import type { DialogueCourseSettings } from '@ats/shared';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateSessionDto, SendMessageDto } from './dto';
+import { StudentRagRetrievalService } from '../student-rag/student-rag-retrieval.service';
+import type { RetrievedChunk } from '../student-rag/student-rag-retrieval.service';
+import { EmbeddingService } from '../student-rag/embedding.service';
+import { Prisma } from '@prisma/client';
+// Stage 06 — shared grounded-generation contract.
+import { buildGroundedMessages } from '../rag/shared/grounded-prompt';
+import { GroundedEvidenceService } from '../rag/shared/grounded-evidence.service';
+import { loadImageChunkMetadata } from '../rag/shared/grounded-evidence.helpers';
+import { FaithfulnessCheckService, buildFaithfulnessRetryAddendum } from '../rag/shared/faithfulness-check.service';
+import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
+
+// Stage 02 feature flag. `RAG_USE_SHARED_RETRIEVER=false` falls back to
+// the legacy local keyword scorer (`retrieveStudentChunksKeywordLegacy`)
+// for instant rollback. Default ON (true).
+function sharedRetrieverEnabled(): boolean {
+  const v = (process.env.RAG_USE_SHARED_RETRIEVER ?? 'true').toLowerCase();
+  return v !== 'false' && v !== '0' && v !== 'off';
+}
 
 @Injectable()
 export class DialogueService {
@@ -26,6 +44,13 @@ export class DialogueService {
     private readonly activityLogService: ActivityLogService,
     @Inject(forwardRef(() => TextMiningService))
     private readonly textMining: TextMiningService,
+    private readonly studentRagRetrieval: StudentRagRetrievalService,
+    private readonly embeddingService: EmbeddingService,
+    // Stage 06 — multimodal grounding + optional faithfulness check.
+    // Both services come through RagModule exports (same module that
+    // provides LlmService) so no new imports are needed.
+    private readonly groundedEvidence: GroundedEvidenceService,
+    private readonly faithfulnessCheck: FaithfulnessCheckService,
   ) {}
 
   // ─── Session CRUD ─────────────────────────────────────────
@@ -141,8 +166,13 @@ export class DialogueService {
     });
     history.reverse();
 
-    // RAG retrieval from student documents
-    let ragContext = '';
+    // ─── RAG retrieval ───────────────────────────────────────
+    // Stage 06: route through the shared grounded-generation
+    // contract. We pull the raw `RetrievedChunk[]` (which carries
+    // `modality`) — then `GroundedEvidenceService.buildEvidence`
+    // splits it into text contextChunks + image attachments per the
+    // env / per-course `RAG_MULTIMODAL_GENERATION` flag.
+    let retrievedChunks: RetrievedChunk[] = [];
     const citations: Array<{
       chunkId: string;
       documentId: string;
@@ -153,7 +183,7 @@ export class DialogueService {
     }> = [];
 
     if (activeSourceIds.length > 0) {
-      const chunks = await this.retrieveStudentChunks(
+      retrievedChunks = await this.retrieveStudentChunksRaw(
         studentId,
         session.courseId,
         activeSourceIds,
@@ -161,43 +191,102 @@ export class DialogueService {
         dblSettings.topKChunks,
       );
 
-      if (chunks.length > 0) {
-        ragContext = chunks
-          .map(
-            (c, i) =>
-              `[Source ${i + 1}: ${c.documentName}, p.${c.pageNumber ?? '?'}]\n${c.content}`,
-          )
-          .join('\n\n');
-
-        for (const c of chunks) {
-          citations.push({
-            chunkId: c.id,
-            documentId: c.documentId,
-            documentName: c.documentName,
-            pageNumber: c.pageNumber,
-            excerpt: c.content.substring(0, 200),
-            score: c.score,
-          });
-        }
+      for (const c of retrievedChunks) {
+        citations.push({
+          chunkId: c.chunkId,
+          documentId: c.documentId,
+          documentName: c.documentName,
+          pageNumber: c.pageNumber,
+          excerpt: c.content.substring(0, 200),
+          score: c.score,
+        });
       }
     }
 
-    // Build prompts
-    const systemPrompt = this.buildSystemPrompt(dblSettings, ragContext);
-    const llmMessages = this.buildLlmMessages(history, dto.content);
-
-    // Get teacher credentials for LLM call
     const teacherId = course.teacherId;
 
-    const {
-      content: assistantContent,
-      promptTokens,
-      completionTokens,
-    } = await this.llmService.callLlmForUser(teacherId, systemPrompt, llmMessages, {
-      feature: 'dialogue_chat',
-      courseId: session.courseId,
-      triggeredByUserId: studentId,
+    // Stage 06 — build the shared evidence shape (text + images).
+    const imageMeta = await loadImageChunkMetadata(this.prisma, retrievedChunks);
+    const evidence = await this.groundedEvidence.buildEvidence(
+      retrievedChunks,
+      imageMeta,
+    );
+
+    const systemPersona = this.buildDialoguePersona(dblSettings);
+    const grounded = buildGroundedMessages({
+      systemPersona,
+      contextChunks: evidence.contextChunks,
+      images: evidence.images,
+      history: history.map((m) => ({
+        role: m.role === 'USER' ? ('user' as const) : ('assistant' as const),
+        content: m.content,
+      })),
+      question: dto.content,
     });
+
+    // First-pass generation.
+    const firstPass = await this.llmService.callLlmStructured(
+      teacherId,
+      {
+        systemPrompt: grounded.systemPrompt,
+        messages: grounded.messages,
+      },
+      {
+        feature: 'dialogue_chat',
+        courseId: session.courseId,
+        triggeredByUserId: studentId,
+      },
+    );
+
+    let assistantContent = firstPass.content;
+    let promptTokens = firstPass.promptTokens;
+    let completionTokens = firstPass.completionTokens;
+    const faithfulnessLog: {
+      fired: boolean;
+      passed?: boolean;
+      regenerated?: boolean;
+    } = { fired: false };
+
+    // Stage 06 Task D — faithfulness self-check. OFF by default for
+    // chat (latency-sensitive) per spec; flip with
+    // `RAG_FAITHFULNESS_CHECK=true` or per-course override.
+    if (
+      faithfulnessCheckEnabled('chat', undefined, dblSettings.faithfulnessCheck)
+    ) {
+      faithfulnessLog.fired = true;
+      const contextForJudge = this.flattenEvidenceForJudge(evidence);
+      const outcome = await this.faithfulnessCheck.checkFaithfulness({
+        answer: assistantContent,
+        context: contextForJudge,
+        teacherId,
+        courseId: session.courseId,
+      });
+      faithfulnessLog.passed = outcome.supported;
+      if (!outcome.supported) {
+        // Regenerate once with a stricter addendum.
+        const stricter = await this.llmService.callLlmStructured(
+          teacherId,
+          {
+            systemPrompt:
+              grounded.systemPrompt +
+              buildFaithfulnessRetryAddendum(outcome.unsupportedClaims ?? []),
+            messages: grounded.messages,
+          },
+          {
+            feature: 'dialogue_chat_retry',
+            courseId: session.courseId,
+            triggeredByUserId: studentId,
+          },
+        );
+        assistantContent = stricter.content;
+        promptTokens += stricter.promptTokens;
+        completionTokens += stricter.completionTokens;
+        faithfulnessLog.regenerated = true;
+      }
+      this.logger.log(
+        `faithfulness_check.fired=true passed=${faithfulnessLog.passed} regenerated=${faithfulnessLog.regenerated ?? false}`,
+      );
+    }
 
     // Parse any inline citations from the response
     const parsedCitations = this.parseCitations(assistantContent, citations);
@@ -217,7 +306,30 @@ export class DialogueService {
           role: 'ASSISTANT',
           content: assistantContent,
           citations: parsedCitations.length > 0 ? parsedCitations : undefined,
-          tokenUsage: { promptTokens, completionTokens },
+          // Stage 06 — `tokenUsage` now carries multimodal + faithfulness
+          // signals alongside the legacy prompt/completion counts so the
+          // teacher's review tab can spot runaway image-input cost and
+          // judge invocations per turn.
+          //
+          // Shape:
+          //   {
+          //     promptTokens: number,
+          //     completionTokens: number,
+          //     imageCount?: number,            // Stage 06 — # images attached
+          //     imageInputBytes?: number,       // Stage 06 — sum of bytes
+          //     faithfulnessFired?: boolean,    // Stage 06 — judge ran
+          //     faithfulnessPassed?: boolean,
+          //     faithfulnessRegenerated?: boolean,
+          //   }
+          tokenUsage: {
+            promptTokens,
+            completionTokens,
+            imageCount: evidence.images.length,
+            imageInputBytes: evidence.totalImageBytes,
+            faithfulnessFired: faithfulnessLog.fired,
+            faithfulnessPassed: faithfulnessLog.passed,
+            faithfulnessRegenerated: faithfulnessLog.regenerated,
+          },
         },
       }),
     ]);
@@ -344,37 +456,57 @@ export class DialogueService {
 
   // ─── Helpers ──────────────────────────────────────────────
 
-  private buildSystemPrompt(settings: DialogueCourseSettings, ragContext: string): string {
+  /**
+   * Stage 06 — Build the dialogue-mode persona that slots in front of
+   * the shared grounding contract via `buildGroundedMessages`. This
+   * is the ONLY per-surface variable; the grounding rules + citation
+   * format come from `GROUNDING_CONTRACT` and are identical across
+   * dialogue / chatbot / interventions.
+   *
+   * The teacher's `systemPromptOverride` (or our baseline tutor
+   * persona) sets the tone, plus the formatting block we've always
+   * shipped to the dialogue ChatPanel. We deliberately drop the old
+   * `citationMode` per-course knob — Stage 06 mandates a single
+   * citation format everywhere; the knob was already a UX wart.
+   */
+  private buildDialoguePersona(settings: DialogueCourseSettings): string {
     const base =
       settings.systemPromptOverride ||
       `You are an intelligent learning assistant helping a student understand their study materials. ` +
-        `Be conversational, encouraging, and Socratic. Ask clarifying questions when helpful. ` +
-        `Always ground your answers in the provided source material when available.`;
+        `Be conversational, encouraging, and Socratic. Ask clarifying questions when helpful.`;
 
-    const citationInstruction =
-      settings.citationMode === 'inline'
-        ? `\nWhen referencing source material, use inline citations like [Source: DocName, p.X].`
-        : settings.citationMode === 'footnote'
-          ? `\nUse footnote-style citations numbered [1], [2], etc. at the end of your response.`
-          : '';
+    const formattingInstruction =
+      `Formatting:\n` +
+      `- Use Markdown (headings, bold, lists, blockquotes, links).\n` +
+      `- Use GFM pipe tables for comparisons.\n` +
+      `- Use fenced code blocks with a language tag (\`\`\`python) for code.\n` +
+      `- Use LaTeX for math: $...$ inline, $$...$$ for display equations.`;
 
-    const contextBlock = ragContext
-      ? `\n\n--- STUDENT DOCUMENTS ---\n${ragContext}\n--- END DOCUMENTS ---`
-      : '';
-
-    return base + citationInstruction + contextBlock;
+    return `${base}\n\n${formattingInstruction}`;
   }
 
-  private buildLlmMessages(
-    history: Array<{ role: string; content: string }>,
-    newMessage: string,
-  ): string {
-    // Build a single user prompt that includes conversation history
-    const historyStr = history
-      .map((m) => `${m.role === 'USER' ? 'Student' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
-
-    return historyStr ? `${historyStr}\n\nStudent: ${newMessage}` : `Student: ${newMessage}`;
+  /** Stage 06 — flatten the grounded evidence into a single string
+   *  the faithfulness judge can score the answer against. Mirrors
+   *  what `buildGroundedMessages` puts on the user message minus the
+   *  conversation history. */
+  private flattenEvidenceForJudge(evidence: {
+    contextChunks: Array<{ citationLabel: string; text: string; caption?: string }>;
+    images: Array<{ citationLabel: string; caption?: string }>;
+  }): string {
+    const lines: string[] = [];
+    for (const c of evidence.contextChunks) {
+      lines.push(`[${c.citationLabel}]`);
+      if (c.text) lines.push(c.text);
+      if (c.caption) lines.push(`(caption: ${c.caption})`);
+      lines.push('');
+    }
+    for (const img of evidence.images) {
+      lines.push(`[${img.citationLabel}]`);
+      lines.push('(image attached)');
+      if (img.caption) lines.push(`(caption: ${img.caption})`);
+      lines.push('');
+    }
+    return lines.join('\n');
   }
 
   private parseCitations(
@@ -397,8 +529,10 @@ export class DialogueService {
   }> {
     if (availableCitations.length === 0) return [];
 
-    // Match [Source: DocName, p.X] or [Source N: DocName, p.X]
-    const citationRegex = /\[Source\s*\d*:\s*([^,\]]+?)(?:,\s*p\.(\d+))?\]/gi;
+    // Stage 06 — accept BOTH text citations (`[Source N: name, p.X]`)
+    // and visual citations (`[Figure: name, p.X]`). Same shape as the
+    // frontend renderer's regex.
+    const citationRegex = /\[(?:Source\s*\d*|Figure):\s*([^,\]]+?)(?:,\s*p\.(\d+))?\]/gi;
     const matches = [...response.matchAll(citationRegex)];
     if (matches.length === 0) return availableCitations;
 
@@ -472,14 +606,101 @@ export class DialogueService {
     return result.success ? result.data : DialogueCourseSettingsSchema.parse({});
   }
 
-  private async retrieveStudentChunks(
+  /**
+   * Stage 06 — return raw `RetrievedChunk[]` (carries `modality`) so
+   * the grounded-evidence builder can split into text + image
+   * attachments. Drops the flat-shape conversion the old
+   * `retrieveStudentChunks` did because every caller now goes
+   * through `GroundedEvidenceService.buildEvidence`.
+   *
+   * Fallback path: when the shared retriever returns nothing OR
+   * `RAG_USE_SHARED_RETRIEVER=false`, we synthesise `RetrievedChunk`s
+   * from the legacy keyword scorer so the rest of the pipeline
+   * doesn't need to branch.
+   */
+  private async retrieveStudentChunksRaw(
+    studentId: string,
+    courseId: string,
+    sourceIds: string[],
+    query: string,
+    topK: number,
+  ): Promise<RetrievedChunk[]> {
+    if (sharedRetrieverEnabled()) {
+      const haveEmbeddings = await this.corpusHasEmbeddings(studentId, courseId, sourceIds);
+      if (haveEmbeddings) {
+        try {
+          const course = await this.prisma.course.findUnique({
+            where: { id: courseId },
+            select: { teacherId: true },
+          });
+          const teacherId = course?.teacherId;
+          const creds = teacherId
+            ? await this.embeddingService.resolveTeacherEmbeddingSpec(teacherId)
+            : null;
+          const apiKey = creds?.apiKey ?? '';
+          const provider = creds?.provider ?? 'fallback';
+          const out = await this.studentRagRetrieval.retrieveWithMeta(
+            query,
+            studentId,
+            courseId,
+            sourceIds,
+            topK,
+            apiKey,
+            provider,
+            teacherId,
+          );
+          if (out.chunks.length > 0) {
+            if (out.meta.degradedRetrieval || out.meta.mixedIndexChunkCount > 0) {
+              this.logger.warn(
+                `dialogue.retrieveStudentChunks: degraded=${out.meta.degradedRetrieval} mixed=${out.meta.mixedIndexChunkCount}`,
+              );
+            }
+            return out.chunks;
+          }
+        } catch (err) {
+          this.logger.warn(
+            `Shared retriever failed; falling back to keyword scorer: ${(err as Error).message}`,
+          );
+        }
+      }
+    }
+
+    // Legacy keyword fallback — synthesise `RetrievedChunk` shape so
+    // downstream code doesn't branch. All keyword hits are `text`
+    // modality (legacy corpus has no image chunks).
+    const flat = await this.retrieveStudentChunksKeywordLegacy(
+      studentId,
+      courseId,
+      sourceIds,
+      query,
+      topK,
+    );
+    return flat.map((c) => ({
+      chunkId: c.id,
+      documentId: c.documentId,
+      documentName: c.documentName,
+      content: c.content,
+      pageNumber: c.pageNumber,
+      score: c.score,
+      metadata: {},
+      modality: 'text' as const,
+    }));
+  }
+
+  /**
+   * Stage 02 legacy fallback. Original keyword-only scorer preserved
+   * so:
+   *   - operators can rollback via `RAG_USE_SHARED_RETRIEVER=false`,
+   *   - corpora without embeddings (no LLM key + prod with the pseudo-
+   *     fallback gated off) still return SOMETHING grounded.
+   */
+  private async retrieveStudentChunksKeywordLegacy(
     studentId: string,
     courseId: string,
     sourceIds: string[],
     query: string,
     topK: number,
   ) {
-    // Retrieve chunks from student-uploaded documents
     const chunks = await this.prisma.studentRagChunk.findMany({
       where: {
         studentId,
@@ -493,27 +714,35 @@ export class DialogueService {
 
     if (chunks.length === 0) return [];
 
-    // Simple keyword-based scoring
     const queryTerms = query
       .toLowerCase()
       .split(/\s+/)
       .filter((t) => t.length > 2);
 
     const scored = chunks.map((chunk) => {
-      const contentLower = chunk.content.toLowerCase();
+      // Stage 03 — Contextual Retrieval. Score over
+      // `contextualText + content` so that lexical hits on the
+      // doc-aware blurb count too. When `contextualText` is NULL
+      // (Stage 02 corpora / feature disabled / failure path), the
+      // haystack is bare content — identical to the pre-Stage-03
+      // scorer.
+      const haystack = `${chunk.contextualText ?? ''} ${chunk.content}`;
+      const haystackLower = haystack.toLowerCase();
       let score = 0;
       for (const term of queryTerms) {
-        const count = (contentLower.match(new RegExp(term, 'g')) || []).length;
+        const count = (haystackLower.match(new RegExp(term, 'g')) || []).length;
         score += count;
       }
-      // Length normalization
-      score = score / Math.sqrt(chunk.content.length / 100);
+      score = score / Math.sqrt(haystack.length / 100);
 
       return {
         id: chunk.id,
         documentId: chunk.documentId,
         documentName: chunk.document.originalName,
         pageNumber: chunk.pageNumber,
+        // Generator-facing payload is the original `content` only —
+        // the contextualisation blurb is a retrieval aid, not
+        // content to quote.
         content: chunk.content,
         score,
       };
@@ -521,5 +750,26 @@ export class DialogueService {
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, topK);
+  }
+
+  private async corpusHasEmbeddings(
+    studentId: string,
+    courseId: string,
+    sourceIds: string[],
+  ): Promise<boolean> {
+    if (sourceIds.length === 0) return false;
+    // Prisma JSON-null sentinel: `Prisma.JsonNull` matches NULL columns.
+    // We want rows where `embedding` is NOT NULL — so filter on
+    // `{ not: Prisma.JsonNull }`.
+    const found = await this.prisma.studentRagChunk.findFirst({
+      where: {
+        studentId,
+        courseId,
+        documentId: { in: sourceIds },
+        embedding: { not: Prisma.JsonNull },
+      },
+      select: { id: true },
+    });
+    return found !== null;
   }
 }

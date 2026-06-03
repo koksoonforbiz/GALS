@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma';
+import { RagModule } from '../rag';
 import { CurriculumCoverageService } from './curriculum-coverage.service';
 import { CurriculumCoverageController } from './curriculum-coverage.controller';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, RagModule],
   controllers: [CurriculumCoverageController],
   providers: [CurriculumCoverageService],
   exports: [CurriculumCoverageService],

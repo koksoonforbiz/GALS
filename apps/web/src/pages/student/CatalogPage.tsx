@@ -9,6 +9,10 @@ interface CatalogCourse {
   bannerBlobKey: string | null;
   learningMode: string;
   createdAt: string;
+  // Prompt 03: per-course policy flag — when false, the Enroll button
+  // is hidden and replaced with a "Self-enroll disabled" badge. The
+  // backend still rejects with 403 if a stale client tries it.
+  allowStudentSelfEnroll: boolean;
   teacher: { id: string; name: string };
   _count: { modules: number; enrollments: number };
 }
@@ -114,6 +118,13 @@ export function CatalogPage() {
                     {isEnrolled ? (
                       <span className="text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-lg font-medium">
                         Enrolled
+                      </span>
+                    ) : !course.allowStudentSelfEnroll ? (
+                      <span
+                        className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium"
+                        title="Self-enrollment is disabled for this course. Contact the teacher."
+                      >
+                        Teacher-enroll only
                       </span>
                     ) : (
                       <button

@@ -134,7 +134,7 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
                   <h3 className="text-sm font-semibold text-gray-800 mb-3">
                     Text-mining — Executive Function detection
                   </h3>
-                  <SessionTextMiningTab sessionId={sessionId} />
+                  <SessionTextMiningTab sessionId={sessionId} scope="activity" />
                 </section>
               </div>
             )}

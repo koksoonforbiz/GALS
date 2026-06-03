@@ -187,12 +187,15 @@ enum ActivityAction {
   DIALOGUE_MESSAGE_SENT
   DIALOGUE_MESSAGE_RECEIVED
   DIALOGUE_SESSION_ENDED
+  CHATBOT_MESSAGE_SENT
+  CHATBOT_MESSAGE_RECEIVED
 
   // Learning interventions
   INTERVENTION_TRIGGERED
   INTERVENTION_VIEWED
   INTERVENTION_COMPLETED
   INTERVENTION_DISMISSED
+  PRACTICE_TEST_CONFIGURED
 
   // Spaced repetition
   SPACED_REP_CARD_VIEWED
@@ -240,14 +243,36 @@ enum ActivityAction {
 // ─── Models ──────────────────────────────────────────────
 
 model User {
-  id              String   @id @default(uuid()) @db.Uuid
-  email           String   @unique
-  passwordHash    String   @map("password_hash")
-  name            String
-  role            UserRole
-  llmProvider     String?  @map("llm_provider") // e.g. "openai"
-  encryptedApiKey String?  @map("encrypted_api_key")
-  llmModel        String?  @map("llm_model") // e.g. "gpt-4o-mini"
+  id                String   @id @default(uuid()) @db.Uuid
+  email             String   @unique
+  // Optional human-friendly login handle assigned by a teacher during
+  // bulk provisioning. Nullable + unique so existing rows (which only
+  // have email) stay valid. NOT used as a foreign key anywhere — the
+  // canonical key for sessions/logs/enrollments remains `User.id`.
+  // Auth accepts either `email` or `loginId` as the identifier.
+  loginId           String?  @unique @map("login_id")
+  passwordHash      String   @map("password_hash")
+  name              String
+  role              UserRole
+  llmProvider       String?  @map("llm_provider") // e.g. "openai"
+  encryptedApiKey   String?  @map("encrypted_api_key")
+  llmModel          String?  @map("llm_model") // e.g. "gpt-4o-mini"
+  // Stage 2 of the LLM upgrade (LLM_20260602/) splits embedding-model
+  // selection from chat-model selection. Embedding model is per-corpus
+  // (because retrieval cosine runs in-memory over JSONB vectors that
+  // must share dimensionality), so we track the teacher's intended
+  // default here AND pin the actual model used on each chunk row.
+  // Nullable for back-compat: existing rows leave this null and fall
+  // back to the registry default for the provider.
+  llmEmbeddingModel String?  @map("llm_embedding_model")
+  // Stage 04 (RAG) — Cohere Rerank API key. Separate vendor from the
+  // chat/embedding LLM (OpenAI/Gemini), so a separate optional field
+  // rather than reusing `encryptedApiKey`. AES-256-GCM encrypted via
+  // the same `LlmService.encrypt` helper as `encryptedApiKey`.
+  // Nullable: when null OR when `RAG_RERANK=false`, the shared
+  // retriever falls back to the no-op reranker (RRF order preserved,
+  // `reranked: false` flagged on the Coverage panel).
+  cohereApiKey      String?  @map("cohere_api_key")
 
   // Onboarding fields
   isTemporaryPassword Boolean   @default(false) @map("is_temporary_password")
@@ -278,6 +303,7 @@ model User {
   studentSessions          StudentSession[]
   activityLogs             ActivityLog[]
   sessionSummaries         SessionSummary[]
+  chatbotMessages          ChatbotMessage[]
 
   // Biometrics relations
   recordingSegments    RecordingSegment[]
@@ -286,6 +312,10 @@ model User {
   webgazerLogs         WebgazerLog[]
   webgazerCalibrations WebgazerCalibrationEvent[]
   pyfeatJobs           PyfeatJob[]
+
+  // Researcher annotation layer (prompt 06)
+  replayCodes       ReplayCode[]
+  replayAnnotations ReplayAnnotation[]
 
   @@map("users")
 }
@@ -301,9 +331,38 @@ model Course {
   orderIndex    Int              @default(0) @map("order_index")
   learningMode  LearningMode     @default(STANDARD) @map("learning_mode")
   dblSettings   Json?            @map("dbl_settings")
-  archivedAt    DateTime?        @map("archived_at") @db.Timestamptz
-  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Enrollment policy flags (prompts 03 + 05). Per-course so different
+  // courses can adopt different policies; the existing Settings surface
+  // (PromptSettingsPage at /teacher/courses/:courseId/prompts) is also
+  // per-course. Backend is the source of truth — student endpoints
+  // return 403 when these are off. Teacher/admin enroll/drop are NEVER
+  // gated by these flags.
+  //
+  // Defaults (prompt 05 flipped self-enroll from true → false):
+  //   - allowStudentSelfEnroll = false (teacher-only enroll is now the
+  //     default; teachers can re-enable per course from Settings →
+  //     Enrollment). Migration 20260601000000_default_self_enroll_off
+  //     changes the DEFAULT for new rows only — existing courses keep
+  //     whatever value they already have so the behaviour shift is
+  //     deliberate per-course, not a silent mass-flip.
+  //   - allowStudentSelfDrop   = false (prompt 03 default; unchanged).
+  allowStudentSelfEnroll Boolean @default(false) @map("allow_student_self_enroll")
+  allowStudentSelfDrop   Boolean @default(false) @map("allow_student_self_drop")
+
+  // Stage 04 (RAG) — Final top-k after the cross-encoder reranker.
+  // Applies to the TEACHER corpus retrieval path
+  // (`RagService.queryChunksFiltered` → `retrieveTeacher`). The
+  // STUDENT corpus uses `dblSettings.rerankTopK` instead because the
+  // dialogue-mode settings already live there.
+  // Range 1-20 (validated server-side). Default 8 matches the
+  // pre-Stage-04 behaviour (top-k 8 was the implicit student
+  // default; teacher had no setting).
+  rerankTopK Int @default(8) @map("rerank_top_k")
+
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz
 
   teacher          User                    @relation("TeacherCourses", fields: [teacherId], references: [id], onDelete: Cascade)
   topics           Topic[]
@@ -591,20 +650,45 @@ model PageContentVersion {
 // ─── RAG: Source Documents & Chunks ──────────────────────
 
 model SourceDocument {
-  id               String           @id @default(uuid()) @db.Uuid
-  courseId         String           @map("course_id") @db.Uuid
-  uploadedById     String           @map("uploaded_by_id") @db.Uuid
-  title            String
-  filename         String
-  blobKey          String           @map("blob_key")
-  mimeType         String           @map("mime_type")
-  sizeBytes        Int              @map("size_bytes")
-  pageCount        Int?             @map("page_count")
-  chunkingStrategy ChunkingStrategy @default(PARAGRAPH) @map("chunking_strategy")
-  chunkCount       Int              @default(0) @map("chunk_count")
-  indexedAt        DateTime?        @map("indexed_at") @db.Timestamptz
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  id                   String           @id @default(uuid()) @db.Uuid
+  courseId             String           @map("course_id") @db.Uuid
+  uploadedById         String           @map("uploaded_by_id") @db.Uuid
+  title                String
+  filename             String
+  blobKey              String           @map("blob_key")
+  mimeType             String           @map("mime_type")
+  sizeBytes            Int              @map("size_bytes")
+  pageCount            Int?             @map("page_count")
+  chunkingStrategy     ChunkingStrategy @default(PARAGRAPH) @map("chunking_strategy")
+  chunkCount           Int              @default(0) @map("chunk_count")
+  indexedAt            DateTime?        @map("indexed_at") @db.Timestamptz
+  // OpenAI Files API cache: id returned by POST /v1/files when this document
+  // was uploaded for reuse in multimodal page-content generation. Lets the
+  // generator reference the file by id instead of re-uploading the PDF on
+  // every call. NULL means no cached file (e.g. uploaded before this feature
+  // existed, non-PDF, or the upload failed/teacher had no API key configured).
+  openaiFileId         String?          @map("openai_file_id")
+  openaiFileUploadedAt DateTime?        @map("openai_file_uploaded_at") @db.Timestamptz
+  // Stage 2 of the LLM upgrade: a corpus must be single-model/single-
+  // dimension because retrieval cosine runs in-memory over JSONB
+  // vectors. We pin the embedding model + dimensions here when chunks
+  // were generated. Backfilled to text-embedding-ada-002 / 1536 (the
+  // legacy default the EmbeddingService was hard-coded against).
+  // `needsReembed` is flipped to true when the teacher changes their
+  // embedding-model preference; Stage 3 owns the background re-embed
+  // worker that consumes this marker.
+  embeddingModel       String?          @map("embedding_model")
+  embeddingDimensions  Int?             @map("embedding_dimensions")
+  // Stage 02 of the RAG upgrade: optional rollout version tag,
+  // orthogonal to `embeddingModel`. Lets the retrieval guard detect
+  // mixed indexes even when the model id is unchanged (e.g. a
+  // Matryoshka-dim flip, or future multimodal vectors sharing the
+  // same model id as text). NULL == "no version tag" — treated as
+  // legacy / unversioned by the retriever.
+  embeddingVersion     String?          @map("embedding_version")
+  needsReembed         Boolean          @default(false) @map("needs_reembed")
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   course     Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   uploadedBy User            @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
@@ -615,48 +699,90 @@ model SourceDocument {
 }
 
 model DocumentChunk {
-  id         String   @id @default(uuid()) @db.Uuid
-  documentId String   @map("document_id") @db.Uuid
-  chunkIndex Int      @map("chunk_index")
-  content    String
-  pageNumber Int?     @map("page_number")
-  tokenCount Int      @default(0) @map("token_count")
-  embedding  Json? // stored as float array in JSON
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                  String   @id @default(uuid()) @db.Uuid
+  documentId          String   @map("document_id") @db.Uuid
+  chunkIndex          Int      @map("chunk_index")
+  content             String
+  pageNumber          Int?     @map("page_number")
+  tokenCount          Int      @default(0) @map("token_count")
+  embedding           Json? // stored as float array in JSON
+  // Per-chunk pin of the embedding model + dimensions used to generate
+  // `embedding`. Kept on each chunk (in addition to the parent
+  // SourceDocument) so a mid-flight re-embed can be incremental without
+  // ambiguity about which rows are stale. Backfilled to legacy defaults.
+  embeddingModel      String?  @map("embedding_model")
+  embeddingDimensions Int?     @map("embedding_dimensions")
+  // Stage 02 — see SourceDocument.embeddingVersion for rationale.
+  embeddingVersion    String?  @map("embedding_version")
+  // Stage 03 — Anthropic Contextual Retrieval. 50-100 token blurb
+  // situating this chunk inside the parent document. PREPENDED to
+  // `content` at embedding time AND at lexical-scan time, so
+  // retrieval treats the chunk as self-locating. The generator still
+  // receives `content` only — `contextualText` is a retrieval aid,
+  // not content to quote back. NULL = no blurb generated (feature
+  // disabled, ingest failed gracefully, or pre-Stage-03 row that
+  // hasn't been backfilled yet); the retriever falls back to bare
+  // text via COALESCE.
+  contextualText      String?  @map("contextual_text")
+  // Stage 05 — Multimodal ingest. NULL ⇒ implicit `'text'` (legacy
+  // rows + every text chunk). `'page_image'` ⇒ row's `embedding` is
+  // a Cohere-Embed-4 image vector and `imageObjectKey` points at the
+  // rendered PNG in MinIO. `'figure'` is reserved for Stage 06+
+  // layout-aware cropping. See migration
+  // `20260603030000_add_multimodal_chunk_columns` for the full
+  // contract. The retriever treats NULL and `'text'` as identical.
+  chunkKind           String?  @map("chunk_kind")
+  imageObjectKey      String?  @map("image_object_key")
+  // VLM-generated caption — SECONDARY signal only. Feeds the
+  // sparse/ILIKE haystack and is shown to the teacher for QA, but is
+  // NEVER quoted as fact (Stage 05 spec hedge against caption
+  // hallucination). The real image is what goes to the generator.
+  caption             String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   document SourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@unique([documentId, chunkIndex])
   @@index([documentId])
+  @@index([chunkKind])
   @@map("document_chunks")
 }
 
 // ─── Dialogue-Based Learning (DBL) ──────────────────────
 
 model StudentSourceDocument {
-  id               String                   @id @default(cuid())
-  enrollmentId     String                   @map("enrollment_id") @db.Uuid
-  enrollment       Enrollment               @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  studentId        String                   @map("student_id") @db.Uuid
-  student          User                     @relation("StudentDocuments", fields: [studentId], references: [id])
-  courseId         String                   @map("course_id") @db.Uuid
-  course           Course                   @relation(fields: [courseId], references: [id])
-  sessionId        String?                  @map("session_id")
-  session          DialogueSession?         @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  fileName         String                   @map("file_name")
-  originalName     String                   @map("original_name")
-  mimeType         String                   @map("mime_type")
-  fileSize         Int                      @map("file_size")
-  blobKey          String                   @map("blob_key")
-  fileType         StudentFileType          @map("file_type")
-  processingStatus DocumentProcessingStatus @default(PENDING) @map("processing_status")
-  processingError  String?                  @map("processing_error")
-  isActive         Boolean                  @default(true) @map("is_active")
-  autoGuide        StudentSourceGuide?
-  chunks           StudentRagChunk[]
-  dialogueNotes    DialogueNote[]
-  createdAt        DateTime                 @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
+  id                  String                   @id @default(cuid())
+  enrollmentId        String                   @map("enrollment_id") @db.Uuid
+  enrollment          Enrollment               @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  studentId           String                   @map("student_id") @db.Uuid
+  student             User                     @relation("StudentDocuments", fields: [studentId], references: [id])
+  courseId            String                   @map("course_id") @db.Uuid
+  course              Course                   @relation(fields: [courseId], references: [id])
+  sessionId           String?                  @map("session_id")
+  session             DialogueSession?         @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  fileName            String                   @map("file_name")
+  originalName        String                   @map("original_name")
+  mimeType            String                   @map("mime_type")
+  fileSize            Int                      @map("file_size")
+  blobKey             String                   @map("blob_key")
+  fileType            StudentFileType          @map("file_type")
+  processingStatus    DocumentProcessingStatus @default(PENDING) @map("processing_status")
+  processingError     String?                  @map("processing_error")
+  isActive            Boolean                  @default(true) @map("is_active")
+  // Stage 2 LLM upgrade: same pin/re-embed contract as SourceDocument.
+  // Tracks the embedding model + dimensions used for chunks under this
+  // student document, and a `needsReembed` flag the teacher's
+  // model-change handler flips so Stage 3's worker can re-embed.
+  embeddingModel      String?                  @map("embedding_model")
+  embeddingDimensions Int?                     @map("embedding_dimensions")
+  // Stage 02 — see SourceDocument.embeddingVersion for rationale.
+  embeddingVersion    String?                  @map("embedding_version")
+  needsReembed        Boolean                  @default(false) @map("needs_reembed")
+  autoGuide           StudentSourceGuide?
+  chunks              StudentRagChunk[]
+  dialogueNotes       DialogueNote[]
+  createdAt           DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime                 @updatedAt @map("updated_at") @db.Timestamptz
 
   @@index([enrollmentId])
   @@index([studentId, courseId])
@@ -679,20 +805,36 @@ model StudentSourceGuide {
 }
 
 model StudentRagChunk {
-  id         String                @id @default(cuid())
-  documentId String                @map("document_id")
-  document   StudentSourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  studentId  String                @map("student_id") @db.Uuid
-  courseId   String                @map("course_id") @db.Uuid
-  content    String                @db.Text
-  embedding  Json?
-  chunkIndex Int                   @map("chunk_index")
-  pageNumber Int?                  @map("page_number")
-  metadata   Json?
-  createdAt  DateTime              @default(now()) @map("created_at") @db.Timestamptz
+  id                  String                @id @default(cuid())
+  documentId          String                @map("document_id")
+  document            StudentSourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  studentId           String                @map("student_id") @db.Uuid
+  courseId            String                @map("course_id") @db.Uuid
+  content             String                @db.Text
+  embedding           Json?
+  // Per-chunk pin of the embedding model + dimensions used to generate
+  // `embedding`. Mirror of DocumentChunk.embeddingModel.
+  embeddingModel      String?               @map("embedding_model")
+  embeddingDimensions Int?                  @map("embedding_dimensions")
+  // Stage 02 — see SourceDocument.embeddingVersion for rationale.
+  embeddingVersion    String?               @map("embedding_version")
+  // Stage 03 — Anthropic Contextual Retrieval. Mirror of
+  // DocumentChunk.contextualText. See DocumentChunk for rationale.
+  contextualText      String?               @map("contextual_text")
+  // Stage 05 — Multimodal ingest. Mirror of
+  // `DocumentChunk.chunkKind`/`imageObjectKey`/`caption`. See the
+  // DocumentChunk fields above for the full contract.
+  chunkKind           String?               @map("chunk_kind")
+  imageObjectKey      String?               @map("image_object_key")
+  caption             String?
+  chunkIndex          Int                   @map("chunk_index")
+  pageNumber          Int?                  @map("page_number")
+  metadata            Json?
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([documentId])
   @@index([studentId, courseId])
+  @@index([chunkKind])
   @@map("student_rag_chunks")
 }
 
@@ -731,6 +873,76 @@ model DialogueMessage {
 
   @@index([sessionId])
   @@map("dialogue_messages")
+}
+
+// Floating / docked chatbot conversation history. Mirrors DialogueMessage
+// per-turn shape (role, content, tokenUsage). Originally anchored ONLY
+// on the activity StudentSession via a cascade FK, which meant chat
+// history was deleted whenever the session row was purged — that broke
+// the student's "review later" workflow once their session ended.
+//
+// Retention (Prompt 01 — chat history):
+//   - `studentId` is now the canonical owner key; cascades with the user.
+//   - `studentSessionId` is now NULLABLE with ON DELETE SET NULL so a
+//     session purge no longer destroys the conversation. We keep the
+//     column around so logs that DO have a live session can still join
+//     back for replay-tab inlining and biometrics-window queries.
+//
+// Persisting these enables:
+//   - teacher Review/Replay tab to show chat turns inline on the timeline
+//   - student-facing "Chat History" review page that lists past
+//     conversations (grouped by session) and replays them through the
+//     same rich-content renderer as live chat
+//   - post-hoc analysis of context resolution effectiveness
+//     (contextSource tells us whether the LLM saw the PDF, a selection,
+//     or only the student RAG corpus)
+//   - measurement of suggested-strategy uptake
+//     (suggestedStrategy + later INTERVENTION_TRIGGERED comparison)
+model ChatbotMessage {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Owner — the student whose chat turn this is. Survives session
+  // teardown; only purged when the user is deleted.
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  // Optional anchor back to the activity session that produced this
+  // turn. Nullable so the row outlives a session purge; SetNull so the
+  // FK becomes null instead of cascading the delete.
+  studentSessionId String?         @map("student_session_id") @db.Uuid
+  studentSession   StudentSession? @relation(fields: [studentSessionId], references: [id], onDelete: SetNull)
+
+  courseId     String? @map("course_id") @db.Uuid
+  moduleItemId String? @map("module_item_id") @db.Uuid
+
+  role    MessageRole
+  content String      @db.Text
+
+  // Which grounding path the backend chose for THIS turn. One of
+  // 'pdf-source' | 'selection' | 'student-rag' | 'none'. Mirrors the
+  // `contextSource` already emitted to logs in chat().
+  contextSource String? @map("context_source")
+
+  // The actual text the student highlighted on the page (truncated),
+  // null if no selection was used. Lets us understand what slice of the
+  // material drove the question.
+  selectedText String? @map("selected_text") @db.Text
+
+  // Strategy the LLM suggested in its reply (PRACTICE_TESTING |
+  // DISTRIBUTED_PRACTICE | STEPWISE_LEARNING | INTERROGATIVE_ELABORATION),
+  // parsed out of the [SUGGEST:X] tag. Null on USER rows.
+  suggestedStrategy String? @map("suggested_strategy")
+
+  promptTokens     Int?    @map("prompt_tokens")
+  completionTokens Int?    @map("completion_tokens")
+  model            String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([studentSessionId])
+  @@index([studentSessionId, createdAt])
+  @@index([studentId, createdAt])
+  @@map("chatbot_messages")
 }
 
 model StudioOutput {
@@ -1240,14 +1452,21 @@ model SavedInterventionReview {
 }
 
 model InterventionPromptConfig {
-  id               String           @id @default(cuid())
-  courseId         String           @map("course_id") @db.Uuid
-  interventionType InterventionType @map("intervention_type")
-  teacherId        String           @map("teacher_id") @db.Uuid
-  systemPrompt     String           @map("system_prompt") @db.Text
-  isCustom         Boolean          @default(true) @map("is_custom")
-  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  id                      String           @id @default(cuid())
+  courseId                String           @map("course_id") @db.Uuid
+  interventionType        InterventionType @map("intervention_type")
+  teacherId               String           @map("teacher_id") @db.Uuid
+  systemPrompt            String           @map("system_prompt") @db.Text
+  isCustom                Boolean          @default(true) @map("is_custom")
+  // P4 — Practice Testing only: per-course default question counts
+  // that override the hard-coded 3+2 when the student doesn't pick
+  // explicit values. Nullable so existing rows stay valid and so
+  // non-PRACTICE_TESTING rows can leave them unset (they're ignored
+  // for other intervention types).
+  defaultMcqCount         Int?             @map("default_mcq_count")
+  defaultShortAnswerCount Int?             @map("default_short_answer_count")
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt               DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
   teacher User @relation("teacherPromptConfigs", fields: [teacherId], references: [id])
 
@@ -1362,6 +1581,11 @@ model StudentSession {
   activityLogs ActivityLog[]
   summary      SessionSummary?
 
+  // Floating / docked chatbot history — one row per user/assistant turn
+  // anchored directly on this session (no parent ChatbotSession; the
+  // student session IS the session boundary).
+  chatbotMessages ChatbotMessage[]
+
   // Biometrics relations
   recordingSegments    RecordingSegment[]
   pupilSizeLogs        PupilSizeLog[]
@@ -1369,6 +1593,7 @@ model StudentSession {
   webgazerCalibrations WebgazerCalibrationEvent[]
   pyfeatJobs           PyfeatJob[]
   replaySnapshots      SessionReplaySnapshot[]
+  replayAnnotations    ReplayAnnotation[]
 
   // Sync anchor relation
   syncAnchor session_sync_anchors?
@@ -1890,7 +2115,7 @@ model derived_learning_velocity {
 model derived_at_risk_flags {
   id         String   @id @default(cuid())
   sessionId  String
-  userId     String         @db.Uuid
+  userId     String   @db.Uuid
   flaggedAt  BigInt
   riskLevel  String
   reasons    Json
@@ -2142,21 +2367,107 @@ model AffectiveStateWindow {
 }
 
 model SessionReplaySnapshot {
-  id         String         @id @default(cuid())
-  sessionId  String         @db.Uuid
-  session    StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  userId     String
-  pageUrl    String
-  html       String
-  screenshotDataUrl String? @map("screenshot_data_url") @db.Text
-  width      Int
-  height     Int
-  scrollX    Int            @default(0)
-  scrollY    Int            @default(0)
-  capturedAt BigInt
-  trigger    String
-  createdAt  DateTime       @default(now()) @db.Timestamptz
+  id                String         @id @default(cuid())
+  sessionId         String         @db.Uuid
+  session           StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId            String
+  pageUrl           String
+  html              String
+  screenshotDataUrl String?        @map("screenshot_data_url") @db.Text
+  width             Int
+  height            Int
+  scrollX           Int            @default(0)
+  scrollY           Int            @default(0)
+  capturedAt        BigInt
+  trigger           String
+  // Per-snapshot AOI rectangles, viewport-relative pixels. Shape:
+  //   [{ region: string, x: number, y: number, width: number, height: number }]
+  // Nullable on purpose: pre-existing rows have no AOI capture, and
+  // any client where getBoundingClientRect throws (private iframes,
+  // disabled JS, race conditions) still gets to write the snapshot.
+  aois              Json?          @db.JsonB
+  // Per-snapshot inner-scroll-host state. Window.scrollY is a dead
+  // signal in the docked course layout because lesson MDX and the
+  // PDF reader scroll inside inner overflow-y-auto containers, so
+  // the replay needs per-host scrollTop / scrollHeight / clientHeight
+  // (plus the host's data-replay-region label when present) to put
+  // the right content into view in the iframe. See migration
+  // 20260601010000 for the JSON shape. Nullable on purpose: pre-
+  // existing rows have no per-host capture, and the recorder is best-
+  // effort — failure inside the triple-defensive try/catch in
+  // captureScrollHosts() simply omits the field so the snapshot still
+  // saves. Backend coerces non-array payloads to Prisma.JsonNull
+  // (same defense as the existing `aois` column).
+  scrollHosts       Json?          @map("scroll_hosts") @db.JsonB
+  // PDF reader current page + total. The PdfReader component renders
+  // every page (not virtualized), so restoring scrollTop is usually
+  // enough — but we keep the page number around as a semantic anchor
+  // for CSV export and as a fallback for the replay when the scroll
+  // container's height isn't yet finalized in the iframe (PDF canvas
+  // imgs may still be decoding when onLoad fires).
+  pdfCurrentPage    Int?           @map("pdf_current_page")
+  pdfTotalPages     Int?           @map("pdf_total_pages")
+  createdAt         DateTime       @default(now()) @db.Timestamptz
 
   @@index([sessionId, capturedAt])
   @@map("session_replay_snapshots")
+}
+
+// ─── Researcher annotation layer (prompt 06) ──────────
+// Free-form qualitative coding on top of captured streams. Additive
+// only: annotations never mutate the captured data. Per
+// researcher+session so two teachers can independently code the same
+// session without stepping on each other.
+
+model ReplayCode {
+  id           String   @id @default(uuid()) @db.Uuid
+  // Owner of the code definition. Codes are private to the
+  // researcher who created them; cross-researcher sharing would need
+  // a future "shared" flag + permission model.
+  researcherId String   @map("researcher_id") @db.Uuid
+  researcher   User     @relation(fields: [researcherId], references: [id], onDelete: Cascade)
+  label        String
+  // Tailwind-style hex (#RRGGBB). Used for tag chips and timeline
+  // bands. Nullable so an "uncoded" annotation is possible.
+  color        String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  annotations ReplayAnnotation[]
+
+  @@index([researcherId])
+  @@map("replay_codes")
+}
+
+model ReplayAnnotation {
+  id        String         @id @default(uuid()) @db.Uuid
+  // Anchored on the StudentSession that's being reviewed — cascade
+  // delete keeps the annotation set tied to the session lifetime.
+  sessionId String         @map("session_id") @db.Uuid
+  session   StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Researcher who authored this annotation. Cascade so removing a
+  // researcher wipes their codes/annotations.
+  researcherId String @map("researcher_id") @db.Uuid
+  researcher   User   @relation(fields: [researcherId], references: [id], onDelete: Cascade)
+
+  // Optional code attachment. Annotations can carry just a note
+  // without a code (free-form), or both. SetNull on code delete so a
+  // researcher cleaning up codes doesn't lose the note bodies.
+  codeId String?     @map("code_id") @db.Uuid
+  code   ReplayCode? @relation(fields: [codeId], references: [id], onDelete: SetNull)
+
+  // ms offsets from baseWallClockMs anchor (same coordinate as the
+  // CSV exporter's relative_s row). `endMs = null` → point annotation
+  // at `startMs`. `endMs >= startMs` → range annotation.
+  startMs BigInt  @map("start_ms")
+  endMs   BigInt? @map("end_ms")
+
+  note      String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([sessionId, startMs])
+  @@index([researcherId])
+  @@map("replay_annotations")
 }

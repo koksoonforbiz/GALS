@@ -2,15 +2,29 @@ import { useState } from 'react';
 import { RefreshCw, Download, Loader2, Pause, Info, MessageSquare, Inbox } from 'lucide-react';
 import { ConstructRow } from './ConstructRow';
 import { TraceDrawer } from './TraceDrawer';
+import { TextMiningSessionScope } from '../hooks/useDashboard';
 
 interface DashboardPanelProps {
   sessionId: string;
+  scope: TextMiningSessionScope;
   data: Record<string, unknown>;
   onRefresh: () => void;
   loading: boolean;
 }
 
-export function DashboardPanel({ sessionId, data, onRefresh, loading }: DashboardPanelProps) {
+function getDetectionsCsvPath(scope: TextMiningSessionScope, sessionId: string) {
+  return scope === 'activity'
+    ? `/api/text-mining/activity-sessions/${sessionId}/detections.csv`
+    : `/api/text-mining/sessions/${sessionId}/detections.csv`;
+}
+
+export function DashboardPanel({
+  sessionId,
+  scope,
+  data,
+  onRefresh,
+  loading,
+}: DashboardPanelProps) {
   const [drawerConstruct, setDrawerConstruct] = useState<string | null>(null);
   const constructs = (data.constructs ?? {}) as Record<string, Record<string, unknown>>;
   const totalMessages = (data.totalUserMessages as number) ?? 0;
@@ -18,11 +32,12 @@ export function DashboardPanel({ sessionId, data, onRefresh, loading }: Dashboar
 
   const handleExportCsv = () => {
     const token = localStorage.getItem('token');
+    const exportPath = getDetectionsCsvPath(scope, sessionId);
     const a = document.createElement('a');
-    a.href = `/api/text-mining/sessions/${sessionId}/detections.csv`;
+    a.href = exportPath;
     a.download = `text-mining-${sessionId}.csv`;
     if (token) {
-      fetch(`/api/text-mining/sessions/${sessionId}/detections.csv`, {
+      fetch(exportPath, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => res.blob())
@@ -121,6 +136,7 @@ export function DashboardPanel({ sessionId, data, onRefresh, loading }: Dashboar
       {drawerConstruct && (
         <TraceDrawer
           sessionId={sessionId}
+          scope={scope}
           constructKey={drawerConstruct}
           displayName={(constructs[drawerConstruct]?.displayName as string) ?? drawerConstruct}
           onClose={() => setDrawerConstruct(null)}

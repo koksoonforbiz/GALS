@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { useActivityLog } from '../../../lib/activity-log';
 import type { SaveForReviewInput } from '../types';
 import { Layers, AlertTriangle, Inbox, Trash2 } from 'lucide-react';
 
@@ -44,6 +45,19 @@ export function DistributedPracticeView({
   const [errorMsg, setErrorMsg] = useState('');
   const initialGenDone = useRef(false);
 
+  const { track } = useActivityLog();
+  // Per-card timing. cardShownAt = when the front of the current
+  // card was rendered. cardFlippedAt = when the student tapped to
+  // reveal the back (null until they flip). cardSeenCountRef counts
+  // how many times each card has been viewed (front-side renders)
+  // across the session. interventionStartedAt = the first time we
+  // entered preview phase (anchor for total duration).
+  const interventionStartedAtRef = useRef<number>(Date.now());
+  const interventionViewedFiredRef = useRef(false);
+  const cardShownAtRef = useRef<number>(Date.now());
+  const cardFlippedAtRef = useRef<number | null>(null);
+  const cardSeenCountRef = useRef<Record<string, number>>({});
+
   const generate = useCallback(async () => {
     setPhase('loading');
     try {
@@ -56,6 +70,7 @@ export function DistributedPracticeView({
         courseId,
         contentId: contentId || undefined,
         pageType,
+        topic: contentTitle || undefined,
         cardCount: 5,
       });
       setInterventionId(result.interventionId);
@@ -73,16 +88,106 @@ export function DistributedPracticeView({
     void generate();
   }, [generate]);
 
+  // Fire INTERVENTION_VIEWED when the deck becomes interactive.
+  // Pairs with server-side INTERVENTION_TRIGGERED.
+  useEffect(() => {
+    if (phase === 'preview' && !interventionViewedFiredRef.current && interventionId) {
+      interventionViewedFiredRef.current = true;
+      interventionStartedAtRef.current = Date.now();
+      cardShownAtRef.current = Date.now();
+      track('INTERVENTION_VIEWED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        interventionId,
+        metadata: {
+          interventionType: 'DISTRIBUTED_PRACTICE',
+          cardCount: cards.length,
+          contentTitle: contentTitle || null,
+          hasSelection: Boolean(selectedText && selectedText.length >= 20),
+        },
+      });
+    }
+  }, [
+    phase,
+    interventionId,
+    cards.length,
+    track,
+    courseId,
+    contentId,
+    contentTitle,
+    selectedText,
+  ]);
+
   const currentCard = cards[currentIndex];
 
+  // Fire SPACED_REP_CARD_VIEWED whenever currentCard.id changes
+  // (initial mount + nav). Track per-card seen count so we can
+  // distinguish first-look vs re-look in analysis.
+  useEffect(() => {
+    if (phase !== 'preview' || !currentCard || !interventionId) return;
+    cardShownAtRef.current = Date.now();
+    cardFlippedAtRef.current = null;
+    cardSeenCountRef.current[currentCard.id] =
+      (cardSeenCountRef.current[currentCard.id] ?? 0) + 1;
+    track('SPACED_REP_CARD_VIEWED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'DISTRIBUTED_PRACTICE',
+        cardId: currentCard.id,
+        cardIndex: currentIndex,
+        cardCount: cards.length,
+        seenCount: cardSeenCountRef.current[currentCard.id],
+      },
+    });
+  }, [currentCard?.id, phase, interventionId, currentIndex, cards.length, track, courseId, contentId]);
+
   const handlePrev = () => {
+    // Emit a CARD_NEXT-style transition event piggybacking on
+    // SPACED_REP_CARD_VIEWED via the metadata on the next render.
+    // The per-card-time durations are emitted in handleFlip /
+    // handleNext (timeOnFront, timeOnBack).
+    emitCardTransition('prev');
     setFlipped(false);
     setCurrentIndex((i) => Math.max(0, i - 1));
   };
 
   const handleNext = () => {
+    emitCardTransition('next');
     setFlipped(false);
     setCurrentIndex((i) => Math.min(cards.length - 1, i + 1));
+  };
+
+  // Helper: when leaving a card, emit a QUESTION_ANSWERED event
+  // carrying timeOnFront / timeOnBack so analysis can compute
+  // hesitation per-side. We reuse QUESTION_ANSWERED (vs adding a
+  // brand-new action) per the user's "reuse existing enums" rule —
+  // semantically the student "answered" by deciding whether they
+  // knew the back and moving on.
+  const emitCardTransition = (direction: 'next' | 'prev' | 'dot') => {
+    if (!currentCard || !interventionId) return;
+    const now = Date.now();
+    const timeOnFrontMs = cardFlippedAtRef.current
+      ? cardFlippedAtRef.current - cardShownAtRef.current
+      : now - cardShownAtRef.current;
+    const timeOnBackMs = cardFlippedAtRef.current ? now - cardFlippedAtRef.current : 0;
+    track('QUESTION_ANSWERED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'DISTRIBUTED_PRACTICE',
+        action: 'card_transition',
+        direction,
+        cardId: currentCard.id,
+        cardIndex: currentIndex,
+        timeOnFrontMs,
+        timeOnBackMs,
+        flipped: cardFlippedAtRef.current !== null,
+        seenCount: cardSeenCountRef.current[currentCard.id] ?? 1,
+      },
+    });
   };
 
   const handleDeleteCard = async (cardId: string) => {
@@ -114,6 +219,25 @@ export function DistributedPracticeView({
       },
     });
     setSaved(true);
+    // Roll up per-card view counts so analysis can compute coverage
+    // (how many cards the student looked at vs the deck size) and
+    // re-exposure depth (max times any card was re-viewed).
+    const seenCounts = Object.values(cardSeenCountRef.current);
+    const cardsViewed = seenCounts.length;
+    const maxRepeat = seenCounts.length > 0 ? Math.max(...seenCounts) : 0;
+    track('INTERVENTION_COMPLETED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'DISTRIBUTED_PRACTICE',
+        totalCards: cards.length,
+        cardsViewed,
+        maxRepeatViews: maxRepeat,
+        totalDurationMs: Date.now() - interventionStartedAtRef.current,
+        completed: true,
+      },
+    });
   };
 
   const handleRetry = () => {
@@ -218,7 +342,16 @@ export function DistributedPracticeView({
             <div
               className="relative cursor-pointer select-none"
               style={{ perspective: '1000px' }}
-              onClick={() => setFlipped(!flipped)}
+              onClick={() => {
+                // First flip = mark the moment so timeOnFront /
+                // timeOnBack can be derived when the student leaves
+                // the card. Re-flipping back doesn't reset (the back
+                // was already revealed).
+                if (!flipped && cardFlippedAtRef.current === null) {
+                  cardFlippedAtRef.current = Date.now();
+                }
+                setFlipped(!flipped);
+              }}
             >
               <div
                 className="relative transition-transform duration-500"
@@ -257,6 +390,7 @@ export function DistributedPracticeView({
                 <button
                   key={i}
                   onClick={() => {
+                    emitCardTransition('dot');
                     setCurrentIndex(i);
                     setFlipped(false);
                   }}

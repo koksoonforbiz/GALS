@@ -1,9 +1,12 @@
 /** Generate suggested questions for the student to ask */
 export interface GenerateSuggestionsDto {
-  selectedText: string; // min 20 chars
+  /** Either ≥20 chars or empty — empty triggers RAG-over-course fallback. */
+  selectedText: string;
   courseId: string;
   contentId?: string;
   pageType?: string;
+  /** Optional topic hint for the RAG fallback. */
+  topic?: string;
   questionCount?: number; // default 6, min 3, max 10
 }
 

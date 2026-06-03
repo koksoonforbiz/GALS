@@ -1,0 +1,813 @@
+{
+  "startedAt": "2026-06-02T16:00:09.476Z",
+  "finishedAt": "2026-06-02T16:00:09.476Z",
+  "gitSha": "db7e85f",
+  "corpus": "teacher",
+  "operator": "npanh",
+  "judgeModel": null,
+  "judgeProvider": null,
+  "generatorModel": null,
+  "generatorProvider": null,
+  "embeddingModel": null,
+  "embeddingDimensions": null,
+  "items": [
+    {
+      "itemId": "tc-001",
+      "question": "What is the main thesis of the first uploaded source document?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-002",
+      "question": "Define the central concept introduced in the course's primary reference material.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-003",
+      "question": "List three key terms defined in the uploaded course materials.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-004",
+      "question": "Summarise the opening section of the primary reference document in 3-4 sentences.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-005",
+      "question": "What is the relationship between the first two core concepts presented in the course materials?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-006",
+      "question": "What example does the teacher's primary document give to illustrate the central idea?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-007",
+      "question": "What conclusion is drawn at the end of the primary reference material?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-008",
+      "question": "Describe what is shown in any figure or diagram appearing in the uploaded materials.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-009",
+      "question": "What values are presented in any data table from the course materials?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-010",
+      "question": "Describe any chart, graph, or plot included in the course materials and state what it depicts.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-011",
+      "question": "What labels appear on the axes of any plotted graph in the uploaded materials?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-012",
+      "question": "Explain the methodology described in the uploaded course materials, step by step.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-013",
+      "question": "What page of the primary reference contains the definition of the most central concept?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-014",
+      "question": "Compare and contrast two ideas presented in the course materials.",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-015",
+      "question": "What are the limitations or caveats noted in the uploaded course materials?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-016",
+      "question": "What is the airspeed velocity of an unladen swallow as established in the course materials?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-017",
+      "question": "According to the course materials, what was the closing price of TSLA stock on March 14 2026?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-018",
+      "question": "Per the uploaded documents, what is the recipe for Hollandaise sauce?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-019",
+      "question": "What worked example or solved problem does the primary reference document walk through?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    },
+    {
+      "itemId": "tc-020",
+      "question": "What citations or references does the primary uploaded document make to external sources?",
+      "retrieved": [],
+      "answer": {
+        "text": "",
+        "citations": [],
+        "model": null,
+        "provider": null
+      },
+      "metrics": {
+        "context_recall": {
+          "score": null,
+          "error": "stub run"
+        },
+        "context_precision": {
+          "score": null,
+          "error": "stub run"
+        },
+        "faithfulness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "answer_relevancy": {
+          "score": null,
+          "error": "stub run"
+        },
+        "refusal_correctness": {
+          "score": null,
+          "error": "stub run"
+        },
+        "citation_validity": {
+          "score": null,
+          "error": "stub run"
+        }
+      },
+      "rowError": "STUB: harness not executed against a real DB/LLM; rerun without --stub when dev creds are available"
+    }
+  ],
+  "aggregates": {
+    "context_recall": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    },
+    "context_precision": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    },
+    "faithfulness": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    },
+    "answer_relevancy": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    },
+    "refusal_correctness": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    },
+    "citation_validity": {
+      "mean": null,
+      "n": 0,
+      "nNull": 20
+    }
+  },
+  "notes": [
+    "STUB RUN — no dev DB or LLM key reachable from this environment.",
+    "Re-run `pnpm --filter @ats/api rag:eval -- --corpus=teacher` with",
+    "RAG_EVAL_JUDGE_USER_ID, RAG_EVAL_TEACHER_COURSE_ID / RAG_EVAL_STUDENT_COURSE_ID,",
+    "and RAG_EVAL_STUDENT_ID set to populate real baseline numbers."
+  ]
+}

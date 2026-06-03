@@ -56,6 +56,7 @@ export function StudentTextMiningPage() {
       {data && (
         <DashboardPanel
           sessionId={studentId ?? ''}
+          scope="dialogue"
           data={data}
           onRefresh={fetchData}
           loading={loading}

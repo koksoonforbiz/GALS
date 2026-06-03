@@ -75,11 +75,30 @@ export const CreateCourseSchema = z.object({
   description: z.string().max(2000).default(''),
   learningMode: z.enum(['STANDARD', 'DIALOGUE']).optional().default('STANDARD'),
   dblSettings: DialogueCourseSettingsSchema.optional(),
+  // Enrollment policy flags (prompt 03). Optional on create; the DB
+  // default kicks in when omitted (allowStudentSelfEnroll = true,
+  // allowStudentSelfDrop = false). Surfaced here so the same
+  // UpdateCourseSchema accepts them on PATCH.
+  allowStudentSelfEnroll: z.boolean().optional(),
+  allowStudentSelfDrop: z.boolean().optional(),
 });
 export type CreateCourse = z.infer<typeof CreateCourseSchema>;
 
 export const UpdateCourseSchema = CreateCourseSchema.partial();
 export type UpdateCourse = z.infer<typeof UpdateCourseSchema>;
+
+// Dedicated DTO for the per-course enrollment policy PATCH on
+// PromptSettingsPage's Enrollment tab. Both fields are optional so the
+// UI can toggle just one at a time.
+export const UpdateEnrollmentPolicySchema = z
+  .object({
+    allowStudentSelfEnroll: z.boolean().optional(),
+    allowStudentSelfDrop: z.boolean().optional(),
+  })
+  .refine((v) => v.allowStudentSelfEnroll !== undefined || v.allowStudentSelfDrop !== undefined, {
+    message: 'At least one of allowStudentSelfEnroll or allowStudentSelfDrop must be provided',
+  });
+export type UpdateEnrollmentPolicy = z.infer<typeof UpdateEnrollmentPolicySchema>;
 
 export const CreateTopicSchema = z.object({
   courseId: z.string().uuid(),

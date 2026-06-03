@@ -1,8 +1,25 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
 import { calculateCost } from '../user-management/llm-cost-calculator';
+import {
+  getChatModel,
+  getEmbeddingModel,
+  isSelectable,
+  defaultChatModel,
+  defaultEmbeddingModel,
+  type ChatModelSpec,
+  type LlmProvider,
+} from '../llm/model-registry';
 import * as crypto from 'crypto';
 
 interface GenerateRagAnswerInput {
@@ -40,7 +57,80 @@ interface LlmResponse {
 interface UserLlmSettings {
   provider: string | null;
   model: string | null;
+  embeddingModel: string | null;
   hasKey: boolean;
+  // Stage 04 (RAG) — Cohere Rerank API key presence flag. The
+  // AiSettingsPage uses this to render the "Cohere key configured"
+  // status without sending the (encrypted) key back to the browser.
+  hasCohereKey: boolean;
+}
+
+// ─── Funnel call-shape types (Stage 3) ──────────────────────
+//
+// The funnel accepts a normalized request and shapes it per the
+// resolved ChatModelSpec. Every chat call site (including the 6 ex-
+// bypasses refactored in Stage 3.2) goes through `callLlmForUser`.
+//
+// `content` may be a plain string OR an OpenAI-style content-part
+// array (the multimodal page-content path uses parts). Under Gemini
+// the funnel translates: text parts → `parts: [{ text }]`; OpenAI
+// file parts → either the cached file_id reference (if the spec says
+// `supportsOpenAiFilesApi`) or are silently dropped (the caller is
+// expected to pre-substitute the chunked-text RAG fallback — see
+// Stage 3.5).
+
+export type FunnelTextPart = { type: 'text'; text: string };
+export type FunnelFilePartByOpenAiId = {
+  type: 'file';
+  file: { file_id: string };
+};
+export type FunnelFilePartInline = {
+  type: 'file';
+  file: { filename: string; file_data: string };
+};
+/**
+ * Stage 05 — Multimodal image content for the VLM caption flow (and
+ * any future image-input call site, e.g. an interventions surface
+ * that wants to ask "explain this chart"). Uses the OpenAI-style
+ * `image_url` shape with a base64 data URL so the same part type
+ * works for both OpenAI (passed straight through) and Gemini
+ * (translated to `inlineData` in `callGeminiApi`).
+ *
+ * `url` MUST be a data URL — `data:image/png;base64,...` — because
+ * the caller is the rasterizer (we already have the bytes); we
+ * intentionally don't accept remote URLs to keep the surface tiny
+ * and the caching story explicit (caller decides what to embed).
+ */
+export type FunnelImageUrlPart = {
+  type: 'image_url';
+  image_url: { url: string };
+};
+export type FunnelContentPart =
+  | FunnelTextPart
+  | FunnelFilePartByOpenAiId
+  | FunnelFilePartInline
+  | FunnelImageUrlPart;
+
+export interface FunnelMessage {
+  role: 'user' | 'assistant';
+  content: string | FunnelContentPart[];
+}
+
+export interface FunnelOptions {
+  /** Optional. When true, ask the provider to emit valid JSON. If
+   *  `jsonSchema` is also supplied, the funnel will request strict
+   *  schema-bound JSON where the provider supports it (OpenAI
+   *  `response_format: json_schema`, Gemini `responseSchema`). */
+  jsonMode?: boolean;
+  jsonSchema?: Record<string, unknown>;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+interface FunnelResult {
+  content: string;
+  promptTokens: number;
+  completionTokens: number;
 }
 
 // Simple symmetric encryption for storing API keys at rest
@@ -54,7 +144,9 @@ export class LlmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @Inject(forwardRef(() => RagService))
     private readonly ragService: RagService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     // Derive a 32-byte key from JWT_SECRET for encrypting stored API keys
     const secret = this.config.get<string>('JWT_SECRET', 'dev-secret-change-in-production');
@@ -82,20 +174,54 @@ export class LlmService {
     return decipher.update(encrypted) + decipher.final('utf8');
   }
 
-  async saveApiKey(userId: string, provider: string, apiKey: string, model?: string) {
+  async saveApiKey(
+    userId: string,
+    provider: string,
+    apiKey: string,
+    model?: string,
+    embeddingModel?: string,
+  ) {
+    // Stage 2 of the LLM upgrade: validate every persisted model id against
+    // the registry, not just trust whatever string the client posted. A
+    // teacher can no longer save an unknown model, a model that belongs to
+    // a different provider, or a fully-retired model.
+    const providerTyped = this.assertSelectableProvider(provider);
+    const resolvedModel = this.assertChatModelAllowed(providerTyped, model);
+    const resolvedEmbeddingModel = this.assertEmbeddingModelAllowed(providerTyped, embeddingModel);
+
+    // Read the existing embedding-model pin before we write so we can
+    // mark the teacher's owned source documents `needsReembed = true`
+    // when the value actually changes. Stage 3 owns the worker that
+    // consumes this marker — here we only set up the contract.
+    const previous = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { llmEmbeddingModel: true },
+    });
+
     const encrypted = this.encrypt(apiKey);
-    const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
 
     await this.prisma.user.update({
       where: { id: userId },
       data: {
-        llmProvider: provider,
+        llmProvider: providerTyped,
         encryptedApiKey: encrypted,
-        llmModel: model || defaultModel,
+        llmModel: resolvedModel,
+        llmEmbeddingModel: resolvedEmbeddingModel,
       },
     });
 
-    return { saved: true, provider, model: model || defaultModel };
+    await this.markCorporaForReembedIfChanged(
+      userId,
+      previous?.llmEmbeddingModel ?? null,
+      resolvedEmbeddingModel,
+    );
+
+    return {
+      saved: true,
+      provider: providerTyped,
+      model: resolvedModel,
+      embeddingModel: resolvedEmbeddingModel,
+    };
   }
 
   async removeApiKey(userId: string) {
@@ -105,6 +231,7 @@ export class LlmService {
         llmProvider: null,
         encryptedApiKey: null,
         llmModel: null,
+        llmEmbeddingModel: null,
       },
     });
     return { removed: true };
@@ -113,13 +240,73 @@ export class LlmService {
   async getUserLlmSettings(userId: string): Promise<UserLlmSettings> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
+      select: {
+        llmProvider: true,
+        llmModel: true,
+        llmEmbeddingModel: true,
+        encryptedApiKey: true,
+        cohereApiKey: true,
+      },
     });
     return {
       provider: user?.llmProvider || null,
       model: user?.llmModel || null,
+      embeddingModel: user?.llmEmbeddingModel || null,
       hasKey: !!user?.encryptedApiKey,
+      hasCohereKey: !!user?.cohereApiKey,
     };
+  }
+
+  // ─── Cohere API Key Management (Stage 04) ────────────────
+  //
+  // Cohere is a separate vendor from the chat LLM (OpenAI/Gemini) —
+  // we keep its key on a separate `User.cohereApiKey` column so a
+  // teacher can opt into reranking without touching their chat
+  // credentials. Encrypted with the SAME AES-256-GCM helper as
+  // `encryptedApiKey` (the encryption key is derived from
+  // `JWT_SECRET`; reusing it means there's one secret to rotate
+  // rather than two).
+
+  async saveCohereApiKey(userId: string, apiKey: string): Promise<{ saved: true }> {
+    if (!apiKey?.trim()) {
+      throw new BadRequestException('Cohere API key is required');
+    }
+    const encrypted = this.encrypt(apiKey.trim());
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { cohereApiKey: encrypted },
+    });
+    return { saved: true };
+  }
+
+  async removeCohereApiKey(userId: string): Promise<{ removed: true }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { cohereApiKey: null },
+    });
+    return { removed: true };
+  }
+
+  /**
+   * Resolve the teacher's Cohere key for the cross-encoder reranker.
+   * Returns `null` when no key is configured or decryption fails —
+   * the reranker MUST handle null by falling back to the noop path.
+   * NEVER throws (triple-defensive contract on the rerank surface).
+   */
+  async getCohereApiKey(userId: string): Promise<string | null> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { cohereApiKey: true },
+      });
+      if (!user?.cohereApiKey) return null;
+      return this.decrypt(user.cohereApiKey);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to decrypt Cohere key for user ${userId}: ${(err as Error).message}`,
+      );
+      return null;
+    }
   }
 
   private async getUserApiKey(
@@ -132,12 +319,162 @@ export class LlmService {
     if (!user?.encryptedApiKey) return null;
     try {
       const apiKey = this.decrypt(user.encryptedApiKey);
-      const provider = user.llmProvider || 'openai';
-      const defaultModel = provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini';
-      return { apiKey, model: user.llmModel || defaultModel, provider };
+      const provider = (user.llmProvider === 'gemini' ? 'gemini' : 'openai') as LlmProvider;
+      const storedModel = user.llmModel ?? null;
+      const resolvedModel = this.resolveChatModelWithGuard(provider, storedModel, userId);
+      return { apiKey, model: resolvedModel, provider };
     } catch {
       this.logger.error(`Failed to decrypt API key for user ${userId}`);
       return null;
+    }
+  }
+
+  // ─── Read-time guard + validation helpers ─────────────────
+  //
+  // Stage 2 (`LLM_20260602/stage2_*`) introduces two safety layers around
+  // the model the funnel will actually call:
+  //
+  //   1. `resolveChatModelWithGuard()` runs on every funnel-routed call.
+  //      If the persisted `User.llmModel` no longer exists in the registry
+  //      or has been hard-retired (e.g. the dead `gemini-2.0-flash`), we
+  //      substitute the provider's recommended default and log a `warn` so
+  //      the live system stops 404-ing immediately, before the data
+  //      migration script runs.
+  //
+  //   2. `assertChatModelAllowed` / `assertEmbeddingModelAllowed` validate
+  //      a teacher's *intended* save. Mismatched provider, unknown id, and
+  //      retired models are all rejected with a 400 — the registry is the
+  //      single source of truth.
+
+  private resolveChatModelWithGuard(
+    provider: LlmProvider,
+    storedModel: string | null,
+    userId: string,
+  ): string {
+    if (!storedModel) {
+      return defaultChatModel(provider).id;
+    }
+    const spec = getChatModel(storedModel);
+    if (spec && spec.provider === provider && isSelectable(spec.id)) {
+      return storedModel;
+    }
+    const fallback = defaultChatModel(provider).id;
+    const reason = !spec
+      ? 'not in registry'
+      : spec.provider !== provider
+        ? `provider mismatch (registry says ${spec.provider}, user provider is ${provider})`
+        : 'retired';
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[LlmService] Read-time guard: user ${userId} model "${storedModel}" is ${reason}; substituting "${fallback}".`,
+    );
+    return fallback;
+  }
+
+  private assertSelectableProvider(provider: string): LlmProvider {
+    if (provider !== 'openai' && provider !== 'gemini') {
+      throw new BadRequestException(
+        `Unsupported LLM provider "${provider}". Expected one of: openai, gemini.`,
+      );
+    }
+    return provider;
+  }
+
+  private assertChatModelAllowed(provider: LlmProvider, modelId?: string | null): string {
+    if (!modelId) {
+      // No model supplied → use registry default for the provider.
+      return defaultChatModel(provider).id;
+    }
+    const spec = getChatModel(modelId);
+    if (!spec) {
+      throw new BadRequestException(
+        `Unknown chat model "${modelId}". Pick a model from /llm/models?provider=${provider}.`,
+      );
+    }
+    if (spec.provider !== provider) {
+      throw new BadRequestException(
+        `Chat model "${modelId}" belongs to provider "${spec.provider}", not "${provider}".`,
+      );
+    }
+    if (!isSelectable(spec.id)) {
+      throw new BadRequestException(
+        `Chat model "${modelId}" is retired and can no longer be selected. Try ${defaultChatModel(provider).id} instead.`,
+      );
+    }
+    return spec.id;
+  }
+
+  private assertEmbeddingModelAllowed(provider: LlmProvider, modelId?: string | null): string {
+    if (!modelId) {
+      return defaultEmbeddingModel(provider).id;
+    }
+    const spec = getEmbeddingModel(modelId);
+    if (!spec) {
+      throw new BadRequestException(
+        `Unknown embedding model "${modelId}". Pick a model from /llm/models?provider=${provider}.`,
+      );
+    }
+    if (spec.provider !== provider) {
+      throw new BadRequestException(
+        `Embedding model "${modelId}" belongs to provider "${spec.provider}", not "${provider}".`,
+      );
+    }
+    if (!isSelectable(spec.id)) {
+      throw new BadRequestException(
+        `Embedding model "${modelId}" is retired and can no longer be selected. Try ${defaultEmbeddingModel(provider).id} instead.`,
+      );
+    }
+    return spec.id;
+  }
+
+  /**
+   * When a teacher actively changes their embedding model, flag every
+   * corpus they own that was indexed under the OLD model so Stage 3's
+   * worker can re-embed. We deliberately do NOT touch corpora when:
+   *   - the teacher's previous value was null (legacy default — leave it
+   *     pinned at `text-embedding-ada-002` as the migration backfilled),
+   *   - the new value equals the previous value (no-op save), or
+   *   - the corpus is already pinned to the new value.
+   *
+   * Stage 2 owns the marker only. Stage 3 owns the actual re-embed flow.
+   */
+  private async markCorporaForReembedIfChanged(
+    teacherId: string,
+    previous: string | null,
+    next: string,
+  ): Promise<void> {
+    if (!previous) return; // first-time set: no existing corpora to disturb
+    if (previous === next) return;
+
+    const [teacherDocs, studentDocs] = await Promise.all([
+      this.prisma.sourceDocument.updateMany({
+        where: {
+          uploadedById: teacherId,
+          embeddingModel: previous,
+          needsReembed: false,
+        },
+        data: { needsReembed: true },
+      }),
+      this.prisma.studentSourceDocument.updateMany({
+        where: {
+          course: { teacherId },
+          embeddingModel: previous,
+          needsReembed: false,
+        },
+        data: { needsReembed: true },
+      }),
+    ]);
+
+    this.logger.log(
+      `Embedding model changed for teacher ${teacherId} (${previous} → ${next}); marked ${teacherDocs.count} teacher docs + ${studentDocs.count} student docs needsReembed=true.`,
+    );
+
+    // Stage 3: kick off the re-embed worker for the teacher's student
+    // corpora. Teacher corpora are keyword-only (rag.service.ts:391
+    // confirms no embeddings yet) so we only need to re-embed student
+    // docs here. Fire-and-forget; the worker tolerates re-runs.
+    if (studentDocs.count > 0) {
+      this.eventEmitter.emit('student-document.reembed-teacher', { teacherId });
     }
   }
 
@@ -155,7 +492,13 @@ export class LlmService {
     const userPrompt = `${contextBlock}\n\n---\n\nQuestion: ${input.query}`;
 
     const credentials = await this.getUserApiKey(input.userId);
-    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
+    const result = await this.callLlm(
+      {
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      },
+      credentials,
+    );
 
     const citations = this.extractCitations(result.content, input.chunks);
 
@@ -245,7 +588,13 @@ export class LlmService {
     const userPrompt = `${contextBlock}\n\n---\n\nGenerate course content for: "${input.title}"\n\nTeacher instructions: ${input.prompt}`;
 
     const credentials = await this.getUserApiKey(input.userId);
-    const result = await this.callLlm(systemPrompt, userPrompt, credentials);
+    const result = await this.callLlm(
+      {
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      },
+      credentials,
+    );
 
     const citations = this.extractCitations(result.content, input.chunks);
 
@@ -431,10 +780,56 @@ export class LlmService {
     systemPrompt: string,
     userPrompt: string,
     usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
-    options?: { jsonMode?: boolean; maxTokens?: number },
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
+    options?: FunnelOptions,
+  ): Promise<{
+    content: string;
+    promptTokens: number;
+    completionTokens: number;
+    /** Model identifier that produced this completion (null when no credentials → template path). */
+    model: string | null;
+    /** Provider name (openai | anthropic | gemini | template). */
+    provider: string | null;
+  }> {
+    return this.callLlmStructured(
+      userId,
+      {
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        ...options,
+      },
+      usageContext,
+    );
+  }
+
+  /**
+   * Registry-driven structured entry point for chat. Accepts a normalized
+   * request and dispatches to the resolved provider with capability-flag-
+   * aware request building. All Stage 3 bypass refactors call this.
+   *
+   * If the teacher has no API key configured, the funnel falls back to the
+   * built-in template generator (existing behavior). Provider errors
+   * propagate to the caller so it can decide whether to fall back further.
+   */
+  async callLlmStructured(
+    userId: string,
+    request: {
+      systemPrompt: string;
+      messages: FunnelMessage[];
+      jsonMode?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      maxTokens?: number;
+      temperature?: number;
+    },
+    usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
+  ): Promise<{
+    content: string;
+    promptTokens: number;
+    completionTokens: number;
+    model: string | null;
+    provider: string | null;
+  }> {
     const credentials = await this.getUserApiKey(userId);
-    const result = await this.callLlm(systemPrompt, userPrompt, credentials, options);
+    const result = await this.callLlm(request, credentials);
 
     if (usageContext) {
       await this.logLlmUsage({
@@ -448,7 +843,111 @@ export class LlmService {
       });
     }
 
-    return result;
+    return {
+      ...result,
+      model: credentials?.model ?? null,
+      provider: credentials?.provider ?? null,
+    };
+  }
+
+  /**
+   * Exposes the resolved chat-model spec for the teacher so call sites can
+   * branch on capability flags (e.g. `supportsOpenAiFilesApi`) BEFORE
+   * issuing the funnel call. Returns null when the teacher has no key
+   * configured.
+   */
+  async getResolvedChatModelForUser(
+    userId: string,
+  ): Promise<{ spec: ChatModelSpec; provider: LlmProvider } | null> {
+    const credentials = await this.getUserApiKey(userId);
+    if (!credentials) return null;
+    const spec = getChatModel(credentials.model);
+    if (!spec) return null;
+    return { spec, provider: credentials.provider as LlmProvider };
+  }
+
+  /**
+   * Upload a PDF (or any binary) to OpenAI's Files API on behalf of a user.
+   * Returns the file_id so callers can reference it in subsequent chat
+   * completions (avoids re-uploading the same PDF on every generation).
+   * Returns null when the user has no OpenAI key configured, the provider
+   * is not OpenAI, or the upload fails — callers should fall back to inline
+   * base64 in that case.
+   */
+  async uploadFileToOpenAi(
+    userId: string,
+    filename: string,
+    buffer: Buffer,
+    mimeType: string = 'application/pdf',
+  ): Promise<string | null> {
+    const credentials = await this.getUserApiKey(userId);
+    if (!credentials) {
+      this.logger.warn(`uploadFileToOpenAi: user ${userId} has no API key configured`);
+      return null;
+    }
+    if (credentials.provider !== 'openai') {
+      this.logger.log(
+        `uploadFileToOpenAi: user ${userId} provider is ${credentials.provider}, skipping OpenAI Files upload`,
+      );
+      return null;
+    }
+    try {
+      const form = new FormData();
+      const blob = new Blob([new Uint8Array(buffer)], { type: mimeType });
+      form.append('file', blob, filename);
+      form.append('purpose', 'user_data');
+
+      const response = await fetch('https://api.openai.com/v1/files', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${credentials.apiKey}`,
+        },
+        body: form,
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        this.logger.error(
+          `OpenAI Files upload failed (${response.status}) for "${filename}": ${errText}`,
+        );
+        return null;
+      }
+      const data = (await response.json()) as { id?: string };
+      if (!data.id) {
+        this.logger.error(`OpenAI Files upload returned no id for "${filename}"`);
+        return null;
+      }
+      this.logger.log(`Uploaded "${filename}" to OpenAI Files API → ${data.id}`);
+      return data.id;
+    } catch (err) {
+      this.logger.error(
+        `uploadFileToOpenAi threw for "${filename}": ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Best-effort delete of an OpenAI-stored file. Called when the source
+   * document is removed locally so we don't leave orphan files on OpenAI.
+   * Never throws — failures are logged.
+   */
+  async deleteFileFromOpenAi(userId: string, fileId: string): Promise<void> {
+    const credentials = await this.getUserApiKey(userId);
+    if (!credentials || credentials.provider !== 'openai') return;
+    try {
+      const response = await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${credentials.apiKey}` },
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        this.logger.warn(
+          `OpenAI Files delete failed (${response.status}) for ${fileId}: ${errText}`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(`deleteFileFromOpenAi threw for ${fileId}: ${(err as Error).message}`);
+    }
   }
 
   async logLlmUsage(params: {
@@ -494,133 +993,262 @@ export class LlmService {
   // ─── Private Helpers ───────────────────────────────────
 
   private async callLlm(
-    systemPrompt: string,
-    userPrompt: string,
+    request: {
+      systemPrompt: string;
+      messages: FunnelMessage[];
+      jsonMode?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      maxTokens?: number;
+      temperature?: number;
+    },
     credentials: { apiKey: string; model: string; provider: string } | null,
-    options?: { jsonMode?: boolean; maxTokens?: number },
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    if (credentials) {
-      if (credentials.provider === 'gemini') {
-        return this.callGeminiApi(
-          systemPrompt,
-          userPrompt,
+  ): Promise<FunnelResult> {
+    // No key → template fallback. The template generator reads simple
+    // flat strings, so flatten the structured input for legacy parsing.
+    if (!credentials) {
+      const userText = this.flattenMessagesToText(request.messages);
+      return this.generateWithoutApi(request.systemPrompt, userText);
+    }
+
+    const provider = credentials.provider as LlmProvider;
+    const spec = getChatModel(credentials.model);
+    // Defensive: read-time guard in getUserApiKey should have already
+    // substituted an in-registry model, but if a brand-new model slips
+    // through we fall back to the provider's default spec to drive call
+    // shape. This keeps the funnel alive instead of crashing.
+    const effectiveSpec = spec ?? defaultChatModel(provider);
+
+    try {
+      if (provider === 'gemini') {
+        return await this.callGeminiApi(
+          request,
           credentials.apiKey,
           credentials.model,
-          options,
+          effectiveSpec,
         );
       }
-      return this.callOpenAiApi(
-        systemPrompt,
-        userPrompt,
+      return await this.callOpenAiApi(
+        request,
         credentials.apiKey,
         credentials.model,
-        options,
+        effectiveSpec,
       );
+    } catch (error) {
+      this.logger.error(`Provider call failed (${provider}/${credentials.model})`, error);
+      // For JSON requests we MUST surface — silent template fallback
+      // here is what causes intervention parsers to think Gemini failed
+      // when it just couldn't be parsed. Let the caller decide.
+      if (request.jsonMode || request.jsonSchema) throw error;
+      // Free-text path: legacy behavior, degrade to template.
+      const userText = this.flattenMessagesToText(request.messages);
+      return this.generateWithoutApi(request.systemPrompt, userText);
     }
-    // Fallback: built-in template-based generation (no API key configured)
-    return this.generateWithoutApi(systemPrompt, userPrompt);
   }
+
+  /**
+   * Flatten the structured-message input into a single string for the
+   * template fallback (no API key path). Strips file parts because the
+   * template generator has no notion of multimodal inputs.
+   */
+  private flattenMessagesToText(messages: FunnelMessage[]): string {
+    return messages
+      .map((m) => {
+        if (typeof m.content === 'string') return m.content;
+        return m.content
+          .filter((p): p is FunnelTextPart => p.type === 'text')
+          .map((p) => p.text)
+          .join('\n');
+      })
+      .join('\n\n');
+  }
+
+  // ─── OpenAI: registry-driven request shape ──────────────
 
   private async callOpenAiApi(
-    systemPrompt: string,
-    userPrompt: string,
+    request: {
+      systemPrompt: string;
+      messages: FunnelMessage[];
+      jsonMode?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      maxTokens?: number;
+      temperature?: number;
+    },
     apiKey: string,
     model: string,
-    options?: { jsonMode?: boolean; maxTokens?: number },
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    try {
-      const body: Record<string, unknown> = {
-        model,
-        max_tokens: options?.maxTokens || 4096,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      };
-      if (options?.jsonMode) {
+    spec: ChatModelSpec,
+  ): Promise<FunnelResult> {
+    const body: Record<string, unknown> = { model };
+
+    // Token cap: GPT-5.x reasoning uses max_completion_tokens; older
+    // OpenAI uses max_tokens.
+    const tokenLimit = request.maxTokens ?? 4096;
+    body[spec.maxTokensParam] = tokenLimit;
+
+    // Only set temperature/top_p when the model accepts a custom one.
+    if (spec.supportsTemperature && request.temperature !== undefined) {
+      body.temperature = request.temperature;
+    }
+
+    // JSON mode: prefer schema-bound when both are available.
+    if (spec.supportsJsonMode && (request.jsonMode || request.jsonSchema)) {
+      if (request.jsonSchema) {
+        body.response_format = {
+          type: 'json_schema',
+          json_schema: {
+            name: 'response',
+            schema: request.jsonSchema,
+            strict: false,
+          },
+        };
+      } else {
         body.response_format = { type: 'json_object' };
       }
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
-        throw new Error(`OpenAI API error: ${response.status}`);
-      }
-
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-      return {
-        content: data.choices?.[0]?.message?.content || '',
-        promptTokens: data.usage?.prompt_tokens || 0,
-        completionTokens: data.usage?.completion_tokens || 0,
-      };
-    } catch (error) {
-      this.logger.error('Failed to call OpenAI API', error);
-      if (options?.jsonMode) throw error;
-      // Fallback to template-based generation
-      return this.generateWithoutApi(systemPrompt, userPrompt);
     }
+
+    // System prompt → first message with role=system. Pass-through
+    // content parts so multimodal payloads (file_id / inline) work.
+    const messages: Array<{ role: string; content: unknown }> = [
+      { role: 'system', content: request.systemPrompt },
+    ];
+    for (const m of request.messages) {
+      messages.push({ role: m.role, content: m.content });
+    }
+    body.messages = messages;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error(`OpenAI API error: ${response.status} ${errorText}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    return {
+      content: data.choices?.[0]?.message?.content || '',
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+    };
   }
 
+  // ─── Gemini: registry-driven request shape ──────────────
+
   private async callGeminiApi(
-    systemPrompt: string,
-    userPrompt: string,
+    request: {
+      systemPrompt: string;
+      messages: FunnelMessage[];
+      jsonMode?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      maxTokens?: number;
+      temperature?: number;
+    },
     apiKey: string,
     model: string,
-    options?: { jsonMode?: boolean; maxTokens?: number },
-  ): Promise<{ content: string; promptTokens: number; completionTokens: number }> {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    spec: ChatModelSpec,
+  ): Promise<FunnelResult> {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-      const generationConfig: Record<string, unknown> = {
-        maxOutputTokens: options?.maxTokens || 4096,
-      };
-      if (options?.jsonMode) {
-        generationConfig.responseMimeType = 'application/json';
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-          generationConfig,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.error(`Gemini API error: ${response.status} ${errorText}`);
-        throw new Error(`Gemini API error: ${response.status}`);
-      }
-
-      const data = (await response.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-      };
-
-      return {
-        content: data.candidates?.[0]?.content?.parts?.[0]?.text || '',
-        promptTokens: data.usageMetadata?.promptTokenCount || 0,
-        completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
-      };
-    } catch (error) {
-      this.logger.error('Failed to call Gemini API', error);
-      if (options?.jsonMode) throw error;
-      // Fallback to template-based generation
-      return this.generateWithoutApi(systemPrompt, userPrompt);
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: request.maxTokens ?? 4096,
+    };
+    if (spec.supportsTemperature && request.temperature !== undefined) {
+      generationConfig.temperature = request.temperature;
     }
+
+    // Thinking: drive from registry. 3.x → thinking_level enum.
+    //          2.x → thinking_budget integer.
+    //          'none' / undefined → omit (model default).
+    if (spec.geminiThinkingParam === 'thinking_level') {
+      generationConfig.thinkingConfig = { thinkingLevel: 'medium' };
+    } else if (spec.geminiThinkingParam === 'thinking_budget') {
+      // Conservative default that still allows useful thought on 2.x.
+      generationConfig.thinkingConfig = { thinkingBudget: 1024 };
+    }
+
+    // JSON mode: responseMimeType (+ optional responseSchema).
+    if (spec.supportsJsonMode && (request.jsonMode || request.jsonSchema)) {
+      generationConfig.responseMimeType = 'application/json';
+      if (request.jsonSchema) {
+        generationConfig.responseSchema = request.jsonSchema;
+      }
+    }
+
+    // Translate FunnelMessage[] → Gemini contents.
+    const contents = request.messages.map((m) => {
+      const role = m.role === 'assistant' ? 'model' : 'user';
+      const parts =
+        typeof m.content === 'string'
+          ? [{ text: m.content } as GeminiPart]
+          : m.content
+              .map((p): GeminiPart | null => {
+                if (p.type === 'text') {
+                  return { text: p.text };
+                }
+                if (p.type === 'image_url') {
+                  // Stage 05 — translate OpenAI-style `image_url` to
+                  // Gemini `inlineData`. We parse the data URL into
+                  // (mimeType, base64) so Gemini gets the bytes it
+                  // expects. Remote URLs are not supported (see
+                  // FunnelImageUrlPart comment).
+                  const parsed = parseDataUrl(p.image_url.url);
+                  if (!parsed) return null;
+                  return {
+                    inlineData: {
+                      mimeType: parsed.mimeType,
+                      data: parsed.base64,
+                    },
+                  };
+                }
+                // OpenAI file-id refs are meaningless under Gemini. The
+                // multimodal call sites in Stage 3.5 substitute chunked
+                // text BEFORE reaching the funnel; if anything still
+                // sneaks through, drop it rather than 400.
+                return null;
+              })
+              .filter((p): p is GeminiPart => p !== null);
+      return { role, parts };
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: request.systemPrompt }] },
+        contents,
+        generationConfig,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error(`Gemini API error: ${response.status} ${errorText}`);
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+
+    // Concat ALL text parts (Gemini sometimes returns multiple).
+    const parts = data.candidates?.[0]?.content?.parts ?? [];
+    const content = parts.map((p) => p.text ?? '').join('');
+
+    return {
+      content,
+      promptTokens: data.usageMetadata?.promptTokenCount || 0,
+      completionTokens: data.usageMetadata?.candidatesTokenCount || 0,
+    };
   }
 
   private async generateWithoutApi(
@@ -816,7 +1444,7 @@ Rules:
     inputPayload?: import('@prisma/client').Prisma.InputJsonValue;
     outputPayload?: import('@prisma/client').Prisma.InputJsonValue;
     errorMessage?: string;
-  }) {
+  }): Promise<void> {
     try {
       await this.prisma.llmAuditLog.create({ data });
     } catch (err) {
@@ -824,3 +1452,22 @@ Rules:
     }
   }
 }
+
+// ─── Stage 05 — Gemini multimodal helper types + utilities ──
+
+/** Gemini `contents[i].parts[j]` is either text or `inlineData`. */
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } };
+
+/**
+ * Parse a `data:mime/type;base64,...` URL into its mime type and
+ * base64 payload. Returns null when the input isn't a base64 data
+ * URL — callers drop the part rather than crashing the request.
+ */
+function parseDataUrl(url: string): { mimeType: string; base64: string } | null {
+  const match = url.match(/^data:([^;]+);base64,(.*)$/);
+  if (!match) return null;
+  return { mimeType: match[1]!, base64: match[2]! };
+}
+

@@ -15,6 +15,13 @@ import {
 import type { ReactNode } from 'react';
 import { TextMiningPromptsTab } from './TextMiningPromptsTab';
 
+// Prompt 03: per-course enrollment policy. Shape returned by GET /courses/:id
+// (full Course) and PATCH /courses/:id/enrollment-policy (partial).
+interface EnrollmentPolicy {
+  allowStudentSelfEnroll: boolean;
+  allowStudentSelfDrop: boolean;
+}
+
 interface PromptConfig {
   interventionType: string;
   courseId: string;
@@ -25,6 +32,11 @@ interface PromptConfig {
   label: string;
   description: string;
   warning?: string | null;
+  // P4 — per-course Practice Testing default counts. Null on every
+  // other intervention type and on rows where the teacher hasn't
+  // overridden the hard-coded 3+2.
+  defaultMcqCount?: number | null;
+  defaultShortAnswerCount?: number | null;
 }
 
 interface FeedbackConfig {
@@ -37,7 +49,7 @@ interface FeedbackConfig {
   description: string;
 }
 
-type TabKey = 'interventions' | 'feedback' | 'questiongen' | 'text-mining';
+type TabKey = 'interventions' | 'feedback' | 'questiongen' | 'text-mining' | 'enrollment';
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   PRACTICE_TESTING: <FlaskConical size={20} />,
@@ -66,6 +78,13 @@ export function PromptSettingsPage() {
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
 
+  // P4 — Practice Testing default-count editor state. Strings so the
+  // input fields can be empty (= "use the hard-coded 3+2"). Bounded
+  // to [0,10] on save; sum [1,10] when at least one slot is set.
+  const [defaultMcqInput, setDefaultMcqInput] = useState<string>('');
+  const [defaultShortInput, setDefaultShortInput] = useState<string>('');
+  const [savingDefaults, setSavingDefaults] = useState<boolean>(false);
+
   // Feedback tab state
   const [feedbackConfigs, setFeedbackConfigs] = useState<FeedbackConfig[]>([]);
   const [feedbackEditValues, setFeedbackEditValues] = useState<Record<string, string>>({});
@@ -79,6 +98,11 @@ export function PromptSettingsPage() {
   const qgenDefault = '';
   const [qgenIsCustom, setQgenIsCustom] = useState(false);
   const [qgenSaving, setQgenSaving] = useState(false);
+
+  // Prompt 03: Enrollment tab state — per-course policy flags. Loaded
+  // from GET /courses/:id (which includes the two scalar columns).
+  const [enrollmentPolicy, setEnrollmentPolicy] = useState<EnrollmentPolicy | null>(null);
+  const [savingPolicy, setSavingPolicy] = useState(false);
 
   // Preview modal state
   const [previewType, setPreviewType] = useState<string | null>(null);
@@ -101,6 +125,18 @@ export function PromptSettingsPage() {
         edits[c.interventionType] = c.systemPrompt;
       }
       setEditValues(edits);
+      // P4 — seed the default-count editor from the PRACTICE_TESTING
+      // row's stored values. Empty string when the teacher hasn't
+      // set them (the hard-coded 3+2 wins).
+      const pt = data.find((c) => c.interventionType === 'PRACTICE_TESTING');
+      setDefaultMcqInput(
+        pt?.defaultMcqCount == null ? '' : String(pt.defaultMcqCount),
+      );
+      setDefaultShortInput(
+        pt?.defaultShortAnswerCount == null
+          ? ''
+          : String(pt.defaultShortAnswerCount),
+      );
     } catch {
       toast('error', 'Failed to load prompt configurations');
     } finally {
@@ -137,11 +173,29 @@ export function PromptSettingsPage() {
     }
   }, [courseId]);
 
+  // Prompt 03: load enrollment policy flags from the full course
+  // record. The two scalar columns ride along on GET /courses/:id
+  // because findOne() uses `include` (Prisma returns all scalars by
+  // default).
+  const fetchEnrollmentPolicy = useCallback(async () => {
+    if (!courseId) return;
+    try {
+      const data = await api.get<EnrollmentPolicy>(`/courses/${courseId}`);
+      setEnrollmentPolicy({
+        allowStudentSelfEnroll: data.allowStudentSelfEnroll,
+        allowStudentSelfDrop: data.allowStudentSelfDrop,
+      });
+    } catch {
+      /* ignore — the tab will show a loading state */
+    }
+  }, [courseId]);
+
   useEffect(() => {
     void fetchConfigs();
     void fetchFeedbackConfigs();
     void fetchFeedbackSettings();
-  }, [fetchConfigs, fetchFeedbackConfigs, fetchFeedbackSettings]);
+    void fetchEnrollmentPolicy();
+  }, [fetchConfigs, fetchFeedbackConfigs, fetchFeedbackSettings, fetchEnrollmentPolicy]);
 
   const handleSave = async (type: string) => {
     if (!courseId) return;
@@ -161,6 +215,34 @@ export function PromptSettingsPage() {
       toast('error', err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving((s) => ({ ...s, [type]: false }));
+    }
+  };
+
+  // P4 — persist the per-course Practice Testing default counts.
+  // Empty string ⇒ null (clear the override; fall back to 3+2). The
+  // backend re-validates the numeric bounds and the combined total.
+  const handleSavePracticeDefaults = async () => {
+    if (!courseId) return;
+    const parse = (s: string): number | null => {
+      const t = s.trim();
+      if (t === '') return null;
+      const n = Number(t);
+      return Number.isInteger(n) ? n : null;
+    };
+    const mcq = parse(defaultMcqInput);
+    const short = parse(defaultShortInput);
+    setSavingDefaults(true);
+    try {
+      await api.patch(
+        `/learning-interventions/prompt-config/${courseId}/PRACTICE_TESTING/defaults`,
+        { defaultMcqCount: mcq, defaultShortAnswerCount: short },
+      );
+      toast('success', 'Practice Testing defaults saved');
+      void fetchConfigs();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to save defaults');
+    } finally {
+      setSavingDefaults(false);
     }
   };
 
@@ -250,6 +332,37 @@ export function PromptSettingsPage() {
     );
   };
 
+  // Prompt 03: per-course enrollment policy toggle. Optimistic update
+  // + on-error revert so the UI feels snappy. PATCH targets the
+  // dedicated /courses/:id/enrollment-policy route (separate from the
+  // generic course PATCH so the partial DTO is validated independently).
+  const handleTogglePolicy = async (key: keyof EnrollmentPolicy, next: boolean) => {
+    if (!courseId || !enrollmentPolicy) return;
+    const prev = enrollmentPolicy;
+    setEnrollmentPolicy({ ...prev, [key]: next });
+    setSavingPolicy(true);
+    try {
+      await api.patch<EnrollmentPolicy>(`/courses/${courseId}/enrollment-policy`, {
+        [key]: next,
+      });
+      toast(
+        'success',
+        key === 'allowStudentSelfEnroll'
+          ? next
+            ? 'Students can self-enroll'
+            : 'Students cannot self-enroll'
+          : next
+            ? 'Students can self-drop'
+            : 'Students cannot self-drop',
+      );
+    } catch (err) {
+      setEnrollmentPolicy(prev);
+      toast('error', err instanceof Error ? err.message : 'Failed to update policy');
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
   if (loading) {
     return <div className="text-gray-500">Loading prompt settings...</div>;
   }
@@ -279,6 +392,8 @@ export function PromptSettingsPage() {
           { key: 'feedback' as TabKey, label: 'AI Feedback' },
           { key: 'questiongen' as TabKey, label: 'Question Gen' },
           { key: 'text-mining' as TabKey, label: 'Text-mining (EF)' },
+          // Prompt 03: per-course enrollment policy toggles.
+          { key: 'enrollment' as TabKey, label: 'Enrollment' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -408,6 +523,68 @@ export function PromptSettingsPage() {
                         {config.userPromptTemplate}
                       </div>
                     </div>
+
+                    {/* P4 — Practice Testing only: per-course
+                        default question counts. Empty fields ⇒ fall
+                        back to the hard-coded 3 MCQ + 2 short-answer.
+                        Only shown on the PRACTICE_TESTING card to keep
+                        the surface area minimal for the other three
+                        intervention types. */}
+                    {config.interventionType === 'PRACTICE_TESTING' && (
+                      <div className="mt-4 border-t border-gray-100 pt-4">
+                        <div className="text-xs font-medium text-gray-700 mb-1">
+                          Default question counts
+                        </div>
+                        <p className="text-[11px] text-gray-500 mb-2">
+                          Applied when a student doesn&apos;t pick explicit values. If
+                          left empty, defaults to 3 + 2.
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <label className="text-xs text-gray-600 flex flex-col gap-1">
+                            Default MCQ count
+                            <input
+                              type="number"
+                              min={0}
+                              max={10}
+                              placeholder="3"
+                              value={defaultMcqInput}
+                              onChange={(e) => setDefaultMcqInput(e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+                            />
+                          </label>
+                          <label className="text-xs text-gray-600 flex flex-col gap-1">
+                            Default short-answer count
+                            <input
+                              type="number"
+                              min={0}
+                              max={10}
+                              placeholder="2"
+                              value={defaultShortInput}
+                              onChange={(e) => setDefaultShortInput(e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+                            />
+                          </label>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            onClick={handleSavePracticeDefaults}
+                            disabled={savingDefaults}
+                            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {savingDefaults ? 'Saving...' : 'Save defaults'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDefaultMcqInput('');
+                              setDefaultShortInput('');
+                            }}
+                            className="text-xs text-gray-600 border border-gray-300 px-3 py-1.5 rounded hover:bg-gray-50 transition-colors"
+                          >
+                            Clear (use 3 + 2)
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -647,6 +824,77 @@ export function PromptSettingsPage() {
 
       {/* ─── Text-mining (EF construct prompts) Tab ─────── */}
       {activeTab === 'text-mining' && courseId && <TextMiningPromptsTab courseId={courseId} />}
+
+      {/* ─── Enrollment Tab (prompt 03) ─────────────────── */}
+      {activeTab === 'enrollment' && (
+        <div className="max-w-2xl">
+          <p className="text-sm text-gray-600 mb-4">
+            Control who can enroll in this course and whether students may remove themselves.
+            Teacher and admin actions (enrolling or removing a student from the User Management
+            roster) are <strong>never</strong> blocked by these toggles — they only affect what
+            students can do.
+          </p>
+
+          {!enrollmentPolicy ? (
+            <div className="text-gray-500 text-sm">Loading enrollment policy...</div>
+          ) : (
+            <div className="space-y-3">
+              <PolicyToggle
+                label="Allow student self-enroll"
+                description="When on, students can enroll themselves from the public course catalog. When off, the Enroll button is replaced with a 'Teacher-enroll only' badge and the backend rejects student-initiated enroll requests with 403."
+                checked={enrollmentPolicy.allowStudentSelfEnroll}
+                disabled={savingPolicy}
+                onChange={(v) => handleTogglePolicy('allowStudentSelfEnroll', v)}
+              />
+              <PolicyToggle
+                label="Allow student self-drop"
+                description="When on, students can drop themselves from the course (their work is preserved but they no longer see it). When off (the default), the Drop button is hidden and the backend rejects student-initiated drops with 403; teachers can still remove students from the User Management roster."
+                checked={enrollmentPolicy.allowStudentSelfDrop}
+                disabled={savingPolicy}
+                onChange={(v) => handleTogglePolicy('allowStudentSelfDrop', v)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Enrollment policy toggle (prompt 03) ─────────────────
+//
+// Small presentational helper kept in this file because it's only used
+// by the Enrollment tab above. Renders a labelled switch with a hint
+// row underneath. The actual PATCH happens in the parent so the toggle
+// stays a pure UI component.
+function PolicyToggle({
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+        />
+        <div className="flex-1">
+          <div className="text-sm font-medium text-gray-900">{label}</div>
+          <div className="text-xs text-gray-500 mt-1">{description}</div>
+        </div>
+      </label>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActivityLogService } from './activity-log.service';
+import { ActivityAction } from './activity-action.enum';
 
 function convertBigInts<T>(value: T): T {
   if (typeof value === 'bigint') {
@@ -20,7 +22,10 @@ function convertBigInts<T>(value: T): T {
 export class SessionService {
   private readonly logger = new Logger(SessionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   /** Called when a student authenticates (login or token refresh). */
   async openSession(params: {
@@ -38,6 +43,22 @@ export class SessionService {
       },
     });
     this.logger.log(`Session opened: ${session.id} for user ${params.userId}`);
+    // Emit the dormant SESSION_START event so the replay timeline and
+    // session summary have a server-authoritative anchor (frontend
+    // can't reliably emit this on first paint due to provider mount
+    // ordering). record() is fire-and-forget — errors are logged, not
+    // thrown.
+    void this.activityLog.record({
+      sessionId: session.id,
+      userId: params.userId,
+      action: ActivityAction.SESSION_START,
+      occurredAt: session.startedAt,
+      courseId: params.courseId,
+      metadata: {
+        ipAddress: params.ipAddress ?? null,
+        userAgent: params.userAgent ?? null,
+      },
+    });
     return session.id;
   }
 
@@ -57,7 +78,7 @@ export class SessionService {
   async closeSession(sessionId: string): Promise<void> {
     const session = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
-      select: { startedAt: true, userId: true },
+      select: { startedAt: true, userId: true, courseId: true },
     });
     if (!session) return;
 
@@ -67,6 +88,17 @@ export class SessionService {
     await this.prisma.studentSession.update({
       where: { id: sessionId },
       data: { endedAt, durationSecs },
+    });
+
+    // Emit SESSION_END BEFORE buildSummary so it's included in the
+    // summary's event counts and timeline.
+    await this.activityLog.record({
+      sessionId,
+      userId: session.userId,
+      action: ActivityAction.SESSION_END,
+      occurredAt: endedAt,
+      courseId: session.courseId ?? undefined,
+      metadata: { durationSecs },
     });
 
     await this.buildSummary(sessionId);

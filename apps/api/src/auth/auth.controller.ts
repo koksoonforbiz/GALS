@@ -43,11 +43,13 @@ export class AuthController {
     return this.authService.logout(body.sessionId);
   }
 
-  @Post('change-password')
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
-  async changePassword(@Body() body: { token: string; newPassword: string }) {
-    return this.authService.changePassword(body.token, body.newPassword);
-  }
+  // Prompt 05: the legacy `POST /auth/change-password` endpoint that
+  // accepted a short-lived passwordChangeToken has been REMOVED.
+  // Students never set or change their own password. Teacher/admin-
+  // issued resets go through `POST /user-management/users/:userId/
+  // reset-password` (guarded by JwtAuthGuard + RolesGuard +
+  // @Roles('teacher','admin')). No forgot-password / self-reset
+  // endpoint is exposed.
 
   @Get('me')
   @SkipThrottle()

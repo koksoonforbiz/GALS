@@ -3,6 +3,29 @@
 /* KaTeX styles */
 @import 'katex/dist/katex.min.css';
 
+/*
+ * KaTeX overflow handling inside chat bubbles.
+ * KaTeX renders math as inline-block / flex elements whose intrinsic width
+ * is the formula's width — it does not wrap. Long equations overflow the
+ * 80%-wide grey/blue chat bubble. Make the display-math container scroll
+ * horizontally and inline math break to a new line if too long.
+ */
+.chat-message-content .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Keep the formula left-aligned when scrollable rather than centered
+     (centered + overflow truncates the start of long equations). */
+  text-align: left;
+}
+.chat-message-content .katex-display > .katex {
+  display: inline-block;
+  white-space: nowrap;
+}
+.chat-message-content .katex {
+  max-width: 100%;
+}
+
 /* react-pdf layer styles — imported here (after Tailwind) so they aren't
    clobbered by Tailwind v4's CSS layer ordering. */
 @import 'react-pdf/dist/Page/TextLayer.css';

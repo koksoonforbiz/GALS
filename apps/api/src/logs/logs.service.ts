@@ -1,5 +1,26 @@
-import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Strip / escape backslash-x sequences that aren't valid 2-digit hex,
+ * which Postgres' JSON/JSONB lexer parses as broken byte escapes and
+ * rejects with "unexpected end of hex escape". The browser side can
+ * accidentally produce these in element selectors / page URLs / element
+ * text (e.g. TipTap ProseMirror serializes some attrs with literal \x
+ * fragments). Replaces the leading backslash with a doubled backslash
+ * so the literal text survives, no data is lost.
+ */
+function sanitizeForPostgresJson(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  // Match \x NOT followed by exactly 2 hex digits.
+  return value.replace(/\\x(?![0-9a-fA-F]{2})/g, '\\\\x');
+}
+
+function isPostgresHexEscapeError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /unexpected end of hex escape/i.test(msg);
+}
 import type { CreateCursorBatchDto } from './dto/create-cursor-batch.dto';
 import type { CreateClickBatchDto } from './dto/create-click-batch.dto';
 import type { CreateScrollBatchDto } from './dto/create-scroll-batch.dto';
@@ -14,6 +35,7 @@ import type { SyncAnchorDto } from './dto/sync-anchor.dto';
 
 @Injectable()
 export class LogsService {
+  private readonly logger = new Logger(LogsService.name);
   constructor(private readonly prisma: PrismaService) {}
   private static readonly MAX_REPLAY_BIOMETRIC_FRAMES = 50000;
 
@@ -21,22 +43,29 @@ export class LogsService {
 
   async batchCursor(dto: CreateCursorBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
+    const data = dto.events.map((e) => ({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      x: e.x,
+      y: e.y,
+      pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
+      elementTarget: sanitizeForPostgresJson(e.elementTarget),
+      timestamp: BigInt(e.timestamp),
+      batchId: e.batchId,
+    }));
     try {
       const result = await this.prisma.cursor_logs.createMany({
-        data: dto.events.map((e) => ({
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          x: e.x,
-          y: e.y,
-          pageUrl: e.pageUrl,
-          elementTarget: e.elementTarget,
-          timestamp: BigInt(e.timestamp),
-          batchId: e.batchId,
-        })),
+        data,
         skipDuplicates: true,
       });
       return { success: true, count: result.count };
     } catch (error: unknown) {
+      if (isPostgresHexEscapeError(error)) {
+        this.logger.warn(
+          `Dropped ${data.length} cursor logs for session ${dto.sessionId} — payload contained an invalid byte escape`,
+        );
+        return { success: true, count: 0, dropped: data.length };
+      }
       throw new InternalServerErrorException(
         `Failed to insert cursor logs: ${error instanceof Error ? error.message : error}`,
       );
@@ -45,22 +74,40 @@ export class LogsService {
 
   async batchClicks(dto: CreateClickBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
+    // Pre-sanitize string fields. The browser occasionally produces
+    // literal "\x" fragments inside element selectors / page URLs
+    // (e.g. from TipTap's ProseMirror DOM serialization) which
+    // Postgres' JSON lexer rejects as a malformed byte escape.
+    const data = dto.events.map((e) => ({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      x: e.x,
+      y: e.y,
+      pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
+      elementSelector: sanitizeForPostgresJson(e.elementSelector) ?? '',
+      elementText: sanitizeForPostgresJson(e.elementText),
+      timestamp: BigInt(e.timestamp),
+    }));
     try {
       const result = await this.prisma.click_logs.createMany({
-        data: dto.events.map((e) => ({
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          x: e.x,
-          y: e.y,
-          pageUrl: e.pageUrl,
-          elementSelector: e.elementSelector,
-          elementText: e.elementText,
-          timestamp: BigInt(e.timestamp),
-        })),
+        data,
         skipDuplicates: true,
       });
       return { success: true, count: result.count };
     } catch (error: unknown) {
+      // If Postgres STILL rejects the payload with the hex-escape
+      // parser error (something else in the data slipped past the
+      // sanitizer, or we hit a different malformed byte), drop the
+      // batch and return success so the client buffer doesn't get
+      // permanently stuck retrying the same poisoned payload every
+      // 30 seconds forever. We log the count + first selector so
+      // we can investigate without the storm of 500s.
+      if (isPostgresHexEscapeError(error)) {
+        this.logger.warn(
+          `Dropped ${data.length} click logs for session ${dto.sessionId} — payload contained an invalid byte escape Postgres couldn't parse (preview: "${data[0]?.elementSelector?.slice(0, 80) ?? ''}")`,
+        );
+        return { success: true, count: 0, dropped: data.length };
+      }
       throw new InternalServerErrorException(
         `Failed to insert click logs: ${error instanceof Error ? error.message : error}`,
       );
@@ -69,20 +116,27 @@ export class LogsService {
 
   async batchScroll(dto: CreateScrollBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
+    const data = dto.events.map((e) => ({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      scrollY: e.scrollY,
+      scrollPercent: e.scrollPercent,
+      pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
+      timestamp: BigInt(e.timestamp),
+    }));
     try {
       const result = await this.prisma.scroll_logs.createMany({
-        data: dto.events.map((e) => ({
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          scrollY: e.scrollY,
-          scrollPercent: e.scrollPercent,
-          pageUrl: e.pageUrl,
-          timestamp: BigInt(e.timestamp),
-        })),
+        data,
         skipDuplicates: true,
       });
       return { success: true, count: result.count };
     } catch (error: unknown) {
+      if (isPostgresHexEscapeError(error)) {
+        this.logger.warn(
+          `Dropped ${data.length} scroll logs for session ${dto.sessionId} — invalid byte escape in payload`,
+        );
+        return { success: true, count: 0, dropped: data.length };
+      }
       throw new InternalServerErrorException(
         `Failed to insert scroll logs: ${error instanceof Error ? error.message : error}`,
       );
@@ -114,20 +168,27 @@ export class LogsService {
 
   async batchVisibility(dto: CreateVisibilityBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
+    const data = dto.events.map((e) => ({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      visibleState: e.visibleState,
+      pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
+      timestamp: BigInt(e.timestamp),
+      hiddenDurationMs: e.hiddenDurationMs,
+    }));
     try {
       const result = await this.prisma.visibility_logs.createMany({
-        data: dto.events.map((e) => ({
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          visibleState: e.visibleState,
-          pageUrl: e.pageUrl,
-          timestamp: BigInt(e.timestamp),
-          hiddenDurationMs: e.hiddenDurationMs,
-        })),
+        data,
         skipDuplicates: true,
       });
       return { success: true, count: result.count };
     } catch (error: unknown) {
+      if (isPostgresHexEscapeError(error)) {
+        this.logger.warn(
+          `Dropped ${data.length} visibility logs for session ${dto.sessionId} — invalid byte escape in payload`,
+        );
+        return { success: true, count: 0, dropped: data.length };
+      }
       throw new InternalServerErrorException(
         `Failed to insert visibility logs: ${error instanceof Error ? error.message : error}`,
       );
@@ -136,21 +197,28 @@ export class LogsService {
 
   async batchClipboard(dto: CreateClipboardBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
+    const data = dto.events.map((e) => ({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      action: e.action,
+      textLength: e.textLength,
+      sourceElement: sanitizeForPostgresJson(e.sourceElement),
+      pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
+      timestamp: BigInt(e.timestamp),
+    }));
     try {
       const result = await this.prisma.clipboard_logs.createMany({
-        data: dto.events.map((e) => ({
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          action: e.action,
-          textLength: e.textLength,
-          sourceElement: e.sourceElement,
-          pageUrl: e.pageUrl,
-          timestamp: BigInt(e.timestamp),
-        })),
+        data,
         skipDuplicates: true,
       });
       return { success: true, count: result.count };
     } catch (error: unknown) {
+      if (isPostgresHexEscapeError(error)) {
+        this.logger.warn(
+          `Dropped ${data.length} clipboard logs for session ${dto.sessionId} — invalid byte escape in payload`,
+        );
+        return { success: true, count: 0, dropped: data.length };
+      }
       throw new InternalServerErrorException(
         `Failed to insert clipboard logs: ${error instanceof Error ? error.message : error}`,
       );
@@ -173,6 +241,31 @@ export class LogsService {
           scrollY: event.scrollY,
           capturedAt: BigInt(event.capturedAt),
           trigger: event.trigger,
+          // Defensive: only persist a well-formed array. Anything else
+          // (string, object, undefined) becomes DB NULL via the Prisma
+          // sentinel so a malformed client payload can never block a
+          // snapshot insert.
+          aois: Array.isArray(event.aois)
+            ? (event.aois as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          // Same JsonNull coercion as `aois`: only a well-formed array
+          // is persisted; anything else (legacy client missing the
+          // capture, malformed payload) lands as DB NULL.
+          scrollHosts: Array.isArray(event.scrollHosts)
+            ? (event.scrollHosts as unknown as Prisma.InputJsonValue)
+            : Prisma.JsonNull,
+          // PDF semantic anchors. Optional everywhere — pages without
+          // a PdfReader mounted simply omit these.
+          pdfCurrentPage:
+            typeof event.pdfCurrentPage === 'number' &&
+            Number.isFinite(event.pdfCurrentPage)
+              ? Math.max(0, Math.floor(event.pdfCurrentPage))
+              : null,
+          pdfTotalPages:
+            typeof event.pdfTotalPages === 'number' &&
+            Number.isFinite(event.pdfTotalPages)
+              ? Math.max(0, Math.floor(event.pdfTotalPages))
+              : null,
         })),
       });
       return { success: true, count: result.count };
@@ -313,11 +406,52 @@ export class LogsService {
             scrollY: true,
             capturedAt: true,
             trigger: true,
+            aois: true,
+            scrollHosts: true,
+            pdfCurrentPage: true,
+            pdfTotalPages: true,
           },
         })
       : Promise.resolve([]);
+    // Need session for the dialogue_message time-window join — fetch
+    // it first so we have userId + start/end. The other queries
+    // still run in parallel below.
+    const session = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        id: true,
+        userId: true,
+        courseId: true,
+        startedAt: true,
+        endedAt: true,
+        durationSecs: true,
+      },
+    });
+
+    // Padded time window used by both the dialogue and chatbot
+    // message queries. The unpadded `[startedAt, endedAt]` bound
+    // drops turns that happen in the moments immediately before the
+    // first captured sample (e.g. the student opens the chatbot, the
+    // session row isn't written until the first activity event a
+    // second later) or after the session is flagged ended (the close
+    // handler runs before the very last assistant reply lands). 5 min
+    // either side is generous enough to catch real edges without
+    // pulling in a neighbouring session.
+    //
+    // For sessions still in progress (`endedAt = null`) we use NOW as
+    // the right edge — without this, in-progress sessions would lose
+    // every dialogue turn.
+    const MESSAGE_WINDOW_PAD_MS = 5 * 60 * 1000;
+    const paddedWindowStart = session
+      ? new Date(session.startedAt.getTime() - MESSAGE_WINDOW_PAD_MS)
+      : null;
+    const paddedWindowEnd = session
+      ? new Date(
+          (session.endedAt ?? new Date()).getTime() + MESSAGE_WINDOW_PAD_MS,
+        )
+      : null;
+
     const [
-      session,
       syncAnchor,
       snapshotCount,
       snapshots,
@@ -331,19 +465,19 @@ export class LogsService {
       recordingSegments,
       openface3Jobs,
       pyfeatJobs,
+      // New for intervention + chat post-analysis:
+      activityLogs,
+      efDetections,
+      dialogueMessages,
+      chatbotMessages,
+      // Lightweight interaction logs surfaced for CSV export. The
+      // Replay tab itself doesn't render these yet — exporter only.
+      keystrokeLogs,
+      cursorLogs,
+      clipboardLogs,
+      visibilityLogs,
     ] =
       await Promise.all([
-        this.prisma.studentSession.findUnique({
-          where: { id: sessionId },
-          select: {
-            id: true,
-            userId: true,
-            courseId: true,
-            startedAt: true,
-            endedAt: true,
-            durationSecs: true,
-          },
-        }),
         this.prisma.session_sync_anchors.findUnique({
           where: { sessionId },
         }),
@@ -469,7 +603,166 @@ export class LogsService {
             sourceMinioKey: true,
           },
         }),
+        // All activity_log rows for this session — drives the new
+        // unified timeline track in the Replay tab (intervention
+        // start/view/complete, module navigation, chatbot turn
+        // markers, etc.). Includes metadata so per-event detail
+        // (latencyMs, score, stepNumber...) can be rendered in
+        // tooltips.
+        this.prisma.activityLog.findMany({
+          where: { sessionId },
+          orderBy: { occurredAt: 'asc' },
+          select: {
+            id: true,
+            action: true,
+            occurredAt: true,
+            courseId: true,
+            moduleId: true,
+            moduleItemId: true,
+            interventionId: true,
+            dialogueSessionId: true,
+            metadata: true,
+          },
+        }),
+        // EF text-mining detections for this session — overlays
+        // construct labels (procrastination / metacognition /
+        // off-task / etc.) on the replay timeline.
+        this.prisma.efDetection.findMany({
+          where: { sessionId },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            messageId: true,
+            constructKey: true,
+            label: true,
+            confidence: true,
+            severity: true,
+            rationale: true,
+            createdAt: true,
+          },
+        }),
+        // Dialogue messages — time-window join by student id.
+        // Dialogue sessions persist across login boundaries (one
+        // DialogueSession can span many StudentSessions), so a join
+        // on session.id isn't enough. The padded window catches edge
+        // turns that arrive seconds before the first sample or after
+        // the session is flagged ended.
+        // Stable secondary sort (id) so same-ms turns keep a
+        // deterministic order across reloads.
+        session && paddedWindowStart && paddedWindowEnd
+          ? this.prisma.dialogueMessage.findMany({
+              where: {
+                createdAt: { gte: paddedWindowStart, lte: paddedWindowEnd },
+                session: { studentId: session.userId },
+              },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: {
+                id: true,
+                sessionId: true,
+                role: true,
+                content: true,
+                tokenUsage: true,
+                createdAt: true,
+              },
+            })
+          : Promise.resolve([] as never[]),
+        // Floating/docked chatbot history. The primary anchor is
+        // `studentSessionId === sessionId`, but turns can carry a
+        // missing/mismatched session id when the chatbot was opened
+        // before the session row was written, or after a tab
+        // re-init that picked a new session. So we union with a
+        // student+time-window fallback (same window the dialogue
+        // query uses). The OR'd query naturally de-duplicates: if a
+        // row matches both clauses it appears once. Stable secondary
+        // sort matches the dialogue query so same-ms turns are
+        // deterministic.
+        this.prisma.chatbotMessage.findMany({
+          where: session && paddedWindowStart && paddedWindowEnd
+            ? {
+                OR: [
+                  { studentSessionId: sessionId },
+                  {
+                    studentSession: { userId: session.userId },
+                    createdAt: { gte: paddedWindowStart, lte: paddedWindowEnd },
+                  },
+                ],
+              }
+            : { studentSessionId: sessionId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            studentSessionId: true,
+            role: true,
+            content: true,
+            contextSource: true,
+            selectedText: true,
+            suggestedStrategy: true,
+            promptTokens: true,
+            completionTokens: true,
+            model: true,
+            moduleItemId: true,
+            createdAt: true,
+          },
+        }),
+        // Keystroke aggregates per field (count, pause, WPM). Note:
+        // these are summary rows, not raw key events — the platform
+        // does not store individual key presses by design.
+        this.prisma.keystroke_logs.findMany({
+          where: { sessionId },
+          orderBy: { timestamp: 'asc' },
+        }),
+        // Mouse-move trajectories. Can be large on long sessions; the
+        // payload is still bounded by the buffered batch size on the
+        // client, so we don't impose an extra cap here.
+        this.prisma.cursor_logs.findMany({
+          where: { sessionId },
+          orderBy: { timestamp: 'asc' },
+        }),
+        // Copy/paste/cut events.
+        this.prisma.clipboard_logs.findMany({
+          where: { sessionId },
+          orderBy: { timestamp: 'asc' },
+        }),
+        // Tab visibility transitions — visible/hidden with optional
+        // duration spent in the previous state.
+        this.prisma.visibility_logs.findMany({
+          where: { sessionId },
+          orderBy: { timestamp: 'asc' },
+        }),
       ]);
+
+    // Intervention review payload. The per-intervention details
+    // (LLM-generated questions, student answers, graded results,
+    // score) live on `LearningIntervention.sessionData` — but
+    // `LearningIntervention` isn't anchored to a student session row
+    // by FK, only via the activity_log `interventionId` column. So
+    // first collect the unique intervention ids referenced by this
+    // session's activity logs, then hydrate them in one query.
+    const interventionIds = Array.from(
+      new Set(
+        activityLogs
+          .map((log) => log.interventionId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+    const interventions = interventionIds.length
+      ? await this.prisma.learningIntervention.findMany({
+          where: { id: { in: interventionIds } },
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            selectedText: true,
+            sessionData: true,
+            completedAt: true,
+            createdAt: true,
+            updatedAt: true,
+            contentId: true,
+            courseId: true,
+            pageType: true,
+          },
+        })
+      : [];
 
     return {
       session,
@@ -523,7 +816,75 @@ export class LogsService {
         })),
         openface3Jobs,
         pyfeatJobs,
+        // Per-source message counts so the Replay tab's Coverage
+        // panel can flag missing turns. `chatbotSessionAnchored` is
+        // the count that would have been returned by the old
+        // session_id-only query; `chatbotFromFallback` is the extra
+        // rows recovered by the student+time-window union (these are
+        // messages whose session_id didn't match but belonged to the
+        // same student within the padded window). A non-zero fallback
+        // count is a signal that the chatbot's session-id wiring
+        // dropped turns and is worth investigating.
+        messageCounts: {
+          dialogueFetched: dialogueMessages.length,
+          chatbotFetched: chatbotMessages.length,
+          chatbotSessionAnchored: chatbotMessages.filter(
+            (m) => m.studentSessionId === sessionId,
+          ).length,
+          chatbotFromFallback: chatbotMessages.filter(
+            (m) => m.studentSessionId !== sessionId,
+          ).length,
+          messageWindowStartIso: paddedWindowStart?.toISOString() ?? null,
+          messageWindowEndIso: paddedWindowEnd?.toISOString() ?? null,
+        },
       },
+      // New timeline tracks for the Replay tab — intervention activity,
+      // text-mining detections, dialogue + chatbot turns.
+      activityLogs: activityLogs.map((log) => ({
+        ...log,
+        occurredAt: log.occurredAt.toISOString(),
+      })),
+      efDetections: efDetections.map((d) => ({
+        ...d,
+        createdAt: d.createdAt.toISOString(),
+      })),
+      dialogueMessages: dialogueMessages.map((m) => ({
+        ...m,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      chatbotMessages: chatbotMessages.map((m) => ({
+        ...m,
+        createdAt: m.createdAt.toISOString(),
+      })),
+      keystrokeLogs: keystrokeLogs.map((log) => ({
+        ...log,
+        timestamp: Number(log.timestamp),
+      })),
+      cursorLogs: cursorLogs.map((log) => ({
+        ...log,
+        timestamp: Number(log.timestamp),
+      })),
+      clipboardLogs: clipboardLogs.map((log) => ({
+        ...log,
+        timestamp: Number(log.timestamp),
+      })),
+      visibilityLogs: visibilityLogs.map((log) => ({
+        ...log,
+        timestamp: Number(log.timestamp),
+      })),
+      // Per-intervention review payload. Frontend renders an
+      // expandable section per intervention showing the LLM
+      // questions, the student's answers, and the score (all stored
+      // on sessionData). Time-ordered so the section matches the
+      // chronological intervention column in the activity timeline.
+      interventions: interventions
+        .map((iv) => ({
+          ...iv,
+          createdAt: iv.createdAt.toISOString(),
+          updatedAt: iv.updatedAt.toISOString(),
+          completedAt: iv.completedAt?.toISOString() ?? null,
+        }))
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     };
   }
 
@@ -553,6 +914,10 @@ export class LogsService {
         scrollY: true,
         capturedAt: true,
         trigger: true,
+        aois: true,
+        scrollHosts: true,
+        pdfCurrentPage: true,
+        pdfTotalPages: true,
       },
     });
 
@@ -590,6 +955,10 @@ export class LogsService {
         scrollY: true,
         capturedAt: true,
         trigger: true,
+        aois: true,
+        scrollHosts: true,
+        pdfCurrentPage: true,
+        pdfTotalPages: true,
       },
     });
 

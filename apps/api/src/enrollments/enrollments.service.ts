@@ -64,6 +64,13 @@ export class EnrollmentsService {
     if (course.archivedAt) {
       throw new ForbiddenException('This course has been archived');
     }
+    // Prompt 03: per-course policy gate. Teacher/admin enroll goes
+    // through `create()` and is never affected by this flag.
+    if (!course.allowStudentSelfEnroll) {
+      throw new ForbiddenException(
+        'Self-enrollment is disabled for this course. Contact the teacher for enrollment.',
+      );
+    }
 
     // Check for existing enrollment (may be DROPPED — re-activate)
     const existing = await this.prisma.enrollment.findUnique({
@@ -94,6 +101,21 @@ export class EnrollmentsService {
 
   // Student drop
   async drop(studentId: string, courseId: string) {
+    // Prompt 03: per-course policy gate. Check BEFORE looking up the
+    // enrollment so a student doesn't get NotFound when the real reason
+    // is policy. Teacher/admin drops go through `dropStudent()` and are
+    // never affected by this flag.
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, allowStudentSelfDrop: true },
+    });
+    if (!course) throw new NotFoundException(`Course ${courseId} not found`);
+    if (!course.allowStudentSelfDrop) {
+      throw new ForbiddenException(
+        'Self-drop is disabled for this course. Contact the teacher to be removed.',
+      );
+    }
+
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { studentId_courseId: { studentId, courseId } },
     });
@@ -110,6 +132,53 @@ export class EnrollmentsService {
         course: { select: { id: true, title: true } },
       },
     });
+  }
+
+  // Teacher/admin-initiated drop by { courseId, userId }. Mirrors the
+  // bulk-enroll role-guard pattern: the caller must own the course (or
+  // be an admin). Never gated by `allowStudentSelfDrop` — that flag is
+  // only about STUDENT-initiated drops.
+  //
+  // Soft drop: marks the enrollment DROPPED so prior work + logs stay
+  // queryable. Idempotent: dropping an already-DROPPED enrollment is a
+  // no-op success.
+  async dropStudent(callerId: string, courseId: string, userId: string) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, title: true, teacherId: true },
+    });
+    if (!course) throw new NotFoundException(`Course ${courseId} not found`);
+
+    const caller = await this.prisma.user.findUnique({
+      where: { id: callerId },
+      select: { role: true },
+    });
+    if (caller?.role !== 'admin' && course.teacherId !== callerId) {
+      throw new ForbiddenException('You can only drop students from your own courses');
+    }
+
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId: userId, courseId } },
+    });
+    if (!enrollment) {
+      throw new NotFoundException('Enrollment not found');
+    }
+
+    if (enrollment.status === 'DROPPED') {
+      // Idempotent — return the existing row so the UI can refresh.
+      return {
+        ...enrollment,
+        course: { id: course.id, title: course.title },
+        alreadyDropped: true,
+      };
+    }
+
+    const updated = await this.prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { status: 'DROPPED' },
+      include: { course: { select: { id: true, title: true } } },
+    });
+    return { ...updated, alreadyDropped: false };
   }
 
   async findByCourse(courseId: string) {

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
+import { useActivityLog } from '../../../lib/activity-log';
 import type { SaveForReviewInput } from '../types';
 import { MessageCircleQuestion, Trophy, AlertTriangle, Lightbulb, Loader } from 'lucide-react';
+import { ChatMessageContent } from '../../ChatMessageContent';
 
 interface InterrogativeElaborationViewProps {
   selectedText: string;
@@ -76,6 +78,20 @@ export function InterrogativeElaborationView({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialGenDone = useRef(false);
 
+  const { track } = useActivityLog();
+  // Typing-pattern signals for the free-text question input. We
+  // measure latency-to-first-keystroke (idle thinking time before
+  // typing starts), total characters typed (typing volume), and
+  // editCount (how many times the input was mutated — a hesitation
+  // signal). These reset every time the input is cleared after a
+  // question is asked.
+  const interventionStartedAtRef = useRef<number>(Date.now());
+  const interventionViewedFiredRef = useRef(false);
+  const inputFirstKeyAtRef = useRef<number | null>(null);
+  const inputStartedAtRef = useRef<number>(Date.now());
+  const inputEditCountRef = useRef(0);
+  const inputTotalCharsRef = useRef(0);
+
   // Auto-scroll to bottom when conversation updates
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -94,6 +110,7 @@ export function InterrogativeElaborationView({
         courseId,
         contentId: contentId || undefined,
         pageType,
+        topic: contentTitle || undefined,
         questionCount: 6,
       });
       setInterventionId(result.interventionId);
@@ -111,6 +128,38 @@ export function InterrogativeElaborationView({
     initialGenDone.current = true;
     void generate();
   }, [generate]);
+
+  // Fire INTERVENTION_VIEWED when suggestions appear (first interactive
+  // surface). Pairs with INTERVENTION_TRIGGERED (server-side on
+  // generate) and INTERVENTION_COMPLETED on wrap-up.
+  useEffect(() => {
+    if (phase === 'suggestions' && !interventionViewedFiredRef.current && interventionId) {
+      interventionViewedFiredRef.current = true;
+      interventionStartedAtRef.current = Date.now();
+      track('INTERVENTION_VIEWED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        interventionId,
+        metadata: {
+          interventionType: 'INTERROGATIVE_ELABORATION',
+          suggestedQuestionCount: suggestedQuestions.length,
+          keyConceptCount: keyConcepts.length,
+          contentTitle: contentTitle || null,
+          hasSelection: Boolean(selectedText && selectedText.length >= 20),
+        },
+      });
+    }
+  }, [
+    phase,
+    interventionId,
+    suggestedQuestions.length,
+    keyConcepts.length,
+    track,
+    courseId,
+    contentId,
+    contentTitle,
+    selectedText,
+  ]);
 
   // Ask a question (from suggestion or typed)
   const handleAskQuestion = async (question: string, suggestionIndex?: number) => {
@@ -138,7 +187,41 @@ export function InterrogativeElaborationView({
       setSuggestionsExpanded(false);
     }
 
+    // Emit QUESTION_ANSWERED — for elaboration the "answer" semantic
+    // is the question the student composed (their reflection effort).
+    // Pull typing-pattern signals from the refs only for typed
+    // questions; suggested questions skip these fields.
+    const wordCount = question.trim().split(/\s+/).filter(Boolean).length;
+    const isTyped = suggestionIndex === undefined;
+    track('QUESTION_ANSWERED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'INTERROGATIVE_ELABORATION',
+        questionIndex: conversation.filter((m) => m.role === 'user').length,
+        chatTurnCount: updatedConvo.length,
+        questionLength: question.length,
+        wordCount,
+        source: isTyped ? 'typed' : 'suggestion',
+        suggestionIndex: suggestionIndex ?? null,
+        latencyMsToFirstKey: isTyped
+          ? inputFirstKeyAtRef.current
+            ? inputFirstKeyAtRef.current - inputStartedAtRef.current
+            : null
+          : null,
+        latencyMsToSubmit: isTyped ? Date.now() - inputStartedAtRef.current : null,
+        editCount: isTyped ? inputEditCountRef.current : 0,
+        totalCharsTyped: isTyped ? inputTotalCharsRef.current : 0,
+      },
+    });
+
     setInputValue('');
+    // Reset typing metrics so the next typed question starts clean.
+    inputFirstKeyAtRef.current = null;
+    inputStartedAtRef.current = Date.now();
+    inputEditCountRef.current = 0;
+    inputTotalCharsRef.current = 0;
 
     try {
       const result = await api.post<{ answer: string }>(
@@ -184,22 +267,39 @@ export function InterrogativeElaborationView({
   const handleWrapUp = async () => {
     if (!interventionId) return;
     setPhase('completing');
+    let final: ConversationSummary;
     try {
-      const result = await api.post<ConversationSummary>(
+      final = await api.post<ConversationSummary>(
         `/learning-interventions/interrogative-elaboration/${interventionId}/complete`,
       );
-      setSummary(result);
+      setSummary(final);
       setPhase('complete');
     } catch {
       // Still show complete phase with fallback
-      setSummary({
+      final = {
         summary: 'Session completed.',
         conceptsCovered: keyConcepts.slice(0, 3),
         questionsAsked: conversation.filter((m) => m.role === 'user').length,
         depthRating: 'surface',
-      });
+      };
+      setSummary(final);
       setPhase('complete');
     }
+    track('INTERVENTION_COMPLETED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId,
+      metadata: {
+        interventionType: 'INTERROGATIVE_ELABORATION',
+        questionsAsked: final.questionsAsked,
+        chatTurnCount: conversation.length,
+        depthRating: final.depthRating,
+        conceptsCovered: final.conceptsCovered.length,
+        suggestionsUsed: usedSuggestions.size,
+        totalDurationMs: Date.now() - interventionStartedAtRef.current,
+        completed: true,
+      },
+    });
   };
 
   const handleSave = () => {
@@ -506,13 +606,24 @@ export function InterrogativeElaborationView({
                   {msg.wasSuggested && <span className="ml-1 text-blue-400">(suggested)</span>}
                 </div>
                 <div
-                  className={`text-xs rounded-lg p-2 ${
+                  className={`text-xs rounded-lg p-2 overflow-hidden ${
                     msg.role === 'user'
                       ? 'bg-blue-50 border border-blue-200 text-gray-800'
                       : 'bg-gray-50 border border-gray-200 text-gray-700'
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === 'user' ? (
+                    /* User messages render verbatim — preserves newlines
+                       and avoids accidentally parsing student-typed
+                       markup. */
+                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                  ) : (
+                    /* Assistant: route through ChatMessageContent so
+                       markdown / GFM tables / fenced code / KaTeX math
+                       render properly. Without this, formulas the LLM
+                       emits arrive as raw `$x^2$` / `\frac{a}{b}` text. */
+                    <ChatMessageContent content={msg.content} className="text-xs" />
+                  )}
                 </div>
               </div>
             ))}
@@ -538,7 +649,22 @@ export function InterrogativeElaborationView({
           <input
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              // Capture first-keystroke timestamp (idle-to-typing latency)
+              if (inputFirstKeyAtRef.current === null && next.length > 0) {
+                inputFirstKeyAtRef.current = Date.now();
+              }
+              // Edit count = how many onChange events fire (insertions,
+              // deletions, paste, autocorrect — all hesitation signals).
+              inputEditCountRef.current += 1;
+              // Track peak typed length (deletions shouldn't reduce the
+              // total chars the student moved through their fingers).
+              if (next.length > inputTotalCharsRef.current) {
+                inputTotalCharsRef.current = next.length;
+              }
+              setInputValue(next);
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

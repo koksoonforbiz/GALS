@@ -90,7 +90,9 @@ services:
       - ./apps/web/index.html:/app/index.html
       - ./apps/web/vite.config.ts:/app/vite.config.ts
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5173 || exit 1"]
+      # Vite now serves https only (basicSsl plugin). --no-check-certificate
+      # because the self-signed cert won't validate against any CA store.
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:5173 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5

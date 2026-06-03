@@ -2,6 +2,7 @@
  * LLM Prompt templates for page content generation (Level 2).
  */
 
+
 import { ChunkWithScore } from '../rag/rag.service';
 
 export interface PageContext {
@@ -38,14 +39,19 @@ OUTPUT FORMAT: Return ONLY valid JSON matching this schema:
 }
 
 CONTENT FORMATTING RULES:
+- The number of content boxes should match the number of pages in the uploaded source selected, unless there is related information, then you can combine them into one content box.
+- Do not cut short the lesson content.
 - The "explanation" field should be detailed, well-structured with paragraphs.
 - Use HTML formatting: <h2>, <h3> for sub-headings, <p> for paragraphs, <strong>, <em>, <ul>/<li> for lists, <code> for inline code.
 - For LaTeX equations: use <span data-inline-math="" latex="LATEX_HERE"></span> for inline math, <div data-block-math="" latex="LATEX_HERE"></div> for display equations.
-- Include inline citation markers like [SRC:abc123 p5-7] within explanation, worked_examples, and corrections.
-- Provide at least 2 worked examples and 2 quick-check questions when source material allows.
 - "learning_outcomes" should be specific, measurable outcomes using Bloom's taxonomy verbs.
-- "key_concepts" should list the main ideas covered.
-- "misconceptions" should address common student misunderstandings.`;
+- FIRST identify ALL core concepts present in the source materials and list every one of them in "key_concepts" — do not omit any concept that has meaningful coverage in the sources. Aim for granular, distinct concepts rather than broad umbrella terms.
+- The "explanation" field must cover every key concept in depth — do not skip, abbreviate, or merge concepts that appear in the sources. Every concept in "key_concepts" must have at least one paragraph of dedicated treatment in "explanation".
+- For each key concept, generate corresponding content blocks:
+  - "worked_examples": at least one worked example per concept where the concept admits problem-solving practice. The length of worked_examples SHOULD be approximately equal to the number of key_concepts.
+  - "quick_check": at least one comprehension question per key concept. The length of quick_check SHOULD be approximately equal to the number of key_concepts.
+  - "misconceptions": list every common student misunderstanding that arises for the listed concepts. Do not cap at any fixed number.
+- Err on the side of including more rather than fewer content blocks; only omit a block type if the source material genuinely does not support it for that concept.`;
 
   if (strictSources) {
     prompt += `

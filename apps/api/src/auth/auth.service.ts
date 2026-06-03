@@ -2,7 +2,6 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
-  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
@@ -25,11 +24,10 @@ interface AuthResponse {
   sessionId?: string;
 }
 
-interface PasswordChangeRequired {
-  requirePasswordChange: true;
-  passwordChangeToken: string;
-  message: string;
-}
+// Loose email shape — strict enough to disambiguate from a loginId
+// handle (which cannot contain `@`). Backend lookups always use the
+// `users.email` unique index regardless.
+const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 @Injectable()
 export class AuthService {
@@ -78,10 +76,39 @@ export class AuthService {
   async login(
     dto: Login,
     requestMeta?: { ip?: string; userAgent?: string },
-  ): Promise<AuthResponse | PasswordChangeRequired> {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+  ): Promise<AuthResponse> {
+    // Prompt 05: single `identifier` (email OR teacher-assigned loginId)
+    // resolved against the canonical `users.id` UUID. Deterministic
+    // rule (no ambiguity even if a stale client supplied both):
+    //   - Looks like an email (contains `@`)  → look up by email.
+    //   - Otherwise                          → look up by loginId.
+    // Both columns are UNIQUE, so each path returns 0 or 1 user. We
+    // verify the SAME single stored password hash regardless of which
+    // path resolved the row. Even if a teacher accidentally assigns a
+    // loginId that looks email-like, the email column is checked first
+    // and any miss falls through to the loginId column. The other
+    // half of that fallthrough is what we do NOT do: we never try the
+    // second column when the first matched, so a single login attempt
+    // can be tied to a single User.id deterministically.
+    //
+    // `passwordChangeToken` / `requirePasswordChange` was removed in
+    // prompt 05: students cannot change their own password. The
+    // `isTemporaryPassword` column is left populated (it remains a
+    // useful "teacher-issued, not yet rotated" hint visible to the
+    // teacher roster) but it no longer gates login.
+    const identifier = dto.identifier.trim();
+    if (!identifier) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    let user = null as Awaited<ReturnType<typeof this.prisma.user.findUnique>> | null;
+    if (EMAIL_LIKE.test(identifier)) {
+      user = await this.prisma.user.findUnique({
+        where: { email: identifier.toLowerCase() },
+      });
+    } else {
+      user = await this.prisma.user.findUnique({ where: { loginId: identifier } });
+    }
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -91,19 +118,6 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (user.isTemporaryPassword) {
-      const limitedToken = this.jwtService.sign(
-        { sub: user.id, type: 'password_change' },
-        { expiresIn: '15m' },
-      );
-
-      return {
-        requirePasswordChange: true,
-        passwordChangeToken: limitedToken,
-        message: 'You must change your password before continuing.',
-      };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -126,73 +140,6 @@ export class AuthService {
 
   async logout(sessionId: string): Promise<void> {
     await this.sessionService.closeSession(sessionId);
-  }
-
-  async changePassword(token: string, newPassword: string): Promise<AuthResponse> {
-    // Verify token
-    let payload: { sub: string; type?: string };
-    try {
-      payload = this.jwtService.verify(token);
-    } catch {
-      throw new UnauthorizedException(
-        'Invalid or expired password change token. Please log in again.',
-      );
-    }
-
-    if (payload.type !== 'password_change') {
-      throw new UnauthorizedException('Invalid token type');
-    }
-
-    // Validate password strength
-    if (!newPassword || newPassword.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters');
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      throw new BadRequestException('Password must contain at least one uppercase letter');
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      throw new BadRequestException('Password must contain at least one lowercase letter');
-    }
-    if (!/[0-9]/.test(newPassword)) {
-      throw new BadRequestException('Password must contain at least one number');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    // Ensure new password is different from current
-    const isSame = await bcrypt.compare(newPassword, user.passwordHash);
-    if (isSame) {
-      throw new BadRequestException('New password must be different from the temporary password');
-    }
-
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-
-    const updatedUser = await this.prisma.user.update({
-      where: { id: payload.sub },
-      data: {
-        passwordHash,
-        isTemporaryPassword: false,
-        passwordChangedAt: new Date(),
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    const accessToken = this.signToken(updatedUser);
-
-    return { accessToken, user: updatedUser };
   }
 
   private signToken(user: UserWithoutPassword): string {
