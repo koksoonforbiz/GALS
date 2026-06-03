@@ -58,3 +58,8 @@ backup_*.sql
 
 # Test env (test-only creds, but still keep out of git)
 .env.test
+
+# gals-export / gals-studio local artifacts
+tools/gals-export/node_modules/
+tools/gals-export/dist/
+tools/gals-export/exports/
