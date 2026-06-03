@@ -13,6 +13,8 @@ import {
   segmentEpochs,
   gazeOnScreenByQuartile,
   readingExposure,
+  prevalence as prevalenceFn,
+  pearson,
   DEFAULT_EXPECTED_WEIGHTS,
   type SnapshotAoiState,
   type Aoi,
@@ -163,4 +165,91 @@ export async function computeReading(sessionId: string) {
   }));
   const items = readingExposure(reading);
   return { sessionId, items, windowScrollOnly: items.length > 0 && items.every((i) => i.windowScrollOnly) };
+}
+
+const numField = (items: unknown, ...keys: string[]): number | null => {
+  if (!items || typeof items !== 'object') return null;
+  const o = items as Record<string, unknown>;
+  for (const k of keys) if (typeof o[k] === 'number') return o[k] as number;
+  return null;
+};
+
+/**
+ * Ground-truth probe/questionnaire surfaces (stage 06): ESM trajectories for
+ * the session, plus convergent-validity helpers computed ACROSS all sessions
+ * (the scatter the review names — expected r ~ 0.30-0.50).
+ */
+export async function computeGroundTruth(sessionId: string) {
+  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  const base = session?.baseWallClockMs ?? 0;
+  const probes = await prisma.probeResponse.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } });
+
+  const esmTrajectory = probes
+    .filter((p) => /esm|sam/i.test(p.probeType))
+    .map((p) => {
+      const items = safeParseJson(p.items);
+      return {
+        t: p.wallMs - base,
+        valence: numField(items, 'valence', 'pleasure'),
+        arousal: numField(items, 'arousal'),
+        engagement: numField(items, 'engagement'),
+      };
+    });
+
+  const paas = probes
+    .filter((p) => /paas|effort/i.test(p.probeType))
+    .map((p) => ({ t: p.wallMs - base, effort: numField(safeParseJson(p.items), 'effort', 'mentalEffort') }));
+
+  const questionnaires = (await prisma.questionnaire.findMany({ where: { sessionId } })).map((q) => ({
+    instrument: q.instrument,
+    phase: q.phase,
+    scoredSubscales: safeParseJson(q.scoredSubscales),
+  }));
+
+  // ── convergent validity across all sessions ────────────────────────────
+  const allSessions = await prisma.session.findMany({ select: { id: true } });
+  const aeqBoredom: number[] = [];
+  const codedBoredom: number[] = [];
+  const panasNA: number[] = [];
+  const codedFrustration: number[] = [];
+  const imiInterest: number[] = [];
+  const meanEsmEngagement: number[] = [];
+
+  for (const s of allSessions) {
+    const track = await affectTrack(s.id);
+    const prev = prevalenceFn(track);
+    const qs = await prisma.questionnaire.findMany({ where: { sessionId: s.id } });
+    const sub = (instrument: string, key: string): number | null => {
+      const q = qs.find((x) => x.instrument.toLowerCase() === instrument);
+      const scored = q ? (safeParseJson(q.scoredSubscales) as Record<string, number> | null) : null;
+      return scored && typeof scored[key] === 'number' ? scored[key] : null;
+    };
+    const aeq = sub('aeq_s', 'boredom');
+    if (aeq != null) { aeqBoredom.push(aeq); codedBoredom.push(prev.proportions.boredom ?? 0); }
+    const na = sub('panas', 'NA');
+    if (na != null) { panasNA.push(na); codedFrustration.push(prev.proportions.frustration ?? 0); }
+    const interest = sub('imi', 'interestEnjoyment');
+    if (interest != null) {
+      const esm = await prisma.probeResponse.findMany({ where: { sessionId: s.id } });
+      const engs = esm.map((p) => numField(safeParseJson(p.items), 'engagement')).filter((v): v is number => v != null);
+      if (engs.length) { imiInterest.push(interest); meanEsmEngagement.push(engs.reduce((a, b) => a + b, 0) / engs.length); }
+    }
+  }
+
+  const validity = {
+    aeqBoredom_vs_codedBoredom: { points: zip(aeqBoredom, codedBoredom), r: pearson(aeqBoredom, codedBoredom) },
+    panasNA_vs_codedFrustration: { points: zip(panasNA, codedFrustration), r: pearson(panasNA, codedFrustration) },
+    imiInterest_vs_esmEngagement: { points: zip(imiInterest, meanEsmEngagement), r: pearson(imiInterest, meanEsmEngagement) },
+  };
+
+  return { sessionId, esmTrajectory, paas, questionnaires, convergentValidity: validity };
+}
+
+function zip(xs: number[], ys: number[]): { x: number; y: number }[] {
+  return xs.map((x, i) => ({ x, y: ys[i] }));
+}
+
+function safeParseJson(v: string | null): unknown {
+  if (v == null) return null;
+  try { return JSON.parse(v); } catch { return null; }
 }

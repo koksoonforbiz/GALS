@@ -1,0 +1,25 @@
+{
+  "name": "@gals-studio/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron launcher for GALS Studio — double-click to run, no terminal.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "edu.gals.studio",
+    "productName": "GALS Studio",
+    "files": ["main.cjs", "preload.cjs", "../studio-server/**", "../studio-web/dist/**", "../../packages/shared/**", "../../node_modules/**"],
+    "mac": { "target": "dmg" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage" }
+  }
+}

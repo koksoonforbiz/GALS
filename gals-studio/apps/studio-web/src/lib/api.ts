@@ -85,6 +85,15 @@ export const api = {
   reading: (id: string) => jget<any>(`/api/analysis/reading?session=${id}`),
   groundTruth: (id: string) => jget<any>(`/api/analysis/ground-truth?session=${id}`),
   exportCsv: (kind: string, scope: string) => `/api/analysis/export/${kind}?scope=${scope}`,
+
+  // Backup / restore (stage 06)
+  exportCodingUrl: '/api/coding/export',
+  importCoding: async (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/coding/import', { method: 'POST', body: form });
+    return res.json();
+  },
 };
 
 export function fmtDuration(ms: number): string {

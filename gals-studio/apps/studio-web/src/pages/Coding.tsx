@@ -25,6 +25,7 @@ export function Coding() {
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [filter, setFilter] = useState<'all' | 'uncoded' | 'disagreements'>('all');
   const [showHelp, setShowHelp] = useState(false);
+  const [showGroundTruth, setShowGroundTruth] = useState(false);
   const [disagreements, setDisagreements] = useState<any[]>([]);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const windowEnterRef = useRef<number>(Date.now());
@@ -212,6 +213,7 @@ export function Coding() {
           {disagreementWinIds.size > 0 && <span className="ml-2 text-amber-600">· {disagreementWinIds.size} disagreements</span>}
         </span>
         <label className="flex items-center gap-1"><input type="checkbox" checked={autoAdvance} onChange={(e) => setAutoAdvance(e.target.checked)} /> auto-advance</label>
+        <label className="flex items-center gap-1" title="Hidden by default during primary coding to avoid biasing the rater"><input type="checkbox" checked={showGroundTruth} onChange={(e) => setShowGroundTruth(e.target.checked)} /> QA: show probes</label>
         <button onClick={() => setShowHelp((s) => !s)} className="rounded border border-slate-300 px-2 py-1">?</button>
       </div>
 
@@ -234,6 +236,7 @@ export function Coding() {
                 {a?.behavior && <span className="h-3 w-3 rounded-sm border border-slate-400" style={{ backgroundColor: colorOf(a.behavior.code) }} title={a.behavior.code} />}
                 {(a?.ef_event?.length ?? 0) > 0 && <span className="text-[9px] text-rose-500">●{a.ef_event.length}</span>}
                 {(a?.motivation?.length ?? 0) > 0 && <span className="text-[9px] text-emerald-500">◆{a.motivation.length}</span>}
+                {(sparse?.probes ?? []).some((p: any) => p.wallMs >= w.startWallMs && p.wallMs <= w.endWallMs) && <span className="text-[9px] text-violet-500" title="probe in window">◉</span>}
                 {disagreementWinIds.has(w.id) && <span className="ml-auto text-amber-500">⚔</span>}
               </button>
             );
@@ -259,7 +262,7 @@ export function Coding() {
           </div>
 
           {pass === 'tiebreaker' && <DisagreementCompare disagreements={disagreements} activeWindowId={activeWindow?.id} />}
-          <WindowContext sparse={sparse} win={activeWindow} />
+          <WindowContext sparse={sparse} win={activeWindow} showGroundTruth={showGroundTruth} />
         </div>
 
         {/* palette */}
@@ -341,17 +344,23 @@ function DisagreementCompare({ disagreements, activeWindowId }: { disagreements:
   );
 }
 
-function WindowContext({ sparse, win }: { sparse: any; win: any }) {
+function WindowContext({ sparse, win, showGroundTruth }: { sparse: any; win: any; showGroundTruth?: boolean }) {
   if (!sparse || !win) return null;
   const inWin = (ms: number) => ms >= win.startWallMs - BUFFER_MS && ms <= win.endWallMs + BUFFER_MS;
   const msgs = [...(sparse.chatbot ?? []), ...(sparse.dialogue ?? [])].filter((m: any) => inWin(m.wallMs));
   const efs = (sparse.efDetections ?? []).filter((d: any) => inWin(d.wallMs));
+  const probes = (sparse.probes ?? []).filter((p: any) => inWin(p.wallMs));
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-2 text-xs">
       <div className="mb-1 font-semibold text-slate-500">Window text channel</div>
       {msgs.length === 0 && efs.length === 0 && <div className="text-slate-400">No chat/EF in this window</div>}
       {msgs.map((m: any, i: number) => <div key={i}><span className="font-semibold">{m.role}:</span> {m.content?.slice(0, 140)}</div>)}
       {efs.map((d: any, i: number) => <div key={`e${i}`} className="text-rose-600">EF: {d.construct} ({d.label})</div>)}
+      {probes.length > 0 && (
+        showGroundTruth
+          ? probes.map((p: any, i: number) => <div key={`p${i}`} className="text-violet-600">Probe ◉ {p.probeType} (self-report revealed in QA mode)</div>)
+          : <div className="text-violet-400">◉ {probes.length} probe(s) in window — hidden during primary coding (enable QA to view)</div>
+      )}
     </div>
   );
 }

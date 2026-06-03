@@ -10,6 +10,7 @@ import {
   windowId,
   windowCount,
   DEFAULT_CODEBOOK,
+  scoreInstrument,
   type StreamKey,
   type BundleValidationReport,
 } from '@gals-studio/shared';
@@ -365,7 +366,16 @@ const streamInserters: Record<StreamKey, (dir: string, sessionId: string) => Pro
     (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, probeType: s(r.probeType) ?? 'unknown', items: JSON.stringify(r.items ?? {}), latencyMs: i(r.latencyMs), scheduledWallMs: n(r.scheduledWallMs), shownWallMs: n(r.shownWallMs), completed: r.completed !== false }),
     (rows) => prisma.probeResponse.createMany({ data: rows as never })),
   questionnaires: (d, sid) => insertStream(d, 'questionnaires',
-    (r) => ({ sessionId: sid, userId: s(r.userId), instrument: s(r.instrument) ?? 'unknown', phase: s(r.phase) ?? 'post', items: JSON.stringify(r.items ?? {}), scoredSubscales: J(r.scoredSubscales), completedAt: r.completedAt ? new Date(r.completedAt as string) : null }),
+    (r) => {
+      const instrument = s(r.instrument) ?? 'unknown';
+      // Score subscales on import when not already provided (published keys).
+      let scored = r.scoredSubscales;
+      if (scored == null && r.items && typeof r.items === 'object') {
+        const result = scoreInstrument(instrument, r.items as Record<string, number>);
+        if (result) scored = result.subscales;
+      }
+      return { sessionId: sid, userId: s(r.userId), instrument, phase: s(r.phase) ?? 'post', items: JSON.stringify(r.items ?? {}), scoredSubscales: J(scored), completedAt: r.completedAt ? new Date(r.completedAt as string) : null };
+    },
     (rows) => prisma.questionnaire.createMany({ data: rows as never })),
   annotations: (d, sid) => insertStream(d, 'annotations',
     (r) => ({ sessionId: sid, externalId: s(r.id), startMs: n(r.startMs) ?? 0, endMs: n(r.endMs), note: s(r.note), codeId: s(r.codeId), researcherId: s(r.researcherId) }),

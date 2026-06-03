@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
-type Tab = 'reliability' | 'dynamics' | 'attention' | 'reading' | 'export';
-const TABS: Tab[] = ['reliability', 'dynamics', 'attention', 'reading', 'export'];
+type Tab = 'reliability' | 'dynamics' | 'attention' | 'reading' | 'groundtruth' | 'export';
+const TABS: Tab[] = ['reliability', 'dynamics', 'attention', 'reading', 'groundtruth', 'export'];
 
 export function Analysis() {
   const [tab, setTab] = useState<Tab>('reliability');
@@ -36,6 +36,7 @@ export function Analysis() {
       {tab === 'dynamics' && session && <Dynamics session={session} />}
       {tab === 'attention' && session && <Attention session={session} />}
       {tab === 'reading' && session && <Reading session={session} />}
+      {tab === 'groundtruth' && session && <GroundTruth session={session} />}
       {tab === 'export' && <Export sessions={sessions} />}
     </div>
   );
@@ -290,6 +291,81 @@ function Reading({ session }: { session: string }) {
         </table>
         <div className="mt-2 text-[11px] text-slate-400">Derived from scrollHosts + PDF pages. Window scrollY is never used for progress.</div>
       </div>
+    </div>
+  );
+}
+
+function GroundTruth({ session }: { session: string }) {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => { api.groundTruth(session).then(setData).catch(() => setData({ error: true })); }, [session]);
+  if (!data) return <div className="text-slate-400">Loading…</div>;
+  if (data.error) return <div className="text-rose-500">No ground-truth data.</div>;
+
+  const cv = data.convergentValidity;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <h3 className="mb-2 text-sm font-semibold text-slate-500">ESM trajectory ({data.esmTrajectory.length} probes)</h3>
+        {data.esmTrajectory.length === 0 ? (
+          <div className="text-sm text-slate-400">No ESM/SAM probes in this session.</div>
+        ) : (
+          <Line series={data.esmTrajectory} keys={['valence', 'arousal', 'engagement']} />
+        )}
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <h3 className="mb-2 text-sm font-semibold text-slate-500">Convergent validity (across all sessions; expected r ≈ 0.30–0.50)</h3>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <Scatter title="AEQ-S boredom ↔ coded boredom" v={cv.aeqBoredom_vs_codedBoredom} />
+          <Scatter title="PANAS NA ↔ coded frustration" v={cv.panasNA_vs_codedFrustration} />
+          <Scatter title="IMI interest ↔ ESM engagement" v={cv.imiInterest_vs_esmEngagement} />
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <h3 className="mb-2 text-sm font-semibold text-slate-500">Scored questionnaires</h3>
+        {data.questionnaires.length === 0 ? <div className="text-sm text-slate-400">None.</div> :
+          data.questionnaires.map((q: any, i: number) => (
+            <div key={i} className="text-xs"><span className="font-semibold">{q.instrument} ({q.phase}):</span> {JSON.stringify(q.scoredSubscales)}</div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function Line({ series, keys }: { series: any[]; keys: string[] }) {
+  const W = 600, H = 120;
+  const ts = series.map((s) => s.t);
+  const tMin = Math.min(...ts), tMax = Math.max(...ts) || 1;
+  const colors: Record<string, string> = { valence: '#16a34a', arousal: '#dc2626', engagement: '#0ea5e9' };
+  const x = (t: number) => ((t - tMin) / (tMax - tMin || 1)) * W;
+  const y = (v: number) => H - Math.max(0, Math.min(1, v / 10)) * H; // assume 0-10 scale
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 140 }}>
+      {keys.map((k) => {
+        const pts = series.filter((s) => s[k] != null);
+        const d = pts.length ? 'M' + pts.map((s) => `${x(s.t).toFixed(1)},${y(s[k]).toFixed(1)}`).join(' L') : '';
+        return <path key={k} d={d} fill="none" stroke={colors[k]} strokeWidth={1.5} />;
+      })}
+      {keys.map((k, i) => <text key={k} x={4} y={12 + i * 12} fontSize={9} fill={colors[k]}>{k}</text>)}
+    </svg>
+  );
+}
+
+function Scatter({ title, v }: { title: string; v: { points: { x: number; y: number }[]; r: number } }) {
+  const W = 180, H = 140;
+  const xs = v.points.map((p) => p.x), ys = v.points.map((p) => p.y);
+  const xMin = Math.min(...xs, 0), xMax = Math.max(...xs, 1);
+  const yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 1);
+  const px = (x: number) => ((x - xMin) / (xMax - xMin || 1)) * (W - 20) + 10;
+  const py = (y: number) => H - 10 - ((y - yMin) / (yMax - yMin || 1)) * (H - 20);
+  return (
+    <div>
+      <div className="text-xs font-medium">{title}</div>
+      <div className="text-xs text-slate-400">r = {Number.isFinite(v.r) ? v.r.toFixed(2) : 'n/a'} · n = {v.points.length}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full border border-slate-100" style={{ height: 120 }}>
+        {v.points.map((p, i) => <circle key={i} cx={px(p.x)} cy={py(p.y)} r={3} fill="#8b5cf6" />)}
+      </svg>
     </div>
   );
 }

@@ -11,6 +11,7 @@ export function Library() {
   const [courseFilter, setCourseFilter] = useState('');
   const [webcamOnly, setWebcamOnly] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const codingFileRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     setLoading(true);
@@ -219,6 +220,25 @@ export function Library() {
             </tbody>
           </table>
         )}
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Backup coding (durability)</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Coding labels are the most valuable artifact. Export them independently of media; restore on any machine.
+        </p>
+        <div className="flex items-center gap-2">
+          <a href={api.exportCodingUrl} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">Export all coding (.zip)</a>
+          <button onClick={() => codingFileRef.current?.click()} className="rounded border border-slate-300 px-3 py-1.5 text-sm">Import coding…</button>
+          <input ref={codingFileRef} type="file" accept=".zip" className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const r = await api.importCoding(f);
+              alert(`Restored: ${JSON.stringify(r.restored ?? r)}`);
+              await refresh();
+            }} />
+        </div>
       </section>
     </div>
   );

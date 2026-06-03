@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../prisma.js';
-import { computeReliability, computeDynamics, computeAttention, computeReading } from '../analysis/compute.js';
+import { computeReliability, computeDynamics, computeAttention, computeReading, computeGroundTruth } from '../analysis/compute.js';
 import { EXPORTERS } from '../analysis/export.js';
 
 export async function analysisRoutes(app: FastifyInstance): Promise<void> {
@@ -48,6 +48,11 @@ export async function analysisRoutes(app: FastifyInstance): Promise<void> {
     reply.header('Content-Type', 'text/csv; charset=utf-8');
     reply.header('Content-Disposition', `attachment; filename="${req.params.kind}_${scope}.csv"`);
     return data;
+  });
+
+  app.get<{ Querystring: { session?: string } }>('/api/analysis/ground-truth', async (req, reply) => {
+    if (!req.query.session) return reply.code(400).send({ error: 'session required' });
+    return computeGroundTruth(req.query.session);
   });
 
   app.get('/api/analysis/runs', async () => ({ runs: await prisma.reliabilityRun.findMany({ orderBy: { computedAt: 'desc' } }) }));
