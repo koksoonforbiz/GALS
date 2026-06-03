@@ -1,0 +1,416 @@
+// GALS Studio — local SQLite store. Media stays on disk; the DB stores
+// relative paths under STUDIO_DATA_DIR/media/. Additive migrations only.
+//
+// Durability rule: importing a bundle must NEVER delete or modify Coder,
+// Annotation, CodebookVersion, or ReliabilityRun rows. Re-importing the same
+// sessionId refreshes ingested streams/media only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("STUDIO_DATABASE_URL")
+}
+
+// ─── Ingested session (mirrors the bundle) ──────────────────────────────────
+
+model Session {
+  id              String   @id
+  userId          String
+  courseId        String
+  moduleId        String?
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationMs      Int
+  timezone        String
+  baseWallClockMs Float
+  device          String?
+  bundleVersion   Int
+  importedAt      DateTime @default(now())
+  manifest        String
+  mediaDir        String
+  userDisplayName String?
+  courseTitle     String?
+  moduleTitle     String?
+
+  gazeSamples     GazeSample[]
+  pupilSamples    PupilSample[]
+  emotionFrames   EmotionFrame[]
+  auResults       AuResult[]
+  clicks          Click[]
+  scrolls         Scroll[]
+  cursors         Cursor[]
+  keystrokes      Keystroke[]
+  clipboards      Clipboard[]
+  visibilities    Visibility[]
+  viewports       Viewport[]
+  activityEvents  ActivityEvent[]
+  snapshots       Snapshot[]
+  webcamSegments  WebcamSegment[]
+  chatbotMessages ChatbotMessage[]
+  dialogueMessages DialogueMessage[]
+  interventions   Intervention[]
+  efDetections    EfDetection[]
+  masteries       Mastery[]
+  cards           SpacedRepCard[]
+  attempts        Attempt[]
+  probes          ProbeResponse[]
+  questionnaires  Questionnaire[]
+  codingWindows   CodingWindow[]
+  carriedAnnotations CarriedAnnotation[]
+}
+
+model GazeSample {
+  id         Int     @id @default(autoincrement())
+  sessionId  String
+  session    Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs     Float
+  x          Float
+  y          Float
+  confidence Float?
+  @@index([sessionId, wallMs])
+}
+
+model PupilSample {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  diameter  Float
+  @@index([sessionId, wallMs])
+}
+
+model EmotionFrame {
+  id                  Int     @id @default(autoincrement())
+  sessionId           String
+  session             Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs              Float
+  faceDetected        Boolean @default(false)
+  dominant            String?
+  dominantProbability Float?
+  pHappiness          Float?
+  pSadness            Float?
+  pSurprise           Float?
+  pFear               Float?
+  pAnger              Float?
+  pDisgust            Float?
+  pContempt           Float?
+  pNeutral            Float?
+  @@index([sessionId, wallMs])
+}
+
+model AuResult {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  faceConf  Float?
+  aus       String // { au01: 0.3, au12: 1.2, ... }
+  @@index([sessionId, wallMs])
+}
+
+model Click {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  x         Float
+  y         Float
+  target    String?
+  pageUrl   String?
+  @@index([sessionId, wallMs])
+}
+
+model Scroll {
+  id            Int     @id @default(autoincrement())
+  sessionId     String
+  session       Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs        Float
+  scrollY       Float?
+  scrollPercent Float?
+  pageUrl       String?
+  scrollHosts   String?
+  @@index([sessionId, wallMs])
+}
+
+model Cursor {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  x         Float
+  y         Float
+  target    String?
+  @@index([sessionId, wallMs])
+}
+
+model Keystroke {
+  id              Int     @id @default(autoincrement())
+  sessionId       String
+  session         Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs          Float
+  fieldId         String?
+  keystrokeCount  Int?
+  pauseDurationMs Int?
+  typingSpeedWPM  Float?
+  @@index([sessionId, wallMs])
+}
+
+model Clipboard {
+  id            Int     @id @default(autoincrement())
+  sessionId     String
+  session       Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs        Float
+  action        String?
+  textLength    Int?
+  sourceElement String?
+  @@index([sessionId, wallMs])
+}
+
+model Visibility {
+  id               Int     @id @default(autoincrement())
+  sessionId        String
+  session          Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs           Float
+  visibleState     String?
+  hiddenDurationMs Int?
+  @@index([sessionId, wallMs])
+}
+
+model Viewport {
+  id          Int     @id @default(autoincrement())
+  sessionId   String
+  session     Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs      Float
+  width       Int?
+  height      Int?
+  orientation String?
+  @@index([sessionId, wallMs])
+}
+
+model ActivityEvent {
+  id                Int     @id @default(autoincrement())
+  sessionId         String
+  session           Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs            Float
+  action            String
+  metadata          String?
+  interventionId    String?
+  dialogueSessionId String?
+  moduleItemId      String?
+  @@index([sessionId, wallMs])
+}
+
+model Snapshot {
+  id             String  @id
+  sessionId      String
+  session        Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs         Float
+  trigger        String
+  pageUrl        String
+  width          Int
+  height         Int
+  scrollX        Int
+  scrollY        Int
+  aois           String?
+  scrollHosts    String?
+  pdfCurrentPage Int?
+  pdfTotalPages  Int?
+  htmlPath       String
+  screenshotPath String?
+  @@index([sessionId, wallMs])
+}
+
+model WebcamSegment {
+  id          String  @id
+  sessionId   String
+  session     Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  startWallMs Float
+  endWallMs   Float?
+  mp4Path     String?
+  byteSize    Int
+  status      String
+  mimeType    String?
+  @@index([sessionId, startWallMs])
+}
+
+model ChatbotMessage {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  role      String
+  content   String
+  selectedText String?
+  model     String?
+  @@index([sessionId, wallMs])
+}
+
+model DialogueMessage {
+  id                Int     @id @default(autoincrement())
+  sessionId         String
+  session           Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs            Float
+  role              String
+  content           String
+  dialogueSessionId String?
+  @@index([sessionId, wallMs])
+}
+
+model Intervention {
+  id           Int     @id @default(autoincrement())
+  sessionId    String
+  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs       Float
+  externalId   String?
+  type         String?
+  status       String?
+  sessionData  String?
+  selectedText String?
+  @@index([sessionId, wallMs])
+}
+
+model EfDetection {
+  id         Int     @id @default(autoincrement())
+  sessionId  String
+  session    Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs     Float
+  construct  String
+  label      String
+  confidence Float?
+  severity   String?
+  rationale  String?
+  model      String?
+  sourceRef  String?
+  @@index([sessionId, wallMs])
+}
+
+model Mastery {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  data      String
+}
+
+model SpacedRepCard {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  data      String
+}
+
+model Attempt {
+  id        Int     @id @default(autoincrement())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs    Float
+  data      String
+}
+
+model ProbeResponse {
+  id              Int     @id @default(autoincrement())
+  sessionId       String
+  session         Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs          Float
+  probeType       String
+  items           String
+  latencyMs       Int?
+  scheduledWallMs Float?
+  shownWallMs     Float?
+  completed       Boolean @default(true)
+  @@index([sessionId, wallMs])
+}
+
+model Questionnaire {
+  id              Int     @id @default(autoincrement())
+  sessionId       String
+  session         Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId          String?
+  instrument      String
+  phase           String
+  items           String
+  scoredSubscales String?
+  completedAt     DateTime?
+}
+
+// ─── Coding / analysis (never touched by import) ─────────────────────────────
+
+model Coder {
+  id          String       @id @default(uuid())
+  name        String
+  role        String // trained_rater | tiebreaker | teacher | expert
+  createdAt   DateTime     @default(now())
+  annotations Annotation[]
+}
+
+model CodebookVersion {
+  id          String       @id @default(uuid())
+  name        String
+  version     String
+  definition  String
+  locked      Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  annotations Annotation[]
+  @@unique([name, version])
+}
+
+model CodingWindow {
+  id          String  @id // `${sessionId}:${index}`
+  sessionId   String
+  session     Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  index       Int
+  startWallMs Float
+  endWallMs   Float
+  durationMs  Int     @default(20000)
+  @@index([sessionId, index])
+}
+
+model Annotation {
+  id                String          @id @default(uuid())
+  sessionId         String
+  windowId          String?
+  coderId           String
+  coder             Coder           @relation(fields: [coderId], references: [id], onDelete: Cascade)
+  codingPass        String // primary_rater_1 | primary_rater_2 | tiebreaker | gold_consensus
+  codebookVersionId String
+  codebookVersion   CodebookVersion @relation(fields: [codebookVersionId], references: [id])
+  dimension         String // affect | behavior | ef_event | motivation
+  code              String
+  intensity         Int?
+  confidence        String?
+  atWallMs          Float?
+  startWallMs       Float?
+  endWallMs         Float?
+  notes             String?
+  codingMs          Int?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  @@index([sessionId, windowId, coderId, codingPass, dimension])
+}
+
+model CarriedAnnotation {
+  id           Int     @id @default(autoincrement())
+  sessionId    String
+  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  externalId   String?
+  startMs      Float
+  endMs        Float?
+  note         String?
+  codeId       String?
+  codeLabel    String?
+  codeColor    String?
+  researcherId String?
+}
+
+model ReliabilityRun {
+  id         String   @id @default(uuid())
+  scope      String // sessionId or "all"
+  dimension  String
+  metrics    String
+  params     String
+  computedAt DateTime @default(now())
+}

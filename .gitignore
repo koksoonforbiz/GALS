@@ -63,3 +63,9 @@ backup_*.sql
 tools/gals-export/node_modules/
 tools/gals-export/dist/
 tools/gals-export/exports/
+gals-studio/node_modules/
+gals-studio/**/node_modules/
+gals-studio/**/dist/
+gals-studio/apps/studio-web/dist/
+gals-studio/**/*.db
+gals-studio/**/*.tsbuildinfo
