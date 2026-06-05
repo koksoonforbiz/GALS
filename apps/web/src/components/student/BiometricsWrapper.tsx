@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { BiometricsSyncProvider, useBiometricsSync } from '../../contexts/BiometricsSyncContext';
 import { useWebcamRecording } from '../../lib/recording/useWebcamRecording';
 import { usePupilSize } from '../../lib/pupil-size/usePupilSize';
-import { useWebgazer } from '../../lib/webgazer/useWebgazer';
+import { useEyeTracking } from '../../lib/webgazer/useEyeTracking';
 import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
 import { BiometricsPanel } from './BiometricsPanel';
@@ -83,8 +83,8 @@ function BiometricsHooksInner({
   // Feature 01: Pupil size
   const pupilSize = usePupilSize(courseId, sessionId, wallClockOffset);
 
-  // Feature 02: WebGazer
-  const webgazer = useWebgazer(courseId, sessionId, wallClockOffset);
+  // Feature 02: Eye tracking (WebGazer or WebEyeTrack, per course config)
+  const webgazer = useEyeTracking(courseId, sessionId, wallClockOffset);
 
   // ── Activity log tracking for biometric state changes ──
   const { track } = useActivityLog();
@@ -94,25 +94,31 @@ function BiometricsHooksInner({
   const prevCalibrating = useRef(false);
 
   useEffect(() => {
-    if (recording.isActive && !prevRecording.current) track('RECORDING_STARTED', { courseId, metadata: { wallClockOffset } });
+    if (recording.isActive && !prevRecording.current)
+      track('RECORDING_STARTED', { courseId, metadata: { wallClockOffset } });
     if (!recording.isActive && prevRecording.current) track('RECORDING_STOPPED', { courseId });
     prevRecording.current = recording.isActive;
   }, [recording.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (pupilSize.isActive && !prevPupil.current) track('PUPIL_SIZE_TRACKING_STARTED', { courseId });
-    if (!pupilSize.isActive && prevPupil.current) track('PUPIL_SIZE_TRACKING_STOPPED', { courseId });
+    if (pupilSize.isActive && !prevPupil.current)
+      track('PUPIL_SIZE_TRACKING_STARTED', { courseId });
+    if (!pupilSize.isActive && prevPupil.current)
+      track('PUPIL_SIZE_TRACKING_STOPPED', { courseId });
     prevPupil.current = pupilSize.isActive;
   }, [pupilSize.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (webgazer.isActive && !prevWebgazer.current) track('WEBGAZER_TRACKING_STARTED', { courseId });
-    if (!webgazer.isActive && prevWebgazer.current) track('WEBGAZER_TRACKING_STOPPED', { courseId });
+    if (webgazer.isActive && !prevWebgazer.current)
+      track('WEBGAZER_TRACKING_STARTED', { courseId });
+    if (!webgazer.isActive && prevWebgazer.current)
+      track('WEBGAZER_TRACKING_STOPPED', { courseId });
     prevWebgazer.current = webgazer.isActive;
   }, [webgazer.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (webgazer.isCalibrating && !prevCalibrating.current) track('WEBGAZER_CALIBRATION_STARTED', { courseId });
+    if (webgazer.isCalibrating && !prevCalibrating.current)
+      track('WEBGAZER_CALIBRATION_STARTED', { courseId });
     prevCalibrating.current = webgazer.isCalibrating;
   }, [webgazer.isCalibrating]); // eslint-disable-line react-hooks/exhaustive-deps
 

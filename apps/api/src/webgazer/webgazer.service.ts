@@ -34,6 +34,7 @@ export class WebgazerService {
       where: { courseId },
       update: {
         isEnabled: dto.isEnabled,
+        eyeTrackerType: dto.eyeTrackerType,
         calibrationOnNewSession: dto.calibrationOnNewSession,
         recalibrationEnabled: dto.recalibrationEnabled,
         inactivityTimeoutSecs: dto.inactivityTimeoutSecs,
@@ -41,6 +42,7 @@ export class WebgazerService {
       create: {
         courseId,
         isEnabled: dto.isEnabled,
+        eyeTrackerType: dto.eyeTrackerType,
         calibrationOnNewSession: dto.calibrationOnNewSession,
         recalibrationEnabled: dto.recalibrationEnabled,
         inactivityTimeoutSecs: dto.inactivityTimeoutSecs,

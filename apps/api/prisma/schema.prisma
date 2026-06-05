@@ -1781,6 +1781,7 @@ model WebgazerConfig {
   courseId                String   @unique @map("course_id") @db.Uuid
   course                  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   isEnabled               Boolean  @default(false) @map("is_enabled")
+  eyeTrackerType          String   @default("webgazer") @map("eye_tracker_type")
   calibrationOnNewSession Boolean  @default(true) @map("calibration_on_new_session")
   inactivityTimeoutSecs   Int      @default(1800) @map("inactivity_timeout_secs")
   recalibrationEnabled    Boolean  @default(true) @map("recalibration_enabled")

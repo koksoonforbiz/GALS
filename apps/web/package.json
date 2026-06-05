@@ -25,6 +25,7 @@
     "@tiptap/starter-kit": "^3.18.0",
     "autoprefixer": "^10.4.23",
     "date-fns": "^4.1.0",
+    "highlight.js": "^11.10.0",
     "katex": "^0.16.28",
     "lucide-react": "^0.575.0",
     "pdfjs-dist": "5.4.296",
@@ -39,9 +40,9 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
-    "highlight.js": "^11.10.0",
     "socket.io-client": "^4.8.3",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "webeyetrack": "^0.0.2"
   },
   "devDependencies": {
     "@ats/config": "workspace:*",
