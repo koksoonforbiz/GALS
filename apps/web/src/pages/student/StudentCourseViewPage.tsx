@@ -669,11 +669,17 @@ export function StudentCourseViewPage() {
                     <PdfReader
                       documentUrl={pdfUrls[selectedItem.id]!}
                       documentName={selectedItem.pdfFilename ?? selectedItem.title}
-                      onTextSelected={(text) => setSelectedText(text)}
-                      onSelectionCleared={() => {
-                        clearSelectedText();
+                      onTextSelected={(text) => {
+                        // Drag-selection overrides checkbox selection
+                        setSelectedText(text);
                         setCheckedPdfPages(new Set());
                         checkedPdfPagesTextRef.current = new Map();
+                      }}
+                      onSelectionCleared={() => {
+                        // mousedown fires this on every click inside the PDF,
+                        // including checkbox clicks — only clear when no pages
+                        // are checkbox-selected, otherwise preserve combined text.
+                        if (checkedPdfPages.size === 0) clearSelectedText();
                       }}
                       onPdfMeta={handlePdfMeta}
                       onCurrentPageText={({ pageNumber, text }) =>
