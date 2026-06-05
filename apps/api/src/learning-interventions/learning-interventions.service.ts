@@ -1879,50 +1879,65 @@ export class LearningInterventionsService {
         'practice-testing',
       );
       if (cached) {
-        const questions = cached.content as PracticeQuestion[];
-        const mcqCount = questions.filter((q) => q.type === 'mcq').length;
-        const shortAnswerCount = questions.filter((q) => q.type === 'short_answer').length;
-        const intervention = await this.prisma.learningIntervention.create({
-          data: {
-            userId,
-            courseId: dto.courseId,
-            contentId: dto.contentId || null,
-            pageType: dto.pageType || null,
-            type: 'PRACTICE_TESTING',
-            status: 'IN_PROGRESS',
-            selectedText: `[pre-generated page ${dto.pageNumber}]`,
-            sessionData: {
-              questions,
-              config: {
-                mcqCount,
-                shortAnswerCount,
-                coverage: { mode: 'all' },
-                usedDefaults: false,
-              },
-            } as unknown as Prisma.InputJsonValue,
-          },
-        });
-        if (sessionId) {
-          void this.activityLogService.record({
-            sessionId,
-            userId,
-            action: ActivityAction.INTERVENTION_TRIGGERED,
-            interventionId: intervention.id,
-            courseId: dto.courseId,
-            metadata: { interventionType: 'PRACTICE_TESTING', triggerReason: 'pre_generated' },
+        const allCached = cached.content as PracticeQuestion[];
+        const cachedMcqs = allCached.filter((q) => q.type === 'mcq');
+        const cachedShortAnswers = allCached.filter((q) => q.type === 'short_answer');
+
+        // Resolve what the student actually requested (mirror the defaults used below)
+        const wantMcq = dto.mcqCount ?? 3;
+        const wantShort = dto.shortAnswerCount ?? 2;
+
+        // Only serve from cache when it has enough questions of each type.
+        // If the student requested more than what was pre-generated, fall
+        // through to live LLM so the full count is honoured.
+        if (cachedMcqs.length >= wantMcq && cachedShortAnswers.length >= wantShort) {
+          const questions = [
+            ...cachedMcqs.slice(0, wantMcq),
+            ...cachedShortAnswers.slice(0, wantShort),
+          ];
+          const intervention = await this.prisma.learningIntervention.create({
+            data: {
+              userId,
+              courseId: dto.courseId,
+              contentId: dto.contentId || null,
+              pageType: dto.pageType || null,
+              type: 'PRACTICE_TESTING',
+              status: 'IN_PROGRESS',
+              selectedText: `[pre-generated page ${dto.pageNumber}]`,
+              sessionData: {
+                questions,
+                config: {
+                  mcqCount: wantMcq,
+                  shortAnswerCount: wantShort,
+                  coverage: { mode: 'all' },
+                  usedDefaults: false,
+                },
+              } as unknown as Prisma.InputJsonValue,
+            },
           });
+          if (sessionId) {
+            void this.activityLogService.record({
+              sessionId,
+              userId,
+              action: ActivityAction.INTERVENTION_TRIGGERED,
+              interventionId: intervention.id,
+              courseId: dto.courseId,
+              metadata: { interventionType: 'PRACTICE_TESTING', triggerReason: 'pre_generated' },
+            });
+          }
+          return {
+            interventionId: intervention.id,
+            questions: questions.map((q) => ({
+              question: q.question,
+              type: q.type,
+              options: q.options,
+            })),
+            coverageFallback: undefined,
+            usedDefaults: false,
+            usedTeacherDefaults: false,
+          };
         }
-        return {
-          interventionId: intervention.id,
-          questions: questions.map((q) => ({
-            question: q.question,
-            type: q.type,
-            options: q.options,
-          })),
-          coverageFallback: undefined,
-          usedDefaults: false,
-          usedTeacherDefaults: false,
-        };
+        // Cache hit but not enough questions — fall through to live LLM
       }
     }
 
