@@ -102,11 +102,43 @@ export function StudentCourseViewPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const { setPageContext, setPdfNumPages } = usePageContext();
+  const {
+    setPageContext,
+    setPdfNumPages,
+    setPdfCurrentPageText,
+    setSelectedText,
+    clearSelectedText,
+  } = usePageContext();
   const { track } = useActivityLog();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Per-page highlight checkbox state. Tracks which PDF pages (if any) are
+  // currently checked so PdfReader can render the right checkbox state.
+  const [checkedPdfPages, setCheckedPdfPages] = useState<Set<number>>(new Set());
+
+  // Clear the per-page checkboxes when the student switches to a different item.
+  useEffect(() => {
+    setCheckedPdfPages(new Set());
+    clearSelectedText();
+  }, [selectedItemId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePageChecked = useCallback(
+    (pageNum: number, checked: boolean, pageText: string) => {
+      if (checked) {
+        setCheckedPdfPages((prev) => new Set([...prev, pageNum]));
+        if (pageText.length > 10) setSelectedText(pageText);
+      } else {
+        setCheckedPdfPages((prev) => {
+          const next = new Set(prev);
+          next.delete(pageNum);
+          return next;
+        });
+        clearSelectedText();
+      }
+    },
+    [setSelectedText, clearSelectedText],
+  );
 
   // Stable callback for PdfReader.onPdfMeta. Without useCallback we
   // emit a new lambda every render — combined with PdfReader putting
@@ -233,9 +265,7 @@ export function StudentCourseViewPage() {
   //     (post-capture-fix, the recorder includes tagged regions even
   //     when their rect is empty so the CSV's aoi_sidebar_w/h flip to 0).
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() =>
-    loadSidebarCollapsed(),
-  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
   const isResizingSidebar = useRef(false);
   const sidebarResizeStart = useRef({ mouseX: 0, startWidth: 0 });
 
@@ -349,6 +379,7 @@ export function StudentCourseViewPage() {
       // value from a previously-viewed PDF. The PdfReader's
       // onPdfMeta will re-set it once the next PDF loads.
       if (!isPdf) setPdfNumPages(null);
+      if (!isPdf) setPdfCurrentPageText(null, null);
     } else if (course) {
       setPageContext({
         pageType: 'lesson',
@@ -359,8 +390,9 @@ export function StudentCourseViewPage() {
         sourceDocumentId: null,
       });
       setPdfNumPages(null);
+      setPdfCurrentPageText(null, null);
     }
-  }, [course, selectedItemId, setPageContext, setPdfNumPages]);
+  }, [course, selectedItemId, setPageContext, setPdfNumPages, setPdfCurrentPageText]);
 
   // Lazily fetch a presigned URL for the currently-selected PDF item so the
   // inline PdfReader can render it. Cache per-item so switching back doesn't
@@ -491,9 +523,7 @@ export function StudentCourseViewPage() {
             data-replay-region="sidebar"
             className="shrink-0 overflow-y-auto pr-1 relative"
             style={
-              sidebarCollapsed
-                ? { width: 0, display: 'none' }
-                : { width: `${sidebarWidth}px` }
+              sidebarCollapsed ? { width: 0, display: 'none' } : { width: `${sidebarWidth}px` }
             }
           >
             {/* Collapse toggle pinned to the sidebar's top-right corner.
@@ -622,12 +652,17 @@ export function StudentCourseViewPage() {
                     <PdfReader
                       documentUrl={pdfUrls[selectedItem.id]!}
                       documentName={selectedItem.pdfFilename ?? selectedItem.title}
-                      // P3 — lift numPages into PageContext so the
-                      // practice-testing config panel can default
-                      // the page-range upper bound to the document's
-                      // last page. Reset to null when the student
-                      // switches off the PDF (see effect below).
+                      onTextSelected={(text) => setSelectedText(text)}
+                      onSelectionCleared={() => {
+                        clearSelectedText();
+                        setCheckedPdfPages(new Set());
+                      }}
                       onPdfMeta={handlePdfMeta}
+                      onCurrentPageText={({ pageNumber, text }) =>
+                        setPdfCurrentPageText(pageNumber, text)
+                      }
+                      checkedPages={checkedPdfPages}
+                      onPageChecked={handlePageChecked}
                     />
                   </div>
                 ) : (
@@ -636,8 +671,8 @@ export function StudentCourseViewPage() {
                   </p>
                 )}
                 <p className="mt-2 text-xs text-gray-400 shrink-0">
-                  Highlight text in the PDF to use it with the chatbot, or open the chatbot
-                  without a selection to ground on this PDF's content.
+                  Highlight text in the PDF to use it with the chatbot, or open the chatbot without
+                  a selection to ground on this PDF's content.
                 </p>
               </div>
             ) : selectedItem.type === 'LINK' ? (

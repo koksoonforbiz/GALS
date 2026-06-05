@@ -6,9 +6,10 @@ export function useStudentSessions(studentId: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  function loadSessions() {
     if (!studentId) return;
     setIsLoading(true);
+    setError(null);
     api
       .get<any[]>(`/activity-log/teacher/students/${studentId}/sessions`)
       .then((data) => {
@@ -19,7 +20,16 @@ export function useStudentSessions(studentId: string) {
         setError(e.message);
         setIsLoading(false);
       });
+  }
+
+  useEffect(() => {
+    loadSessions();
   }, [studentId]);
 
-  return { sessions, isLoading, error };
+  async function deleteSession(sessionId: string) {
+    await api.delete(`/activity-log/teacher/sessions/${sessionId}`);
+    setSessions((current) => current.filter((session) => session.id !== sessionId));
+  }
+
+  return { sessions, isLoading, error, deleteSession, refresh: loadSessions };
 }

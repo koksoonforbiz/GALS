@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -131,6 +132,16 @@ export class ActivityLogController {
   @Roles('teacher')
   async getSessionLogs(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
     return this.activityLogService.getSessionLogs(sessionId);
+  }
+
+  /**
+   * DELETE /activity-log/teacher/sessions/:sessionId
+   * Remove one unwanted student session and its related log data.
+   */
+  @Delete('teacher/sessions/:sessionId')
+  @Roles('teacher')
+  async deleteSession(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+    return this.activityLogService.deleteSession(sessionId);
   }
 
   /**

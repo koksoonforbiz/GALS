@@ -48,8 +48,18 @@ function extractTextFromBlockDocument(doc: unknown): string {
       const o = node as Record<string, unknown>;
       // Common text-bearing fields in our block schema. Prioritise html
       // so we strip tags below; fall back to plain-text equivalents.
-      const textFields = ['html', 'text', 'caption', 'problem', 'solution',
-        'misconception', 'correction', 'question', 'answer', 'explanation'];
+      const textFields = [
+        'html',
+        'text',
+        'caption',
+        'problem',
+        'solution',
+        'misconception',
+        'correction',
+        'question',
+        'answer',
+        'explanation',
+      ];
       for (const f of textFields) {
         if (typeof o[f] === 'string') {
           parts.push(stripHtmlToText(o[f] as string));
@@ -66,7 +76,10 @@ function extractTextFromBlockDocument(doc: unknown): string {
     }
   };
   visit(doc);
-  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  return parts
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -193,7 +206,11 @@ interface ChatbotPanelProps {
   isMaximized?: boolean;
 }
 
-export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false }: ChatbotPanelProps) {
+export function ChatbotPanel({
+  onMinimize,
+  onToggleMaximize,
+  isMaximized = false,
+}: ChatbotPanelProps) {
   const {
     pageType,
     courseId,
@@ -201,6 +218,8 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false
     contentTitle,
     contentText,
     selectedText,
+    pdfCurrentPage,
+    pdfCurrentPageText,
     setSelectedText,
     clearSelectedText,
   } = usePageContext();
@@ -415,6 +434,18 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false
     setMode('chat');
   };
 
+  const canUseCurrentPdfPage = Boolean(pdfCurrentPageText && pdfCurrentPageText.length > 10);
+  const currentPdfPageSelected = canUseCurrentPdfPage && selectedText === pdfCurrentPageText;
+  const handleToggleCurrentPdfPage = (checked: boolean) => {
+    if (checked && pdfCurrentPageText) {
+      setSelectedText(pdfCurrentPageText);
+      return;
+    }
+    if (currentPdfPageSelected) {
+      clearSelectedText();
+    }
+  };
+
   // ─── Review Tab Mode ────────────────────────────────────
   if (mode === 'review-tab') {
     return (
@@ -573,6 +604,20 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false
         </span>
       </div>
 
+      {canUseCurrentPdfPage && (
+        <label className="px-3 py-1.5 border-b border-blue-100 bg-blue-50 flex items-center gap-2 text-xs text-blue-800">
+          <input
+            type="checkbox"
+            checked={currentPdfPageSelected}
+            onChange={(e) => handleToggleCurrentPdfPage(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="truncate">
+            Highlight current slide{pdfCurrentPage ? ` ${pdfCurrentPage}` : ''}
+          </span>
+        </label>
+      )}
+
       {/* Selected text banner */}
       {selectedText && (
         <div className="px-3 py-1.5 border-b border-yellow-200 bg-yellow-50 flex items-center gap-2 text-xs">
@@ -619,7 +664,9 @@ export function ChatbotPanel({ onMinimize, onToggleMaximize, isMaximized = false
         ) : (
           messages.map((msg) => (
             <div key={msg.id}>
-              <div className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`flex min-w-0 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
                 <div
                   className={`max-w-[80%] min-w-0 overflow-hidden px-3 py-2 rounded-lg text-xs ${
                     msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'

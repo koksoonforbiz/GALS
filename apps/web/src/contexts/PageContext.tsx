@@ -24,6 +24,8 @@ interface PageContextType {
    * when no PDF is open, or while the PDF is still loading.
    */
   pdfNumPages: number | null;
+  pdfCurrentPage: number | null;
+  pdfCurrentPageText: string | null;
   /**
    * True when a page (e.g. StudentCourseViewPage) renders the chatbot
    * inline as a docked right-side panel. The global FloatingChatbot reads
@@ -36,12 +38,7 @@ interface PageContextType {
     ctx: Partial<
       Pick<
         PageContextType,
-        | 'pageType'
-        | 'courseId'
-        | 'contentId'
-        | 'contentTitle'
-        | 'contentText'
-        | 'sourceDocumentId'
+        'pageType' | 'courseId' | 'contentId' | 'contentTitle' | 'contentText' | 'sourceDocumentId'
       >
     >,
   ) => void;
@@ -51,6 +48,7 @@ interface PageContextType {
   /** Set by the PdfReader (via the lifting prop `onPdfMeta`) so
    *  intervention views can default page-range inputs sensibly. */
   setPdfNumPages: (n: number | null) => void;
+  setPdfCurrentPageText: (page: number | null, text: string | null) => void;
 }
 
 const PageContext = createContext<PageContextType | null>(null);
@@ -65,6 +63,8 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [selectedText, setSelectedTextState] = useState<string | null>(null);
   const [chatbotDocked, setChatbotDockedState] = useState<boolean>(false);
   const [pdfNumPages, setPdfNumPagesState] = useState<number | null>(null);
+  const [pdfCurrentPage, setPdfCurrentPage] = useState<number | null>(null);
+  const [pdfCurrentPageText, setPdfCurrentPageTextState] = useState<string | null>(null);
 
   const setPageContext = useCallback(
     (
@@ -106,6 +106,11 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
     setPdfNumPagesState(n);
   }, []);
 
+  const setPdfCurrentPageText = useCallback((page: number | null, text: string | null) => {
+    setPdfCurrentPage(page);
+    setPdfCurrentPageTextState(text);
+  }, []);
+
   // Global text selection listener. Scoped: only captures selections that
   // BEGIN inside an element marked `data-selectable="true"` (or a
   // descendant of one). This stops accidental selections in the navbar,
@@ -128,9 +133,7 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
       // Selection origin's Element. Text nodes have parentElement; element
       // nodes are themselves Elements.
       const startEl: Element | null =
-        anchor.nodeType === Node.ELEMENT_NODE
-          ? (anchor as Element)
-          : anchor.parentElement;
+        anchor.nodeType === Node.ELEMENT_NODE ? (anchor as Element) : anchor.parentElement;
       if (!startEl) return;
       if (!startEl.closest('[data-selectable="true"]')) return;
 
@@ -151,12 +154,15 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         selectedText,
         sourceDocumentId,
         pdfNumPages,
+        pdfCurrentPage,
+        pdfCurrentPageText,
         chatbotDocked,
         setPageContext,
         setSelectedText,
         clearSelectedText,
         setChatbotDocked,
         setPdfNumPages,
+        setPdfCurrentPageText,
       }}
     >
       {children}

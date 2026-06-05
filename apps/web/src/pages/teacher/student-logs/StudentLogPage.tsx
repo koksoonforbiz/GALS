@@ -11,11 +11,19 @@ export function StudentLogPage() {
     searchParams.get('session'),
   );
 
-  const { sessions, isLoading, error } = useStudentSessions(studentId!);
+  const { sessions, isLoading, error, deleteSession } = useStudentSessions(studentId!);
 
   function selectSession(id: string) {
     setSelectedSessionId(id);
     setSearchParams({ session: id });
+  }
+
+  async function handleDeleteSession(id: string) {
+    await deleteSession(id);
+    if (selectedSessionId === id) {
+      setSelectedSessionId(null);
+      setSearchParams({});
+    }
   }
 
   if (isLoading) {
@@ -38,7 +46,12 @@ export function StudentLogPage() {
           <h2 className="text-sm font-medium text-gray-900 dark:text-gray-100">Sessions</h2>
           <p className="text-xs text-gray-500 mt-0.5">{sessions.length} total</p>
         </div>
-        <SessionList sessions={sessions} selectedId={selectedSessionId} onSelect={selectSession} />
+        <SessionList
+          sessions={sessions}
+          selectedId={selectedSessionId}
+          onSelect={selectSession}
+          onDelete={handleDeleteSession}
+        />
       </div>
 
       {/* Right panel — log viewer */}

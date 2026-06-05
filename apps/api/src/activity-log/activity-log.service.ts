@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { BlobService } from '../blob/blob.service';
 import { ActivityAction } from './activity-action.enum';
 
 export interface RecordEventParams {
@@ -26,7 +27,10 @@ export interface RecordEventParams {
 export class ActivityLogService {
   private readonly logger = new Logger(ActivityLogService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly blob: BlobService,
+  ) {}
 
   /**
    * Record a single activity event. Safe to call fire-and-forget.
@@ -108,13 +112,143 @@ export class ActivityLogService {
         _count: { select: { activityLogs: true } },
       },
     });
+    const recordingStats = await this.prisma.recordingSegment.groupBy({
+      by: ['sessionId'],
+      where: {
+        studentId: userId,
+        sessionId: { in: sessions.map((session) => session.id) },
+      },
+      _count: { _all: true },
+      _sum: { fileSizeBytes: true },
+    });
+    const recordingStatsBySession = new Map(
+      recordingStats.map((stats) => [
+        stats.sessionId,
+        {
+          recordingSegmentCount: stats._count._all,
+          recordingBytes: stats._sum.fileSizeBytes ?? 0,
+        },
+      ]),
+    );
 
     return sessions.map((s) => ({
       ...s,
       // Provide a live event count so the session list always shows the real number
       liveEventCount: s._count.activityLogs,
+      recordingSegmentCount: recordingStatsBySession.get(s.id)?.recordingSegmentCount ?? 0,
+      recordingBytes: recordingStatsBySession.get(s.id)?.recordingBytes ?? 0,
       _count: undefined,
     }));
+  }
+
+  /** Delete a student session and related logs/derived telemetry. */
+  async deleteSession(sessionId: string) {
+    const session = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+
+    const recordingSegments = await this.prisma.recordingSegment.findMany({
+      where: { sessionId },
+      select: { minioKey: true },
+    });
+    const pyfeatJobs = await this.prisma.pyfeatJob.findMany({
+      where: { sessionId },
+      select: { sourceMinioKey: true, resultMinioKey: true },
+    });
+
+    const blobKeys = new Set<string>();
+    recordingSegments.forEach((segment) => blobKeys.add(segment.minioKey));
+    pyfeatJobs.forEach((job) => {
+      blobKeys.add(job.sourceMinioKey);
+      if (job.resultMinioKey) blobKeys.add(job.resultMinioKey);
+    });
+
+    await Promise.all([...blobKeys].map((key) => this.blob.delete(key)));
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const [
+        chatbotMessages,
+        cursorLogs,
+        clickLogs,
+        scrollLogs,
+        keystrokeLogs,
+        visibilityLogs,
+        clipboardLogs,
+        viewportLogs,
+        performanceLogs,
+        errorLogs,
+        sessionSyncAnchors,
+        modalityOffsets,
+        derivedEngagement,
+        derivedCognitiveLoad,
+        derivedEmotionTimeline,
+        derivedLearningVelocity,
+        derivedAtRiskFlags,
+        alignedFrames,
+        efDetections,
+        emotionFrames,
+        affectiveStateWindows,
+      ] = await Promise.all([
+        tx.chatbotMessage.deleteMany({ where: { studentSessionId: sessionId } }),
+        tx.cursor_logs.deleteMany({ where: { sessionId } }),
+        tx.click_logs.deleteMany({ where: { sessionId } }),
+        tx.scroll_logs.deleteMany({ where: { sessionId } }),
+        tx.keystroke_logs.deleteMany({ where: { sessionId } }),
+        tx.visibility_logs.deleteMany({ where: { sessionId } }),
+        tx.clipboard_logs.deleteMany({ where: { sessionId } }),
+        tx.viewport_logs.deleteMany({ where: { sessionId } }),
+        tx.performance_logs.deleteMany({ where: { sessionId } }),
+        tx.error_logs.deleteMany({ where: { sessionId } }),
+        tx.session_sync_anchors.deleteMany({ where: { sessionId } }),
+        tx.modality_offsets.deleteMany({ where: { sessionId } }),
+        tx.derived_engagement.deleteMany({ where: { sessionId } }),
+        tx.derived_cognitive_load.deleteMany({ where: { sessionId } }),
+        tx.derived_emotion_timeline.deleteMany({ where: { sessionId } }),
+        tx.derived_learning_velocity.deleteMany({ where: { sessionId } }),
+        tx.derived_at_risk_flags.deleteMany({ where: { sessionId } }),
+        tx.aligned_frames.deleteMany({ where: { sessionId } }),
+        tx.efDetection.deleteMany({ where: { sessionId } }),
+        tx.emotionFrame.deleteMany({ where: { sessionId } }),
+        tx.affectiveStateWindow.deleteMany({ where: { sessionId } }),
+      ]);
+
+      await tx.studentSession.delete({ where: { id: sessionId } });
+
+      return {
+        deleted: true,
+        sessionId,
+        recordingVideosDeleted: recordingSegments.length,
+        blobObjectsDeleted: blobKeys.size,
+        counts: {
+          chatbotMessages: chatbotMessages.count,
+          cursorLogs: cursorLogs.count,
+          clickLogs: clickLogs.count,
+          scrollLogs: scrollLogs.count,
+          keystrokeLogs: keystrokeLogs.count,
+          visibilityLogs: visibilityLogs.count,
+          clipboardLogs: clipboardLogs.count,
+          viewportLogs: viewportLogs.count,
+          performanceLogs: performanceLogs.count,
+          errorLogs: errorLogs.count,
+          sessionSyncAnchors: sessionSyncAnchors.count,
+          modalityOffsets: modalityOffsets.count,
+          derivedEngagement: derivedEngagement.count,
+          derivedCognitiveLoad: derivedCognitiveLoad.count,
+          derivedEmotionTimeline: derivedEmotionTimeline.count,
+          derivedLearningVelocity: derivedLearningVelocity.count,
+          derivedAtRiskFlags: derivedAtRiskFlags.count,
+          alignedFrames: alignedFrames.count,
+          efDetections: efDetections.count,
+          emotionFrames: emotionFrames.count,
+          affectiveStateWindows: affectiveStateWindows.count,
+        },
+      };
+    });
+
+    this.logger.log(`Deleted student session ${sessionId}`);
+    return result;
   }
 
   /** Compute a summary on the fly from raw logs (for in-progress sessions). */

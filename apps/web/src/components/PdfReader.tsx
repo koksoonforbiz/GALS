@@ -18,6 +18,8 @@ interface PdfReaderProps {
   onTextSelected?: (text: string, pageNumber: number | null) => void;
   /** Fired whenever the selection is cleared (mousedown elsewhere, Escape). */
   onSelectionCleared?: () => void;
+  /** When true, surfaces the visible/current PDF page text as selected context. */
+  autoSelectCurrentPage?: boolean;
   /**
    * P3 — fires when the PDF's metadata is known (numPages) and on
    * page changes. Parent surfaces (e.g. StudentCourseViewPage) lift
@@ -25,6 +27,13 @@ interface PdfReaderProps {
    * page-range upper bound to the document's last page.
    */
   onPdfMeta?: (meta: { currentPage: number; numPages: number }) => void;
+  onCurrentPageText?: (meta: { pageNumber: number; text: string }) => void;
+  /**
+   * Per-page highlight checkboxes. Multiple pages can be checked simultaneously.
+   * The parent receives each toggle via onPageChecked.
+   */
+  checkedPages?: ReadonlySet<number>;
+  onPageChecked?: (pageNum: number, checked: boolean, pageText: string) => void;
   className?: string;
 }
 
@@ -33,7 +42,11 @@ export function PdfReader({
   documentName,
   onTextSelected,
   onSelectionCleared,
+  autoSelectCurrentPage = false,
   onPdfMeta,
+  onCurrentPageText,
+  checkedPages,
+  onPageChecked,
   className = '',
 }: PdfReaderProps) {
   const [numPages, setNumPages] = useState(0);
@@ -89,18 +102,19 @@ export function PdfReader({
   useEffect(() => {
     onPdfMetaRef.current = onPdfMeta;
   }, [onPdfMeta]);
+  const onCurrentPageTextRef = useRef(onCurrentPageText);
+  useEffect(() => {
+    onCurrentPageTextRef.current = onCurrentPageText;
+  }, [onCurrentPageText]);
 
-  const onDocumentLoadSuccess = useCallback(
-    ({ numPages: total }: { numPages: number }) => {
-      setNumPages(total);
-      setIsLoading(false);
-      setLoadError(false);
-      // P3 — lift numPages so consumers can default page-range
-      // inputs without re-parsing the PDF.
-      onPdfMetaRef.current?.({ currentPage: 1, numPages: total });
-    },
-    [],
-  );
+  const onDocumentLoadSuccess = useCallback(({ numPages: total }: { numPages: number }) => {
+    setNumPages(total);
+    setIsLoading(false);
+    setLoadError(false);
+    // P3 — lift numPages so consumers can default page-range
+    // inputs without re-parsing the PDF.
+    onPdfMetaRef.current?.({ currentPage: 1, numPages: total });
+  }, []);
 
   // P3 — surface every page change too so the meta callback can
   // track scroll position if a consumer cares (PracticeTestingView
@@ -156,6 +170,7 @@ export function PdfReader({
     };
 
     const handleMouseDown = () => {
+      if (autoSelectCurrentPage) return;
       onSelectionCleared?.();
     };
 
@@ -165,7 +180,35 @@ export function PdfReader({
       container.removeEventListener('mouseup', handleMouseUp);
       container.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [onTextSelected, onSelectionCleared, currentPage]);
+  }, [onTextSelected, onSelectionCleared, currentPage, autoSelectCurrentPage]);
+
+  useEffect(() => {
+    if (!autoSelectCurrentPage || numPages === 0) return;
+
+    const selectCurrentPageText = () => {
+      const pageEl = pageRefs.current.get(currentPage);
+      const textLayer = pageEl?.querySelector('.textLayer');
+      const text = textLayer?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      if (text.length > 10) onTextSelected?.(text, currentPage);
+    };
+
+    const timeout = window.setTimeout(selectCurrentPageText, 250);
+    return () => window.clearTimeout(timeout);
+  }, [autoSelectCurrentPage, currentPage, numPages, rotation, containerWidth, onTextSelected]);
+
+  useEffect(() => {
+    if (numPages === 0) return;
+
+    const publishCurrentPageText = () => {
+      const pageEl = pageRefs.current.get(currentPage);
+      const textLayer = pageEl?.querySelector('.textLayer');
+      const text = textLayer?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+      onCurrentPageTextRef.current?.({ pageNumber: currentPage, text });
+    };
+
+    const timeout = window.setTimeout(publishCurrentPageText, 250);
+    return () => window.clearTimeout(timeout);
+  }, [currentPage, numPages, rotation, containerWidth]);
 
   // Escape clears the in-browser selection too.
   useEffect(() => {
@@ -270,27 +313,48 @@ export function PdfReader({
                   ref={(el) => {
                     if (el) pageRefs.current.set(pageNum, el);
                   }}
-                  // data-replay-pdf-page lets the replay locate the
-                  // exact page wrapper inside the captured DOM and
-                  // scrollIntoView() it when scrollTop restore is
-                  // unreliable (canvas → <img> swap, async image
-                  // decode). Read by ReplayTab restore on iframe load.
                   data-replay-pdf-page={pageNum}
-                  className="bg-white shadow-md rounded mx-auto max-w-full"
+                  className={`mx-auto max-w-full transition-shadow ${
+                    checkedPages?.has(pageNum) ? 'ring-2 ring-amber-400 rounded' : ''
+                  }`}
                 >
-                  {containerWidth > 0 && (
-                    <Page
-                      pageNumber={pageNum}
-                      // Width-driven render: at scale=1.0 the page fills
-                      // the column; zoom multiplies that. This is the
-                      // reflow contract — `scale` alone uses the PDF's
-                      // native page size and overflows narrow columns.
-                      width={containerWidth * scale}
-                      rotate={rotation}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
-                    />
+                  {/* Per-page highlight checkbox bar sits above the page */}
+                  {onPageChecked && (
+                    <label
+                      className={`flex items-center gap-1.5 px-2 py-1 text-[11px] cursor-pointer select-none border-b rounded-t ${
+                        checkedPages?.has(pageNum)
+                          ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold'
+                          : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-amber-50 hover:text-amber-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checkedPages?.has(pageNum) ?? false}
+                        onChange={(e) => {
+                          const pageEl = pageRefs.current.get(pageNum);
+                          const text =
+                            pageEl
+                              ?.querySelector('.textLayer')
+                              ?.textContent?.replace(/\s+/g, ' ')
+                              .trim() ?? '';
+                          onPageChecked(pageNum, e.target.checked, text);
+                        }}
+                        className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <span>Slide {pageNum} — highlight for learning strategies</span>
+                    </label>
                   )}
+                  <div className="bg-white shadow-md rounded-b">
+                    {containerWidth > 0 && (
+                      <Page
+                        pageNumber={pageNum}
+                        width={containerWidth * scale}
+                        rotate={rotation}
+                        renderTextLayer={true}
+                        renderAnnotationLayer={true}
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

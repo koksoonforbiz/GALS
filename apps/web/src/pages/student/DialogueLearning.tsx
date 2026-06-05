@@ -52,7 +52,7 @@ export function DialogueLearning() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { track } = useActivityLog();
-  const { setPageContext } = usePageContext();
+  const { setPageContext, setSelectedText, clearSelectedText } = usePageContext();
 
   // Set page context so the floating chatbot knows we're in a course
   useEffect(() => {
@@ -341,11 +341,11 @@ export function DialogueLearning() {
   // ─── Handlers ─────────────────────────────────────────────
 
   // Emit DIALOGUE_SESSION_ENDED when the student leaves an active
-   // dialogue session — either switches to a different one or
-   // navigates away entirely. Pairs with DIALOGUE_SESSION_STARTED so
-   // time-in-session can be derived from start/end timestamps for the
-   // teacher's replay tab. Uses a ref so we capture the *previous*
-   // session id (the one we're leaving), not the current one.
+  // dialogue session — either switches to a different one or
+  // navigates away entirely. Pairs with DIALOGUE_SESSION_STARTED so
+  // time-in-session can be derived from start/end timestamps for the
+  // teacher's replay tab. Uses a ref so we capture the *previous*
+  // session id (the one we're leaving), not the current one.
   const lastActiveSessionRef = useRef<string | null>(null);
   useEffect(() => {
     const prev = lastActiveSessionRef.current;
@@ -1000,10 +1000,14 @@ export function DialogueLearning() {
                 documentId={centerPanel.documentId}
                 documentName={centerPanel.documentName}
                 documentUrl={centerPanel.documentUrl}
-                onClose={() => setCenterPanel({ type: 'chat' })}
+                onClose={() => {
+                  setCenterPanel({ type: 'chat' });
+                  clearSelectedText();
+                }}
                 onSendToIntervention={handleSendToIntervention}
                 onSaveHighlightToNotes={handleSaveHighlightToNotes}
                 highlights={pdfHighlights}
+                onPageHighlighted={(text) => (text ? setSelectedText(text) : clearSelectedText())}
               />
             )}
           </div>

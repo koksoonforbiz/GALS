@@ -37,6 +37,8 @@ interface PdfReaderPanelProps {
   onSendToIntervention: (text: string, strategy: InterventionStrategy) => void;
   onSaveHighlightToNotes: (text: string, pageNumber?: number, color?: string) => void;
   highlights?: HighlightEntry[];
+  /** Fired when the user ticks/unticks a per-page checkbox. Pass null to clear. */
+  onPageHighlighted?: (text: string | null) => void;
 }
 
 export function PdfReaderPanel({
@@ -45,7 +47,7 @@ export function PdfReaderPanel({
   onClose,
   onSendToIntervention,
   onSaveHighlightToNotes,
-  highlights = [],
+  onPageHighlighted,
 }: PdfReaderPanelProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -61,6 +63,51 @@ export function PdfReaderPanel({
     text: string;
     boundingRect: DOMRect;
   } | null>(null);
+
+  // Per-page checkbox highlight: tracks which pages the user has ticked.
+  // Multiple pages can be highlighted simultaneously. A strategy bar appears
+  // below the toolbar so the user can send the combined page text to any
+  // learning intervention.
+  const [checkedPages, setCheckedPages] = useState<Set<number>>(new Set());
+  const [checkedPagesText, setCheckedPagesText] = useState<Map<number, string>>(new Map());
+
+  // Keep a stable ref so the notification effect doesn't depend on onPageHighlighted
+  // directly (inline lambdas from the parent re-create every render).
+  const onPageHighlightedRef = useRef(onPageHighlighted);
+  useEffect(() => {
+    onPageHighlightedRef.current = onPageHighlighted;
+  });
+
+  useEffect(() => {
+    if (checkedPagesText.size === 0) {
+      onPageHighlightedRef.current?.(null);
+      return;
+    }
+    const combined = [...checkedPagesText.values()].filter(Boolean).join('\n\n---\n\n');
+    onPageHighlightedRef.current?.(combined || null);
+  }, [checkedPagesText]);
+
+  const handlePageChecked = useCallback((pageNum: number, checked: boolean) => {
+    if (!checked) {
+      setCheckedPages((prev) => {
+        const next = new Set(prev);
+        next.delete(pageNum);
+        return next;
+      });
+      setCheckedPagesText((prev) => {
+        const next = new Map(prev);
+        next.delete(pageNum);
+        return next;
+      });
+      return;
+    }
+    const pageEl = pageRefs.current.get(pageNum);
+    const raw = pageEl?.querySelector('.textLayer')?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    // Strip common PDF footer boilerplate that pollutes the LLM context.
+    const text = raw.replace(/SMU Classification\s*:\s*Restricted\s*/gi, '').trim();
+    setCheckedPages((prev) => new Set([...prev, pageNum]));
+    setCheckedPagesText((prev) => new Map([...prev, [pageNum, text]]));
+  }, []);
 
   // Default highlight color (yellow unless changed by user)
   const [defaultHighlightColor, setDefaultHighlightColor] = useState<string>('yellow');
@@ -162,17 +209,6 @@ export function PdfReaderPanel({
     onSaveHighlightToNotes(text, currentPage, color);
   };
 
-  // Group highlights by page number for overlay rendering
-  const highlightsByPage = useMemo(() => {
-    const map = new Map<number, HighlightEntry[]>();
-    for (const h of highlights) {
-      const page = h.pageNumber ?? 1;
-      if (!map.has(page)) map.set(page, []);
-      map.get(page)!.push(h);
-    }
-    return map;
-  }, [highlights]);
-
   const handleDismissSelection = () => {
     setSelection(null);
     window.getSelection()?.removeAllRanges();
@@ -253,7 +289,9 @@ export function PdfReaderPanel({
                       setShowColorPicker(false);
                     }}
                     className={`w-6 h-6 rounded-full border-2 hover:scale-110 transition-all ${
-                      defaultHighlightColor === name ? 'border-gray-700 ring-2 ring-offset-1 ring-gray-400' : 'border-gray-200 hover:border-gray-500'
+                      defaultHighlightColor === name
+                        ? 'border-gray-700 ring-2 ring-offset-1 ring-gray-400'
+                        : 'border-gray-200 hover:border-gray-500'
                     }`}
                     style={{ backgroundColor: hex }}
                     title={`Set default to ${name}`}
@@ -267,6 +305,58 @@ export function PdfReaderPanel({
           </span>
         </div>
       </div>
+
+      {/* Checked-pages strategy bar */}
+      {checkedPages.size > 0 &&
+        (() => {
+          const sortedPages = [...checkedPages].sort((a, b) => a - b);
+          const combinedText = [...checkedPagesText.values()].filter(Boolean).join('\n\n---\n\n');
+          const slideLabel =
+            checkedPages.size === 1
+              ? `Slide ${sortedPages[0]} highlighted`
+              : `Slides ${sortedPages.join(', ')} highlighted`;
+          const clearAll = () => {
+            setCheckedPages(new Set());
+            setCheckedPagesText(new Map());
+          };
+          return (
+            <div className="px-3 py-2 border-b border-amber-300 bg-amber-50 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-amber-800 font-semibold shrink-0">{slideLabel} —</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {(
+                  [
+                    ['practice_testing', <Lightbulb size={11} />, 'Practice Testing'],
+                    ['elaboration', <MessageSquare size={11} />, 'Elaboration'],
+                    ['stepwise', <List size={11} />, 'Stepwise'],
+                    ['distributed_practice', <CalendarDays size={11} />, 'Spaced Rep'],
+                  ] as const
+                ).map(([strategy, icon, label]) => (
+                  <button
+                    key={strategy}
+                    disabled={!combinedText}
+                    onClick={() => {
+                      if (combinedText) {
+                        onSaveHighlightToNotes(combinedText, undefined, defaultHighlightColor);
+                        onSendToIntervention(combinedText, strategy);
+                        clearAll();
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded border border-amber-400 bg-white text-amber-800 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {icon}
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={clearAll}
+                className="ml-auto text-[11px] text-amber-500 hover:text-amber-700"
+              >
+                Clear{checkedPages.size > 1 ? ' all' : ''}
+              </button>
+            </div>
+          );
+        })()}
 
       {/* PDF display area */}
       <div ref={scrollContainerRef} className="flex-1 bg-gray-100 overflow-y-auto">
@@ -301,42 +391,41 @@ export function PdfReaderPanel({
                   ref={(el) => {
                     if (el) pageRefs.current.set(pageNum, el);
                   }}
-                  className="bg-white shadow-md rounded mx-auto relative"
+                  className={`mx-auto transition-shadow ${
+                    checkedPages.has(pageNum) ? 'ring-2 ring-amber-400 rounded' : ''
+                  }`}
                 >
-                  <Page
-                    pageNumber={pageNum}
-                    scale={scale}
-                    rotate={rotation}
-                    renderTextLayer={true}
-                    renderAnnotationLayer={true}
-                  />
-                  {/* Highlight indicators for this page */}
-                  {(highlightsByPage.get(pageNum) || []).length > 0 && (
-                    <div className="absolute top-1 right-1 z-10 flex flex-col gap-1">
-                      {(highlightsByPage.get(pageNum) || []).map((h) => (
-                        <div
-                          key={h.id}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs shadow-sm border border-gray-200 bg-white/90 max-w-[180px]"
-                          title={h.text}
-                        >
-                          <Highlighter
-                            size={10}
-                            style={{ color: HIGHLIGHT_COLORS[h.color] || HIGHLIGHT_COLORS.yellow }}
-                          />
-                          <span className="truncate text-gray-600">
-                            {h.text.slice(0, 40)}
-                            {h.text.length > 40 ? '...' : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Per-page highlight checkbox */}
+                  <label
+                    className={`flex items-center gap-1.5 px-2 py-1 text-[11px] cursor-pointer select-none border-b rounded-t ${
+                      checkedPages.has(pageNum)
+                        ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold'
+                        : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-amber-50 hover:text-amber-700'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedPages.has(pageNum)}
+                      onChange={(e) => handlePageChecked(pageNum, e.target.checked)}
+                      className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <span>Slide {pageNum} — highlight for learning strategies</span>
+                  </label>
+
+                  <div className="bg-white shadow-md rounded-b">
+                    <Page
+                      pageNumber={pageNum}
+                      scale={scale}
+                      rotate={rotation}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </Document>
         )}
-
       </div>
 
       {/* Selection popup – rendered outside scroll container so mousedown dismiss doesn't intercept clicks */}
