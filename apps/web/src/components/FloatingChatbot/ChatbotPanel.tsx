@@ -206,12 +206,15 @@ interface ChatbotPanelProps {
   onMinimize?: () => void;
   onToggleMaximize?: () => void;
   isMaximized?: boolean;
+  /** Called when the user clicks "Clear" so the PDF page checkboxes can be reset. */
+  onClearAllHighlights?: () => void;
 }
 
 export function ChatbotPanel({
   onMinimize,
   onToggleMaximize,
   isMaximized = false,
+  onClearAllHighlights,
 }: ChatbotPanelProps) {
   const {
     pageType,
@@ -222,7 +225,6 @@ export function ChatbotPanel({
     selectedText,
     sourceDocumentId,
     pdfCurrentPage,
-    pdfCurrentPageText,
     setSelectedText,
     clearSelectedText,
   } = usePageContext();
@@ -452,18 +454,6 @@ export function ChatbotPanel({
     setMode('chat');
   };
 
-  const canUseCurrentPdfPage = Boolean(pdfCurrentPageText && pdfCurrentPageText.length > 10);
-  const currentPdfPageSelected = canUseCurrentPdfPage && selectedText === pdfCurrentPageText;
-  const handleToggleCurrentPdfPage = (checked: boolean) => {
-    if (checked && pdfCurrentPageText) {
-      setSelectedText(pdfCurrentPageText);
-      return;
-    }
-    if (currentPdfPageSelected) {
-      clearSelectedText();
-    }
-  };
-
   // ─── Review Tab Mode ────────────────────────────────────
   if (mode === 'review-tab') {
     return (
@@ -630,20 +620,6 @@ export function ChatbotPanel({
         </span>
       </div>
 
-      {canUseCurrentPdfPage && (
-        <label className="px-3 py-1.5 border-b border-blue-100 bg-blue-50 flex items-center gap-2 text-xs text-blue-800">
-          <input
-            type="checkbox"
-            checked={currentPdfPageSelected}
-            onChange={(e) => handleToggleCurrentPdfPage(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="truncate">
-            Highlight current slide{pdfCurrentPage ? ` ${pdfCurrentPage}` : ''}
-          </span>
-        </label>
-      )}
-
       {/* Selected text banner */}
       {selectedText && (
         <div className="px-3 py-1.5 border-b border-yellow-200 bg-yellow-50 flex items-center gap-2 text-xs">
@@ -653,7 +629,10 @@ export function ChatbotPanel({
             {selectedText.length > 60 ? '...' : ''}&quot;
           </span>
           <button
-            onClick={clearSelectedText}
+            onClick={() => {
+              clearSelectedText();
+              onClearAllHighlights?.();
+            }}
             className="text-gray-400 hover:text-gray-600 whitespace-nowrap"
           >
             Clear

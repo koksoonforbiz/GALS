@@ -753,7 +753,12 @@ export function StudentCourseViewPage() {
             className="shrink-0"
             style={{ width: displayedChatbotWidth }}
           >
-            <DockedChatbot />
+            <DockedChatbot
+              onClearAllHighlights={() => {
+                setCheckedPdfPages(new Set());
+                checkedPdfPagesTextRef.current = new Map();
+              }}
+            />
           </div>
         </div>
       )}

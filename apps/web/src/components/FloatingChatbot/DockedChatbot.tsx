@@ -15,7 +15,7 @@ import { usePageContext } from '../../contexts/PageContext';
  * FloatingChatbot hides itself while the docked variant is on screen.
  * This component does that bookkeeping automatically.
  */
-export function DockedChatbot() {
+export function DockedChatbot({ onClearAllHighlights }: { onClearAllHighlights?: () => void }) {
   const { setChatbotDocked } = usePageContext();
 
   // Flip the suppress-floating-chatbot flag while this component is
@@ -29,7 +29,7 @@ export function DockedChatbot() {
     <div className="flex flex-col h-full w-full bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
       {/* No onMinimize / onToggleMaximize — the optional buttons in
           PanelHeader hide themselves when those props are omitted. */}
-      <ChatbotPanel />
+      <ChatbotPanel onClearAllHighlights={onClearAllHighlights} />
     </div>
   );
 }
