@@ -154,6 +154,8 @@ import {
   MessageCircleQuestion,
   Loader,
   ArrowLeft,
+  Zap,
+  Sparkles,
 } from 'lucide-react';
 
 const STRATEGY_META: Record<
@@ -262,6 +264,7 @@ export function ChatbotPanel({
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
   const [pendingStrategy, setPendingStrategy] = useState<ChatbotMode | null>(null);
+  const [pregenReady, setPregenReady] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Save-for-Review Handler ──────────────────────────────
@@ -292,6 +295,20 @@ export function ChatbotPanel({
       .then((stats) => setDueCount(stats.dueToday))
       .catch(() => {});
   }, [mode]);
+
+  // Fetch pre-generation readiness when document/page changes
+  useEffect(() => {
+    if (!sourceDocumentId || pdfCurrentPage == null) {
+      setPregenReady({});
+      return;
+    }
+    api
+      .get<Record<string, boolean>>(
+        `/pre-generation/ready?documentId=${sourceDocumentId}&pageNumber=${pdfCurrentPage}`,
+      )
+      .then((r) => setPregenReady(r))
+      .catch(() => setPregenReady({}));
+  }, [sourceDocumentId, pdfCurrentPage]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -797,24 +814,28 @@ export function ChatbotPanel({
               icon={<FlaskConical size={12} />}
               onClick={() => handleInterventionClick('practice-testing')}
               disabled={!courseId}
+              ready={sourceDocumentId ? pregenReady['practice-testing'] : undefined}
             />
             <InterventionButton
               label="Distributed"
               icon={<Layers size={12} />}
               onClick={() => handleInterventionClick('distributed-practice')}
               disabled={!courseId}
+              ready={sourceDocumentId ? pregenReady['distributed-practice'] : undefined}
             />
             <InterventionButton
               label="Step"
               icon={<Footprints size={12} />}
               onClick={() => handleInterventionClick('stepwise-learning')}
               disabled={!courseId}
+              ready={sourceDocumentId ? pregenReady['stepwise-learning'] : undefined}
             />
             <InterventionButton
               label="Elab"
               icon={<MessageCircleQuestion size={12} />}
               onClick={() => handleInterventionClick('interrogative-elaboration')}
               disabled={!courseId}
+              ready={sourceDocumentId ? pregenReady['interrogative-elaboration'] : undefined}
             />
           </div>
         </div>
@@ -968,11 +989,13 @@ function InterventionButton({
   icon,
   onClick,
   disabled,
+  ready,
 }: {
   label: string;
   icon?: React.ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  ready?: boolean;
 }) {
   return (
     <button
@@ -986,6 +1009,8 @@ function InterventionButton({
     >
       {icon}
       {label}
+      {ready === true && <Zap size={9} className="text-green-500 shrink-0" />}
+      {ready === false && <Sparkles size={9} className="text-purple-400 shrink-0" />}
     </button>
   );
 }

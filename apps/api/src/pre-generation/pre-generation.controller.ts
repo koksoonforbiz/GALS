@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -20,6 +20,12 @@ export class PreGenerationController {
   @Roles('teacher', 'admin')
   updateConfig(@Param('courseId') courseId: string, @Body() dto: PreGenerationConfigDto) {
     return this.svc.updateConfig(courseId, dto);
+  }
+
+  @Get('ready')
+  @Roles('teacher', 'admin', 'student')
+  getReadiness(@Query('documentId') documentId: string, @Query('pageNumber') pageNumber: string) {
+    return this.svc.getReadiness(documentId, parseInt(pageNumber, 10));
   }
 
   @Get('status/:documentId')

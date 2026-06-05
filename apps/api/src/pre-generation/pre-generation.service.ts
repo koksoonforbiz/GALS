@@ -229,6 +229,20 @@ export class PreGenerationService implements OnModuleInit, OnModuleDestroy {
     return exercise ?? null;
   }
 
+  /** Per-strategy readiness check for the student chatbot indicator. */
+  async getReadiness(documentId: string, pageNumber: number): Promise<Record<Strategy, boolean>> {
+    const done = await this.prisma.preGeneratedExercise.findMany({
+      where: { documentId, pageNumber, status: 'done' },
+      select: { strategy: true },
+      distinct: ['strategy'],
+    });
+    const doneSet = new Set(done.map((d) => d.strategy));
+    return Object.fromEntries(STRATEGIES.map((s) => [s, doneSet.has(s)])) as Record<
+      Strategy,
+      boolean
+    >;
+  }
+
   /** Status summary for the teacher UI. */
   async getDocumentStatus(documentId: string) {
     const counts = await this.prisma.preGeneratedExercise.groupBy({
