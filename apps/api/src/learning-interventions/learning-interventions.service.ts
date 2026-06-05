@@ -171,10 +171,7 @@ interface ConversationMessage {
  * Exported so the unit test can assert minItems/maxItems are pinned
  * to the requested totals.
  */
-export function buildPracticeTestingSchema(
-  mcq: number,
-  short: number,
-): Record<string, unknown> {
+export function buildPracticeTestingSchema(mcq: number, short: number): Record<string, unknown> {
   const total = mcq + short;
   return {
     type: 'object',
@@ -330,8 +327,16 @@ function stripHtmlToPlainText(html: string): string {
 function extractTextFromBlockDocument(doc: unknown): string {
   const parts: string[] = [];
   const textFields = new Set([
-    'html', 'text', 'caption', 'problem', 'solution',
-    'misconception', 'correction', 'question', 'answer', 'explanation',
+    'html',
+    'text',
+    'caption',
+    'problem',
+    'solution',
+    'misconception',
+    'correction',
+    'question',
+    'answer',
+    'explanation',
   ]);
   const skip = new Set(['id', 'metadata', 'generationJobId', 'generatedBy', 'version']);
   const visit = (node: unknown) => {
@@ -360,7 +365,10 @@ function extractTextFromBlockDocument(doc: unknown): string {
     }
   };
   visit(doc);
-  return parts.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  return parts
+    .join('\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -782,10 +790,7 @@ export class LearningInterventionsService {
             coverage.subtopic.trim(),
           );
           if (subtopicChunks && subtopicChunks.length > 0) {
-            const filename = await this.lookupPdfFilenameForContent(
-              dto.courseId,
-              dto.contentId,
-            );
+            const filename = await this.lookupPdfFilenameForContent(dto.courseId, dto.contentId);
             const contextChunks = subtopicChunks.map((c, i) => {
               const pageLabel = c.pageNumber != null ? `, p.${c.pageNumber}` : '';
               return {
@@ -830,10 +835,7 @@ export class LearningInterventionsService {
         if (wantsPages) {
           const reqStart = coverage!.pageStart as number;
           const reqEnd = coverage!.pageEnd as number;
-          const maxPage = await this.lookupMaxPageForContent(
-            dto.courseId,
-            dto.contentId,
-          );
+          const maxPage = await this.lookupMaxPageForContent(dto.courseId, dto.contentId);
           // No page metadata at all (legacy ingest) — try the slice
           // anyway; the paged helper falls back to full text with a
           // warn when nothing matches. We still flag fallback only if
@@ -855,10 +857,7 @@ export class LearningInterventionsService {
                 requestedPageStart: reqStart,
                 requestedPageEnd: reqEnd,
               };
-              pdfText = await this.tryResolveFromModuleItem(
-                dto.courseId,
-                dto.contentId,
-              );
+              pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
             }
           } else {
             const clampedEnd = Math.min(reqEnd, maxPage);
@@ -869,10 +868,7 @@ export class LearningInterventionsService {
                 requestedPageEnd: reqEnd,
                 clampedPageEnd: clampedEnd,
               };
-              pdfText = await this.tryResolveFromModuleItem(
-                dto.courseId,
-                dto.contentId,
-              );
+              pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
             } else {
               const sliced = await this.tryResolveFromModuleItemPaged(
                 dto.courseId,
@@ -891,10 +887,7 @@ export class LearningInterventionsService {
                   requestedPageEnd: reqEnd,
                   clampedPageEnd: clampedEnd,
                 };
-                pdfText = await this.tryResolveFromModuleItem(
-                  dto.courseId,
-                  dto.contentId,
-                );
+                pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
               } else {
                 // The paged helper falls back to full text internally
                 // when zero chunks match; distinguish by checking whether
@@ -924,10 +917,7 @@ export class LearningInterventionsService {
             }
           }
         } else {
-          pdfText = await this.tryResolveFromModuleItem(
-            dto.courseId,
-            dto.contentId,
-          );
+          pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
         }
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -949,10 +939,7 @@ export class LearningInterventionsService {
         // structure. Synthesise a single grounded chunk so the
         // shared contract still applies (the model is reminded to
         // cite [Source 1: <filename>] when quoting).
-        const filename = await this.lookupPdfFilenameForContent(
-          dto.courseId,
-          dto.contentId,
-        );
+        const filename = await this.lookupPdfFilenameForContent(dto.courseId, dto.contentId);
         const pageSuffix =
           appliedPageStart != null && appliedPageEnd != null
             ? ` (pp. ${appliedPageStart}-${appliedPageEnd})`
@@ -1001,11 +988,7 @@ export class LearningInterventionsService {
     // Pull raw chunks (multimodal-aware) and build the grounded
     // evidence shape via the shared service. Falls back to the
     // legacy snippet-block when no chunks come back.
-    const rawChunks = await this.queryStudentRagRawChunks(
-      studentId,
-      dto.courseId,
-      query,
-    );
+    const rawChunks = await this.queryStudentRagRawChunks(studentId, dto.courseId, query);
     // Page-range narrowing on the student-RAG path: filter the
     // shared retriever's output by pageNumber. The current shared
     // retriever (`StudentRagRetrievalService.retrieveWithMeta`)
@@ -1041,10 +1024,7 @@ export class LearningInterventionsService {
     }
     if (narrowed.length > 0) {
       const imageMeta = await loadImageChunkMetadata(this.prisma, narrowed);
-      const evidence = await this.groundedEvidence.buildEvidence(
-        narrowed,
-        imageMeta,
-      );
+      const evidence = await this.groundedEvidence.buildEvidence(narrowed, imageMeta);
       const text = this.flattenEvidenceToLegacyText(evidence);
       return {
         text,
@@ -1245,9 +1225,7 @@ export class LearningInterventionsService {
       }
       return out.chunks.length > 0 ? out.chunks : null;
     } catch (err) {
-      this.logger.warn(
-        `Teacher subtopic retrieval failed: ${(err as Error).message}`,
-      );
+      this.logger.warn(`Teacher subtopic retrieval failed: ${(err as Error).message}`);
       return null;
     }
   }
@@ -1737,8 +1715,7 @@ export class LearningInterventionsService {
           args.teacherId,
           {
             systemPrompt:
-              systemWithContract +
-              buildFaithfulnessRetryAddendum(outcome.unsupportedClaims ?? []),
+              systemWithContract + buildFaithfulnessRetryAddendum(outcome.unsupportedClaims ?? []),
             messages,
             jsonMode: args.jsonMode,
             jsonSchema: args.jsonSchema,
@@ -1790,6 +1767,101 @@ export class LearningInterventionsService {
 
   // ─── Practice Testing ─────────────────────────────────────
 
+  // ─── Pre-generation helpers ──────────────────────────────────────────────
+
+  /** Called by the background pre-generation worker. Runs the LLM for a
+   *  single (page, strategy) pair and returns the raw validated content.
+   *  No Prisma writes, no activity logs — pure LLM call. */
+  async preGeneratePage(
+    courseId: string,
+    pageText: string,
+    strategy:
+      | 'practice-testing'
+      | 'distributed-practice'
+      | 'stepwise-learning'
+      | 'interrogative-elaboration',
+  ): Promise<unknown> {
+    const teacherId = await this.getCourseTeacherIdWithApiKey(courseId);
+
+    const callOnce = async (
+      feature: string,
+      system: string,
+      user: string,
+      schema: Record<string, unknown>,
+    ) =>
+      this.generateInterventionGrounded({
+        teacherId,
+        courseId,
+        triggeredByUserId: teacherId,
+        feature,
+        system,
+        user,
+        evidence: null,
+        jsonMode: true,
+        jsonSchema: schema,
+      });
+
+    if (strategy === 'practice-testing') {
+      const sp = await this.getSystemPrompt(courseId, 'PRACTICE_TESTING');
+      const { system, user } = buildPracticeTestingPrompt(sp, pageText, {
+        mcqCount: 3,
+        shortAnswerCount: 2,
+      });
+      const r = await callOnce(
+        'practice_testing_pregen',
+        system,
+        user,
+        buildPracticeTestingSchema(3, 2),
+      );
+      return this.validatePracticeTestResponse(this.parseLlmJson(r.content));
+    }
+
+    if (strategy === 'distributed-practice') {
+      const sp = await this.getSystemPrompt(courseId, 'DISTRIBUTED_PRACTICE');
+      const { system, user } = buildDistributedPracticePrompt(sp, pageText, 5);
+      const r = await callOnce(
+        'distributed_practice_pregen',
+        system,
+        user,
+        DISTRIBUTED_PRACTICE_SCHEMA,
+      );
+      return this.validateFlashcardResponse(this.parseLlmJson(r.content));
+    }
+
+    if (strategy === 'stepwise-learning') {
+      const sp = await this.getSystemPrompt(courseId, 'STEPWISE_LEARNING');
+      const { system, user } = buildStepwiseLearningPrompt(sp, pageText);
+      const r = await callOnce('stepwise_learning_pregen', system, user, STEPWISE_GENERATE_SCHEMA);
+      const v = this.validateStepwiseResponse(this.parseLlmJson(r.content));
+      return { steps: v.steps, summary: v.summary };
+    }
+
+    // interrogative-elaboration
+    const sp = await this.getSystemPrompt(courseId, 'INTERROGATIVE_ELABORATION');
+    const { system, user } = buildQuestionSuggestionPrompt(sp, pageText, 6);
+    const r = await callOnce('ie_pregen', system, user, INTERROGATIVE_SUGGESTION_SCHEMA);
+    const v = this.validateSuggestionResponse(this.parseLlmJson(r.content));
+    return { suggestedQuestions: v.suggestedQuestions, keyConcepts: v.keyConcepts };
+  }
+
+  private async findPreGeneratedExercise(
+    documentId: string,
+    pageNumber: number,
+    strategy: string,
+  ): Promise<{ content: unknown } | null> {
+    try {
+      return await this.prisma.preGeneratedExercise.findFirst({
+        where: { documentId, pageNumber, strategy, status: 'done' },
+        orderBy: { setIndex: 'asc' },
+        select: { content: true },
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  // ─── Generate methods ────────────────────────────────────────────────────
+
   async generatePracticeTest(
     userId: string,
     dto: GeneratePracticeTestDto,
@@ -1797,6 +1869,61 @@ export class LearningInterventionsService {
   ): Promise<PracticeTestResult> {
     if (!dto.courseId) {
       throw new BadRequestException('courseId is required');
+    }
+
+    // ─── Pre-generation cache ──────────────────────────────────────────────
+    if (dto.documentId && dto.pageNumber != null) {
+      const cached = await this.findPreGeneratedExercise(
+        dto.documentId,
+        dto.pageNumber,
+        'practice-testing',
+      );
+      if (cached) {
+        const questions = cached.content as PracticeQuestion[];
+        const mcqCount = questions.filter((q) => q.type === 'mcq').length;
+        const shortAnswerCount = questions.filter((q) => q.type === 'short_answer').length;
+        const intervention = await this.prisma.learningIntervention.create({
+          data: {
+            userId,
+            courseId: dto.courseId,
+            contentId: dto.contentId || null,
+            pageType: dto.pageType || null,
+            type: 'PRACTICE_TESTING',
+            status: 'IN_PROGRESS',
+            selectedText: `[pre-generated page ${dto.pageNumber}]`,
+            sessionData: {
+              questions,
+              config: {
+                mcqCount,
+                shortAnswerCount,
+                coverage: { mode: 'all' },
+                usedDefaults: false,
+              },
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId,
+            action: ActivityAction.INTERVENTION_TRIGGERED,
+            interventionId: intervention.id,
+            courseId: dto.courseId,
+            metadata: { interventionType: 'PRACTICE_TESTING', triggerReason: 'pre_generated' },
+          });
+        }
+        return {
+          interventionId: intervention.id,
+          questions: questions.map((q) => ({
+            question: q.question,
+            type: q.type,
+            options: q.options,
+          })),
+          coverageFallback: undefined,
+          usedDefaults: false,
+          usedTeacherDefaults: false,
+        };
+      }
     }
 
     // ─── Count resolution + validation ──────────────────────────────
@@ -1817,16 +1944,11 @@ export class LearningInterventionsService {
       dto.questionCount === undefined
     ) {
       try {
-        const teacherDefaults = await this.lookupTeacherPracticeDefaults(
-          dto.courseId,
-        );
+        const teacherDefaults = await this.lookupTeacherPracticeDefaults(dto.courseId);
         if (teacherDefaults) {
           const t = {
-            mcqCount:
-              teacherDefaults.defaultMcqCount ?? resolvedMcqCount,
-            shortAnswerCount:
-              teacherDefaults.defaultShortAnswerCount ??
-              resolvedShortAnswerCount,
+            mcqCount: teacherDefaults.defaultMcqCount ?? resolvedMcqCount,
+            shortAnswerCount: teacherDefaults.defaultShortAnswerCount ?? resolvedShortAnswerCount,
           };
           // Re-validate the teacher's configured values land in [1,10]
           // total — if a stale row would push us out of bounds, ignore
@@ -1894,10 +2016,7 @@ export class LearningInterventionsService {
     });
 
     // Per-call schema pinning the exact totals via minItems/maxItems.
-    const practiceSchema = buildPracticeTestingSchema(
-      resolvedMcqCount,
-      resolvedShortAnswerCount,
-    );
+    const practiceSchema = buildPracticeTestingSchema(resolvedMcqCount, resolvedShortAnswerCount);
 
     // Call LLM with retry on malformed JSON
     let questions: PracticeQuestion[];
@@ -2297,6 +2416,57 @@ export class LearningInterventionsService {
       throw new BadRequestException('courseId is required');
     }
 
+    // ─── Pre-generation cache ──────────────────────────────────────────────
+    if (dto.documentId && dto.pageNumber != null) {
+      const cached = await this.findPreGeneratedExercise(
+        dto.documentId,
+        dto.pageNumber,
+        'interrogative-elaboration',
+      );
+      if (cached) {
+        const c = cached.content as {
+          suggestedQuestions: SuggestedQuestion[];
+          keyConcepts: string[];
+        };
+        const intervention = await this.prisma.learningIntervention.create({
+          data: {
+            userId,
+            courseId: dto.courseId,
+            contentId: dto.contentId || null,
+            pageType: dto.pageType || null,
+            type: 'INTERROGATIVE_ELABORATION',
+            status: 'IN_PROGRESS',
+            selectedText: `[pre-generated page ${dto.pageNumber}]`,
+            sessionData: {
+              suggestedQuestions: c.suggestedQuestions,
+              keyConcepts: c.keyConcepts,
+              conversation: [],
+              selectedText: `[pre-generated page ${dto.pageNumber}]`,
+              questionsAsked: 0,
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId,
+            action: ActivityAction.INTERVENTION_TRIGGERED,
+            interventionId: intervention.id,
+            courseId: dto.courseId,
+            metadata: {
+              interventionType: 'INTERROGATIVE_ELABORATION',
+              triggerReason: 'pre_generated',
+            },
+          });
+        }
+        return {
+          interventionId: intervention.id,
+          suggestedQuestions: c.suggestedQuestions,
+          keyConcepts: c.keyConcepts,
+        };
+      }
+    }
+
     const ctx = await this.resolveInterventionContext(userId, dto);
     if (ctx.source !== 'selection') {
       this.logger.log(
@@ -2581,6 +2751,51 @@ export class LearningInterventionsService {
   }> {
     if (!dto.courseId) {
       throw new BadRequestException('courseId is required');
+    }
+
+    // ─── Pre-generation cache ──────────────────────────────────────────────
+    if (dto.documentId && dto.pageNumber != null) {
+      const cached = await this.findPreGeneratedExercise(
+        dto.documentId,
+        dto.pageNumber,
+        'stepwise-learning',
+      );
+      if (cached) {
+        const c = cached.content as { steps: StepwiseStep[]; summary: string };
+        const intervention = await this.prisma.learningIntervention.create({
+          data: {
+            userId,
+            courseId: dto.courseId,
+            contentId: dto.contentId || null,
+            pageType: dto.pageType || null,
+            type: 'STEPWISE_LEARNING',
+            status: 'IN_PROGRESS',
+            selectedText: `[pre-generated page ${dto.pageNumber}]`,
+            sessionData: {
+              steps: c.steps,
+              summary: c.summary,
+              currentStep: 1,
+              selectedText: `[pre-generated page ${dto.pageNumber}]`,
+              stepResults: {},
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId,
+            action: ActivityAction.INTERVENTION_TRIGGERED,
+            interventionId: intervention.id,
+            courseId: dto.courseId,
+            metadata: { interventionType: 'STEPWISE_LEARNING', triggerReason: 'pre_generated' },
+          });
+        }
+        return {
+          interventionId: intervention.id,
+          steps: c.steps.map((s) => ({ stepNumber: s.stepNumber, title: s.title })),
+          totalSteps: c.steps.length,
+        };
+      }
     }
 
     const ctx = await this.resolveInterventionContext(userId, dto);
@@ -2938,6 +3153,65 @@ export class LearningInterventionsService {
   async generateCards(userId: string, dto: GenerateCardsDto, sessionId?: string) {
     if (!dto.courseId) {
       throw new BadRequestException('courseId is required');
+    }
+
+    // ─── Pre-generation cache ──────────────────────────────────────────────
+    if (dto.documentId && dto.pageNumber != null) {
+      const cached = await this.findPreGeneratedExercise(
+        dto.documentId,
+        dto.pageNumber,
+        'distributed-practice',
+      );
+      if (cached) {
+        const cards = cached.content as FlashcardData[];
+        const intervention = await this.prisma.learningIntervention.create({
+          data: {
+            userId,
+            courseId: dto.courseId,
+            contentId: dto.contentId || null,
+            pageType: dto.pageType || null,
+            type: 'DISTRIBUTED_PRACTICE',
+            status: 'COMPLETED',
+            selectedText: `[pre-generated page ${dto.pageNumber}]`,
+            completedAt: new Date(),
+            sessionData: { cards } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const createdCards = await Promise.all(
+          cards.map((card) =>
+            this.prisma.spacedRepetitionCard.create({
+              data: {
+                userId,
+                interventionId: intervention.id,
+                courseId: dto.courseId,
+                front: card.front,
+                back: card.back,
+                ease: 2.5,
+                interval: 0,
+                repetitions: 0,
+                nextReviewAt: tomorrow,
+              },
+            }),
+          ),
+        );
+        if (sessionId) {
+          void this.activityLogService.record({
+            sessionId,
+            userId,
+            action: ActivityAction.INTERVENTION_TRIGGERED,
+            interventionId: intervention.id,
+            courseId: dto.courseId,
+            metadata: { interventionType: 'DISTRIBUTED_PRACTICE', triggerReason: 'pre_generated' },
+          });
+        }
+        return {
+          interventionId: intervention.id,
+          cards: createdCards.map((c) => ({ id: c.id, front: c.front, back: c.back })),
+          totalCreated: createdCards.length,
+        };
+      }
     }
 
     const ctx = await this.resolveInterventionContext(userId, dto);

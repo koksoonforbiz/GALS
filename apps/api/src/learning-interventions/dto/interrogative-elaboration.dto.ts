@@ -8,6 +8,8 @@ export interface GenerateSuggestionsDto {
   /** Optional topic hint for the RAG fallback. */
   topic?: string;
   questionCount?: number; // default 6, min 3, max 10
+  documentId?: string;
+  pageNumber?: number;
 }
 
 /** Student asks a question to the chatbot tutor */

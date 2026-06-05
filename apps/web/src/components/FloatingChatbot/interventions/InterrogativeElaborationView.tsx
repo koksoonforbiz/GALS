@@ -11,6 +11,8 @@ interface InterrogativeElaborationViewProps {
   contentId: string | null;
   pageType: string;
   contentTitle: string;
+  documentId?: string | null;
+  pageNumber?: number | null;
   onComplete: () => void;
   onBack: () => void;
   onSaveForReview: (data: SaveForReviewInput) => void;
@@ -57,6 +59,8 @@ export function InterrogativeElaborationView({
   contentId,
   pageType,
   contentTitle,
+  documentId,
+  pageNumber,
   onComplete,
   onBack,
   onSaveForReview,
@@ -112,6 +116,8 @@ export function InterrogativeElaborationView({
         pageType,
         topic: contentTitle || undefined,
         questionCount: 6,
+        ...(documentId ? { documentId } : {}),
+        ...(pageNumber != null ? { pageNumber } : {}),
       });
       setInterventionId(result.interventionId);
       setSuggestedQuestions(result.suggestedQuestions);
@@ -121,7 +127,7 @@ export function InterrogativeElaborationView({
       setErrorMsg(err instanceof Error ? err.message : 'Failed to generate suggestions');
       setPhase('error');
     }
-  }, [selectedText, courseId, contentId, pageType]);
+  }, [selectedText, courseId, contentId, pageType, documentId, pageNumber]);
 
   useEffect(() => {
     if (initialGenDone.current) return;
@@ -354,7 +360,10 @@ export function InterrogativeElaborationView({
         </p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
         <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
-          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+          <div
+            className="bg-blue-500 h-1.5 rounded-full"
+            style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }}
+          />
         </div>
         <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
@@ -392,7 +401,10 @@ export function InterrogativeElaborationView({
         <Loader size={28} className="text-blue-500 mb-3 animate-spin" />
         <p className="text-sm text-gray-600">Generating conversation summary...</p>
         <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
-          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+          <div
+            className="bg-blue-500 h-1.5 rounded-full"
+            style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }}
+          />
         </div>
         <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
@@ -407,7 +419,9 @@ export function InterrogativeElaborationView({
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-3 py-3 border-b border-gray-100 bg-gray-50 text-center">
-          <div className="mb-1 flex justify-center"><Trophy size={22} className="text-yellow-500" /></div>
+          <div className="mb-1 flex justify-center">
+            <Trophy size={22} className="text-yellow-500" />
+          </div>
           <div className="text-sm font-semibold text-gray-800">Great exploration!</div>
           <div className="text-xs text-gray-600 mt-1 flex items-center justify-center gap-3">
             <span>Questions: {summary.questionsAsked}</span>

@@ -7,6 +7,8 @@ export interface GenerateCardsDto {
   /** Optional topic hint for the RAG fallback. */
   topic?: string;
   cardCount?: number; // default 5, min 1, max 15
+  documentId?: string;
+  pageNumber?: number;
 }
 
 export interface ReviewCardDto {

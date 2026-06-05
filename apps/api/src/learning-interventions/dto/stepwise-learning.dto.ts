@@ -7,6 +7,8 @@ export interface GenerateStepwiseDto {
   pageType?: string;
   /** Optional topic hint for the RAG fallback. */
   topic?: string;
+  documentId?: string;
+  pageNumber?: number;
 }
 
 /** Submit a comprehension check response */

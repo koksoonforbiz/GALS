@@ -11,6 +11,8 @@ interface PracticeTestingViewProps {
   contentId: string | null;
   pageType: string;
   contentTitle: string;
+  documentId?: string | null;
+  pageNumber?: number | null;
   onComplete: () => void;
   onBack: () => void;
   onSaveForReview: (data: SaveForReviewInput) => void;
@@ -51,6 +53,8 @@ export function PracticeTestingView({
   contentId,
   pageType,
   contentTitle,
+  documentId,
+  pageNumber,
   onComplete,
   onBack,
   onSaveForReview,
@@ -155,16 +159,12 @@ export function PracticeTestingView({
       courseId,
       contentId: contentId || undefined,
       pageType,
-      // Q2 RAG fallback: when selectedText is empty, the backend uses
-      // `topic` to query the course's indexed materials.
       topic: contentTitle || undefined,
       mcqCount,
       shortAnswerCount,
-      // When the coverage UI is hidden, omit the field entirely — the
-      // backend defaults to `coverage: { mode: 'all' }` per existing
-      // behaviour, so omission is equivalent to "All material" without
-      // re-introducing the hidden state into the wire payload.
       ...(COVERAGE_UI_ENABLED ? { coverage } : {}),
+      ...(documentId ? { documentId } : {}),
+      ...(pageNumber != null ? { pageNumber } : {}),
     };
   }, [
     selectedText,
@@ -178,6 +178,8 @@ export function PracticeTestingView({
     pageStart,
     pageEnd,
     subtopic,
+    documentId,
+    pageNumber,
   ]);
 
   // Generate practice test
@@ -193,10 +195,7 @@ export function PracticeTestingView({
         // (e.g. zero chunks in the page range after clamping). Used
         // to show a non-blocking inline notice on the quiz phase.
         coverageFallback?: {
-          reason:
-            | 'no_chunks_in_range'
-            | 'invalid_range_after_clamp'
-            | 'no_pages_available';
+          reason: 'no_chunks_in_range' | 'invalid_range_after_clamp' | 'no_pages_available';
           requestedPageStart?: number;
           requestedPageEnd?: number;
           clampedPageEnd?: number;
@@ -479,9 +478,7 @@ export function PracticeTestingView({
                 />
               </label>
             </div>
-            <div className="text-[11px] text-gray-500">
-              Total: {totalRequested} (must be 1-10)
-            </div>
+            <div className="text-[11px] text-gray-500">Total: {totalRequested} (must be 1-10)</div>
             {!countsValid && (
               <div className="text-[11px] text-amber-600 flex items-center gap-1">
                 <AlertTriangle size={11} />
@@ -791,9 +788,7 @@ export function PracticeTestingView({
                 {r.correct ? '✓' : '✗'}
               </span>
               <span className="text-xs text-gray-800 flex-1 truncate">{r.question}</span>
-              <span className="text-xs text-gray-400">
-                {expandedResult === i ? '▲' : '▼'}
-              </span>
+              <span className="text-xs text-gray-400">{expandedResult === i ? '▲' : '▼'}</span>
             </button>
             {expandedResult === i && (
               <div className="px-3 pb-2 text-xs space-y-1 border-t border-gray-100 pt-2">

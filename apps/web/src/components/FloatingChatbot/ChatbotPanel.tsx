@@ -218,6 +218,7 @@ export function ChatbotPanel({
     contentTitle,
     contentText,
     selectedText,
+    sourceDocumentId,
     pdfCurrentPage,
     pdfCurrentPageText,
     setSelectedText,
@@ -480,6 +481,8 @@ export function ChatbotPanel({
           contentId={contentId}
           pageType={pageType}
           contentTitle={contentTitle || ''}
+          documentId={sourceDocumentId}
+          pageNumber={pdfCurrentPage}
           onComplete={handleBackToChat}
           onBack={handleBackToChat}
           onSaveForReview={handleSaveForReview}
@@ -506,6 +509,8 @@ export function ChatbotPanel({
           contentId={contentId}
           pageType={pageType}
           contentTitle={contentTitle || ''}
+          documentId={sourceDocumentId}
+          pageNumber={pdfCurrentPage}
           onComplete={handleBackToChat}
           onBack={handleBackToChat}
           onSaveForReview={handleSaveForReview}
@@ -549,6 +554,8 @@ export function ChatbotPanel({
           contentId={contentId}
           pageType={pageType}
           contentTitle={contentTitle || ''}
+          documentId={sourceDocumentId}
+          pageNumber={pdfCurrentPage}
           resumeSessionId={resumeSessionId}
           onComplete={handleBackToChat}
           onBack={handleBackToChat}
@@ -576,6 +583,8 @@ export function ChatbotPanel({
           contentId={contentId}
           pageType={pageType}
           contentTitle={contentTitle || ''}
+          documentId={sourceDocumentId}
+          pageNumber={pdfCurrentPage}
           onComplete={handleBackToChat}
           onBack={handleBackToChat}
           onSaveForReview={handleSaveForReview}

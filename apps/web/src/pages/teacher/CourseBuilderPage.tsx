@@ -26,6 +26,7 @@ import { WebgazerSettings } from '../../components/teacher/biometrics/WebgazerSe
 import { PyfeatSettings } from '../../components/teacher/biometrics/PyfeatSettings';
 import { Openface3Settings } from '../../components/teacher/biometrics/Openface3Settings';
 import { TextMiningTeacherSettings } from '../../components/teacher/biometrics/TextMiningTeacherSettings';
+import { PreGenerationSettings } from '../../components/teacher/PreGenerationSettings';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -514,11 +515,7 @@ export function CourseBuilderPage() {
   // (so the row swaps immediately), POST the full ordered list to the
   // existing items-reorder endpoint, and revert + toast on failure so
   // the list never sits desynced from the server.
-  const handleMoveItem = async (
-    itemId: string,
-    moduleId: string,
-    direction: 'up' | 'down',
-  ) => {
+  const handleMoveItem = async (itemId: string, moduleId: string, direction: 'up' | 'down') => {
     if (!course || reorderingItems) return;
     const mod = course.modules.find((m) => m.id === moduleId);
     if (!mod) return;
@@ -540,9 +537,7 @@ export function CourseBuilderPage() {
     const renumbered = next.map((it, i) => ({ ...it, orderIndex: i }));
     setCourse({
       ...course,
-      modules: course.modules.map((m) =>
-        m.id === moduleId ? { ...m, items: renumbered } : m,
-      ),
+      modules: course.modules.map((m) => (m.id === moduleId ? { ...m, items: renumbered } : m)),
     });
 
     setReorderingItems(true);
@@ -1284,134 +1279,141 @@ export function CourseBuilderPage() {
                     [...selectedModule.items]
                       .sort((a, b) => a.orderIndex - b.orderIndex)
                       .map((item, itemIdx, itemArr) => (
-                      <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            {/* Page selection checkbox */}
-                            {item.type === 'PAGE' && (
-                              <input
-                                type="checkbox"
-                                checked={selectedPageIds.has(item.id)}
-                                onChange={() => togglePageSelection(item.id)}
-                                className="rounded border-gray-300 text-violet-600 w-3.5 h-3.5"
-                              />
-                            )}
-                            <span
-                              className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                                item.type === 'PAGE'
-                                  ? 'bg-blue-100 text-blue-700'
-                                  : item.type === 'PDF'
-                                    ? 'bg-red-100 text-red-700'
-                                    : item.type === 'LINK'
-                                      ? 'bg-purple-100 text-purple-700'
-                                      : 'bg-green-100 text-green-700'
-                              }`}
-                            >
-                              {item.type}
-                            </span>
-                            <span className="text-sm font-medium text-gray-800">{item.title}</span>
-                            {item.type === 'PAGE' && item.contentMdx && (
-                              <span className="text-[10px] px-1 py-0.5 bg-green-100 text-green-600 rounded">
-                                has content
+                        <div
+                          key={item.id}
+                          className="bg-white border border-gray-200 rounded-lg p-3"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {/* Page selection checkbox */}
+                              {item.type === 'PAGE' && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPageIds.has(item.id)}
+                                  onChange={() => togglePageSelection(item.id)}
+                                  className="rounded border-gray-300 text-violet-600 w-3.5 h-3.5"
+                                />
+                              )}
+                              <span
+                                className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                                  item.type === 'PAGE'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : item.type === 'PDF'
+                                      ? 'bg-red-100 text-red-700'
+                                      : item.type === 'LINK'
+                                        ? 'bg-purple-100 text-purple-700'
+                                        : 'bg-green-100 text-green-700'
+                                }`}
+                              >
+                                {item.type}
                               </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {/* Reorder within module. Mirrors the
+                              <span className="text-sm font-medium text-gray-800">
+                                {item.title}
+                              </span>
+                              {item.type === 'PAGE' && item.contentMdx && (
+                                <span className="text-[10px] px-1 py-0.5 bg-green-100 text-green-600 rounded">
+                                  has content
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {/* Reorder within module. Mirrors the
                                 module-list up/down arrow pattern so all
                                 four item types (PAGE/PDF/LINK/ASSESSMENT)
                                 reorder uniformly. Disabled at list
                                 edges and while a reorder is in flight. */}
-                            <button
-                              onClick={() => handleMoveItem(item.id, item.moduleId, 'up')}
-                              disabled={itemIdx === 0 || reorderingItems}
-                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
-                              title="Move up"
-                              aria-label="Move item up"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              onClick={() => handleMoveItem(item.id, item.moduleId, 'down')}
-                              disabled={itemIdx === itemArr.length - 1 || reorderingItems}
-                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
-                              title="Move down"
-                              aria-label="Move item down"
-                            >
-                              ↓
-                            </button>
-                            {/* AI Generate button per page */}
-                            {item.type === 'PAGE' && (
                               <button
-                                onClick={() => openPromptComposer([item.id])}
-                                disabled={generating}
-                                className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50"
-                                title="Generate AI content for this page"
+                                onClick={() => handleMoveItem(item.id, item.moduleId, 'up')}
+                                disabled={itemIdx === 0 || reorderingItems}
+                                className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                                title="Move up"
+                                aria-label="Move item up"
                               >
-                                AI
+                                ↑
                               </button>
-                            )}
-                            {item.type === 'PAGE' && (
                               <button
-                                onClick={() => {
-                                  if (editingItemId === item.id) {
-                                    setEditingItemId(null);
-                                  } else {
-                                    setEditingItemId(item.id);
-                                    setEditContent(item.contentMdx || '');
-                                  }
-                                }}
-                                className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                onClick={() => handleMoveItem(item.id, item.moduleId, 'down')}
+                                disabled={itemIdx === itemArr.length - 1 || reorderingItems}
+                                className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed px-1"
+                                title="Move down"
+                                aria-label="Move item down"
                               >
-                                {editingItemId === item.id ? 'Cancel' : 'Edit'}
+                                ↓
                               </button>
-                            )}
-                            {item.type === 'PDF' && item.pdfBlobKey && (
-                              <button
-                                onClick={() => handlePdfDownload(item.id)}
-                                className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                              >
-                                Preview
-                              </button>
-                            )}
-                            {item.type === 'PDF' && (
-                              <label className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 cursor-pointer">
-                                Upload
-                                <input
-                                  type="file"
-                                  accept="application/pdf"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) handlePdfUpload(item.id, item.moduleId, file);
+                              {/* AI Generate button per page */}
+                              {item.type === 'PAGE' && (
+                                <button
+                                  onClick={() => openPromptComposer([item.id])}
+                                  disabled={generating}
+                                  className="text-xs px-2 py-1 bg-violet-100 text-violet-700 rounded hover:bg-violet-200 disabled:opacity-50"
+                                  title="Generate AI content for this page"
+                                >
+                                  AI
+                                </button>
+                              )}
+                              {item.type === 'PAGE' && (
+                                <button
+                                  onClick={() => {
+                                    if (editingItemId === item.id) {
+                                      setEditingItemId(null);
+                                    } else {
+                                      setEditingItemId(item.id);
+                                      setEditContent(item.contentMdx || '');
+                                    }
                                   }}
-                                />
-                              </label>
-                            )}
-                            <button
-                              onClick={() => handleDeleteItem(item.id, item.moduleId)}
-                              className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200"
-                            >
-                              Delete
-                            </button>
+                                  className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                >
+                                  {editingItemId === item.id ? 'Cancel' : 'Edit'}
+                                </button>
+                              )}
+                              {item.type === 'PDF' && item.pdfBlobKey && (
+                                <button
+                                  onClick={() => handlePdfDownload(item.id)}
+                                  className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
+                                >
+                                  Preview
+                                </button>
+                              )}
+                              {item.type === 'PDF' && (
+                                <label className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 cursor-pointer">
+                                  Upload
+                                  <input
+                                    type="file"
+                                    accept="application/pdf"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) handlePdfUpload(item.id, item.moduleId, file);
+                                    }}
+                                  />
+                                </label>
+                              )}
+                              <button
+                                onClick={() => handleDeleteItem(item.id, item.moduleId)}
+                                className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
-                        {/* PDF info */}
-                        {item.type === 'PDF' && item.pdfFilename && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            {item.pdfFilename} (
-                            {item.pdfSize ? `${Math.round(item.pdfSize / 1024)}KB` : 'unknown size'}
-                            )
-                          </p>
-                        )}
+                          {/* PDF info */}
+                          {item.type === 'PDF' && item.pdfFilename && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {item.pdfFilename} (
+                              {item.pdfSize
+                                ? `${Math.round(item.pdfSize / 1024)}KB`
+                                : 'unknown size'}
+                              )
+                            </p>
+                          )}
 
-                        {/* LINK info */}
-                        {item.type === 'LINK' && item.url && (
-                          <p className="text-xs text-gray-500 mt-1 truncate">{item.url}</p>
-                        )}
+                          {/* LINK info */}
+                          {item.type === 'LINK' && item.url && (
+                            <p className="text-xs text-gray-500 mt-1 truncate">{item.url}</p>
+                          )}
 
-                        {/* PAGE editor. Wrap in ErrorBoundary so a
+                          {/* PAGE editor. Wrap in ErrorBoundary so a
                             crash in any block (e.g. RichTextEditor
                             TDZ, malformed JSON content) shows a
                             fallback inside the item card instead of
@@ -1419,25 +1421,22 @@ export function CourseBuilderPage() {
                             `key` ensures a fresh boundary per item so
                             recovering from one item's error doesn't
                             leak into the next. */}
-                        {editingItemId === item.id && (
-                          <div className="mt-2">
-                            <ErrorBoundary
-                              key={item.id}
-                              label="the lesson editor"
-                            >
-                              <BlockEditor
-                                content={editContent}
-                                onSave={(json) =>
-                                  handleSaveItemContent(item.id, item.moduleId, json)
-                                }
-                                autoSaveMs={2000}
-                                onOpenHistory={() => setHistoryItemId(item.id)}
-                              />
-                            </ErrorBoundary>
-                          </div>
-                        )}
-                      </div>
-                    ))
+                          {editingItemId === item.id && (
+                            <div className="mt-2">
+                              <ErrorBoundary key={item.id} label="the lesson editor">
+                                <BlockEditor
+                                  content={editContent}
+                                  onSave={(json) =>
+                                    handleSaveItemContent(item.id, item.moduleId, json)
+                                  }
+                                  autoSaveMs={2000}
+                                  onOpenHistory={() => setHistoryItemId(item.id)}
+                                />
+                              </ErrorBoundary>
+                            </div>
+                          )}
+                        </div>
+                      ))
                   )}
                 </div>
 
@@ -1709,6 +1708,9 @@ export function CourseBuilderPage() {
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
             <TextMiningTeacherSettings />
+          </div>
+          <div className="border border-gray-200 rounded-lg p-4">
+            <PreGenerationSettings courseId={courseId!} />
           </div>
         </div>
       )}

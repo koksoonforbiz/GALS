@@ -26,6 +26,10 @@ export interface GeneratePracticeTestDto {
   /** @deprecated Use mcqCount + shortAnswerCount.
    *  When provided alone (legacy clients), the server splits 60/40 MCQ/short. */
   questionCount?: number;
+  /** sourceDocumentId — used to look up pre-generated exercises for instant delivery. */
+  documentId?: string;
+  /** Current PDF page number — used with documentId for cache lookup. */
+  pageNumber?: number;
 }
 
 export interface SubmitPracticeTestAnswersDto {

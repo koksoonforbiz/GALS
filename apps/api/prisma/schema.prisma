@@ -388,6 +388,7 @@ model Course {
   pyfeatConfig           PyfeatConfig?
   affectiveMappingConfig AffectiveMappingConfig?
   pyfeatJobs             PyfeatJob[]
+  preGenerationConfig    PreGenerationConfig?
 
   @@index([teacherId])
   @@map("courses")
@@ -690,9 +691,10 @@ model SourceDocument {
   createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  course     Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  uploadedBy User            @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
-  chunks     DocumentChunk[]
+  course                Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy            User                  @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
+  chunks                DocumentChunk[]
+  preGeneratedExercises PreGeneratedExercise[]
 
   @@index([courseId])
   @@map("source_documents")
@@ -2471,4 +2473,41 @@ model ReplayAnnotation {
   @@index([sessionId, startMs])
   @@index([researcherId])
   @@map("replay_annotations")
+}
+
+// ─── Pre-generation ──────────────────────────────────────────────────────────
+
+model PreGenerationConfig {
+  id           String   @id @default(cuid())
+  courseId     String   @unique @map("course_id") @db.Uuid
+  /// 'all' | 'first5' | 'none'
+  mode         String   @default("none") @map("mode")
+  numberOfSets Int      @default(1) @map("number_of_sets")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@map("pre_generation_configs")
+}
+
+model PreGeneratedExercise {
+  id           String    @id @default(cuid())
+  documentId   String    @map("document_id") @db.Uuid
+  pageNumber   Int       @map("page_number")
+  /// 'practice-testing' | 'distributed-practice' | 'stepwise-learning' | 'interrogative-elaboration'
+  strategy     String    @map("strategy")
+  setIndex     Int       @map("set_index")
+  content      Json      @map("content")
+  /// 'pending' | 'generating' | 'done' | 'error'
+  status       String    @default("pending") @map("status")
+  errorMessage String?   @map("error_message")
+  generatedAt  DateTime? @map("generated_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  document SourceDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, pageNumber, strategy, setIndex])
+  @@index([documentId, pageNumber, strategy, status])
+  @@map("pre_generated_exercises")
 }

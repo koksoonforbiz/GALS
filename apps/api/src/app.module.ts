@@ -43,6 +43,7 @@ import { AffectiveMappingModule } from './affective-mapping';
 import { ReplayAnnotationsModule } from './replay-annotations';
 import { ChatHistoryModule } from './chat-history';
 import { LlmModelsModule } from './llm';
+import { PreGenerationModule } from './pre-generation/pre-generation.module';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -97,6 +98,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     ReplayAnnotationsModule,
     ChatHistoryModule,
     LlmModelsModule,
+    PreGenerationModule,
   ],
   controllers: [HealthController],
 })

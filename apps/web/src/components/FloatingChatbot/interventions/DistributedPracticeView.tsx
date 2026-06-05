@@ -11,6 +11,8 @@ interface DistributedPracticeViewProps {
   contentId: string | null;
   pageType: string;
   contentTitle: string;
+  documentId?: string | null;
+  pageNumber?: number | null;
   onComplete: () => void;
   onBack: () => void;
   onSaveForReview: (data: SaveForReviewInput) => void;
@@ -30,6 +32,8 @@ export function DistributedPracticeView({
   contentId,
   pageType,
   contentTitle,
+  documentId,
+  pageNumber,
   onComplete,
   onBack,
   onSaveForReview,
@@ -72,6 +76,8 @@ export function DistributedPracticeView({
         pageType,
         topic: contentTitle || undefined,
         cardCount: 5,
+        ...(documentId ? { documentId } : {}),
+        ...(pageNumber != null ? { pageNumber } : {}),
       });
       setInterventionId(result.interventionId);
       setCards(result.cards);
@@ -80,7 +86,7 @@ export function DistributedPracticeView({
       setErrorMsg(err instanceof Error ? err.message : 'Failed to generate flashcards');
       setPhase('error');
     }
-  }, [selectedText, courseId, contentId, pageType]);
+  }, [selectedText, courseId, contentId, pageType, documentId, pageNumber]);
 
   useEffect(() => {
     if (initialGenDone.current) return;
@@ -107,16 +113,7 @@ export function DistributedPracticeView({
         },
       });
     }
-  }, [
-    phase,
-    interventionId,
-    cards.length,
-    track,
-    courseId,
-    contentId,
-    contentTitle,
-    selectedText,
-  ]);
+  }, [phase, interventionId, cards.length, track, courseId, contentId, contentTitle, selectedText]);
 
   const currentCard = cards[currentIndex];
 
@@ -127,8 +124,7 @@ export function DistributedPracticeView({
     if (phase !== 'preview' || !currentCard || !interventionId) return;
     cardShownAtRef.current = Date.now();
     cardFlippedAtRef.current = null;
-    cardSeenCountRef.current[currentCard.id] =
-      (cardSeenCountRef.current[currentCard.id] ?? 0) + 1;
+    cardSeenCountRef.current[currentCard.id] = (cardSeenCountRef.current[currentCard.id] ?? 0) + 1;
     track('SPACED_REP_CARD_VIEWED', {
       courseId,
       moduleItemId: contentId ?? undefined,
@@ -141,7 +137,16 @@ export function DistributedPracticeView({
         seenCount: cardSeenCountRef.current[currentCard.id],
       },
     });
-  }, [currentCard?.id, phase, interventionId, currentIndex, cards.length, track, courseId, contentId]);
+  }, [
+    currentCard?.id,
+    phase,
+    interventionId,
+    currentIndex,
+    cards.length,
+    track,
+    courseId,
+    contentId,
+  ]);
 
   const handlePrev = () => {
     // Emit a CARD_NEXT-style transition event piggybacking on
@@ -259,7 +264,10 @@ export function DistributedPracticeView({
         <p className="text-sm text-gray-600">Creating flashcards...</p>
         <p className="text-xs text-gray-400 mt-2">This may take a few seconds</p>
         <div className="w-48 bg-gray-200 rounded-full h-1.5 mt-4 overflow-hidden">
-          <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }} />
+          <div
+            className="bg-blue-500 h-1.5 rounded-full"
+            style={{ width: '40%', animation: 'indeterminate 1.5s ease-in-out infinite' }}
+          />
         </div>
         <style>{`@keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }`}</style>
       </div>
