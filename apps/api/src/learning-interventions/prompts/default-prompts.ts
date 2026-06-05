@@ -40,7 +40,8 @@ Rules:
 - Questions should test comprehension, not just surface recall
 - Each MCQ must have exactly 4 options
 - Explanations should be educational and reference the source text
-- For short answers, include 2-4 keywords that a correct answer should contain`,
+- For short answers, include 2-4 keywords that a correct answer should contain
+- Please include calculation questions if the content selected involved the application of formula`,
     userPromptTemplate: `Generate exactly {{mcqCount}} multiple-choice and exactly {{shortAnswerCount}} short-answer questions from this text. Return them as a single \`questions\` array in the order: MCQ first, short-answer second.\n\n"{{selectedText}}"`,
   },
 
@@ -76,7 +77,8 @@ Rules:
 - Each question should lead to a meaningful explanation, not a yes/no answer
 - Include the key topic each question targets
 - Include difficulty level: beginner, intermediate, advanced
-- Extract 3-5 key concepts from the text that the questions cover`,
+- Extract 3-5 key concepts from the text that the questions cover
+- Please include calculation questions if the content selected involved the application of formula`,
     userPromptTemplate: `Suggest {{questionCount}} "why" and "how" questions a student could ask to better understand this text:\n\n"{{selectedText}}"`,
   },
 
@@ -111,7 +113,8 @@ Rules:
 - Each step should be self-contained but connected to the flow
 - Content should paraphrase and simplify, not just copy the source
 - Comprehension checks should require understanding, not just recall
-- The summary should help the learner see how all pieces connect`,
+- The summary should help the learner see how all pieces connect
+- Please include calculation questions if the content selected involved the application of formula`,
     userPromptTemplate: `Break this text into stepwise learning chunks:\n\n"{{selectedText}}"`,
   },
 
@@ -140,7 +143,8 @@ Rules:
 - Generate exactly {{cardCount}} cards
 - Front should not contain the answer
 - Back should be self-contained
-- Vary question types`,
+- Vary question types
+- Please include calculation questions if the content selected involved the application of formula`,
     userPromptTemplate: `Create {{cardCount}} spaced repetition flashcards from this text:\n\n"{{selectedText}}"`,
   },
 };
