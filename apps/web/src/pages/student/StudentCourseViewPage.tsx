@@ -116,26 +116,33 @@ export function StudentCourseViewPage() {
   // Per-page highlight checkbox state. Tracks which PDF pages (if any) are
   // currently checked so PdfReader can render the right checkbox state.
   const [checkedPdfPages, setCheckedPdfPages] = useState<Set<number>>(new Set());
+  const checkedPdfPagesTextRef = useRef<Map<number, string>>(new Map());
 
   // Clear the per-page checkboxes when the student switches to a different item.
   useEffect(() => {
     setCheckedPdfPages(new Set());
+    checkedPdfPagesTextRef.current = new Map();
     clearSelectedText();
   }, [selectedItemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePageChecked = useCallback(
     (pageNum: number, checked: boolean, pageText: string) => {
-      if (checked) {
-        setCheckedPdfPages((prev) => new Set([...prev, pageNum]));
-        if (pageText.length > 10) setSelectedText(pageText);
-      } else {
-        setCheckedPdfPages((prev) => {
-          const next = new Set(prev);
-          next.delete(pageNum);
-          return next;
-        });
-        clearSelectedText();
-      }
+      if (checked) checkedPdfPagesTextRef.current.set(pageNum, pageText);
+      else checkedPdfPagesTextRef.current.delete(pageNum);
+      setCheckedPdfPages((prev) => {
+        const next = new Set(prev);
+        if (checked) next.add(pageNum);
+        else next.delete(pageNum);
+        return next;
+      });
+      // Combine text from all checked pages in page order
+      const combined = [...checkedPdfPagesTextRef.current.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([, t]) => t)
+        .filter(Boolean)
+        .join('\n\n---\n\n');
+      if (combined.length > 10) setSelectedText(combined);
+      else clearSelectedText();
     },
     [setSelectedText, clearSelectedText],
   );
@@ -666,6 +673,7 @@ export function StudentCourseViewPage() {
                       onSelectionCleared={() => {
                         clearSelectedText();
                         setCheckedPdfPages(new Set());
+                        checkedPdfPagesTextRef.current = new Map();
                       }}
                       onPdfMeta={handlePdfMeta}
                       onCurrentPageText={({ pageNumber, text }) =>
