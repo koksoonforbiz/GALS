@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import { usePageContext } from '../../contexts/PageContext';
 import { useActivityLog } from '../../lib/activity-log';
@@ -374,6 +374,16 @@ export function StudentCourseViewPage() {
         contentText: item?.type === 'PAGE' && item.contentMdx ? item.contentMdx : null,
         sourceDocumentId: null,
       });
+      if (isPdf && item?.pdfFilename) {
+        api
+          .get<{ documentId: string | null }>(
+            `/pre-generation/match-document?courseId=${course.id}&filename=${encodeURIComponent(item.pdfFilename)}`,
+          )
+          .then(({ documentId }) => {
+            if (documentId) setPageContext({ sourceDocumentId: documentId });
+          })
+          .catch(() => {});
+      }
       // P3 — clear PDF numPages when switching off a PDF item so the
       // practice-testing config panel doesn't default to a stale
       // value from a previously-viewed PDF. The PdfReader's

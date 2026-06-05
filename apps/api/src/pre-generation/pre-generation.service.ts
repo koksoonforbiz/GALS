@@ -229,6 +229,16 @@ export class PreGenerationService implements OnModuleInit, OnModuleDestroy {
     return exercise ?? null;
   }
 
+  /** Find a SourceDocument in the course matching the given filename. Used by the
+   *  student view to resolve a ModuleItem PDF to its pre-generation document ID. */
+  async matchDocument(courseId: string, filename: string): Promise<{ documentId: string | null }> {
+    const doc = await this.prisma.sourceDocument.findFirst({
+      where: { courseId, filename },
+      select: { id: true },
+    });
+    return { documentId: doc?.id ?? null };
+  }
+
   /** Per-strategy readiness check for the student chatbot indicator. */
   async getReadiness(documentId: string, pageNumber: number): Promise<Record<Strategy, boolean>> {
     const done = await this.prisma.preGeneratedExercise.findMany({

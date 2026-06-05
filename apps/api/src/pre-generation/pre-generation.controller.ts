@@ -22,6 +22,12 @@ export class PreGenerationController {
     return this.svc.updateConfig(courseId, dto);
   }
 
+  @Get('match-document')
+  @Roles('teacher', 'admin', 'student')
+  matchDocument(@Query('courseId') courseId: string, @Query('filename') filename: string) {
+    return this.svc.matchDocument(courseId, filename);
+  }
+
   @Get('ready')
   @Roles('teacher', 'admin', 'student')
   getReadiness(@Query('documentId') documentId: string, @Query('pageNumber') pageNumber: string) {
