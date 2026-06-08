@@ -779,7 +779,12 @@ export class LlmService {
     userId: string,
     systemPrompt: string,
     userPrompt: string,
-    usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
+    usageContext?: {
+      feature: string;
+      courseId?: string;
+      triggeredByUserId?: string;
+      modality?: 'text' | 'image';
+    },
     options?: FunnelOptions,
   ): Promise<{
     content: string;
@@ -820,7 +825,12 @@ export class LlmService {
       maxTokens?: number;
       temperature?: number;
     },
-    usageContext?: { feature: string; courseId?: string; triggeredByUserId?: string },
+    usageContext?: {
+      feature: string;
+      courseId?: string;
+      triggeredByUserId?: string;
+      modality?: 'text' | 'image';
+    },
   ): Promise<{
     content: string;
     promptTokens: number;
@@ -840,6 +850,7 @@ export class LlmService {
         inputTokens: result.promptTokens,
         outputTokens: result.completionTokens,
         feature: usageContext.feature,
+        modality: usageContext.modality,
       });
     }
 
@@ -919,9 +930,7 @@ export class LlmService {
       this.logger.log(`Uploaded "${filename}" to OpenAI Files API → ${data.id}`);
       return data.id;
     } catch (err) {
-      this.logger.error(
-        `uploadFileToOpenAi threw for "${filename}": ${(err as Error).message}`,
-      );
+      this.logger.error(`uploadFileToOpenAi threw for "${filename}": ${(err as Error).message}`);
       return null;
     }
   }
@@ -958,6 +967,7 @@ export class LlmService {
     inputTokens: number;
     outputTokens: number;
     feature: string;
+    modality?: 'text' | 'image';
     metadata?: Record<string, unknown>;
   }): Promise<void> {
     try {
@@ -981,6 +991,7 @@ export class LlmService {
           outputCost: cost.outputCost,
           totalCost: cost.totalCost,
           feature: params.feature,
+          modality: params.modality ?? 'text',
           metadata:
             (params.metadata as import('@prisma/client').Prisma.InputJsonValue) ?? undefined,
         },
@@ -1456,9 +1467,7 @@ Rules:
 // ─── Stage 05 — Gemini multimodal helper types + utilities ──
 
 /** Gemini `contents[i].parts[j]` is either text or `inlineData`. */
-type GeminiPart =
-  | { text: string }
-  | { inlineData: { mimeType: string; data: string } };
+type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
 
 /**
  * Parse a `data:mime/type;base64,...` URL into its mime type and
@@ -1470,4 +1479,3 @@ function parseDataUrl(url: string): { mimeType: string; base64: string } | null 
   if (!match) return null;
   return { mimeType: match[1]!, base64: match[2]! };
 }
-

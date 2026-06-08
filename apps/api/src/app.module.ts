@@ -44,6 +44,7 @@ import { ReplayAnnotationsModule } from './replay-annotations';
 import { ChatHistoryModule } from './chat-history';
 import { LlmModelsModule } from './llm';
 import { PreGenerationModule } from './pre-generation/pre-generation.module';
+import { VlmModule } from './vlm/vlm.module';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -99,6 +100,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     ChatHistoryModule,
     LlmModelsModule,
     PreGenerationModule,
+    VlmModule,
   ],
   controllers: [HealthController],
 })

@@ -290,7 +290,7 @@ export class UserManagementService {
     if (dateTo) dateWhere.createdAt = { ...(dateWhere.createdAt as object), lte: new Date(dateTo) };
 
     const logs = await this.prisma.llmUsageLog.groupBy({
-      by: ['provider', 'model', 'feature'],
+      by: ['provider', 'model', 'feature', 'modality'],
       where: dateWhere,
       _sum: {
         inputTokens: true,
@@ -309,6 +309,7 @@ export class UserManagementService {
       }
     > = {};
     const byFeature: Record<string, { totalTokens: number; totalCost: number }> = {};
+    const coursModalityCost: Record<string, number> = { text: 0, image: 0 };
 
     let totalTokens = 0;
     let totalCost = 0;
@@ -342,6 +343,10 @@ export class UserManagementService {
       const featEntry = byFeature[log.feature]!;
       featEntry.totalTokens += t;
       featEntry.totalCost += c;
+
+      // By modality
+      const mod = log.modality ?? 'text';
+      coursModalityCost[mod] = (coursModalityCost[mod] ?? 0) + c;
     }
 
     // Top students by usage
@@ -411,6 +416,8 @@ export class UserManagementService {
       averageProgress: avgProgress,
       totalTokens,
       totalCost: Math.round(totalCost * 1000000) / 1000000,
+      textCost: Math.round((coursModalityCost['text'] ?? 0) * 1000000) / 1000000,
+      imageCost: Math.round((coursModalityCost['image'] ?? 0) * 1000000) / 1000000,
       byProvider,
       byFeature,
       topStudentsByUsage: topStudentDetails,
@@ -432,7 +439,7 @@ export class UserManagementService {
     if (dateTo) where.createdAt = { ...(where.createdAt as object), lte: new Date(dateTo) };
 
     const logs = await this.prisma.llmUsageLog.groupBy({
-      by: ['provider', 'model', 'feature'],
+      by: ['provider', 'model', 'feature', 'modality'],
       where,
       _sum: {
         inputTokens: true,
@@ -453,6 +460,7 @@ export class UserManagementService {
       }
     > = {};
     const byFeature: Record<string, { totalTokens: number; totalCost: number }> = {};
+    const byModality: Record<string, number> = { text: 0, image: 0 };
 
     let totalTokens = 0;
     let totalCost = 0;
@@ -486,11 +494,17 @@ export class UserManagementService {
       const featEntry2 = byFeature[log.feature]!;
       featEntry2.totalTokens += t;
       featEntry2.totalCost += c;
+
+      // By modality (text vs image)
+      const mod = log.modality ?? 'text';
+      byModality[mod] = (byModality[mod] ?? 0) + c;
     }
 
     return {
       totalTokens,
       totalCost: Math.round(totalCost * 1000000) / 1000000,
+      textCost: Math.round((byModality['text'] ?? 0) * 1000000) / 1000000,
+      imageCost: Math.round((byModality['image'] ?? 0) * 1000000) / 1000000,
       byProvider,
       byFeature,
     };
@@ -963,9 +977,7 @@ export class UserManagementService {
           message,
         });
         erroredCount++;
-        this.logger.warn(
-          `bulkProvisionUsers row ${i} failed for email=${emailLower}: ${message}`,
-        );
+        this.logger.warn(`bulkProvisionUsers row ${i} failed for email=${emailLower}: ${message}`);
       }
     }
 

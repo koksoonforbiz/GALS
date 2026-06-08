@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { apiFetch } from '../../lib/api';
+import { apiFetch, api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import {
   useLlmModels,
@@ -23,18 +23,19 @@ interface LlmSettings {
 
 type ProviderKey = 'openai' | 'gemini';
 
-const PROVIDER_KEY_HELP: Record<ProviderKey, { placeholder: string; url: string; label: string }> = {
-  openai: {
-    placeholder: 'sk-...',
-    url: 'https://platform.openai.com/api-keys',
-    label: 'platform.openai.com/api-keys',
-  },
-  gemini: {
-    placeholder: 'AIza...',
-    url: 'https://aistudio.google.com/apikey',
-    label: 'aistudio.google.com/apikey',
-  },
-};
+const PROVIDER_KEY_HELP: Record<ProviderKey, { placeholder: string; url: string; label: string }> =
+  {
+    openai: {
+      placeholder: 'sk-...',
+      url: 'https://platform.openai.com/api-keys',
+      label: 'platform.openai.com/api-keys',
+    },
+    gemini: {
+      placeholder: 'AIza...',
+      url: 'https://aistudio.google.com/apikey',
+      label: 'aistudio.google.com/apikey',
+    },
+  };
 
 export function AiSettingsPage() {
   const { toast } = useToast();
@@ -57,6 +58,23 @@ export function AiSettingsPage() {
   const [savingCohere, setSavingCohere] = useState(false);
   const [showCohereKey, setShowCohereKey] = useState(false);
 
+  // VLM image-slide description settings
+  interface VlmConfig {
+    enabled: boolean;
+    textThreshold: number;
+    imageWidth: number;
+    imageHeight: number;
+    provider: string;
+  }
+  const [vlmConfig, setVlmConfig] = useState<VlmConfig>({
+    enabled: true,
+    textThreshold: 80,
+    imageWidth: 256,
+    imageHeight: 256,
+    provider: 'same',
+  });
+  const [savingVlm, setSavingVlm] = useState(false);
+
   // Stage 2 LLM upgrade: every option in the dropdowns now comes from
   // the server-side registry (`/llm/models`). No more hard-coded lists
   // here — when Stage 1's registry adds/retires a model, this page
@@ -71,6 +89,13 @@ export function AiSettingsPage() {
     () => models?.embedding.filter((m) => m.provider === provider) ?? [],
     [models, provider],
   );
+
+  useEffect(() => {
+    api
+      .get<VlmConfig>('/vlm/config')
+      .then(setVlmConfig)
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     (async () => {
@@ -197,9 +222,7 @@ export function AiSettingsPage() {
   const savedChatSpec = models?.chat.find((m) => m.id === (settings?.model ?? ''));
   const recommendedChatForBanner = recommendedChatModel(models, provider);
   const showRetiredChatBanner =
-    !!settings?.model &&
-    !!models &&
-    (!savedChatSpec || savedChatSpec.deprecated === true);
+    !!settings?.model && !!models && (!savedChatSpec || savedChatSpec.deprecated === true);
 
   if (loading) {
     return <div className="text-gray-500">Loading AI settings...</div>;
@@ -216,9 +239,7 @@ export function AiSettingsPage() {
       {/* Current Status */}
       <div
         className={`p-4 rounded-lg border mb-6 ${
-          settings?.hasKey
-            ? 'bg-green-50 border-green-200'
-            : 'bg-yellow-50 border-yellow-200'
+          settings?.hasKey ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'
         }`}
       >
         <div className="flex items-center gap-2">
@@ -239,8 +260,8 @@ export function AiSettingsPage() {
         </div>
         {!settings?.hasKey && (
           <p className="text-xs text-yellow-700 mt-2">
-            Without an API key, the Course Studio will use template-based content generation.
-            To use real AI, enter your API key below.
+            Without an API key, the Course Studio will use template-based content generation. To use
+            real AI, enter your API key below.
           </p>
         )}
       </div>
@@ -251,11 +272,11 @@ export function AiSettingsPage() {
           <p className="text-sm text-amber-800">
             <span className="font-semibold">Heads up:</span> your selected chat model{' '}
             <code className="font-mono text-xs bg-amber-100 px-1 rounded">{settings?.model}</code>{' '}
-            is{' '}
-            {savedChatSpec ? 'a legacy / deprecated model' : 'no longer offered'}
+            is {savedChatSpec ? 'a legacy / deprecated model' : 'no longer offered'}
             {recommendedChatForBanner ? (
               <>
-                {' '}— consider switching to{' '}
+                {' '}
+                — consider switching to{' '}
                 <code className="font-mono text-xs bg-amber-100 px-1 rounded">
                   {recommendedChatForBanner.id}
                 </code>{' '}
@@ -271,8 +292,8 @@ export function AiSettingsPage() {
       {modelsError && (
         <div className="p-4 rounded-lg border bg-red-50 border-red-200 mb-6">
           <p className="text-sm text-red-700">
-            Could not load the model registry: {modelsError}. You can still save the key, but
-            the model dropdown is empty until the registry endpoint is reachable.
+            Could not load the model registry: {modelsError}. You can still save the key, but the
+            model dropdown is empty until the registry endpoint is reachable.
           </p>
         </div>
       )}
@@ -366,7 +387,11 @@ export function AiSettingsPage() {
               type={showKey ? 'text' : 'password'}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder={settings?.hasKey ? 'Enter new key to replace...' : (PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...')}
+              placeholder={
+                settings?.hasKey
+                  ? 'Enter new key to replace...'
+                  : PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...'
+              }
               className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
               required={!settings?.hasKey}
             />
@@ -414,20 +439,17 @@ export function AiSettingsPage() {
       {/* Stage 04 (RAG) — Cohere Rerank key (optional, separate vendor). */}
       <div className="mt-10 pt-8 border-t border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-1">
-          Cohere Rerank Key{' '}
-          <span className="text-xs font-normal text-gray-400">(optional)</span>
+          Cohere Rerank Key <span className="text-xs font-normal text-gray-400">(optional)</span>
         </h3>
         <p className="text-sm text-gray-500 mb-4">
-          A Cohere API key enables the cross-encoder reranker stage on retrieval, which
-          materially improves answer grounding. Independent of the chat-LLM key above —
-          skip this and the system falls back to RRF order automatically.
+          A Cohere API key enables the cross-encoder reranker stage on retrieval, which materially
+          improves answer grounding. Independent of the chat-LLM key above — skip this and the
+          system falls back to RRF order automatically.
         </p>
 
         <div
           className={`p-4 rounded-lg border mb-4 ${
-            settings?.hasCohereKey
-              ? 'bg-green-50 border-green-200'
-              : 'bg-gray-50 border-gray-200'
+            settings?.hasCohereKey ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
           }`}
         >
           <div className="flex items-center gap-2">
@@ -461,9 +483,7 @@ export function AiSettingsPage() {
                 type={showCohereKey ? 'text' : 'password'}
                 value={cohereKey}
                 onChange={(e) => setCohereKey(e.target.value)}
-                placeholder={
-                  settings?.hasCohereKey ? 'Enter new key to replace...' : 'Co-...'
-                }
+                placeholder={settings?.hasCohereKey ? 'Enter new key to replace...' : 'Co-...'}
                 className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
               />
               <button
@@ -511,6 +531,120 @@ export function AiSettingsPage() {
             )}
           </div>
         </form>
+      </div>
+
+      {/* VLM Image Slide Description */}
+      <div className="mt-10 pt-8 border-t border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          Image Slide Description <span className="text-xs font-normal text-gray-400">(VLM)</span>
+        </h3>
+        <p className="text-sm text-gray-500 mb-4">
+          When a student highlights a PDF slide that has very little selectable text (e.g. a diagram
+          or chart), the system can send the slide image to a vision model (VLM) to generate a text
+          description. That description is then used as context for the learning strategies, just
+          like regular text.
+        </p>
+
+        <div className="space-y-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={vlmConfig.enabled}
+              onChange={(e) => setVlmConfig((c) => ({ ...c, enabled: e.target.checked }))}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Enable VLM description for image-based slides
+            </span>
+          </label>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Text threshold (characters)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={2000}
+              value={vlmConfig.textThreshold}
+              onChange={(e) =>
+                setVlmConfig((c) => ({
+                  ...c,
+                  textThreshold: Math.max(0, parseInt(e.target.value) || 0),
+                }))
+              }
+              disabled={!vlmConfig.enabled}
+              className="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Slides with fewer than this many characters of selectable text will be sent to the
+              VLM. Default: 80.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Image resolution</label>
+            <div className="flex gap-2">
+              {([128, 256, 512, 1024] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  disabled={!vlmConfig.enabled}
+                  onClick={() =>
+                    setVlmConfig((c) => ({ ...c, imageWidth: size, imageHeight: size }))
+                  }
+                  className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:opacity-40 ${
+                    vlmConfig.imageWidth === size
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+                  }`}
+                >
+                  {size}×{size}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Smaller = cheaper & faster. Larger = better accuracy for dense diagrams.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">VLM provider</label>
+            <select
+              value={vlmConfig.provider}
+              onChange={(e) => setVlmConfig((c) => ({ ...c, provider: e.target.value }))}
+              disabled={!vlmConfig.enabled}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
+            >
+              <option value="same">Same as chat model</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Google Gemini</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Uses the same API key you configured above. "Same as chat model" is recommended.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={savingVlm}
+            onClick={async () => {
+              setSavingVlm(true);
+              try {
+                const updated = await api.patch<VlmConfig>('/vlm/config', vlmConfig);
+                setVlmConfig(updated);
+                toast('success', 'VLM settings saved');
+              } catch (err) {
+                toast('error', err instanceof Error ? err.message : 'Failed to save VLM settings');
+              } finally {
+                setSavingVlm(false);
+              }
+            }}
+            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {savingVlm ? 'Saving...' : 'Save VLM Settings'}
+          </button>
+        </div>
       </div>
 
       {/* Security Note */}

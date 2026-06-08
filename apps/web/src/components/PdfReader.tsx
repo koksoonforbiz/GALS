@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RotateCw, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '../lib/api';
 
 /**
  * Slim, reusable PDF reader. Renders a scrollable multi-page document via
@@ -34,6 +35,17 @@ interface PdfReaderProps {
    */
   checkedPages?: ReadonlySet<number>;
   onPageChecked?: (pageNum: number, checked: boolean, pageText: string) => void;
+  /** Course ID used when sending image slides to the VLM describe endpoint. */
+  courseId?: string;
+  /** VLM config from the teacher. When provided and enabled, sparse-text
+   *  pages are automatically described by a vision model before being
+   *  passed to onPageChecked. */
+  vlmConfig?: {
+    enabled: boolean;
+    textThreshold: number;
+    imageWidth: number;
+    imageHeight: number;
+  } | null;
   className?: string;
 }
 
@@ -47,6 +59,8 @@ export function PdfReader({
   onCurrentPageText,
   checkedPages,
   onPageChecked,
+  courseId,
+  vlmConfig,
   className = '',
 }: PdfReaderProps) {
   const [numPages, setNumPages] = useState(0);
@@ -68,6 +82,7 @@ export function PdfReader({
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [vlmLoadingPages, setVlmLoadingPages] = useState<Set<number>>(new Set());
 
   // Observe the scroll container's content-box width and feed it to
   // <Page width={...}>. ResizeObserver fires on browser zoom, window
@@ -330,18 +345,71 @@ export function PdfReader({
                       <input
                         type="checkbox"
                         checked={checkedPages?.has(pageNum) ?? false}
-                        onChange={(e) => {
+                        onChange={async (e) => {
+                          const checked = e.target.checked;
                           const pageEl = pageRefs.current.get(pageNum);
-                          const text =
+                          const rawText =
                             pageEl
                               ?.querySelector('.textLayer')
                               ?.textContent?.replace(/\s+/g, ' ')
                               .trim() ?? '';
-                          onPageChecked(pageNum, e.target.checked, text);
+
+                          // When unchecking, always call immediately — no VLM needed.
+                          if (!checked) {
+                            onPageChecked(pageNum, false, rawText);
+                            return;
+                          }
+
+                          const useVlm =
+                            vlmConfig?.enabled &&
+                            courseId &&
+                            rawText.length < (vlmConfig.textThreshold ?? 80);
+
+                          if (!useVlm) {
+                            onPageChecked(pageNum, true, rawText);
+                            return;
+                          }
+
+                          // Sparse-text slide → capture canvas → VLM
+                          setVlmLoadingPages((s) => new Set([...s, pageNum]));
+                          try {
+                            const canvas = pageEl?.querySelector(
+                              'canvas',
+                            ) as HTMLCanvasElement | null;
+                            if (canvas) {
+                              const w = vlmConfig!.imageWidth ?? 256;
+                              const h = vlmConfig!.imageHeight ?? 256;
+                              const off = document.createElement('canvas');
+                              off.width = w;
+                              off.height = h;
+                              off.getContext('2d')?.drawImage(canvas, 0, 0, w, h);
+                              const base64 = off.toDataURL('image/png').split(',')[1] ?? '';
+                              const { description } = await api.post<{ description: string }>(
+                                '/vlm/describe-page',
+                                { base64, courseId },
+                              );
+                              onPageChecked(pageNum, true, description || rawText);
+                            } else {
+                              onPageChecked(pageNum, true, rawText);
+                            }
+                          } catch {
+                            onPageChecked(pageNum, true, rawText);
+                          } finally {
+                            setVlmLoadingPages((s) => {
+                              const n = new Set(s);
+                              n.delete(pageNum);
+                              return n;
+                            });
+                          }
                         }}
-                        className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                        disabled={vlmLoadingPages.has(pageNum)}
+                        className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:opacity-40"
                       />
-                      <span>Slide {pageNum} — highlight for learning strategies</span>
+                      <span>
+                        {vlmLoadingPages.has(pageNum)
+                          ? 'Describing slide…'
+                          : `Slide ${pageNum} — highlight for learning strategies`}
+                      </span>
                     </label>
                   )}
                   <div className="bg-white shadow-md rounded-b">

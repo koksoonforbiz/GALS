@@ -316,6 +316,7 @@ model User {
   // Researcher annotation layer (prompt 06)
   replayCodes       ReplayCode[]
   replayAnnotations ReplayAnnotation[]
+  vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
   @@map("users")
 }
@@ -1074,6 +1075,7 @@ model LlmUsageLog {
   outputCost   Float    @map("output_cost") // USD
   totalCost    Float    @map("total_cost") // USD
   feature      String // "course_generation", "practice_testing", etc.
+  modality     String   @default("text") // "text" | "image"
   metadata     Json?
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
 
@@ -1082,6 +1084,7 @@ model LlmUsageLog {
   @@index([userId])
   @@index([courseId])
   @@index([createdAt])
+  @@index([userId, modality])
   @@map("llm_usage_logs")
 }
 
@@ -2510,4 +2513,20 @@ model PreGeneratedExercise {
   @@unique([documentId, pageNumber, strategy, setIndex])
   @@index([documentId, pageNumber, strategy, status])
   @@map("pre_generated_exercises")
+}
+
+model VlmConfig {
+  id            String   @id @default(cuid())
+  teacherId     String   @unique @map("teacher_id") @db.Uuid
+  enabled       Boolean  @default(true)
+  textThreshold Int      @default(80) @map("text_threshold")
+  imageWidth    Int      @default(256) @map("image_width")
+  imageHeight   Int      @default(256) @map("image_height")
+  provider      String   @default("same") // "same" | "openai" | "gemini"
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  teacher User @relation("teacherVlmConfig", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@map("vlm_configs")
 }

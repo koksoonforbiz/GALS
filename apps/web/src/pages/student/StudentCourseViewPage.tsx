@@ -117,6 +117,12 @@ export function StudentCourseViewPage() {
   // currently checked so PdfReader can render the right checkbox state.
   const [checkedPdfPages, setCheckedPdfPages] = useState<Set<number>>(new Set());
   const checkedPdfPagesTextRef = useRef<Map<number, string>>(new Map());
+  const [vlmConfig, setVlmConfig] = useState<{
+    enabled: boolean;
+    textThreshold: number;
+    imageWidth: number;
+    imageHeight: number;
+  } | null>(null);
 
   // Clear the per-page checkboxes when the student switches to a different item.
   useEffect(() => {
@@ -453,6 +459,17 @@ export function StudentCourseViewPage() {
           return;
         }
         setCourse(data);
+        // Fetch teacher's VLM config so PdfReader knows whether to call VLM
+        // for image-sparse slides and what resolution to resize to.
+        api
+          .get<{
+            enabled: boolean;
+            textThreshold: number;
+            imageWidth: number;
+            imageHeight: number;
+          }>(`/vlm/config/course/${courseId}`)
+          .then((cfg) => setVlmConfig(cfg))
+          .catch(() => {});
         // Auto-select first item
         const firstItem = data.modules[0]?.items[0];
         if (firstItem) setSelectedItemId(firstItem.id);
@@ -687,6 +704,8 @@ export function StudentCourseViewPage() {
                       }
                       checkedPages={checkedPdfPages}
                       onPageChecked={handlePageChecked}
+                      courseId={courseId}
+                      vlmConfig={vlmConfig}
                     />
                   </div>
                 ) : (

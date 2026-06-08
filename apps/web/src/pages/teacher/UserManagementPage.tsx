@@ -22,6 +22,8 @@ interface CourseProgress {
 interface TokenUsage {
   totalTokens: number;
   totalCost: number;
+  textCost: number;
+  imageCost: number;
   byProvider: Record<
     string,
     {
@@ -636,8 +638,9 @@ function StudentDetailModal({
         {/* Token Usage */}
         <h4 className="font-medium text-gray-900 mb-2 mt-4">AI Token Usage & Costs</h4>
         <p className="text-sm text-gray-600 mb-3">
-          Total: {student.tokenUsage.totalTokens.toLocaleString()} tokens &middot;{' '}
-          {formatCost(student.tokenUsage.totalCost)}
+          Total: {student.tokenUsage.totalTokens.toLocaleString()} tokens &middot; AI Cost (Text):{' '}
+          {formatCost(student.tokenUsage.textCost ?? student.tokenUsage.totalCost)} &middot; AI Cost
+          (Image): {formatCost(student.tokenUsage.imageCost ?? 0)}
         </p>
 
         {/* By Provider */}
@@ -963,7 +966,8 @@ export function UserManagementPage() {
                       <th className="pb-2 pr-4">Name / Email</th>
                       <th className="pb-2 pr-4">Courses</th>
                       <th className="pb-2 pr-4">Progress</th>
-                      <th className="pb-2 pr-4 text-right">AI Cost</th>
+                      <th className="pb-2 pr-4 text-right">AI Cost (Text)</th>
+                      <th className="pb-2 pr-4 text-right">AI Cost (Image)</th>
                       <th className="pb-2"></th>
                     </tr>
                   </thead>
@@ -1022,7 +1026,10 @@ export function UserManagementPage() {
                           ))}
                         </td>
                         <td className="py-3 pr-4 text-right font-mono text-xs">
-                          {formatCost(student.tokenUsage.totalCost)}
+                          {formatCost(student.tokenUsage.textCost ?? student.tokenUsage.totalCost)}
+                        </td>
+                        <td className="py-3 pr-4 text-right font-mono text-xs">
+                          {formatCost(student.tokenUsage.imageCost ?? 0)}
                         </td>
                         <td className="py-3 text-right space-x-3">
                           <button
@@ -1103,8 +1110,9 @@ export function UserManagementPage() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h3 className="text-lg font-semibold text-blue-900">My AI Usage</h3>
                 <p className="text-sm text-blue-700 mt-1">
-                  Total: {teacherUsage.totalTokens.toLocaleString()} tokens &middot;{' '}
-                  {formatCost(teacherUsage.totalCost)}
+                  Total: {teacherUsage.totalTokens.toLocaleString()} tokens &middot; AI Cost (Text):{' '}
+                  {formatCost(teacherUsage.textCost ?? teacherUsage.totalCost)} &middot; AI Cost
+                  (Image): {formatCost(teacherUsage.imageCost ?? 0)}
                 </p>
               </div>
 
@@ -1230,12 +1238,7 @@ export function UserManagementPage() {
           onClose={() => setSelectedStudent(null)}
           onResetPassword={setResetTarget}
           onRemoveFromCourse={(courseId, courseName) =>
-            handleRemoveFromCourse(
-              selectedStudent.name,
-              courseId,
-              courseName,
-              selectedStudent.id,
-            )
+            handleRemoveFromCourse(selectedStudent.name, courseId, courseName, selectedStudent.id)
           }
         />
       )}
