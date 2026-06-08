@@ -1,19 +1,17 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import basicSsl from '@vitejs/plugin-basic-ssl';
+import mkcert from 'vite-plugin-mkcert';
 import path from 'path';
 
 const apiTarget = process.env.DOCKER_ENV === '1' ? 'http://api:3000' : 'http://localhost:3000';
 const minioTarget = process.env.DOCKER_ENV === '1' ? 'http://minio:9000' : 'http://localhost:9000';
 
 export default defineConfig({
-  // basicSsl auto-generates a self-signed cert at startup so we can serve
-  // over https://localhost:5173. Browsers will warn about the cert the
-  // first time — click through. Required for WebGazer (its hostname check
-  // rejects http on anything except literal "localhost") and for any
-  // getUserMedia / mic / clipboard / sensor APIs that demand a secure
-  // context regardless of hostname.
-  plugins: [react(), basicSsl()],
+  // mkcert installs a local CA and issues a trusted cert for localhost so
+  // Chrome/Edge accept it without warnings. Required for WebGazer (hostname
+  // check rejects http) and any getUserMedia / sensor API needing a secure
+  // context. Run `mkcert -install` once if the CA isn't trusted yet.
+  plugins: [react(), mkcert()],
   resolve: {
     alias: {
       'react-pdf': path.resolve(__dirname, 'node_modules/react-pdf'),
