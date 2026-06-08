@@ -117,6 +117,9 @@ export function StudentCourseViewPage() {
   // currently checked so PdfReader can render the right checkbox state.
   const [checkedPdfPages, setCheckedPdfPages] = useState<Set<number>>(new Set());
   const checkedPdfPagesTextRef = useRef<Map<number, string>>(new Map());
+  // Stores base64 image data for pages that need VLM (sparse text slides).
+  // VLM is called lazily when the student actually picks a learning strategy.
+  const pendingImagePagesRef = useRef<Map<number, string>>(new Map());
   const [vlmConfig, setVlmConfig] = useState<{
     enabled: boolean;
     textThreshold: number;
@@ -128,20 +131,29 @@ export function StudentCourseViewPage() {
   useEffect(() => {
     setCheckedPdfPages(new Set());
     checkedPdfPagesTextRef.current = new Map();
+    pendingImagePagesRef.current = new Map();
     clearSelectedText();
   }, [selectedItemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePageChecked = useCallback(
-    (pageNum: number, checked: boolean, pageText: string) => {
-      if (checked) checkedPdfPagesTextRef.current.set(pageNum, pageText);
-      else checkedPdfPagesTextRef.current.delete(pageNum);
+    (pageNum: number, checked: boolean, pageText: string, imageBase64?: string) => {
+      if (checked) {
+        checkedPdfPagesTextRef.current.set(pageNum, pageText);
+        if (imageBase64) pendingImagePagesRef.current.set(pageNum, imageBase64);
+        else pendingImagePagesRef.current.delete(pageNum);
+      } else {
+        checkedPdfPagesTextRef.current.delete(pageNum);
+        pendingImagePagesRef.current.delete(pageNum);
+      }
       setCheckedPdfPages((prev) => {
         const next = new Set(prev);
         if (checked) next.add(pageNum);
         else next.delete(pageNum);
         return next;
       });
-      // Combine text from all checked pages in page order
+      // Combine text from all checked pages in page order.
+      // Image slides contribute empty/sparse rawText for now — their real
+      // text will be resolved by resolveVlmSlides at strategy selection time.
       const combined = [...checkedPdfPagesTextRef.current.entries()]
         .sort(([a], [b]) => a - b)
         .map(([, t]) => t)
@@ -152,6 +164,40 @@ export function StudentCourseViewPage() {
     },
     [setSelectedText, clearSelectedText],
   );
+
+  // Called by the chatbot panel just before launching a learning strategy.
+  // Sends any pending image slides to VLM, updates their text, and returns
+  // the new combined selectedText (or null if nothing changed).
+  const resolveVlmSlides = useCallback(async (): Promise<string | null> => {
+    if (!courseId || pendingImagePagesRef.current.size === 0) return null;
+    const updates: [number, string][] = [];
+    for (const [pageNum, base64] of pendingImagePagesRef.current) {
+      try {
+        const { description } = await api.post<{ description: string }>('/vlm/describe-page', {
+          base64,
+          courseId,
+        });
+        if (description) updates.push([pageNum, description]);
+      } catch {
+        // Keep sparse rawText as fallback — strategy will still proceed
+      }
+    }
+    if (updates.length === 0) return null;
+    for (const [pageNum, desc] of updates) {
+      checkedPdfPagesTextRef.current.set(pageNum, desc);
+      pendingImagePagesRef.current.delete(pageNum);
+    }
+    const combined = [...checkedPdfPagesTextRef.current.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, t]) => t)
+      .filter(Boolean)
+      .join('\n\n---\n\n');
+    if (combined.length > 10) {
+      setSelectedText(combined);
+      return combined;
+    }
+    return null;
+  }, [courseId, setSelectedText]);
 
   // Stable callback for PdfReader.onPdfMeta. Without useCallback we
   // emit a new lambda every render — combined with PdfReader putting
@@ -776,7 +822,9 @@ export function StudentCourseViewPage() {
               onClearAllHighlights={() => {
                 setCheckedPdfPages(new Set());
                 checkedPdfPagesTextRef.current = new Map();
+                pendingImagePagesRef.current = new Map();
               }}
+              resolveVlmSlides={resolveVlmSlides}
             />
           </div>
         </div>

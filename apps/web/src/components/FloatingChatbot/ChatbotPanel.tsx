@@ -208,6 +208,11 @@ interface ChatbotPanelProps {
   isMaximized?: boolean;
   /** Called when the user clicks "Clear" so the PDF page checkboxes can be reset. */
   onClearAllHighlights?: () => void;
+  /**
+   * Called just before a strategy launches. Sends pending image slides to VLM
+   * and returns the resolved selectedText, or null if nothing changed.
+   */
+  resolveVlmSlides?: () => Promise<string | null>;
 }
 
 export function ChatbotPanel({
@@ -215,6 +220,7 @@ export function ChatbotPanel({
   onToggleMaximize,
   isMaximized = false,
   onClearAllHighlights,
+  resolveVlmSlides,
 }: ChatbotPanelProps) {
   const {
     pageType,
@@ -263,6 +269,7 @@ export function ChatbotPanel({
   }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isResolvingVlm, setIsResolvingVlm] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
   const [pendingStrategy, setPendingStrategy] = useState<ChatbotMode | null>(null);
@@ -414,13 +421,24 @@ export function ChatbotPanel({
     }
   };
 
-  const handleInterventionClick = (type: ChatbotMode) => {
+  const handleInterventionClick = async (type: ChatbotMode) => {
     if (!courseId) return;
-    if (selectedText) {
-      // Text already selected, go directly to strategy
+
+    // Resolve VLM descriptions for any checked image slides before launching.
+    let effectiveSelectedText = selectedText;
+    if (resolveVlmSlides) {
+      setIsResolvingVlm(true);
+      try {
+        const resolved = await resolveVlmSlides();
+        if (resolved) effectiveSelectedText = resolved;
+      } finally {
+        setIsResolvingVlm(false);
+      }
+    }
+
+    if (effectiveSelectedText) {
       setMode(type);
     } else {
-      // No text selected — show the choice prompt
       setPendingStrategy(type);
     }
   };
@@ -781,42 +799,51 @@ export function ChatbotPanel({
       {/* Intervention buttons (always visible) */}
       {!pendingStrategy && (
         <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
-          <div className="text-xs text-gray-500 mb-1.5">Apply learning strategy:</div>
-          {!courseId && (
-            <div className="text-[10px] text-amber-600 mb-1">
-              Navigate to a course to use learning strategies.
+          {isResolvingVlm ? (
+            <div className="flex items-center gap-2 text-xs text-amber-700 py-1">
+              <Loader size={12} className="animate-spin" />
+              Describing image slides…
             </div>
+          ) : (
+            <>
+              <div className="text-xs text-gray-500 mb-1.5">Apply learning strategy:</div>
+              {!courseId && (
+                <div className="text-[10px] text-amber-600 mb-1">
+                  Navigate to a course to use learning strategies.
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                <InterventionButton
+                  label="Practice"
+                  icon={<FlaskConical size={12} />}
+                  onClick={() => void handleInterventionClick('practice-testing')}
+                  disabled={!courseId}
+                  ready={sourceDocumentId ? pregenReady['practice-testing'] : undefined}
+                />
+                <InterventionButton
+                  label="Distributed"
+                  icon={<Layers size={12} />}
+                  onClick={() => void handleInterventionClick('distributed-practice')}
+                  disabled={!courseId}
+                  ready={sourceDocumentId ? pregenReady['distributed-practice'] : undefined}
+                />
+                <InterventionButton
+                  label="Step"
+                  icon={<Footprints size={12} />}
+                  onClick={() => void handleInterventionClick('stepwise-learning')}
+                  disabled={!courseId}
+                  ready={sourceDocumentId ? pregenReady['stepwise-learning'] : undefined}
+                />
+                <InterventionButton
+                  label="Elab"
+                  icon={<MessageCircleQuestion size={12} />}
+                  onClick={() => void handleInterventionClick('interrogative-elaboration')}
+                  disabled={!courseId}
+                  ready={sourceDocumentId ? pregenReady['interrogative-elaboration'] : undefined}
+                />
+              </div>
+            </>
           )}
-          <div className="flex flex-wrap gap-1.5">
-            <InterventionButton
-              label="Practice"
-              icon={<FlaskConical size={12} />}
-              onClick={() => handleInterventionClick('practice-testing')}
-              disabled={!courseId}
-              ready={sourceDocumentId ? pregenReady['practice-testing'] : undefined}
-            />
-            <InterventionButton
-              label="Distributed"
-              icon={<Layers size={12} />}
-              onClick={() => handleInterventionClick('distributed-practice')}
-              disabled={!courseId}
-              ready={sourceDocumentId ? pregenReady['distributed-practice'] : undefined}
-            />
-            <InterventionButton
-              label="Step"
-              icon={<Footprints size={12} />}
-              onClick={() => handleInterventionClick('stepwise-learning')}
-              disabled={!courseId}
-              ready={sourceDocumentId ? pregenReady['stepwise-learning'] : undefined}
-            />
-            <InterventionButton
-              label="Elab"
-              icon={<MessageCircleQuestion size={12} />}
-              onClick={() => handleInterventionClick('interrogative-elaboration')}
-              disabled={!courseId}
-              ready={sourceDocumentId ? pregenReady['interrogative-elaboration'] : undefined}
-            />
-          </div>
         </div>
       )}
 

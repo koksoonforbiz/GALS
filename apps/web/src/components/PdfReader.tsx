@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { RotateCw, FileText, Loader2, AlertCircle } from 'lucide-react';
-import { api } from '../lib/api';
 
 const SLIDE_BOILERPLATE = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
 
@@ -47,18 +46,26 @@ interface PdfReaderProps {
    * The parent receives each toggle via onPageChecked.
    */
   checkedPages?: ReadonlySet<number>;
-  onPageChecked?: (pageNum: number, checked: boolean, pageText: string) => void;
-  /** Course ID used when sending image slides to the VLM describe endpoint. */
-  courseId?: string;
-  /** VLM config from the teacher. When provided and enabled, sparse-text
-   *  pages are automatically described by a vision model before being
-   *  passed to onPageChecked. */
+  /**
+   * Called on each page checkbox toggle. `imageBase64` is provided when
+   * the page has sparse text (likely image-based) so the parent can defer
+   * a VLM describe call until the student actually selects a strategy.
+   */
+  onPageChecked?: (
+    pageNum: number,
+    checked: boolean,
+    pageText: string,
+    imageBase64?: string,
+  ) => void;
+  /** VLM config from the teacher — used for the text threshold + image dimensions. */
   vlmConfig?: {
     enabled: boolean;
     textThreshold: number;
     imageWidth: number;
     imageHeight: number;
   } | null;
+  /** Not used for VLM calls here (deferred to strategy selection), kept for API compat. */
+  courseId?: string;
   className?: string;
 }
 
@@ -72,7 +79,7 @@ export function PdfReader({
   onCurrentPageText,
   checkedPages,
   onPageChecked,
-  courseId,
+  courseId: _courseId,
   vlmConfig,
   className = '',
 }: PdfReaderProps) {
@@ -95,7 +102,6 @@ export function PdfReader({
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const [vlmLoadingPages, setVlmLoadingPages] = useState<Set<number>>(new Set());
 
   // Observe the scroll container's content-box width and feed it to
   // <Page width={...}>. ResizeObserver fires on browser zoom, window
@@ -358,7 +364,7 @@ export function PdfReader({
                       <input
                         type="checkbox"
                         checked={checkedPages?.has(pageNum) ?? false}
-                        onChange={async (e) => {
+                        onChange={(e) => {
                           const checked = e.target.checked;
                           const pageEl = pageRefs.current.get(pageNum);
                           const rawText = stripBoilerplate(
@@ -368,25 +374,17 @@ export function PdfReader({
                               .trim() ?? '',
                           );
 
-                          // When unchecking, always call immediately — no VLM needed.
                           if (!checked) {
                             onPageChecked(pageNum, false, rawText);
                             return;
                           }
 
-                          const useVlm =
-                            vlmConfig?.enabled &&
-                            courseId &&
-                            rawText.length < (vlmConfig.textThreshold ?? 80);
+                          // Sparse text → capture canvas now so parent can call VLM
+                          // later (when user selects a strategy) instead of immediately.
+                          const isSparse =
+                            vlmConfig?.enabled && rawText.length < (vlmConfig.textThreshold ?? 80);
 
-                          if (!useVlm) {
-                            onPageChecked(pageNum, true, rawText);
-                            return;
-                          }
-
-                          // Sparse-text slide → capture canvas → VLM
-                          setVlmLoadingPages((s) => new Set([...s, pageNum]));
-                          try {
+                          if (isSparse) {
                             const canvas = pageEl?.querySelector(
                               'canvas',
                             ) as HTMLCanvasElement | null;
@@ -398,32 +396,16 @@ export function PdfReader({
                               off.height = h;
                               off.getContext('2d')?.drawImage(canvas, 0, 0, w, h);
                               const base64 = off.toDataURL('image/png').split(',')[1] ?? '';
-                              const { description } = await api.post<{ description: string }>(
-                                '/vlm/describe-page',
-                                { base64, courseId },
-                              );
-                              onPageChecked(pageNum, true, description || rawText);
-                            } else {
-                              onPageChecked(pageNum, true, rawText);
+                              onPageChecked(pageNum, true, rawText, base64);
+                              return;
                             }
-                          } catch {
-                            onPageChecked(pageNum, true, rawText);
-                          } finally {
-                            setVlmLoadingPages((s) => {
-                              const n = new Set(s);
-                              n.delete(pageNum);
-                              return n;
-                            });
                           }
+
+                          onPageChecked(pageNum, true, rawText);
                         }}
-                        disabled={vlmLoadingPages.has(pageNum)}
-                        className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer disabled:opacity-40"
+                        className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                       />
-                      <span>
-                        {vlmLoadingPages.has(pageNum)
-                          ? 'Describing slide…'
-                          : `Slide ${pageNum} — highlight for learning strategies`}
-                      </span>
+                      <span>{`Slide ${pageNum} — highlight for learning strategies`}</span>
                     </label>
                   )}
                   <div className="bg-white shadow-md rounded-b">
