@@ -151,6 +151,11 @@ export class VlmService {
         },
       );
 
+      this.logger.log(
+        `[VLM] describe-page done — provider:${result.provider} model:${result.model} ` +
+          `promptTokens:${result.promptTokens} completionTokens:${result.completionTokens} ` +
+          `userId:${userId} courseId:${courseId}`,
+      );
       return { description: result.content.trim() };
     } catch (err) {
       this.logger.error(
