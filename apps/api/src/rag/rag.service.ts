@@ -11,10 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { LlmService } from './llm.service';
 import { SharedChunkingService } from './shared/chunking.service';
-import {
-  ContextualizeService,
-  contextualRetrievalEnabled,
-} from './shared/contextualize.service';
+import { ContextualizeService, contextualRetrievalEnabled } from './shared/contextualize.service';
 import { EmbeddingService } from '../student-rag/embedding.service';
 import { StudentRagRetrievalService } from '../student-rag/student-rag-retrieval.service';
 import { PdfRasterizerService } from './shared/pdf-rasterizer.service';
@@ -310,19 +307,15 @@ export class RagService implements OnModuleInit {
           // ingest.
           let blurb = '';
           try {
-            blurb = await this.contextualizeService.contextualizeChunk(
-              text,
-              chunk.content,
-              {
-                teacherId,
-                documentTitle: doc.title,
-                usageContext: {
-                  feature: 'rag.contextualize.teacher',
-                  courseId: doc.courseId,
-                  triggeredByUserId: doc.uploadedById,
-                },
+            blurb = await this.contextualizeService.contextualizeChunk(text, chunk.content, {
+              teacherId,
+              documentTitle: doc.title,
+              usageContext: {
+                feature: 'rag.contextualize.teacher',
+                courseId: doc.courseId,
+                triggeredByUserId: doc.uploadedById,
               },
-            );
+            });
           } catch (err) {
             this.logger.warn(
               `Contextualize threw for chunk ${chunk.id}: ${(err as Error).message}`,
@@ -375,13 +368,8 @@ export class RagService implements OnModuleInit {
         for (let i = 0; i < created.length; i += EMBEDDING_BATCH_SIZE) {
           const batch = created.slice(i, i + EMBEDDING_BATCH_SIZE);
           try {
-            const texts = batch.map(
-              (c) => textsForEmbedding?.get(c.id) ?? c.content,
-            );
-            const result = await this.embeddingService.callEmbeddingForUser(
-              teacherId,
-              texts,
-            );
+            const texts = batch.map((c) => textsForEmbedding?.get(c.id) ?? c.content);
+            const result = await this.embeddingService.callEmbeddingForUser(teacherId, texts);
             pinnedModel = result.model;
             pinnedDim = result.dimensions;
             // Tag pseudo-embedding rows distinctly so the
@@ -389,8 +377,7 @@ export class RagService implements OnModuleInit {
             // re-resolving the funnel state. The funnel returns
             // `provider: 'fallback'` in both the no-key path AND
             // the post-error degradation path.
-            const stampedModel =
-              result.provider === 'fallback' ? 'sha256-pseudo' : result.model;
+            const stampedModel = result.provider === 'fallback' ? 'sha256-pseudo' : result.model;
             await Promise.all(
               batch.map((chunk, idx) =>
                 this.prisma.documentChunk.update({
@@ -479,9 +466,7 @@ export class RagService implements OnModuleInit {
           // Top-level guard — the helper itself is already defensive
           // but we wrap once more so a surprise throw never aborts
           // ingest after text chunks have been persisted.
-          this.logger.warn(
-            `Multimodal ingest failed for ${documentId}: ${(err as Error).message}`,
-          );
+          this.logger.warn(`Multimodal ingest failed for ${documentId}: ${(err as Error).message}`);
         }
       }
 
@@ -494,7 +479,7 @@ export class RagService implements OnModuleInit {
     }
   }
 
-  private async extractText(
+  async extractText(
     buffer: Buffer,
     mimeType: string,
   ): Promise<{ text: string; pageCount: number | null }> {
@@ -666,9 +651,7 @@ export class RagService implements OnModuleInit {
         }
       }),
     );
-    const uploaded = uploads.filter(
-      (u): u is NonNullable<typeof u> => u !== null,
-    );
+    const uploaded = uploads.filter((u): u is NonNullable<typeof u> => u !== null);
     if (uploaded.length === 0) return 0;
 
     // 2. Embed images via the multimodal funnel.
@@ -693,15 +676,11 @@ export class RagService implements OnModuleInit {
         continue;
       }
 
-      const caption = await this.pageCaption.captionPageImage(
-        page.pngBuffer,
-        'image/png',
-        {
-          teacherId: args.teacherId,
-          courseId: args.courseId,
-          pageNumber: page.pageNumber,
-        },
-      );
+      const caption = await this.pageCaption.captionPageImage(page.pngBuffer, 'image/png', {
+        teacherId: args.teacherId,
+        courseId: args.courseId,
+        pageNumber: page.pageNumber,
+      });
 
       try {
         await this.prisma.documentChunk.create({
@@ -775,9 +754,7 @@ export class RagService implements OnModuleInit {
             select: { teacherId: true },
           });
           if (course) {
-            const creds = await this.embeddingService.resolveTeacherEmbeddingSpec(
-              course.teacherId,
-            );
+            const creds = await this.embeddingService.resolveTeacherEmbeddingSpec(course.teacherId);
             const apiKey = creds.apiKey ?? '';
             const provider = creds.provider;
             const out = await this.sharedRetrieval.retrieveTeacher(

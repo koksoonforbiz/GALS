@@ -34,6 +34,17 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0',
+    hmr: {
+      clientPort: 5173,
+    },
+    // Polling is required when source files live on a Windows filesystem
+    // mounted into WSL2 (/mnt/d/...). Linux inotify does not receive
+    // change events across the 9P filesystem boundary, so without polling
+    // Vite never detects edits and keeps serving stale compiled output.
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     proxy: {
       '/api': {
         target: apiTarget,

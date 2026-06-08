@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -38,5 +38,46 @@ export class PreGenerationController {
   @Roles('teacher', 'admin')
   getDocumentStatus(@Param('documentId') documentId: string) {
     return this.svc.getDocumentStatus(documentId);
+  }
+
+  @Get('exercises')
+  @Roles('teacher', 'admin')
+  getExercises(
+    @Query('documentId') documentId: string,
+    @Query('pageNumber') pageNumber?: string,
+    @Query('strategy') strategy?: string,
+  ) {
+    const page = pageNumber != null && pageNumber !== '' ? parseInt(pageNumber, 10) : undefined;
+    return this.svc.getExercises(documentId, page, strategy);
+  }
+
+  @Get('cost/:courseId')
+  @Roles('teacher', 'admin')
+  getCost(@Param('courseId') courseId: string) {
+    return this.svc.getPregenCost(courseId);
+  }
+
+  @Post('regenerate')
+  @Roles('teacher', 'admin')
+  regenerate(@Query('documentId') documentId: string) {
+    return this.svc.regenerateDocument(documentId);
+  }
+
+  @Post('regenerate-course')
+  @Roles('teacher', 'admin')
+  regenerateCourse(@Query('courseId') courseId: string) {
+    return this.svc.regenerateCourse(courseId);
+  }
+
+  @Get('module-items/list')
+  @Roles('teacher', 'admin')
+  listModuleItems(@Query('courseId') courseId: string) {
+    return this.svc.listModuleItemPdfs(courseId);
+  }
+
+  @Post('module-items/:itemId/queue')
+  @Roles('teacher', 'admin')
+  queueModuleItem(@Param('itemId') itemId: string) {
+    return this.svc.queueModuleItemPregen(itemId);
   }
 }

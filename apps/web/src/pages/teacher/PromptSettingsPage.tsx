@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { TextMiningPromptsTab } from './TextMiningPromptsTab';
+import { PreGenContentTab } from './PreGenContentTab';
 
 // Prompt 03: per-course enrollment policy. Shape returned by GET /courses/:id
 // (full Course) and PATCH /courses/:id/enrollment-policy (partial).
@@ -49,7 +50,13 @@ interface FeedbackConfig {
   description: string;
 }
 
-type TabKey = 'interventions' | 'feedback' | 'questiongen' | 'text-mining' | 'enrollment';
+type TabKey =
+  | 'interventions'
+  | 'feedback'
+  | 'questiongen'
+  | 'text-mining'
+  | 'enrollment'
+  | 'pregen';
 
 const TYPE_ICONS: Record<string, ReactNode> = {
   PRACTICE_TESTING: <FlaskConical size={20} />,
@@ -129,13 +136,9 @@ export function PromptSettingsPage() {
       // row's stored values. Empty string when the teacher hasn't
       // set them (the hard-coded 3+2 wins).
       const pt = data.find((c) => c.interventionType === 'PRACTICE_TESTING');
-      setDefaultMcqInput(
-        pt?.defaultMcqCount == null ? '' : String(pt.defaultMcqCount),
-      );
+      setDefaultMcqInput(pt?.defaultMcqCount == null ? '' : String(pt.defaultMcqCount));
       setDefaultShortInput(
-        pt?.defaultShortAnswerCount == null
-          ? ''
-          : String(pt.defaultShortAnswerCount),
+        pt?.defaultShortAnswerCount == null ? '' : String(pt.defaultShortAnswerCount),
       );
     } catch {
       toast('error', 'Failed to load prompt configurations');
@@ -394,6 +397,7 @@ export function PromptSettingsPage() {
           { key: 'text-mining' as TabKey, label: 'Text-mining (EF)' },
           // Prompt 03: per-course enrollment policy toggles.
           { key: 'enrollment' as TabKey, label: 'Enrollment' },
+          { key: 'pregen' as TabKey, label: 'Pre-Generated Content' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -536,8 +540,8 @@ export function PromptSettingsPage() {
                           Default question counts
                         </div>
                         <p className="text-[11px] text-gray-500 mb-2">
-                          Applied when a student doesn&apos;t pick explicit values. If
-                          left empty, defaults to 3 + 2.
+                          Applied when a student doesn&apos;t pick explicit values. If left empty,
+                          defaults to 3 + 2.
                         </p>
                         <div className="grid grid-cols-2 gap-2">
                           <label className="text-xs text-gray-600 flex flex-col gap-1">
@@ -824,6 +828,9 @@ export function PromptSettingsPage() {
 
       {/* ─── Text-mining (EF construct prompts) Tab ─────── */}
       {activeTab === 'text-mining' && courseId && <TextMiningPromptsTab courseId={courseId} />}
+
+      {/* ─── Pre-Generated Content Tab ──────────────────── */}
+      {activeTab === 'pregen' && courseId && <PreGenContentTab courseId={courseId} />}
 
       {/* ─── Enrollment Tab (prompt 03) ─────────────────── */}
       {activeTab === 'enrollment' && (

@@ -75,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('user', JSON.stringify(freshUser));
           })
           .catch(() => {
-            // Token invalid, clear storage
+            // Token invalid or server unreachable — clear storage and unblock UI
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             setUser(null);

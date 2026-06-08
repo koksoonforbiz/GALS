@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../lib/api';
-import { Zap, Loader2 } from 'lucide-react';
+import { Zap, Loader2, RefreshCw } from 'lucide-react';
 
 type Mode = 'all' | 'first5' | 'none';
 
@@ -37,6 +37,7 @@ export function PreGenerationSettings({ courseId }: { courseId: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   useEffect(() => {
     api
@@ -45,6 +46,28 @@ export function PreGenerationSettings({ courseId }: { courseId: string }) {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [courseId]);
+
+  const handleRegenerate = async () => {
+    if (
+      !window.confirm(
+        'Re-queue all exercises for every indexed document in this course? Existing done exercises will be reset and re-generated. This will consume LLM credits.',
+      )
+    )
+      return;
+    setIsRegenerating(true);
+    try {
+      const r = await api.post<{ queued: number; documents: number }>(
+        `/pre-generation/regenerate-course?courseId=${encodeURIComponent(courseId)}`,
+      );
+      alert(
+        `${r.queued} exercises queued across ${r.documents} document${r.documents !== 1 ? 's' : ''}. Check the Pre-Generated Content tab for progress.`,
+      );
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to queue re-generation');
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -70,16 +93,35 @@ export function PreGenerationSettings({ courseId }: { courseId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-2">
-        <Zap size={18} className="text-gray-600" />
-        <h3 className="text-sm font-semibold text-gray-800">Instant Exercises</h3>
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-            form.mode !== 'none' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-          }`}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Zap size={18} className="text-gray-600" />
+          <h3 className="text-sm font-semibold text-gray-800">Instant Exercises</h3>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              form.mode !== 'none' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {form.mode !== 'none' ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+        <button
+          onClick={() => void handleRegenerate()}
+          disabled={isRegenerating || form.mode === 'none'}
+          title={
+            form.mode === 'none'
+              ? 'Enable pre-generation first'
+              : 'Re-queue all exercises for every indexed document'
+          }
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed rounded-md transition-colors"
         >
-          {form.mode !== 'none' ? 'Enabled' : 'Disabled'}
-        </span>
+          {isRegenerating ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <RefreshCw size={13} />
+          )}
+          {isRegenerating ? 'Queuing…' : 'Re-generate All'}
+        </button>
       </div>
 
       <p className="text-xs text-gray-500">

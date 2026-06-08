@@ -35,10 +35,24 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     ...options?.headers,
   };
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new ApiError(0, 'Request timed out — is the server running?');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (res.status === 401) {
     // For background biometric requests, throw without clearing token/redirecting.
