@@ -3,6 +3,19 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import { RotateCw, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
 
+const SLIDE_BOILERPLATE = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
+
+function stripBoilerplate(text: string): string {
+  let s = text;
+  for (const pattern of SLIDE_BOILERPLATE) {
+    s = s.replace(pattern, '');
+  }
+  return s
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /**
  * Slim, reusable PDF reader. Renders a scrollable multi-page document via
  * react-pdf and surfaces the user's text selection through a callback.
@@ -348,11 +361,12 @@ export function PdfReader({
                         onChange={async (e) => {
                           const checked = e.target.checked;
                           const pageEl = pageRefs.current.get(pageNum);
-                          const rawText =
+                          const rawText = stripBoilerplate(
                             pageEl
                               ?.querySelector('.textLayer')
                               ?.textContent?.replace(/\s+/g, ' ')
-                              .trim() ?? '';
+                              .trim() ?? '',
+                          );
 
                           // When unchecking, always call immediately — no VLM needed.
                           if (!checked) {

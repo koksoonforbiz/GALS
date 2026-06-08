@@ -31,6 +31,17 @@ import {
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 
+const SLIDE_BOILERPLATE_PATTERNS = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
+
+function stripSlideBoilerplate(text: string): string {
+  let s = text;
+  for (const p of SLIDE_BOILERPLATE_PATTERNS) s = s.replace(p, '');
+  return s
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Stage 02 feature flag. Default ON.
 function sharedRetrieverEnabled(): boolean {
   const v = (process.env.RAG_USE_SHARED_RETRIEVER ?? 'true').toLowerCase();
@@ -755,14 +766,14 @@ export class LearningInterventionsService {
      *  when coverage applied cleanly or wasn't requested. */
     coverageFallback?: CoverageFallback;
   }> {
-    const sel = (dto.selectedText ?? '').trim();
+    const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
     if (sel.length >= 20) {
       // Selection mode: no structured evidence, no images. The
       // caller's `ctx.text` is fed into the strategy-specific
       // prompt template as today. Coverage narrowing is ignored —
       // the student already chose what to focus on.
       return {
-        text: dto.selectedText!,
+        text: sel,
         source: 'selection',
         evidence: null,
       };
@@ -4007,7 +4018,7 @@ export class LearningInterventionsService {
     }
 
     if (!evidence) {
-      const sel = (dto.selectedText ?? '').trim();
+      const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
       if (sel.length >= 20) {
         evidence = {
           contextChunks: [
