@@ -8,6 +8,8 @@ import { ConfigService } from '@nestjs/config';
 export class LogExportService {
   private readonly logger = new Logger(LogExportService.name);
   private readonly s3: S3Client;
+  /** Separate client whose endpoint matches what the browser will use — so the presigned URL host is correct. */
+  private readonly s3Public: S3Client;
   private readonly bucket: string;
   private readonly recordingBucket: string;
 
@@ -15,13 +17,25 @@ export class LogExportService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
+    const internalEndpoint = config.get<string>('BLOB_STORAGE_ENDPOINT', 'http://localhost:9000');
+    // Public endpoint is what the browser reaches (e.g. http://localhost:9000 on the host machine).
+    // Presigned URLs must be signed with this host so MinIO validates the Host header correctly.
+    const publicEndpoint = config.get<string>('BLOB_STORAGE_PUBLIC_ENDPOINT', internalEndpoint);
+    const region = config.get<string>('BLOB_STORAGE_REGION', 'us-east-1');
+    const credentials = {
+      accessKeyId: config.get<string>('BLOB_STORAGE_ACCESS_KEY', 'minioadmin'),
+      secretAccessKey: config.get<string>('BLOB_STORAGE_SECRET_KEY', 'minioadmin'),
+    };
     this.s3 = new S3Client({
-      endpoint: config.get<string>('BLOB_STORAGE_ENDPOINT', 'http://localhost:9000'),
-      region: config.get<string>('BLOB_STORAGE_REGION', 'us-east-1'),
-      credentials: {
-        accessKeyId: config.get<string>('BLOB_STORAGE_ACCESS_KEY', 'minioadmin'),
-        secretAccessKey: config.get<string>('BLOB_STORAGE_SECRET_KEY', 'minioadmin'),
-      },
+      endpoint: internalEndpoint,
+      region,
+      credentials,
+      forcePathStyle: true,
+    });
+    this.s3Public = new S3Client({
+      endpoint: publicEndpoint,
+      region,
+      credentials,
       forcePathStyle: true,
     });
     this.bucket = config.get<string>('MINIO_LOG_BUCKET', 'student-logs');
@@ -155,7 +169,7 @@ export class LogExportService {
         if (seg.uploadStatus === 'COMPLETED' && seg.minioKey) {
           try {
             downloadUrl = await getSignedUrl(
-              this.s3,
+              this.s3Public,
               new GetObjectCommand({ Bucket: this.recordingBucket, Key: seg.minioKey }),
               { expiresIn: 3600 },
             );
@@ -436,7 +450,7 @@ export class LogExportService {
     );
 
     const url = await getSignedUrl(
-      this.s3,
+      this.s3Public,
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
       { expiresIn: 3600 },
     );

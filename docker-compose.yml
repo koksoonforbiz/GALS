@@ -17,9 +17,9 @@ services:
       BLOB_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       BLOB_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       BLOB_STORAGE_REGION: us-east-1
-      # In dockerized dev, web proxies /s3 -> minio:9000 with Host rewritten.
-      # Presigned URLs must be signed against the same host seen by MinIO.
-      BLOB_STORAGE_PUBLIC_ENDPOINT: http://minio:9000
+      # Public endpoint used to sign presigned URLs that the browser will fetch.
+      # Must match the host the browser uses to reach MinIO (port-mapped on host).
+      BLOB_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
     networks:
       - local-dev
     depends_on:
