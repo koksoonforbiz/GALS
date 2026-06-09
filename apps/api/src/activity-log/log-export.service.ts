@@ -102,6 +102,7 @@ export class LogExportService {
           capturedAt: true,
           trigger: true,
           html: true,
+          screenshotDataUrl: true,
         },
       }),
       this.prisma.emotionFrame.findMany({
