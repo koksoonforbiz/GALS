@@ -6,6 +6,9 @@ const SLIDE_BOILERPLATE = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
 
 function stripBoilerplate(text: string): string {
   let s = text;
+  // Remove URLs before boilerplate patterns so they don't inflate the
+  // character count used by the image-slide heuristic (isSparse check).
+  s = s.replace(/https?:\/\/\S+/g, '');
   for (const pattern of SLIDE_BOILERPLATE) {
     s = s.replace(pattern, '');
   }

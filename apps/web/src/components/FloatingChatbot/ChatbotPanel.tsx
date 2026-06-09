@@ -327,6 +327,19 @@ export function ChatbotPanel({
   const handleSend = async () => {
     if (!inputValue.trim() || isSending) return;
 
+    // Resolve VLM descriptions for any checked image slides so the chat
+    // call has the same slide context as the strategy buttons.
+    let effectiveSelectedText = selectedText;
+    if (resolveVlmSlides) {
+      setIsResolvingVlm(true);
+      try {
+        const resolved = await resolveVlmSlides();
+        if (resolved) effectiveSelectedText = resolved;
+      } finally {
+        setIsResolvingVlm(false);
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -385,7 +398,7 @@ export function ChatbotPanel({
           pageType,
           contentId: contentId || undefined,
           contentTitle: contentTitle || undefined,
-          selectedText: selectedText || undefined,
+          selectedText: effectiveSelectedText || undefined,
         },
       );
 
@@ -877,7 +890,7 @@ export function ChatbotPanel({
                 handleSend();
               }
             }}
-            placeholder="Type a message..."
+            placeholder={selectedText ? 'Ask about these slides...' : 'Type a message...'}
             disabled={isSending}
             className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 disabled:bg-gray-50"
           />

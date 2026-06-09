@@ -41,7 +41,8 @@ Rules:
 - Each MCQ must have exactly 4 options
 - Explanations should be educational and reference the source text
 - For short answers, include 2-4 keywords that a correct answer should contain
-- Please include calculation questions if the content selected involved the application of formula`,
+- Please include calculation questions if the content selected involved the application of formula
+- Do NOT generate questions about the visual design or structure of the slide (e.g. how a chart is laid out, how many columns a table has, what colour is used, how the slide is organised). Focus only on the subject matter content`,
     userPromptTemplate: `Generate exactly {{mcqCount}} multiple-choice and exactly {{shortAnswerCount}} short-answer questions from this text. Return them as a single \`questions\` array in the order: MCQ first, short-answer second.\n\n"{{selectedText}}"`,
   },
 
@@ -78,7 +79,8 @@ Rules:
 - Include the key topic each question targets
 - Include difficulty level: beginner, intermediate, advanced
 - Extract 3-5 key concepts from the text that the questions cover
-- Please include calculation questions if the content selected involved the application of formula`,
+- Please include calculation questions if the content selected involved the application of formula
+- Do NOT suggest questions about the visual design or structure of the slide (e.g. how a chart is laid out, how many columns a table has, what colour is used, how the slide is organised). Focus only on the subject matter content`,
     userPromptTemplate: `Suggest {{questionCount}} "why" and "how" questions a student could ask to better understand this text:\n\n"{{selectedText}}"`,
   },
 
@@ -114,7 +116,8 @@ Rules:
 - Content should paraphrase and simplify, not just copy the source
 - Comprehension checks should require understanding, not just recall
 - The summary should help the learner see how all pieces connect
-- Please include calculation questions if the content selected involved the application of formula`,
+- Please include calculation questions if the content selected involved the application of formula
+- Do NOT create steps or comprehension checks about the visual design or structure of the slide (e.g. how a chart is laid out, how many columns a table has, what colour is used, how the slide is organised). Focus only on the subject matter content`,
     userPromptTemplate: `Break this text into stepwise learning chunks:\n\n"{{selectedText}}"`,
   },
 
@@ -144,7 +147,8 @@ Rules:
 - Front should not contain the answer
 - Back should be self-contained
 - Vary question types
-- Please include calculation questions if the content selected involved the application of formula`,
+- Please include calculation questions if the content selected involved the application of formula
+- Do NOT create flashcards about the visual design or structure of the slide (e.g. how a chart is laid out, how many columns a table has, what colour is used, how the slide is organised). Focus only on the subject matter content`,
     userPromptTemplate: `Create {{cardCount}} spaced repetition flashcards from this text:\n\n"{{selectedText}}"`,
   },
 };
