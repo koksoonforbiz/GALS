@@ -12,8 +12,16 @@ import { WebgazerLogViewer } from '../../../components/teacher/biometrics/Webgaz
 import { PyfeatLogViewer } from '../../../components/teacher/biometrics/PyfeatLogViewer';
 import { SessionEmotionTab } from '../../../features/openface3/pages/SessionEmotionTab';
 import { SessionTextMiningTab } from '../../../features/text-mining/pages/SessionTextMiningTab';
+import { exportSessionData, type ExportProgress } from './lib/exportSessionData';
 
-const TABS = ['Summary', 'Timeline', 'Conversations', 'Interventions', 'Replay', 'Biometrics'] as const;
+const TABS = [
+  'Summary',
+  'Timeline',
+  'Conversations',
+  'Interventions',
+  'Replay',
+  'Biometrics',
+] as const;
 type Tab = (typeof TABS)[number];
 
 interface Props {
@@ -26,8 +34,19 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('Summary');
   const { logs, isLoading: logsLoading } = useSessionLogs(sessionId);
   const { summary, isLoading: summaryLoading } = useSessionSummary(sessionId);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 
   const isLoading = logsLoading || summaryLoading;
+
+  async function handleExportData() {
+    try {
+      await exportSessionData(sessionId, setExportProgress);
+    } catch (err) {
+      alert(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setTimeout(() => setExportProgress(null), 1500);
+    }
+  }
 
   // Derive a wall-clock window for the emotion timeline from activity logs.
   // Any session that's been touched will have at least one log entry; if not,
@@ -49,23 +68,6 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
     return { sessionStartMs: start, sessionEndMs: end };
   }, [logs]);
 
-  function handleExport() {
-    const token = localStorage.getItem('token');
-    const url = `/api/activity-log/teacher/sessions/${sessionId}/export`;
-    fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => res.blob())
-      .then((blob) => {
-        const href = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = href;
-        a.download = `session-${sessionId}.json`;
-        a.click();
-        URL.revokeObjectURL(href);
-      });
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -75,10 +77,13 @@ export function SessionLogViewer({ sessionId, studentId, courseId }: Props) {
           <p className="text-xs text-gray-400 font-mono mt-0.5">{sessionId}</p>
         </div>
         <button
-          onClick={handleExport}
-          className="text-xs px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+          onClick={() => void handleExportData()}
+          disabled={exportProgress !== null && exportProgress.stage !== 'done'}
+          className="text-xs px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white transition-colors min-w-[110px] text-center"
         >
-          Export JSON
+          {exportProgress && exportProgress.stage !== 'done'
+            ? `${exportProgress.percent}% — ${exportProgress.detail}`
+            : 'Export Data'}
         </button>
       </div>
 

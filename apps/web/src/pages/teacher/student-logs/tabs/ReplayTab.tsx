@@ -7,7 +7,6 @@ import type {
   SessionReplaySnapshot,
 } from '../hooks/useSessionReplay';
 import { api } from '../../../../lib/api';
-import { exportReplayCsv, downloadCsvFile } from '../lib/exportReplayCsv';
 import {
   computeAoiScoring,
   DEFAULT_VALID_STUDY_PARAMS,
@@ -26,12 +25,32 @@ import { AnnotationsPanel } from '../components/AnnotationsPanel';
 // map falls back to neutral slate so an unknown future region still
 // renders sensibly.
 const AOI_COLORS: Record<string, { stroke: string; fill: string; chip: string }> = {
-  sidebar: { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.10)', chip: 'bg-violet-100 text-violet-700 border-violet-300' },
-  lesson: { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.08)', chip: 'bg-blue-100 text-blue-700 border-blue-300' },
-  'pdf-viewer': { stroke: '#dc2626', fill: 'rgba(220, 38, 38, 0.10)', chip: 'bg-red-100 text-red-700 border-red-300' },
-  chatbot: { stroke: '#16a34a', fill: 'rgba(22, 163, 74, 0.10)', chip: 'bg-green-100 text-green-700 border-green-300' },
+  sidebar: {
+    stroke: '#8b5cf6',
+    fill: 'rgba(139, 92, 246, 0.10)',
+    chip: 'bg-violet-100 text-violet-700 border-violet-300',
+  },
+  lesson: {
+    stroke: '#2563eb',
+    fill: 'rgba(37, 99, 235, 0.08)',
+    chip: 'bg-blue-100 text-blue-700 border-blue-300',
+  },
+  'pdf-viewer': {
+    stroke: '#dc2626',
+    fill: 'rgba(220, 38, 38, 0.10)',
+    chip: 'bg-red-100 text-red-700 border-red-300',
+  },
+  chatbot: {
+    stroke: '#16a34a',
+    fill: 'rgba(22, 163, 74, 0.10)',
+    chip: 'bg-green-100 text-green-700 border-green-300',
+  },
 };
-const AOI_FALLBACK = { stroke: '#64748b', fill: 'rgba(100, 116, 139, 0.10)', chip: 'bg-slate-100 text-slate-700 border-slate-300' };
+const AOI_FALLBACK = {
+  stroke: '#64748b',
+  fill: 'rgba(100, 116, 139, 0.10)',
+  chip: 'bg-slate-100 text-slate-700 border-slate-300',
+};
 function aoiColor(region: string) {
   return AOI_COLORS[region] ?? AOI_FALLBACK;
 }
@@ -125,9 +144,20 @@ function formatTimestamp(ms: number) {
 function chooseTickStepMs(durationMs: number): number {
   const TARGET_TICKS = 8;
   const ladder = [
-    1_000, 2_000, 5_000, 10_000, 15_000, 30_000,
-    60_000, 2 * 60_000, 5 * 60_000, 10 * 60_000, 15 * 60_000,
-    30 * 60_000, 60 * 60_000, 2 * 60 * 60_000,
+    1_000,
+    2_000,
+    5_000,
+    10_000,
+    15_000,
+    30_000,
+    60_000,
+    2 * 60_000,
+    5 * 60_000,
+    10 * 60_000,
+    15 * 60_000,
+    30 * 60_000,
+    60 * 60_000,
+    2 * 60 * 60_000,
   ];
   const ideal = Math.max(1_000, durationMs / TARGET_TICKS);
   for (const step of ladder) if (step >= ideal) return step;
@@ -189,7 +219,10 @@ function parseTimeOffsetMs(raw: string): number | null {
  * to where the page was originally served from. Same-origin fetches
  * succeed without allow-scripts.
  */
-function injectBaseForIframe(html: string | null | undefined, pageUrl: string | null | undefined): string {
+function injectBaseForIframe(
+  html: string | null | undefined,
+  pageUrl: string | null | undefined,
+): string {
   if (!html) return '';
   // Strip <script> blocks. The sandbox already blocks them from
   // executing, but the browser logs a console warning per blocked
@@ -273,21 +306,14 @@ function injectBaseForIframe(html: string | null | undefined, pageUrl: string | 
  * the iframe is `.react-pdf__Document`'s PARENT — `div.flex-1
  * .bg-gray-100.overflow-auto`. Walking up finds it.
  */
-function applyScrollWithFallback(
-  el: HTMLElement,
-  top: number,
-  left: number,
-): void {
+function applyScrollWithFallback(el: HTMLElement, top: number, left: number): void {
   const win = el.ownerDocument?.defaultView;
   if (!win) return;
   // Helper: returns the actual scroll host for the requested axis.
   // Walks up from `start`, returning the first ancestor whose
   // computed overflow on that axis is `auto`/`scroll`/`overlay` AND
   // whose scroll size exceeds its client size. Stops at <html>.
-  const findScrollableAncestor = (
-    start: HTMLElement,
-    axis: 'y' | 'x',
-  ): HTMLElement | null => {
+  const findScrollableAncestor = (start: HTMLElement, axis: 'y' | 'x'): HTMLElement | null => {
     let p: HTMLElement | null = start.parentElement;
     let depth = 0;
     while (p && depth < 30) {
@@ -297,9 +323,7 @@ function applyScrollWithFallback(
         const cs = win.getComputedStyle(p);
         const ov = axis === 'y' ? cs.overflowY : cs.overflowX;
         const overflowsAxis =
-          axis === 'y'
-            ? p.scrollHeight > p.clientHeight + 1
-            : p.scrollWidth > p.clientWidth + 1;
+          axis === 'y' ? p.scrollHeight > p.clientHeight + 1 : p.scrollWidth > p.clientWidth + 1;
         if ((ov === 'auto' || ov === 'scroll' || ov === 'overlay') && overflowsAxis) {
           return p;
         }
@@ -340,10 +364,7 @@ function applyScrollWithFallback(
 function applyInnerScrollRestore(
   iframe: HTMLIFrameElement | null | undefined,
   snapshot:
-    | (Pick<
-        SessionReplaySnapshot,
-        'scrollX' | 'scrollY' | 'pdfCurrentPage' | 'scrollHosts'
-      > & {
+    | (Pick<SessionReplaySnapshot, 'scrollX' | 'scrollY' | 'pdfCurrentPage' | 'scrollHosts'> & {
         // Loose type; the caller may pass a stale row missing the new
         // fields. We tolerate undefined gracefully below.
       })
@@ -381,9 +402,7 @@ function applyInnerScrollRestore(
               // descendant — same logic as the recorder's
               // findInnerScrollHost. Skip if neither the tagged
               // element nor any descendant overflows.
-              const tagged = doc.querySelector<HTMLElement>(
-                `[data-replay-region="${h.region}"]`,
-              );
+              const tagged = doc.querySelector<HTMLElement>(`[data-replay-region="${h.region}"]`);
               if (tagged) {
                 if (
                   tagged.scrollHeight > tagged.clientHeight + 1 ||
@@ -394,10 +413,7 @@ function applyInnerScrollRestore(
                   // Pick any descendant that overflows.
                   const candidates = tagged.querySelectorAll<HTMLElement>('*');
                   for (const c of Array.from(candidates)) {
-                    if (
-                      c.scrollHeight > c.clientHeight + 1 ||
-                      c.scrollWidth > c.clientWidth + 1
-                    ) {
+                    if (c.scrollHeight > c.clientHeight + 1 || c.scrollWidth > c.clientWidth + 1) {
                       target = c;
                       break;
                     }
@@ -459,9 +475,7 @@ function applyInnerScrollRestore(
       //     pre-prompt-06 snapshots have the attr but not the DB col).
       let pdfPage: number | null = null;
       try {
-        const attrEl = doc.querySelector<HTMLElement>(
-          '[data-replay-pdf-current-page]',
-        );
+        const attrEl = doc.querySelector<HTMLElement>('[data-replay-pdf-current-page]');
         const attrVal = attrEl?.getAttribute('data-replay-pdf-current-page');
         if (attrVal) {
           const n = Number(attrVal);
@@ -470,13 +484,15 @@ function applyInnerScrollRestore(
       } catch {
         // ignore attr read failure
       }
-      if (pdfPage === null && typeof snapshot?.pdfCurrentPage === 'number' && snapshot.pdfCurrentPage >= 1) {
+      if (
+        pdfPage === null &&
+        typeof snapshot?.pdfCurrentPage === 'number' &&
+        snapshot.pdfCurrentPage >= 1
+      ) {
         pdfPage = snapshot.pdfCurrentPage;
       }
       if (pdfPage !== null) {
-        const pageEl = doc.querySelector<HTMLElement>(
-          `[data-replay-pdf-page="${pdfPage}"]`,
-        );
+        const pageEl = doc.querySelector<HTMLElement>(`[data-replay-pdf-page="${pdfPage}"]`);
         if (pageEl) {
           try {
             pageEl.scrollIntoView({ block: 'start', behavior: 'auto' });
@@ -489,10 +505,7 @@ function applyInnerScrollRestore(
       // Window scroll for pages that DO scroll the body (non-docked
       // layouts). Harmless on docked-layout snapshots where scrollY=0.
       try {
-        iframe.contentWindow?.scrollTo(
-          snapshot?.scrollX ?? 0,
-          snapshot?.scrollY ?? 0,
-        );
+        iframe.contentWindow?.scrollTo(snapshot?.scrollX ?? 0, snapshot?.scrollY ?? 0);
       } catch {
         // cross-origin / detached
       }
@@ -739,12 +752,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     useState<LearningThresholds>(DEFAULT_THRESHOLDS);
   const [selectedSignals, setSelectedSignals] = useState<Set<SignalKey>>(
     () =>
-      new Set<SignalKey>([
-        'boredomScore',
-        'frustrationScore',
-        'engagementScore',
-        'confusionScore',
-      ]),
+      new Set<SignalKey>(['boredomScore', 'frustrationScore', 'engagementScore', 'confusionScore']),
   );
   const [showAoiOverlay, setShowAoiOverlay] = useState(true);
 
@@ -758,19 +766,15 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
   const [aoiParams, setAoiParams] = useState<ValidStudyMaskParams>(DEFAULT_VALID_STUDY_PARAMS);
   const [aoiWindowStartText, setAoiWindowStartText] = useState<string>('');
   const [aoiWindowEndText, setAoiWindowEndText] = useState<string>('');
-  const [expectedWeights, setExpectedWeights] = useState<ExpectedWeightTable>(DEFAULT_EXPECTED_WEIGHTS);
+  const [expectedWeights, setExpectedWeights] =
+    useState<ExpectedWeightTable>(DEFAULT_EXPECTED_WEIGHTS);
 
-  const [isExportingCsv, setIsExportingCsv] = useState(false);
-  const [csvBinMs, setCsvBinMs] = useState<number>(1000);
   // Export range as session-relative offsets (ms). Null means "use
   // the session bound" — keeps the inputs empty by default so a
   // fresh load defaults to "whole session" without showing 0:00.
-  const [csvStartOffsetMs, setCsvStartOffsetMs] = useState<number | null>(null);
-  const [csvEndOffsetMs, setCsvEndOffsetMs] = useState<number | null>(null);
+
   // Local text state for the inputs so the user can type freely
   // (e.g. partially-typed "1:2") without us snapping the value.
-  const [csvStartText, setCsvStartText] = useState<string>('');
-  const [csvEndText, setCsvEndText] = useState<string>('');
 
   useEffect(() => {
     setIsPlaying(false);
@@ -898,7 +902,9 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     srcDoc: string;
     isLoaded: boolean;
   };
-  const [iframeBuffers, setIframeBuffers] = useState<readonly [IframeBufferState, IframeBufferState]>([
+  const [iframeBuffers, setIframeBuffers] = useState<
+    readonly [IframeBufferState, IframeBufferState]
+  >([
     { snapshotId: null, srcDoc: '', isLoaded: false },
     { snapshotId: null, srcDoc: '', isLoaded: false },
   ]);
@@ -990,8 +996,8 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     () =>
       Boolean(
         currentSnapshotWithContent &&
-          !currentSnapshotWithContent.screenshotDataUrl &&
-          currentSnapshotWithContent.html,
+        !currentSnapshotWithContent.screenshotDataUrl &&
+        currentSnapshotWithContent.html,
       ),
     [currentSnapshotWithContent],
   );
@@ -1034,10 +1040,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     // snapshotIdx as needed instead of binary-searching each sample.
     for (const g of data.gazeLogs) {
       const ts = new Date(g.timestamp).getTime();
-      while (
-        snapshotIdx + 1 < snapshots.length &&
-        snapshots[snapshotIdx + 1]!.capturedAt <= ts
-      ) {
+      while (snapshotIdx + 1 < snapshots.length && snapshots[snapshotIdx + 1]!.capturedAt <= ts) {
         snapshotIdx += 1;
       }
       const snap = snapshots[snapshotIdx];
@@ -1074,10 +1077,8 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
   // via the same helper the CSV exporter uses).
   const aoiScoring = useMemo(() => {
     if (!data) return null;
-    const startMs =
-      aoiFilterMode === 'A' ? parseTimeOffsetMs(aoiWindowStartText) : null;
-    const endMs =
-      aoiFilterMode === 'A' ? parseTimeOffsetMs(aoiWindowEndText) : null;
+    const startMs = aoiFilterMode === 'A' ? parseTimeOffsetMs(aoiWindowStartText) : null;
+    const endMs = aoiFilterMode === 'A' ? parseTimeOffsetMs(aoiWindowEndText) : null;
     return computeAoiScoring({
       baseWallClockMs,
       durationMs,
@@ -1112,7 +1113,8 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       else break;
     }
     return (
-      selected ?? (currentSnapshot ? { width: currentSnapshot.width, height: currentSnapshot.height } : null)
+      selected ??
+      (currentSnapshot ? { width: currentSnapshot.width, height: currentSnapshot.height } : null)
     );
   }, [currentAbsoluteMs, currentSnapshot, data]);
 
@@ -1204,7 +1206,9 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     let selected = segments[0] ?? null;
     for (const segment of segments) {
       const startMs = new Date(segment.startWallTime).getTime();
-      const endMs = segment.endWallTime ? new Date(segment.endWallTime).getTime() : Number.POSITIVE_INFINITY;
+      const endMs = segment.endWallTime
+        ? new Date(segment.endWallTime).getTime()
+        : Number.POSITIVE_INFINITY;
       if (currentAbsoluteMs >= startMs && currentAbsoluteMs <= endMs) {
         selected = segment;
         break;
@@ -1312,16 +1316,15 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     };
 
     for (const signal of EMOTION_SIGNALS) {
-      const prop =
-        `p${signal.key.charAt(0).toUpperCase()}${signal.key.slice(1)}` as
-          | 'pHappiness'
-          | 'pSadness'
-          | 'pSurprise'
-          | 'pFear'
-          | 'pAnger'
-          | 'pDisgust'
-          | 'pContempt'
-          | 'pNeutral';
+      const prop = `p${signal.key.charAt(0).toUpperCase()}${signal.key.slice(1)}` as
+        | 'pHappiness'
+        | 'pSadness'
+        | 'pSurprise'
+        | 'pFear'
+        | 'pAnger'
+        | 'pDisgust'
+        | 'pContempt'
+        | 'pNeutral';
       pushSeries(
         signal.key,
         signal.label,
@@ -1426,8 +1429,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     }
     // Pick the load target. Before the first swap, load into buffer 0
     // directly so we don't waste a frame on the blank state.
-    const loadIdx: 0 | 1 =
-      visibleBufferIdx == null ? 0 : ((1 - visibleBufferIdx) as 0 | 1);
+    const loadIdx: 0 | 1 = visibleBufferIdx == null ? 0 : ((1 - visibleBufferIdx) as 0 | 1);
     const hidden = iframeBuffers[loadIdx];
     if (hidden.snapshotId === target.id) {
       // The hidden buffer already targets this snapshot. Two
@@ -1442,10 +1444,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       if (hidden.isLoaded) {
         const iframe = iframeRefs[loadIdx].current;
         try {
-          iframe?.contentWindow?.scrollTo(
-            target.scrollX ?? 0,
-            currentScrollY,
-          );
+          iframe?.contentWindow?.scrollTo(target.scrollX ?? 0, currentScrollY);
         } catch {
           // Cross-origin / detached frame — ignore.
         }
@@ -1505,10 +1504,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       // content doesn't jump on the swap.
       const iframe = iframeRefs[idx].current;
       try {
-        iframe?.contentWindow?.scrollTo(
-          currentSnapshotWithContent?.scrollX ?? 0,
-          currentScrollY,
-        );
+        iframe?.contentWindow?.scrollTo(currentSnapshotWithContent?.scrollX ?? 0, currentScrollY);
       } catch {
         // Cross-origin / detached frame — ignore.
       }
@@ -1623,187 +1619,6 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
         </div>
       </div>
 
-      {/* CSV export controls. Sits below the playback toolbar so the
-          range fields don't compete with the seek bar for width. */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs">
-        <span className="font-semibold text-gray-700">CSV export</span>
-        {/* Bin size — 1 s default keeps a 4 h session under Excel's
-            16k-column limit; 200 ms matches py-feat's native cadence
-            for higher-fidelity downstream analysis. */}
-        <label className="flex items-center gap-1 text-gray-500">
-          Bin
-          <select
-            value={csvBinMs}
-            onChange={(e) => setCsvBinMs(Number(e.target.value))}
-            disabled={isExportingCsv}
-            className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs"
-          >
-            <option value={200}>200 ms</option>
-            <option value={500}>500 ms</option>
-            <option value={1000}>1 s</option>
-            <option value={5000}>5 s</option>
-          </select>
-        </label>
-        {/* From / To range. Accept mm:ss, h:mm:ss, or bare seconds.
-            Empty means "session start" / "session end". Setting via
-            playhead writes the formatted string so the user sees what
-            they captured. */}
-        <label className="flex items-center gap-1 text-gray-500">
-          From
-          <input
-            type="text"
-            placeholder={formatDuration(0)}
-            value={csvStartText}
-            onChange={(e) => {
-              setCsvStartText(e.target.value);
-              const parsed = parseTimeOffsetMs(e.target.value);
-              setCsvStartOffsetMs(parsed);
-            }}
-            disabled={isExportingCsv}
-            className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 font-mono text-xs"
-          />
-          <button
-            type="button"
-            disabled={isExportingCsv}
-            onClick={() => {
-              setCsvStartOffsetMs(currentTimeMs);
-              setCsvStartText(formatTickLabel(currentTimeMs));
-            }}
-            className="rounded border border-gray-300 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-            title="Use the current playback position as the start"
-          >
-            ⤓ here
-          </button>
-        </label>
-        <label className="flex items-center gap-1 text-gray-500">
-          To
-          <input
-            type="text"
-            placeholder={formatDuration(durationMs)}
-            value={csvEndText}
-            onChange={(e) => {
-              setCsvEndText(e.target.value);
-              const parsed = parseTimeOffsetMs(e.target.value);
-              setCsvEndOffsetMs(parsed);
-            }}
-            disabled={isExportingCsv}
-            className="w-20 rounded border border-gray-300 bg-white px-1.5 py-0.5 font-mono text-xs"
-          />
-          <button
-            type="button"
-            disabled={isExportingCsv}
-            onClick={() => {
-              setCsvEndOffsetMs(currentTimeMs);
-              setCsvEndText(formatTickLabel(currentTimeMs));
-            }}
-            className="rounded border border-gray-300 px-1.5 py-0.5 text-[11px] text-gray-600 hover:bg-gray-50 disabled:opacity-60"
-            title="Use the current playback position as the end"
-          >
-            ⤓ here
-          </button>
-        </label>
-        {(() => {
-          // Resolved range — what we'd actually export if the user
-          // clicked the button right now. Shown next to the button so
-          // it's obvious what's selected without re-reading both
-          // inputs.
-          const startMs = Math.max(0, Math.min(durationMs, csvStartOffsetMs ?? 0));
-          const endMs = Math.max(startMs, Math.min(durationMs, csvEndOffsetMs ?? durationMs));
-          const rangeLabel =
-            startMs === 0 && endMs === durationMs
-              ? `full session (${formatDuration(durationMs)})`
-              : `${formatTickLabel(startMs)} → ${formatTickLabel(endMs)} (${formatDuration(endMs - startMs)})`;
-          return (
-            <span className="font-mono text-[11px] text-gray-500">
-              Range: {rangeLabel}
-            </span>
-          );
-        })()}
-        <button
-          type="button"
-          disabled={isExportingCsv || !data || durationMs <= 0}
-          onClick={() => {
-            if (!data) return;
-            setIsExportingCsv(true);
-            // Snapshot user-facing values so an in-flight slider
-            // tweak can't change them mid-build.
-            const startMs = Math.max(0, Math.min(durationMs, csvStartOffsetMs ?? 0));
-            const endMs = Math.max(startMs, Math.min(durationMs, csvEndOffsetMs ?? durationMs));
-            // Defer to the next tick so the disabled UI state can
-            // paint before the (potentially seconds-long) string
-            // serialization blocks the main thread.
-            window.setTimeout(() => {
-              try {
-                const csv = exportReplayCsv(
-                  {
-                    session: data.session,
-                    snapshots: data.snapshots,
-                    clickLogs: data.clickLogs,
-                    scrollLogs: data.scrollLogs,
-                    gazeLogs: data.gazeLogs,
-                    pupilLogs: data.pupilLogs,
-                    emotionFrames: data.emotionFrames,
-                    auResults: data.auResults,
-                    activityLogs: data.activityLogs,
-                    efDetections: data.efDetections,
-                    dialogueMessages: data.dialogueMessages,
-                    chatbotMessages: data.chatbotMessages,
-                    keystrokeLogs: data.keystrokeLogs,
-                    cursorLogs: data.cursorLogs,
-                    clipboardLogs: data.clipboardLogs,
-                    visibilityLogs: data.visibilityLogs,
-                    // Prompt 06: viewportLogs was previously fetched in
-                    // the replay fan-out but never reached the CSV —
-                    // surfaces as viewport_width / viewport_height /
-                    // viewport_orientation carry-forward rows.
-                    viewportLogs: data.viewportLogs,
-                  },
-                  baseWallClockMs,
-                  durationMs,
-                  {
-                    binMs: csvBinMs,
-                    // Reflect whatever the teacher set on the sliders
-                    // — same labels they're seeing in the right panel.
-                    thresholds: learningThresholds,
-                    startOffsetMs: startMs,
-                    endOffsetMs: endMs,
-                    // AOI scoring rows (per-epoch observed/expected/
-                    // alignment). Computed live in the panel; we just
-                    // forward the result so the exporter doesn't
-                    // recompute. Null is fine — rows are skipped.
-                    aoiScoring: aoiScoring
-                      ? {
-                          epochs: aoiScoring.epochs,
-                          sessionAlignment: aoiScoring.sessionAlignment,
-                        }
-                      : undefined,
-                  },
-                );
-                const startIso = data.session?.startedAt
-                  ? new Date(data.session.startedAt).toISOString().replace(/[:.]/g, '-')
-                  : 'unknown';
-                const sid = (data.session?.id ?? sessionId).slice(0, 8);
-                // Annotate filename with the range when it isn't the
-                // whole session, so multiple slices stay distinguishable.
-                const rangeSuffix =
-                  startMs === 0 && endMs === durationMs
-                    ? ''
-                    : `-${Math.round(startMs / 1000)}s-${Math.round(endMs / 1000)}s`;
-                downloadCsvFile(
-                  csv,
-                  `replay-${sid}-${startIso}-${csvBinMs}ms${rangeSuffix}.csv`,
-                );
-              } finally {
-                setIsExportingCsv(false);
-              }
-            }, 0);
-          }}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isExportingCsv ? 'Building CSV…' : 'Export CSV'}
-        </button>
-      </div>
-
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Signal Timeline</h3>
@@ -1852,13 +1667,29 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
           >
             <line x1="0" y1="180" x2="1000" y2="180" stroke="#d1d5db" strokeWidth="1" />
             <line x1="0" y1="20" x2="0" y2="180" stroke="#d1d5db" strokeWidth="1" />
-            <line x1="0" y1="20" x2="1000" y2="20" stroke="#e5e7eb" strokeDasharray="4 4" strokeWidth="1" />
-            <line x1="0" y1="100" x2="1000" y2="100" stroke="#e5e7eb" strokeDasharray="4 4" strokeWidth="1" />
+            <line
+              x1="0"
+              y1="20"
+              x2="1000"
+              y2="20"
+              stroke="#e5e7eb"
+              strokeDasharray="4 4"
+              strokeWidth="1"
+            />
+            <line
+              x1="0"
+              y1="100"
+              x2="1000"
+              y2="100"
+              stroke="#e5e7eb"
+              strokeDasharray="4 4"
+              strokeWidth="1"
+            />
             {(() => {
               // X-axis time ticks. Step is chosen from a human-friendly
               // ladder so a 4 h session gets 30-min ticks, a 5 min
               // session gets 30 s ticks, etc. Both relative (mm:ss /
-               // h:mm:ss) and absolute wall-clock labels are shown so
+              // h:mm:ss) and absolute wall-clock labels are shown so
               // the teacher can match the timeline to external events.
               const stepMs = chooseTickStepMs(durationMs);
               const ticks: Array<{ x: number; relLabel: string; wallLabel: string }> = [];
@@ -1880,14 +1711,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                     stroke="#9ca3af"
                     strokeWidth="1"
                   />
-                  <line
-                    x1={tick.x}
-                    y1="20"
-                    x2={tick.x}
-                    y2="180"
-                    stroke="#f3f4f6"
-                    strokeWidth="1"
-                  />
+                  <line x1={tick.x} y1="20" x2={tick.x} y2="180" stroke="#f3f4f6" strokeWidth="1" />
                   <text
                     x={tick.x}
                     y="198"
@@ -1911,20 +1735,27 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                 </g>
               ));
             })()}
-            {([
-              {
-                signalKey: 'engagementScore' as SignalKey,
-                label: `Eng threshold ${learningThresholds.engagement_score.toFixed(2)}`,
-                color: '#16a34a',
-                value: learningThresholds.engagement_score,
-              },
-              {
-                signalKey: 'boredomScore' as SignalKey,
-                label: `Boredom threshold ${learningThresholds.boredom_score.toFixed(2)}`,
-                color: '#6b7280',
-                value: learningThresholds.boredom_score,
-              },
-            ] satisfies Array<{ signalKey: SignalKey; label: string; color: string; value: number }>)
+            {(
+              [
+                {
+                  signalKey: 'engagementScore' as SignalKey,
+                  label: `Eng threshold ${learningThresholds.engagement_score.toFixed(2)}`,
+                  color: '#16a34a',
+                  value: learningThresholds.engagement_score,
+                },
+                {
+                  signalKey: 'boredomScore' as SignalKey,
+                  label: `Boredom threshold ${learningThresholds.boredom_score.toFixed(2)}`,
+                  color: '#6b7280',
+                  value: learningThresholds.boredom_score,
+                },
+              ] satisfies Array<{
+                signalKey: SignalKey;
+                label: string;
+                color: string;
+                value: number;
+              }>
+            )
               .filter((guide) => selectedSignals.has(guide.signalKey))
               .map((guide) => {
                 const y = 180 - Math.min(1, Math.max(0, guide.value)) * 160;
@@ -1983,22 +1814,19 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                       fill={color}
                       opacity={0.7}
                     >
-                      <title>{a.code?.label ?? 'annotation'}: {a.note ?? ''}</title>
+                      <title>
+                        {a.code?.label ?? 'annotation'}: {a.note ?? ''}
+                      </title>
                     </rect>
                   </g>
                 );
               }
               return (
                 <g key={a.id}>
-                  <line
-                    x1={x}
-                    y1={185}
-                    x2={x}
-                    y2={194}
-                    stroke={color}
-                    strokeWidth={2}
-                  >
-                    <title>{a.code?.label ?? 'annotation'}: {a.note ?? ''}</title>
+                  <line x1={x} y1={185} x2={x} y2={194} stroke={color} strokeWidth={2}>
+                    <title>
+                      {a.code?.label ?? 'annotation'}: {a.note ?? ''}
+                    </title>
                   </line>
                 </g>
               );
@@ -2182,32 +2010,32 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                   Lower z-index than gaze/click dots so those stay on
                   top. pointer-events-none so they never block the
                   click-to-seek behaviour on the chart above. */}
-              {showAoiOverlay && currentAois?.map((rect, idx) => {
-                const color = aoiColor(rect.region);
-                return (
-                  <div
-                    key={`${rect.region}-${idx}`}
-                    className="pointer-events-none absolute z-[5] border-2 text-[10px] font-mono"
-                    style={{
-                      left: `${rect.x * contentScale}px`,
-                      top: `${rect.y * contentScale}px`,
-                      width: `${rect.width * contentScale}px`,
-                      height: `${rect.height * contentScale}px`,
-                      borderColor: color.stroke,
-                      backgroundColor: color.fill,
-                      color: color.stroke,
-                    }}
-                  >
-                    <span
-                      className="absolute left-0 top-0 px-1 py-0.5 text-white"
-                      style={{ backgroundColor: color.stroke }}
+              {showAoiOverlay &&
+                currentAois?.map((rect, idx) => {
+                  const color = aoiColor(rect.region);
+                  return (
+                    <div
+                      key={`${rect.region}-${idx}`}
+                      className="pointer-events-none absolute z-[5] border-2 text-[10px] font-mono"
+                      style={{
+                        left: `${rect.x * contentScale}px`,
+                        top: `${rect.y * contentScale}px`,
+                        width: `${rect.width * contentScale}px`,
+                        height: `${rect.height * contentScale}px`,
+                        borderColor: color.stroke,
+                        backgroundColor: color.fill,
+                        color: color.stroke,
+                      }}
                     >
-                      {rect.region}
-                    </span>
-                  </div>
-                );
-              })}
-
+                      <span
+                        className="absolute left-0 top-0 px-1 py-0.5 text-white"
+                        style={{ backgroundColor: color.stroke }}
+                      >
+                        {rect.region}
+                      </span>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         </div>
@@ -2245,7 +2073,8 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
             </div>
             {currentRecordingSegment && (
               <p className="mt-2 text-[11px] text-gray-500">
-                Segment window: {formatTimestamp(new Date(currentRecordingSegment.startWallTime).getTime())}
+                Segment window:{' '}
+                {formatTimestamp(new Date(currentRecordingSegment.startWallTime).getTime())}
                 {' - '}
                 {currentRecordingSegment.endWallTime
                   ? formatTimestamp(new Date(currentRecordingSegment.endWallTime).getTime())
@@ -2288,7 +2117,9 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
 
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-[11px] uppercase tracking-wide text-gray-400">Learning state</p>
+                  <p className="text-[11px] uppercase tracking-wide text-gray-400">
+                    Learning state
+                  </p>
                   <button
                     type="button"
                     onClick={() => setLearningThresholds(DEFAULT_THRESHOLDS)}
@@ -2354,13 +2185,17 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
               </div>
 
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-gray-400">Top action units</p>
+                <p className="text-[11px] uppercase tracking-wide text-gray-400">
+                  Top action units
+                </p>
                 <div className="mt-2 space-y-2">
                   {topAus.length > 0 ? (
                     topAus.map((au) => (
                       <div key={au.key} className="flex items-center justify-between gap-3">
                         <span className="font-medium text-gray-700">{au.label}</span>
-                        <span className="font-mono text-gray-800">{(au.value ?? 0).toFixed(2)}</span>
+                        <span className="font-mono text-gray-800">
+                          {(au.value ?? 0).toFixed(2)}
+                        </span>
                       </div>
                     ))
                   ) : (
@@ -2374,7 +2209,9 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                 <div className="mt-2 rounded-md bg-gray-50 px-2 py-1.5">
                   <div className="text-[11px] text-gray-500">Pupil diameter</div>
                   <div className="font-medium text-gray-800">
-                    {currentPupil ? currentPupil.pupilDiameter.toFixed(2) : 'No recent pupil sample'}
+                    {currentPupil
+                      ? currentPupil.pupilDiameter.toFixed(2)
+                      : 'No recent pupil sample'}
                   </div>
                 </div>
               </div>
@@ -2486,7 +2323,8 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                           outside
                         </span>
                         <span className="font-mono text-gray-700">
-                          {((aoiCoverage.outside / aoiCoverage.totalWithAoi) * 100).toFixed(1)}% · {aoiCoverage.outside}
+                          {((aoiCoverage.outside / aoiCoverage.totalWithAoi) * 100).toFixed(1)}% ·{' '}
+                          {aoiCoverage.outside}
                         </span>
                       </div>
                       <div className="mt-1 h-1.5 overflow-hidden rounded bg-gray-100">
@@ -2517,7 +2355,6 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
           <AnnotationsPanel
             annotations={annotationsApi.annotations}
             codes={annotationsApi.codes}
-            sessionId={sessionId}
             currentTimeMs={currentTimeMs}
             durationMs={durationMs}
             onSeek={(offsetMs) => {
@@ -2575,9 +2412,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
                   ? `avg every ${formatDuration(snapshotStats.averageGapMs)}`
                   : 'single snapshot only'}
               </p>
-              <p>
-                Recording mode: fixed periodic snapshots every 1s
-              </p>
+              <p>Recording mode: fixed periodic snapshots every 1s</p>
               <p>{data.clickLogs.length} click events recorded</p>
               <p>{data.gazeLogs.length} gaze samples recorded</p>
               <p>{data.pupilLogs.length} pupil-size samples recorded</p>
@@ -2812,31 +2647,26 @@ function EventTimelinePanel({
         const correct = meta.isCorrect;
         const latency =
           typeof meta.latencyMs === 'number' ? `${Math.round(meta.latencyMs / 100) / 10}s` : '';
-        detail = `${correct === true ? '✓' : correct === false ? '✗' : ''} ${latency}${itype}`.trim();
+        detail =
+          `${correct === true ? '✓' : correct === false ? '✗' : ''} ${latency}${itype}`.trim();
       } else if (log.action === 'PRACTICE_TEST_CONFIGURED') {
         // P5 — render a compact human summary of what the student
         // chose: counts, coverage scope, and (when present) the
         // coverageFallback widening notice from P2.
         const mcq = typeof meta.mcqCount === 'number' ? meta.mcqCount : null;
-        const sa =
-          typeof meta.shortAnswerCount === 'number' ? meta.shortAnswerCount : null;
-        const mode =
-          typeof meta.coverageMode === 'string' ? meta.coverageMode : 'all';
-        const pageStart =
-          typeof meta.pageStart === 'number' ? meta.pageStart : null;
+        const sa = typeof meta.shortAnswerCount === 'number' ? meta.shortAnswerCount : null;
+        const mode = typeof meta.coverageMode === 'string' ? meta.coverageMode : 'all';
+        const pageStart = typeof meta.pageStart === 'number' ? meta.pageStart : null;
         const pageEnd = typeof meta.pageEnd === 'number' ? meta.pageEnd : null;
         const subtopic =
-          typeof meta.subtopic === 'string' && meta.subtopic.trim()
-            ? meta.subtopic.trim()
-            : null;
+          typeof meta.subtopic === 'string' && meta.subtopic.trim() ? meta.subtopic.trim() : null;
         let scope = 'whole lesson';
         if (mode === 'pages' && pageStart != null && pageEnd != null) {
           scope = `pp. ${pageStart}-${pageEnd}`;
         } else if (mode === 'subtopic' && subtopic) {
           scope = `sub-topic: ${subtopic}`;
         }
-        const counts =
-          mcq != null && sa != null ? `${mcq} MCQ + ${sa} short-answer` : 'questions';
+        const counts = mcq != null && sa != null ? `${mcq} MCQ + ${sa} short-answer` : 'questions';
         let summary = `Practice Test configured — ${counts}, ${scope}`;
         // Append the widening notice when the backend flagged a
         // coverageFallback. Pull the requested page range from the
@@ -2847,12 +2677,8 @@ function EventTimelinePanel({
             ? (meta.coverageFallback as Record<string, unknown>)
             : null;
         if (cf) {
-          const reqLo =
-            typeof cf.requestedPageStart === 'number'
-              ? cf.requestedPageStart
-              : null;
-          const reqHi =
-            typeof cf.requestedPageEnd === 'number' ? cf.requestedPageEnd : null;
+          const reqLo = typeof cf.requestedPageStart === 'number' ? cf.requestedPageStart : null;
+          const reqHi = typeof cf.requestedPageEnd === 'number' ? cf.requestedPageEnd : null;
           const requested =
             reqLo != null && reqHi != null ? `pp. ${reqLo}-${reqHi}` : 'requested pages';
           summary += ` (requested ${requested}, none found — used whole lesson)`;
@@ -2860,15 +2686,20 @@ function EventTimelinePanel({
         detail = summary;
       } else if (log.action === 'INTERVENTION_COMPLETED') {
         const dur =
-          typeof meta.totalDurationMs === 'number' ? `${Math.round(meta.totalDurationMs / 1000)}s` : '';
+          typeof meta.totalDurationMs === 'number'
+            ? `${Math.round(meta.totalDurationMs / 1000)}s`
+            : '';
         const score = typeof meta.score === 'number' ? `· ${meta.score}%` : '';
         detail = `${dur} ${score}${itype}`.trim();
       } else if (log.action === 'CHATBOT_MESSAGE_SENT' || log.action === 'DIALOGUE_MESSAGE_SENT') {
         const msg = (meta.message ?? meta.messageText ?? '') as string;
         detail = msg ? `"${msg.slice(0, 80)}${msg.length > 80 ? '…' : ''}"` : '';
       } else {
-        const title =
-          (meta.itemTitle ?? meta.contentTitle ?? meta.courseTitle ?? meta.summary ?? '') as string;
+        const title = (meta.itemTitle ??
+          meta.contentTitle ??
+          meta.courseTitle ??
+          meta.summary ??
+          '') as string;
         detail = `${title}${itype}`.trim();
       }
       out.push({
@@ -3056,9 +2887,7 @@ function InterventionReviewPanel({
               ? session!.results!
               : null;
           const rawQuestions =
-            !gradedResults && Array.isArray(session?.questions)
-              ? session!.questions!
-              : null;
+            !gradedResults && Array.isArray(session?.questions) ? session!.questions! : null;
           const userAnswers =
             session?.userAnswers && typeof session.userAnswers === 'object'
               ? session.userAnswers
@@ -3220,7 +3049,7 @@ function InterventionBody({
         <ol className="space-y-2">
           {rawQuestions.map((q, idx) => {
             const ans = userAnswers
-              ? userAnswers[String(idx)] ?? userAnswers[idx as unknown as string]
+              ? (userAnswers[String(idx)] ?? userAnswers[idx as unknown as string])
               : undefined;
             return (
               <li key={idx} className="rounded border border-gray-200 bg-white p-2">
@@ -3279,10 +3108,7 @@ function InterventionBody({
             <>
               <span className="ml-2 font-medium">Concepts:</span>
               {concepts.map((c, i) => (
-                <span
-                  key={i}
-                  className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700"
-                >
+                <span key={i} className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
                   {c}
                 </span>
               ))}
@@ -3294,17 +3120,12 @@ function InterventionBody({
             <p className="mb-1 font-medium text-gray-700">LLM suggested questions</p>
             <ol className="space-y-1">
               {suggested.map((q, idx) => (
-                <li
-                  key={idx}
-                  className="rounded border border-gray-200 bg-white p-2 text-[11px]"
-                >
+                <li key={idx} className="rounded border border-gray-200 bg-white p-2 text-[11px]">
                   <span className="mr-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-slate-600">
                     {q.type ?? '?'} · {q.difficulty ?? '?'}
                   </span>
                   {q.question}
-                  {q.topic ? (
-                    <span className="ml-2 text-gray-500">({q.topic})</span>
-                  ) : null}
+                  {q.topic ? <span className="ml-2 text-gray-500">({q.topic})</span> : null}
                 </li>
               ))}
             </ol>
@@ -3353,9 +3174,7 @@ function InterventionBody({
   if (type === 'STEPWISE_LEARNING') {
     const steps = Array.isArray(session.steps) ? session.steps : [];
     const stepResults =
-      session.stepResults && typeof session.stepResults === 'object'
-        ? session.stepResults
-        : {};
+      session.stepResults && typeof session.stepResults === 'object' ? session.stepResults : {};
     const currentStep = typeof session.currentStep === 'number' ? session.currentStep : null;
     if (steps.length === 0) {
       return (
@@ -3389,9 +3208,7 @@ function InterventionBody({
                 }`}
               >
                 <div className="mb-1 flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-gray-500">
-                    Step {s.stepNumber}
-                  </span>
+                  <span className="font-mono text-[10px] text-gray-500">Step {s.stepNumber}</span>
                   <span className="font-medium text-gray-900">{s.title}</span>
                   {result && (
                     <span
@@ -3419,32 +3236,34 @@ function InterventionBody({
                     {s.comprehensionCheck.question}
                   </div>
                 )}
-                {result && Array.isArray(result.userResponses) && result.userResponses.length > 0 && (
-                  <ol className="mt-2 space-y-1">
-                    {result.userResponses.map((u, idx) => (
-                      <li
-                        key={idx}
-                        className="rounded border border-gray-200 bg-white p-1.5 text-[11px]"
-                      >
-                        <div className="flex items-start gap-2">
-                          <span
-                            className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] ${
-                              u.isCorrect
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            attempt {idx + 1} {u.isCorrect ? '✓' : '✗'}
-                          </span>
-                          <span className="text-gray-800">{u.response}</span>
-                        </div>
-                        {u.feedback && (
-                          <p className="mt-1 text-[11px] text-gray-600">{u.feedback}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                )}
+                {result &&
+                  Array.isArray(result.userResponses) &&
+                  result.userResponses.length > 0 && (
+                    <ol className="mt-2 space-y-1">
+                      {result.userResponses.map((u, idx) => (
+                        <li
+                          key={idx}
+                          className="rounded border border-gray-200 bg-white p-1.5 text-[11px]"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span
+                              className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                                u.isCorrect
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              attempt {idx + 1} {u.isCorrect ? '✓' : '✗'}
+                            </span>
+                            <span className="text-gray-800">{u.response}</span>
+                          </div>
+                          {u.feedback && (
+                            <p className="mt-1 text-[11px] text-gray-600">{u.feedback}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
               </li>
             );
           })}
@@ -3492,8 +3311,8 @@ function InterventionBody({
   // ─── Unknown / future types ──────────────────────────
   return (
     <p className="text-gray-500">
-      No renderer for intervention type <span className="font-mono">{type}</span>{' '}
-      yet. Captured session data is available in the export.
+      No renderer for intervention type <span className="font-mono">{type}</span> yet. Captured
+      session data is available in the export.
     </p>
   );
 }
@@ -3532,12 +3351,7 @@ const AOI_BUCKET_LABELS: Record<AoiBucket, string> = {
   outside: 'Outside any AOI',
 };
 
-const SCORED_BUCKET_ORDER: AoiBucket[] = [
-  'sidebar',
-  'lesson+pdf',
-  'chatbot',
-  'header',
-];
+const SCORED_BUCKET_ORDER: AoiBucket[] = ['sidebar', 'lesson+pdf', 'chatbot', 'header'];
 
 const EPOCH_LABELS: Record<EpochType, string> = {
   reading_lesson: 'Reading lesson',
@@ -3577,9 +3391,7 @@ function AoiScoringPanel({
   }
 
   const { hygiene, metrics, epochs, sessionAlignment } = scoring;
-  const scoredEpochs = epochs.filter(
-    (e) => e.type !== 'idle' && e.type !== 'navigating_modules',
-  );
+  const scoredEpochs = epochs.filter((e) => e.type !== 'idle' && e.type !== 'navigating_modules');
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-600">
@@ -3590,9 +3402,7 @@ function AoiScoringPanel({
             type="button"
             onClick={() => onFilterModeChange('A')}
             className={`rounded px-2 py-0.5 text-[11px] ${
-              filterMode === 'A'
-                ? 'bg-slate-900 text-white'
-                : 'text-gray-600 hover:bg-white'
+              filterMode === 'A' ? 'bg-slate-900 text-white' : 'text-gray-600 hover:bg-white'
             }`}
             title="Filter A: per-AOI PDT across a researcher-defined window."
           >
@@ -3602,9 +3412,7 @@ function AoiScoringPanel({
             type="button"
             onClick={() => onFilterModeChange('B')}
             className={`rounded px-2 py-0.5 text-[11px] ${
-              filterMode === 'B'
-                ? 'bg-slate-900 text-white'
-                : 'text-gray-600 hover:bg-white'
+              filterMode === 'B' ? 'bg-slate-900 text-white' : 'text-gray-600 hover:bg-white'
             }`}
             title="Filter B: per-epoch observed-vs-expected alignment (SEEV/EV)."
           >
@@ -3653,9 +3461,7 @@ function AoiScoringPanel({
               step="500"
               min={0}
               value={params.idleGapMs}
-              onChange={(e) =>
-                onParamsChange({ ...params, idleGapMs: Number(e.target.value) })
-              }
+              onChange={(e) => onParamsChange({ ...params, idleGapMs: Number(e.target.value) })}
               className="w-24 rounded border border-gray-300 bg-white px-1.5 py-0.5 font-mono text-[11px]"
             />
           </label>
@@ -3717,9 +3523,7 @@ function AoiScoringPanel({
                   <tbody>
                     {EPOCH_TYPES.filter((t) => t !== 'idle').map((t) => (
                       <tr key={t}>
-                        <td className="py-0.5 font-medium text-gray-700">
-                          {EPOCH_LABELS[t]}
-                        </td>
+                        <td className="py-0.5 font-medium text-gray-700">{EPOCH_LABELS[t]}</td>
                         {SCORED_BUCKET_ORDER.map((b) => {
                           const v = expectedWeights[t]?.[b] ?? 0;
                           return (
@@ -3774,14 +3578,10 @@ function AoiScoringPanel({
             ≈ {formatDuration(hygiene.validStudyDurationSecs * 1000)}
           </span>
           {hygiene.excludedByConfidence > 0 && (
-            <span className="text-amber-700">
-              –{hygiene.excludedByConfidence} low-conf
-            </span>
+            <span className="text-amber-700">–{hygiene.excludedByConfidence} low-conf</span>
           )}
           {hygiene.excludedByVisibility > 0 && (
-            <span className="text-amber-700">
-              –{hygiene.excludedByVisibility} tab hidden
-            </span>
+            <span className="text-amber-700">–{hygiene.excludedByVisibility} tab hidden</span>
           )}
           {hygiene.excludedByTransitionSettle > 0 && (
             <span className="text-amber-700">
@@ -3792,9 +3592,7 @@ function AoiScoringPanel({
             <span className="text-amber-700">–{hygiene.excludedByIdle} idle</span>
           )}
           {hygiene.excludedByOutsideWindow > 0 && (
-            <span className="text-gray-500">
-              –{hygiene.excludedByOutsideWindow} outside window
-            </span>
+            <span className="text-gray-500">–{hygiene.excludedByOutsideWindow} outside window</span>
           )}
         </div>
       </div>
@@ -3814,15 +3612,9 @@ function AoiScoringPanel({
             <tbody>
               {metrics.map((m) => (
                 <tr key={m.bucket} className="border-t border-gray-100">
-                  <td className="py-1 font-medium text-gray-700">
-                    {AOI_BUCKET_LABELS[m.bucket]}
-                  </td>
-                  <td className="py-1 text-right font-mono text-gray-700">
-                    {m.samples}
-                  </td>
-                  <td className="py-1 text-right font-mono text-gray-700">
-                    {fmtPct(m.pdt)}
-                  </td>
+                  <td className="py-1 font-medium text-gray-700">{AOI_BUCKET_LABELS[m.bucket]}</td>
+                  <td className="py-1 text-right font-mono text-gray-700">{m.samples}</td>
+                  <td className="py-1 text-right font-mono text-gray-700">{fmtPct(m.pdt)}</td>
                   <td className="py-1 pl-2">
                     <div className="h-1.5 w-full overflow-hidden rounded bg-gray-100">
                       <div
@@ -3852,10 +3644,7 @@ function AoiScoringPanel({
           )}
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {scoredEpochs.map((e, idx) => (
-              <div
-                key={`${e.startMs}-${idx}`}
-                className="rounded border border-gray-200 p-2"
-              >
+              <div key={`${e.startMs}-${idx}`} className="rounded border border-gray-200 p-2">
                 <div className="mb-1 flex items-center justify-between text-[11px]">
                   <span className="font-medium text-gray-700">{EPOCH_LABELS[e.type]}</span>
                   <span className="font-mono text-gray-500">
@@ -3881,9 +3670,7 @@ function AoiScoringPanel({
                     const exp = e.expected[b] ?? 0;
                     return (
                       <div key={b} className="flex items-center gap-2 text-[10px]">
-                        <span className="w-20 shrink-0 text-gray-600">
-                          {AOI_BUCKET_LABELS[b]}
-                        </span>
+                        <span className="w-20 shrink-0 text-gray-600">{AOI_BUCKET_LABELS[b]}</span>
                         <div className="relative flex-1">
                           {/* expected (light) */}
                           <div
@@ -3908,8 +3695,8 @@ function AoiScoringPanel({
           </div>
           <p className="mt-2 text-[10px] text-gray-500">
             Bars show <span className="font-medium text-slate-700">observed</span> over{' '}
-            <span className="text-indigo-700">expected</span> share per AOI. Alignment
-            uses total-variation distance: 1 − ½·Σ|obs − exp| over the four scored AOIs.
+            <span className="text-indigo-700">expected</span> share per AOI. Alignment uses
+            total-variation distance: 1 − ½·Σ|obs − exp| over the four scored AOIs.
           </p>
         </div>
       )}

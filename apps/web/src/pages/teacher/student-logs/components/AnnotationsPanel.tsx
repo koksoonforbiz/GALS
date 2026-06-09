@@ -15,7 +15,6 @@ import type { ReplayAnnotation, ReplayCode } from '../hooks/useReplayAnnotations
 interface AnnotationsPanelProps {
   annotations: ReplayAnnotation[];
   codes: ReplayCode[];
-  sessionId: string;
   currentTimeMs: number;
   durationMs: number;
   onSeek: (offsetMs: number) => void;
@@ -65,29 +64,9 @@ function parseOffset(raw: string): number | null {
   return Math.max(0, Math.round(secs * 1000));
 }
 
-function downloadFile(content: string, filename: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 5_000);
-}
-
-function escapeCsv(value: string | number | null | undefined): string {
-  if (value == null) return '';
-  const str = String(value);
-  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
-
 export function AnnotationsPanel({
   annotations,
   codes,
-  sessionId,
   currentTimeMs,
   durationMs,
   onSeek,
@@ -132,36 +111,6 @@ export function AnnotationsPanel({
     setDraftEnd('');
   };
 
-  const handleExportCsv = () => {
-    const lines = ['code,start_ms,end_ms,start_label,end_label,note,session_id'];
-    for (const a of annotations) {
-      lines.push(
-        [
-          escapeCsv(a.code?.label ?? ''),
-          escapeCsv(a.startMs),
-          escapeCsv(a.endMs ?? ''),
-          escapeCsv(formatOffset(a.startMs)),
-          escapeCsv(a.endMs != null ? formatOffset(a.endMs) : ''),
-          escapeCsv(a.note ?? ''),
-          escapeCsv(a.sessionId),
-        ].join(','),
-      );
-    }
-    downloadFile(
-      lines.join('\n'),
-      `annotations-${sessionId.slice(0, 8)}.csv`,
-      'text/csv;charset=utf-8',
-    );
-  };
-
-  const handleExportJson = () => {
-    downloadFile(
-      JSON.stringify(annotations, null, 2),
-      `annotations-${sessionId.slice(0, 8)}.json`,
-      'application/json;charset=utf-8',
-    );
-  };
-
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 text-xs text-gray-600">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -173,22 +122,6 @@ export function AnnotationsPanel({
             className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50"
           >
             {showCodeManager ? 'Close codes' : 'Manage codes'}
-          </button>
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={annotations.length === 0}
-            className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            CSV
-          </button>
-          <button
-            type="button"
-            onClick={handleExportJson}
-            disabled={annotations.length === 0}
-            className="rounded border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            JSON
           </button>
         </div>
       </div>
@@ -364,7 +297,9 @@ export function AnnotationsPanel({
                     </span>
                   )}
                   {!isEditing ? (
-                    <span className="flex-1 text-gray-800">{a.note || <em className="text-gray-400">no note</em>}</span>
+                    <span className="flex-1 text-gray-800">
+                      {a.note || <em className="text-gray-400">no note</em>}
+                    </span>
                   ) : (
                     <input
                       type="text"
