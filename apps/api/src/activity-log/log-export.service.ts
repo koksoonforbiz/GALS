@@ -165,19 +165,19 @@ export class LogExportService {
       }),
     ]);
 
-    // Fetch screenshotDataUrl and html in batches to avoid Prisma rust→napi size limit
+    // Fetch screenshotDataUrl in batches to avoid Prisma rust→napi size limit.
+    // html is NOT fetched here — it is served via the paginated dom-snapshots endpoint
+    // to avoid holding gigabytes in memory for long sessions.
     const BATCH = 50;
     const screenshotMap = new Map<string, string | null>();
-    const htmlMap = new Map<string, string | null>();
     for (let i = 0; i < replaySnapshots.length; i += BATCH) {
       const batchIds = replaySnapshots.slice(i, i + BATCH).map((s) => s.id);
       const rows = await this.prisma.sessionReplaySnapshot.findMany({
         where: { id: { in: batchIds } },
-        select: { id: true, screenshotDataUrl: true, html: true },
+        select: { id: true, screenshotDataUrl: true },
       });
       for (const row of rows) {
         screenshotMap.set(row.id, row.screenshotDataUrl ?? null);
-        htmlMap.set(row.id, row.html ?? null);
       }
     }
 
@@ -443,13 +443,45 @@ export class LogExportService {
           capturedAt: Number(s.capturedAt),
           trigger: s.trigger,
           screenshotDataUrl: screenshotMap.get(s.id) ?? null,
-          html: htmlMap.get(s.id) ?? null,
           htmlFile: `dom_snapshots/snapshot_${String(idx).padStart(4, '0')}.html`,
         })),
       },
 
       // ── Recordings ───────────────────────────────────────────────────────
       recordings: recordingsWithUrls,
+    };
+  }
+
+  /**
+   * Return a page of DOM HTML snapshots for the export ZIP.
+   * Called repeatedly by the frontend to stream HTML without holding
+   * the full dataset in memory.
+   */
+  async getExportDomSnapshots(
+    sessionId: string,
+    offset: number,
+    limit: number,
+  ): Promise<{
+    total: number;
+    snapshots: Array<{ snapshotIndex: number; htmlFile: string; html: string | null }>;
+  }> {
+    const total = await this.prisma.sessionReplaySnapshot.count({ where: { sessionId } });
+
+    const rows = await this.prisma.sessionReplaySnapshot.findMany({
+      where: { sessionId },
+      orderBy: { capturedAt: 'asc' },
+      skip: offset,
+      take: limit,
+      select: { id: true, html: true },
+    });
+
+    return {
+      total,
+      snapshots: rows.map((row, i) => ({
+        snapshotIndex: offset + i,
+        htmlFile: `dom_snapshots/snapshot_${String(offset + i).padStart(4, '0')}.html`,
+        html: row.html ?? null,
+      })),
     };
   }
 

@@ -230,6 +230,25 @@ export class ActivityLogController {
   }
 
   /**
+   * GET /activity-log/teacher/sessions/:sessionId/export/dom-snapshots
+   * Returns a page of DOM HTML snapshots for the export ZIP.
+   * The frontend calls this repeatedly to avoid the server holding all HTML in memory.
+   */
+  @Get('teacher/sessions/:sessionId/export/dom-snapshots')
+  @Roles('teacher')
+  async getExportDomSnapshots(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.logExportService.getExportDomSnapshots(
+      sessionId,
+      Math.max(0, Number(offset ?? '0')),
+      Math.min(50, Math.max(1, Number(limit ?? '20'))),
+    );
+  }
+
+  /**
    * GET /activity-log/teacher/sessions/:sessionId/export-url
    * Upload to MinIO and return a presigned URL (for large files).
    */

@@ -474,19 +474,36 @@ export async function exportSessionData(
     }
   }
 
-  // DOM snapshots
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const domSnapshots: any[] = sessionData?.replay?.snapshots ?? [];
-  const domSnapshotsWithHtml = domSnapshots.filter((s: any) => s.html);
-  if (domSnapshotsWithHtml.length > 0) {
-    report('zipping', 86, `Saving ${domSnapshotsWithHtml.length} DOM snapshots…`);
+  // DOM snapshots — fetched via paginated endpoint to avoid OOM on long sessions
+  const snapshotCount: number = sessionData?.replay?.snapshotCount ?? 0;
+  if (snapshotCount > 0) {
+    report('zipping', 86, `Fetching ${snapshotCount} DOM snapshots…`);
     const domFolder = folder.folder('dom_snapshots')!;
-    for (const snap of domSnapshots) {
-      if (snap.html) {
-        const filename = (snap.htmlFile as string).replace('dom_snapshots/', '');
-        domFolder.file(filename, snap.html as string);
-        delete snap.html;
+    const DOM_LIMIT = 20;
+    let domOffset = 0;
+    let domTotal = snapshotCount;
+    while (domOffset < domTotal) {
+      const domRes = await fetch(
+        `/api/activity-log/teacher/sessions/${sessionId}/export/dom-snapshots?offset=${domOffset}&limit=${DOM_LIMIT}`,
+        { headers },
+      );
+      if (!domRes.ok) throw new Error(`DOM snapshot fetch failed: ${domRes.status}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { total, snapshots: batch }: { total: number; snapshots: any[] } = await domRes.json();
+      domTotal = total;
+      for (const snap of batch) {
+        if (snap.html) {
+          const filename = (snap.htmlFile as string).replace('dom_snapshots/', '');
+          domFolder.file(filename, snap.html as string);
+        }
       }
+      domOffset += DOM_LIMIT;
+      const pct = 86 + Math.min(7, Math.round((domOffset / domTotal) * 7));
+      report(
+        'zipping',
+        pct,
+        `Saving DOM snapshots ${Math.min(domOffset, domTotal)} of ${domTotal}…`,
+      );
     }
   }
 
