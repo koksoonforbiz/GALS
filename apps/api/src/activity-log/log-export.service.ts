@@ -89,6 +89,10 @@ export class LogExportService {
         where: { sessionId },
         orderBy: { occurredAt: 'asc' },
       }),
+      // Exclude html and screenshotDataUrl — both are very large text blobs
+      // that cause Prisma's rust→napi bridge to fail on long sessions.
+      // screenshotDataUrl is fetched separately in batches below.
+      // html is omitted from the export (gigabytes for long sessions).
       this.prisma.sessionReplaySnapshot.findMany({
         where: { sessionId },
         orderBy: { capturedAt: 'asc' },
@@ -101,8 +105,6 @@ export class LogExportService {
           scrollY: true,
           capturedAt: true,
           trigger: true,
-          html: true,
-          screenshotDataUrl: true,
         },
       }),
       this.prisma.emotionFrame.findMany({
@@ -162,6 +164,18 @@ export class LogExportService {
         orderBy: { startWallTime: 'asc' },
       }),
     ]);
+
+    // Fetch screenshotDataUrl in batches to avoid Prisma rust→napi size limit
+    const BATCH = 50;
+    const screenshotMap = new Map<string, string | null>();
+    for (let i = 0; i < replaySnapshots.length; i += BATCH) {
+      const batchIds = replaySnapshots.slice(i, i + BATCH).map((s) => s.id);
+      const rows = await this.prisma.sessionReplaySnapshot.findMany({
+        where: { id: { in: batchIds } },
+        select: { id: true, screenshotDataUrl: true },
+      });
+      for (const row of rows) screenshotMap.set(row.id, row.screenshotDataUrl ?? null);
+    }
 
     // Generate presigned download URLs for each completed recording segment
     const recordingsWithUrls = await Promise.all(
@@ -424,8 +438,7 @@ export class LogExportService {
           scrollY: s.scrollY,
           capturedAt: Number(s.capturedAt),
           trigger: s.trigger,
-          html: s.html,
-          screenshotDataUrl: s.screenshotDataUrl ?? null,
+          screenshotDataUrl: screenshotMap.get(s.id) ?? null,
         })),
       },
 
