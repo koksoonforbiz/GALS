@@ -51,14 +51,10 @@ screen_recording/
     5x timelapse:       ffmpeg -framerate 5 -i frame_%04d.jpg -c:v libx264 screen_recording.mp4
 
 dom_snapshots/
-  Full HTML of the student's browser at each captured moment.
-
-  snapshot_0000.html, snapshot_0001.html, ...
-    - One file per replay snapshot, in chronological order.
-    - Open directly in a browser to see exactly what the student saw.
-    - Corresponds to the htmlFile field in replay.snapshots in session_data.json.
-    - Render in an iframe for interactive session replay; pair with the
-      matching frame_NNNN.jpg for a pixel-accurate side-by-side view.
+  NOT INCLUDED in this ZIP.
+  The full HTML corpus is too large to export via the browser for long sessions
+  (each snapshot is ~500 KB; a 46-minute session has ~2 700 snapshots = ~1.4 GB).
+  See "FETCHING DOM SNAPSHOTS" below for how to download them directly.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RECORDING TECHNICAL DETAILS
@@ -367,6 +363,107 @@ JavaScript / Node.js — basic load:
   console.log("Chat messages:", data.communications.chatbotMessages.length);
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FETCHING DOM SNAPSHOTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DOM snapshots (full serialised HTML of the student's page) are stored in the
+Postgres table "session_replay_snapshots". They are not included in this ZIP
+because the total HTML corpus is too large to hold in a browser tab's memory.
+
+To download them, use the GALS API paginated endpoint (requires teacher token):
+
+  GET /api/activity-log/teacher/sessions/{SESSION_ID}/export/dom-snapshots
+      ?offset=0&limit=20
+
+  Response:
+  {
+    "total": 2761,
+    "snapshots": [
+      { "snapshotIndex": 0, "htmlFile": "dom_snapshots/snapshot_0000.html", "html": "<!DOCTYPE html>..." },
+      ...
+    ]
+  }
+
+  Increment offset by limit until offset >= total to page through all snapshots.
+  The htmlFile field matches the htmlFile reference in session_data.json replay.snapshots.
+
+Shell script — download all DOM snapshots to a local folder:
+
+  SESSION_ID="<paste session id here>"
+  TOKEN="<paste Bearer token from browser DevTools Network tab>"
+  BASE="http://localhost:3000"
+  LIMIT=20; OFFSET=0; TOTAL=1
+
+  mkdir -p dom_snapshots
+  while [ $OFFSET -lt $TOTAL ]; do
+    RESP=$(curl -s -H "Authorization: Bearer $TOKEN" \\
+      "$BASE/api/activity-log/teacher/sessions/$SESSION_ID/export/dom-snapshots?offset=$OFFSET&limit=$LIMIT")
+    TOTAL=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")
+    echo "$RESP" | python3 - <<'PY'
+import sys, json, pathlib
+data = json.load(sys.stdin)
+for s in data["snapshots"]:
+    if s["html"]:
+        pathlib.Path(s["htmlFile"]).parent.mkdir(parents=True, exist_ok=True)
+        pathlib.Path(s["htmlFile"]).write_text(s["html"], encoding="utf-8")
+        print(f"  saved {s['htmlFile']}")
+PY
+    OFFSET=$((OFFSET + LIMIT))
+    echo "Fetched $OFFSET / $TOTAL"
+  done
+
+Python script — download all DOM snapshots:
+
+  import requests, pathlib, math
+
+  SESSION_ID = "<paste session id here>"
+  TOKEN      = "<paste Bearer token>"
+  BASE       = "http://localhost:3000"
+  LIMIT      = 20
+
+  headers = {"Authorization": f"Bearer {TOKEN}"}
+  offset, total = 0, math.inf
+
+  while offset < total:
+      r = requests.get(
+          f"{BASE}/api/activity-log/teacher/sessions/{SESSION_ID}/export/dom-snapshots",
+          params={"offset": offset, "limit": LIMIT},
+          headers=headers,
+      )
+      r.raise_for_status()
+      data = r.json()
+      total = data["total"]
+      for snap in data["snapshots"]:
+          if snap["html"]:
+              p = pathlib.Path(snap["htmlFile"])
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_text(snap["html"], encoding="utf-8")
+              print(f"saved {snap['htmlFile']}")
+      offset += LIMIT
+      print(f"fetched {min(offset, total)} / {total}")
+
+Direct Prisma query (TypeScript, for developers with database access):
+
+  const snapshots = await prisma.sessionReplaySnapshot.findMany({
+    where: { sessionId: "<SESSION_ID>" },
+    orderBy: { capturedAt: "asc" },
+    select: { id: true, capturedAt: true, pageUrl: true, html: true, screenshotDataUrl: true },
+  });
+  // html and screenshotDataUrl are large — fetch in batches (take: 50) for long sessions
+
+Direct SQL:
+
+  SELECT id, captured_at, page_url,
+         length(html)              AS html_bytes,
+         length(screenshot_data_url) AS screenshot_bytes
+  FROM   session_replay_snapshots
+  WHERE  session_id = '<SESSION_ID>'
+  ORDER  BY captured_at;
+
+  -- Fetch the HTML for a single snapshot:
+  SELECT html FROM session_replay_snapshots WHERE id = '<SNAPSHOT_ID>';
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 QUESTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Contact the GALS development team for schema questions or data access issues.
@@ -474,38 +571,10 @@ export async function exportSessionData(
     }
   }
 
-  // DOM snapshots — fetched via paginated endpoint to avoid OOM on long sessions
-  const snapshotCount: number = sessionData?.replay?.snapshotCount ?? 0;
-  if (snapshotCount > 0) {
-    report('zipping', 86, `Fetching ${snapshotCount} DOM snapshots…`);
-    const domFolder = folder.folder('dom_snapshots')!;
-    const DOM_LIMIT = 20;
-    let domOffset = 0;
-    let domTotal = snapshotCount;
-    while (domOffset < domTotal) {
-      const domRes = await fetch(
-        `/api/activity-log/teacher/sessions/${sessionId}/export/dom-snapshots?offset=${domOffset}&limit=${DOM_LIMIT}`,
-        { headers },
-      );
-      if (!domRes.ok) throw new Error(`DOM snapshot fetch failed: ${domRes.status}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { total, snapshots: batch }: { total: number; snapshots: any[] } = await domRes.json();
-      domTotal = total;
-      for (const snap of batch) {
-        if (snap.html) {
-          const filename = (snap.htmlFile as string).replace('dom_snapshots/', '');
-          domFolder.file(filename, snap.html as string);
-        }
-      }
-      domOffset += DOM_LIMIT;
-      const pct = 86 + Math.min(7, Math.round((domOffset / domTotal) * 7));
-      report(
-        'zipping',
-        pct,
-        `Saving DOM snapshots ${Math.min(domOffset, domTotal)} of ${domTotal}…`,
-      );
-    }
-  }
+  // DOM snapshots are NOT included in the ZIP — the HTML corpus is too large
+  // for a browser tab to hold in memory (500 KB × thousands of snapshots).
+  // See dom_snapshots/HOW_TO_FETCH.md in the ZIP, or the README, for how to
+  // download snapshots directly from the database.
 
   report('zipping', 94, 'Compressing…');
   const zipBlob = await zip.generateAsync({
