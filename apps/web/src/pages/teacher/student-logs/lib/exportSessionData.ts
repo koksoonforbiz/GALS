@@ -39,10 +39,9 @@ screen_recording/
   Pixel-accurate screenshots of the student's browser, exported in two forms:
 
   screen_recording.webm
-    A timelapse video assembled from all captured frames.
-    - Playback speed: 5 fps (each frame = ~1 second of real session time)
-    - The video therefore plays approximately 5x faster than real time.
-    - Example: a 30-minute session produces a ~6-minute timelapse video.
+    A real-time video assembled from all captured pixel screenshots.
+    - Playback speed: 1 fps (matches the 1 fps capture rate = real-time speed)
+    - Duration equals the session length: a 30-second session = 30-second video.
     - Encoding note: the video is generated in the browser at export time
       using Canvas + MediaRecorder (VP9/WebM). Quality is set to 1.5 Mbps.
     - Open with VLC, Chrome, or any WebM-compatible player.
@@ -289,9 +288,9 @@ Aligning screen frames with emotion data:
       Math.abs(b.frameWallMs - snapshot.capturedAt) ? a : b)
 
 Screen video frame index to wall-clock time:
-  The timelapse video plays at 5 fps. Frame N in screen_recording.webm
+  The video plays at 1 fps (real-time). Frame N in screen_recording.webm
   corresponds to frame_NNNN.jpg, whose capturedAt is in replay.snapshots.
-  video_time_seconds = frameIndex / 5
+  video_time_seconds = frameIndex / 1  (i.e. frame index = second in video)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LOADING THE DATA — CODE EXAMPLES
@@ -397,7 +396,7 @@ async function createScreenVideo(
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const FPS = 5;
+  const FPS = 1;
   const stream = canvas.captureStream(FPS);
   const mimeType =
     typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -501,7 +500,7 @@ export async function exportSessionData(
     report(
       'encoding',
       52,
-      `Encoding screen recording (${screenshotFrames.length} frames at 5 fps)…`,
+      `Encoding screen recording (${screenshotFrames.length} frames at 1 fps)…`,
     );
     screenVideoBlob = await createScreenVideo(
       screenshotFrames.map((f) => f.dataUrl),
