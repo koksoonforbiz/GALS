@@ -393,18 +393,6 @@ export async function exportSessionData(
   // ── Step 2: Extract screenshots from snapshots ────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const snapshots: any[] = sessionData?.replay?.snapshots ?? [];
-  console.log('[Export] total snapshots:', snapshots.length);
-  console.log(
-    '[Export] snapshots with screenshotDataUrl:',
-    snapshots.filter((s: any) => s.screenshotDataUrl).length,
-  );
-  if (snapshots.length > 0) {
-    console.log('[Export] first snapshot keys:', Object.keys(snapshots[0]));
-    console.log(
-      '[Export] first snapshot screenshotDataUrl (first 80 chars):',
-      String(snapshots[0].screenshotDataUrl ?? 'null').slice(0, 80),
-    );
-  }
   const screenshotFrames: { index: number; dataUrl: string; filename: string }[] = [];
   let frameIdx = 0;
   for (const snap of snapshots) {
