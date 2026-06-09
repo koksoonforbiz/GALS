@@ -425,6 +425,7 @@ export class LogExportService {
           capturedAt: Number(s.capturedAt),
           trigger: s.trigger,
           html: s.html,
+          screenshotDataUrl: s.screenshotDataUrl ?? null,
         })),
       },
 
