@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
 
 export interface ExportProgress {
-  stage: 'fetching' | 'downloading' | 'encoding' | 'zipping' | 'done';
+  stage: 'fetching' | 'downloading' | 'zipping' | 'done';
   /** 0–100 */
   percent: number;
   detail: string;
@@ -36,26 +36,19 @@ recordings/
     leave or the session is paused. Long sessions may produce multiple files.
 
 screen_recording/
-  Pixel-accurate screenshots of the student's browser, exported in two forms:
-
-  screen_recording.webm
-    A real-time video assembled from all captured pixel screenshots.
-    - Playback speed: 1 fps (matches the 1 fps capture rate = real-time speed)
-    - Duration equals the session length: a 30-second session = 30-second video.
-    - Encoding note: the video is generated in the browser at export time
-      using Canvas + MediaRecorder (VP9/WebM). Quality is set to 1.5 Mbps.
-    - Open with VLC, Chrome, or any WebM-compatible player.
+  Pixel-accurate screenshots of the student's browser as individual JPEG frames.
 
   frame_0000.jpg, frame_0001.jpg, ...
-    Individual screenshot frames in capture order (oldest first).
     - Format: JPEG, same resolution as the student's browser viewport.
     - Captured at: 1 frame per second (periodic) plus extra frames on
       page navigation, tab visibility change, and session start/end.
     - Total frame count depends on session length and navigation activity.
-    - Each frame filename corresponds to the screenshotFile field in the
-      matching replay.snapshots entry in session_data.json.
-    - Use these if you need frame-level control (e.g. to render at a
-      different speed, overlay gaze data, or extract specific moments).
+    - Each frame corresponds to the screenshotFile field in the matching
+      replay.snapshots entry in session_data.json.
+
+  To convert frames into a video using ffmpeg (free, offline):
+    Real-time (1 fps):  ffmpeg -framerate 1 -i frame_%04d.jpg -c:v libx264 screen_recording.mp4
+    5x timelapse:       ffmpeg -framerate 5 -i frame_%04d.jpg -c:v libx264 screen_recording.mp4
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RECORDING TECHNICAL DETAILS
@@ -287,10 +280,9 @@ Aligning screen frames with emotion data:
       Math.abs(a.frameWallMs - snapshot.capturedAt) <
       Math.abs(b.frameWallMs - snapshot.capturedAt) ? a : b)
 
-Screen video frame index to wall-clock time:
-  The video plays at 1 fps (real-time). Frame N in screen_recording.webm
-  corresponds to frame_NNNN.jpg, whose capturedAt is in replay.snapshots.
-  video_time_seconds = frameIndex / 1  (i.e. frame index = second in video)
+Screen frame index to wall-clock time:
+  Frame N (frame_NNNN.jpg) corresponds to replay.snapshots[N].capturedAt.
+  To get the session offset: offset_ms = snapshot.capturedAt - Date.parse(session.startedAt)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 LOADING THE DATA — CODE EXAMPLES
@@ -370,68 +362,6 @@ QUESTIONS
 Contact the GALS development team for schema questions or data access issues.
 `;
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function createScreenVideo(
-  frames: string[],
-  onProgress: (pct: number, detail: string) => void,
-): Promise<Blob | null> {
-  if (frames.length === 0) return null;
-
-  const firstImg = await loadImage(frames[0]!);
-  const width = firstImg.naturalWidth || 1280;
-  const height = firstImg.naturalHeight || 720;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const FPS = 1;
-  const stream = canvas.captureStream(FPS);
-  const mimeType =
-    typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9'
-      : 'video/webm';
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_500_000 });
-  const chunks: Blob[] = [];
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-
-  return new Promise((resolve) => {
-    recorder.onstop = () => resolve(new Blob(chunks, { type: 'video/webm' }));
-    recorder.start(200);
-
-    (async () => {
-      const frameMs = Math.round(1000 / FPS);
-      for (let i = 0; i < frames.length; i++) {
-        try {
-          const img = await loadImage(frames[i]!);
-          ctx.drawImage(img, 0, 0, width, height);
-        } catch {
-          // Skip unloadable frame — canvas keeps the previous frame
-        }
-        onProgress(
-          Math.round(((i + 1) / frames.length) * 100),
-          `Encoding frame ${i + 1} of ${frames.length}…`,
-        );
-        await new Promise((res) => setTimeout(res, frameMs));
-      }
-      recorder.stop();
-    })();
-  });
-}
-
 export async function exportSessionData(
   sessionId: string,
   onProgress?: (p: ExportProgress) => void,
@@ -453,6 +383,18 @@ export async function exportSessionData(
   // ── Step 2: Extract screenshots from snapshots ────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const snapshots: any[] = sessionData?.replay?.snapshots ?? [];
+  console.log('[Export] total snapshots:', snapshots.length);
+  console.log(
+    '[Export] snapshots with screenshotDataUrl:',
+    snapshots.filter((s: any) => s.screenshotDataUrl).length,
+  );
+  if (snapshots.length > 0) {
+    console.log('[Export] first snapshot keys:', Object.keys(snapshots[0]));
+    console.log(
+      '[Export] first snapshot screenshotDataUrl (first 80 chars):',
+      String(snapshots[0].screenshotDataUrl ?? 'null').slice(0, 80),
+    );
+  }
   const screenshotFrames: { index: number; dataUrl: string; filename: string }[] = [];
   let frameIdx = 0;
   for (const snap of snapshots) {
@@ -494,23 +436,7 @@ export async function exportSessionData(
     }
   }
 
-  // ── Step 4: Encode screen recording video ─────────────────────────────────
-  let screenVideoBlob: Blob | null = null;
-  if (screenshotFrames.length > 0) {
-    report(
-      'encoding',
-      52,
-      `Encoding screen recording (${screenshotFrames.length} frames at 1 fps)…`,
-    );
-    screenVideoBlob = await createScreenVideo(
-      screenshotFrames.map((f) => f.dataUrl),
-      (pct, detail) => {
-        report('encoding', 52 + Math.round(pct * 0.3), detail);
-      },
-    );
-  }
-
-  // ── Step 5: Build ZIP ─────────────────────────────────────────────────────
+  // ── Step 4: Build ZIP ────────────────────────────────────────────────────
   report('zipping', 84, 'Building ZIP archive…');
   const zip = new JSZip();
 
@@ -541,14 +467,10 @@ export async function exportSessionData(
     }
   }
 
-  // Screen recording video + individual frames
+  // Screen recording frames
   if (screenshotFrames.length > 0) {
     const screenFolder = folder.folder('screen_recording')!;
-    if (screenVideoBlob) {
-      screenFolder.file('screen_recording.webm', screenVideoBlob);
-    }
     for (const { dataUrl, filename } of screenshotFrames) {
-      // Strip the data URL prefix to get raw base64
       const base64 = (dataUrl as string).replace(/^data:[^;]+;base64,/, '');
       screenFolder.file(filename, base64, { base64: true });
     }
