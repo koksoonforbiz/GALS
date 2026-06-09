@@ -165,16 +165,20 @@ export class LogExportService {
       }),
     ]);
 
-    // Fetch screenshotDataUrl in batches to avoid Prisma rust→napi size limit
+    // Fetch screenshotDataUrl and html in batches to avoid Prisma rust→napi size limit
     const BATCH = 50;
     const screenshotMap = new Map<string, string | null>();
+    const htmlMap = new Map<string, string | null>();
     for (let i = 0; i < replaySnapshots.length; i += BATCH) {
       const batchIds = replaySnapshots.slice(i, i + BATCH).map((s) => s.id);
       const rows = await this.prisma.sessionReplaySnapshot.findMany({
         where: { id: { in: batchIds } },
-        select: { id: true, screenshotDataUrl: true },
+        select: { id: true, screenshotDataUrl: true, html: true },
       });
-      for (const row of rows) screenshotMap.set(row.id, row.screenshotDataUrl ?? null);
+      for (const row of rows) {
+        screenshotMap.set(row.id, row.screenshotDataUrl ?? null);
+        htmlMap.set(row.id, row.html ?? null);
+      }
     }
 
     // Generate presigned download URLs for each completed recording segment
@@ -429,7 +433,7 @@ export class LogExportService {
       // ── DOM replay snapshots ──────────────────────────────────────────────
       replay: {
         snapshotCount: replaySnapshots.length,
-        snapshots: replaySnapshots.map((s) => ({
+        snapshots: replaySnapshots.map((s, idx) => ({
           id: s.id,
           pageUrl: s.pageUrl,
           width: s.width,
@@ -439,6 +443,8 @@ export class LogExportService {
           capturedAt: Number(s.capturedAt),
           trigger: s.trigger,
           screenshotDataUrl: screenshotMap.get(s.id) ?? null,
+          html: htmlMap.get(s.id) ?? null,
+          htmlFile: `dom_snapshots/snapshot_${String(idx).padStart(4, '0')}.html`,
         })),
       },
 

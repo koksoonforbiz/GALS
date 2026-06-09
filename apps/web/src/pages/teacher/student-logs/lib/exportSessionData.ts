@@ -50,6 +50,16 @@ screen_recording/
     Real-time (1 fps):  ffmpeg -framerate 1 -i frame_%04d.jpg -c:v libx264 screen_recording.mp4
     5x timelapse:       ffmpeg -framerate 5 -i frame_%04d.jpg -c:v libx264 screen_recording.mp4
 
+dom_snapshots/
+  Full HTML of the student's browser at each captured moment.
+
+  snapshot_0000.html, snapshot_0001.html, ...
+    - One file per replay snapshot, in chronological order.
+    - Open directly in a browser to see exactly what the student saw.
+    - Corresponds to the htmlFile field in replay.snapshots in session_data.json.
+    - Render in an iframe for interactive session replay; pair with the
+      matching frame_NNNN.jpg for a pixel-accurate side-by-side view.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RECORDING TECHNICAL DETAILS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -473,6 +483,22 @@ export async function exportSessionData(
     for (const { dataUrl, filename } of screenshotFrames) {
       const base64 = (dataUrl as string).replace(/^data:[^;]+;base64,/, '');
       screenFolder.file(filename, base64, { base64: true });
+    }
+  }
+
+  // DOM snapshots
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const domSnapshots: any[] = sessionData?.replay?.snapshots ?? [];
+  const domSnapshotsWithHtml = domSnapshots.filter((s: any) => s.html);
+  if (domSnapshotsWithHtml.length > 0) {
+    report('zipping', 86, `Saving ${domSnapshotsWithHtml.length} DOM snapshots…`);
+    const domFolder = folder.folder('dom_snapshots')!;
+    for (const snap of domSnapshots) {
+      if (snap.html) {
+        const filename = (snap.htmlFile as string).replace('dom_snapshots/', '');
+        domFolder.file(filename, snap.html as string);
+        delete snap.html;
+      }
     }
   }
 
