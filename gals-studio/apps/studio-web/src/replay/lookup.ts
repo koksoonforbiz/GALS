@@ -10,7 +10,12 @@ export interface SnapshotLite {
   pdfCurrentPage: number | null;
   pdfTotalPages: number | null;
   aois: { region: string; x: number; y: number; width: number; height: number }[];
-  scrollHosts: { region?: string | null; scrollTop: number; scrollHeight: number; clientHeight: number }[];
+  scrollHosts: {
+    region?: string | null;
+    scrollTop: number;
+    scrollHeight: number;
+    clientHeight: number;
+  }[];
   hasScreenshot: boolean;
 }
 
@@ -41,16 +46,28 @@ export function snapshotAt(snaps: SnapshotLite[], absoluteMs: number): SnapshotL
 }
 
 export function segmentAt(segs: WebcamSeg[], absoluteMs: number): WebcamSeg | null {
-  for (const seg of segs) {
+  // Some recordings have no endWallMs (the source row lacked an end time and a
+  // duration). Treating those as ending at Infinity makes one short segment
+  // shadow every later recording — the panel then seeks far past its real
+  // content and the video looks "cut off". Cap an unbounded segment at the next
+  // segment's start instead, and prefer the latest-starting match.
+  const sorted = [...segs].sort((a, b) => a.startWallMs - b.startWallMs);
+  let chosen: WebcamSeg | null = null;
+  for (let i = 0; i < sorted.length; i++) {
+    const seg = sorted[i];
     if (seg.status !== 'ok' || !seg.url) continue;
-    const end = seg.endWallMs ?? Infinity;
-    if (absoluteMs >= seg.startWallMs && absoluteMs <= end) return seg;
+    const nextStart = i + 1 < sorted.length ? sorted[i + 1].startWallMs : Infinity;
+    const end = seg.endWallMs ?? nextStart;
+    if (absoluteMs >= seg.startWallMs && absoluteMs < end) chosen = seg;
   }
-  return null;
+  return chosen;
 }
 
 /** Nearest sample to absoluteMs by wallMs (linear pointer maintained by caller). */
-export function nearestByWall<T extends { wallMs: number }>(arr: T[], absoluteMs: number): T | null {
+export function nearestByWall<T extends { wallMs: number }>(
+  arr: T[],
+  absoluteMs: number,
+): T | null {
   if (arr.length === 0) return null;
   let lo = 0;
   let hi = arr.length - 1;
