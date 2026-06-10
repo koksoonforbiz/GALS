@@ -34,7 +34,7 @@ export interface ReplayScrollHost {
 
 export interface ReplaySnapshotEventDto {
   pageUrl: string;
-  html: string;
+  html?: string;
   screenshotDataUrl?: string;
   width: number;
   height: number;

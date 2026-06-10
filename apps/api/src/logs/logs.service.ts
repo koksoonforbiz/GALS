@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -233,7 +238,7 @@ export class LogsService {
           sessionId: dto.sessionId,
           userId: dto.userId,
           pageUrl: event.pageUrl,
-          html: event.html,
+          html: event.html ?? null,
           screenshotDataUrl: event.screenshotDataUrl ?? null,
           width: event.width,
           height: event.height,
@@ -257,13 +262,11 @@ export class LogsService {
           // PDF semantic anchors. Optional everywhere — pages without
           // a PdfReader mounted simply omit these.
           pdfCurrentPage:
-            typeof event.pdfCurrentPage === 'number' &&
-            Number.isFinite(event.pdfCurrentPage)
+            typeof event.pdfCurrentPage === 'number' && Number.isFinite(event.pdfCurrentPage)
               ? Math.max(0, Math.floor(event.pdfCurrentPage))
               : null,
           pdfTotalPages:
-            typeof event.pdfTotalPages === 'number' &&
-            Number.isFinite(event.pdfTotalPages)
+            typeof event.pdfTotalPages === 'number' && Number.isFinite(event.pdfTotalPages)
               ? Math.max(0, Math.floor(event.pdfTotalPages))
               : null,
         })),
@@ -446,9 +449,7 @@ export class LogsService {
       ? new Date(session.startedAt.getTime() - MESSAGE_WINDOW_PAD_MS)
       : null;
     const paddedWindowEnd = session
-      ? new Date(
-          (session.endedAt ?? new Date()).getTime() + MESSAGE_WINDOW_PAD_MS,
-        )
+      ? new Date((session.endedAt ?? new Date()).getTime() + MESSAGE_WINDOW_PAD_MS)
       : null;
 
     const [
@@ -476,208 +477,208 @@ export class LogsService {
       cursorLogs,
       clipboardLogs,
       visibilityLogs,
-    ] =
-      await Promise.all([
-        this.prisma.session_sync_anchors.findUnique({
-          where: { sessionId },
-        }),
-        snapshotCountPromise,
-        snapshotsPromise,
-        this.prisma.click_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        this.prisma.scroll_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        this.prisma.viewport_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        this.prisma.webgazerLog.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-          select: {
-            id: true,
-            pageUrl: true,
-            timestamp: true,
-            gazeX: true,
-            gazeY: true,
-            confidence: true,
-          },
-        }),
-        this.prisma.pupilSizeLog.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-          select: {
-            id: true,
-            timestamp: true,
-            pupilDiameter: true,
-          },
-        }),
-        this.prisma.emotionFrame.findMany({
-          where: { sessionId },
-          orderBy: { frameWallMs: 'asc' },
-          take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
-          select: {
-            id: true,
-            frameWallMs: true,
-            frameIndex: true,
-            faceDetected: true,
-            dominantEmotion: true,
-            dominantProbability: true,
-            pHappiness: true,
-            pSadness: true,
-            pSurprise: true,
-            pFear: true,
-            pAnger: true,
-            pDisgust: true,
-            pContempt: true,
-            pNeutral: true,
-          },
-        }),
-        this.prisma.pyfeatAuResult.findMany({
-          where: { job: { sessionId } },
-          orderBy: { wallTime: 'asc' },
-          take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
-          select: {
-            id: true,
-            frameIndex: true,
-            timestamp: true,
-            wallTime: true,
-            faceConf: true,
-            au01: true,
-            au02: true,
-            au04: true,
-            au05: true,
-            au06: true,
-            au07: true,
-            au09: true,
-            au10: true,
-            au12: true,
-            au14: true,
-            au15: true,
-            au17: true,
-            au20: true,
-            au23: true,
-            au24: true,
-            au25: true,
-            au26: true,
-            au28: true,
-          },
-        }),
-        this.prisma.recordingSegment.findMany({
-          where: { sessionId },
-          orderBy: { startWallTime: 'asc' },
-          select: {
-            id: true,
-            uploadStatus: true,
-            pyfeatJobId: true,
-            startWallTime: true,
-            endWallTime: true,
-            durationMs: true,
-          },
-        }),
-        this.prisma.openface3Job.findMany({
-          where: { recordingSegment: { sessionId } },
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            status: true,
-            errorMessage: true,
-            createdAt: true,
-            completedAt: true,
-            recordingSegmentId: true,
-          },
-        }),
-        this.prisma.pyfeatJob.findMany({
-          where: { sessionId },
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            status: true,
-            error: true,
-            createdAt: true,
-            completedAt: true,
-            sourceMinioKey: true,
-          },
-        }),
-        // All activity_log rows for this session — drives the new
-        // unified timeline track in the Replay tab (intervention
-        // start/view/complete, module navigation, chatbot turn
-        // markers, etc.). Includes metadata so per-event detail
-        // (latencyMs, score, stepNumber...) can be rendered in
-        // tooltips.
-        this.prisma.activityLog.findMany({
-          where: { sessionId },
-          orderBy: { occurredAt: 'asc' },
-          select: {
-            id: true,
-            action: true,
-            occurredAt: true,
-            courseId: true,
-            moduleId: true,
-            moduleItemId: true,
-            interventionId: true,
-            dialogueSessionId: true,
-            metadata: true,
-          },
-        }),
-        // EF text-mining detections for this session — overlays
-        // construct labels (procrastination / metacognition /
-        // off-task / etc.) on the replay timeline.
-        this.prisma.efDetection.findMany({
-          where: { sessionId },
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            messageId: true,
-            constructKey: true,
-            label: true,
-            confidence: true,
-            severity: true,
-            rationale: true,
-            createdAt: true,
-          },
-        }),
-        // Dialogue messages — time-window join by student id.
-        // Dialogue sessions persist across login boundaries (one
-        // DialogueSession can span many StudentSessions), so a join
-        // on session.id isn't enough. The padded window catches edge
-        // turns that arrive seconds before the first sample or after
-        // the session is flagged ended.
-        // Stable secondary sort (id) so same-ms turns keep a
-        // deterministic order across reloads.
-        session && paddedWindowStart && paddedWindowEnd
-          ? this.prisma.dialogueMessage.findMany({
-              where: {
-                createdAt: { gte: paddedWindowStart, lte: paddedWindowEnd },
-                session: { studentId: session.userId },
-              },
-              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-              select: {
-                id: true,
-                sessionId: true,
-                role: true,
-                content: true,
-                tokenUsage: true,
-                createdAt: true,
-              },
-            })
-          : Promise.resolve([] as never[]),
-        // Floating/docked chatbot history. The primary anchor is
-        // `studentSessionId === sessionId`, but turns can carry a
-        // missing/mismatched session id when the chatbot was opened
-        // before the session row was written, or after a tab
-        // re-init that picked a new session. So we union with a
-        // student+time-window fallback (same window the dialogue
-        // query uses). The OR'd query naturally de-duplicates: if a
-        // row matches both clauses it appears once. Stable secondary
-        // sort matches the dialogue query so same-ms turns are
-        // deterministic.
-        this.prisma.chatbotMessage.findMany({
-          where: session && paddedWindowStart && paddedWindowEnd
+    ] = await Promise.all([
+      this.prisma.session_sync_anchors.findUnique({
+        where: { sessionId },
+      }),
+      snapshotCountPromise,
+      snapshotsPromise,
+      this.prisma.click_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.prisma.scroll_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.prisma.viewport_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      this.prisma.webgazerLog.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+        select: {
+          id: true,
+          pageUrl: true,
+          timestamp: true,
+          gazeX: true,
+          gazeY: true,
+          confidence: true,
+        },
+      }),
+      this.prisma.pupilSizeLog.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+        select: {
+          id: true,
+          timestamp: true,
+          pupilDiameter: true,
+        },
+      }),
+      this.prisma.emotionFrame.findMany({
+        where: { sessionId },
+        orderBy: { frameWallMs: 'asc' },
+        take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
+        select: {
+          id: true,
+          frameWallMs: true,
+          frameIndex: true,
+          faceDetected: true,
+          dominantEmotion: true,
+          dominantProbability: true,
+          pHappiness: true,
+          pSadness: true,
+          pSurprise: true,
+          pFear: true,
+          pAnger: true,
+          pDisgust: true,
+          pContempt: true,
+          pNeutral: true,
+        },
+      }),
+      this.prisma.pyfeatAuResult.findMany({
+        where: { job: { sessionId } },
+        orderBy: { wallTime: 'asc' },
+        take: LogsService.MAX_REPLAY_BIOMETRIC_FRAMES,
+        select: {
+          id: true,
+          frameIndex: true,
+          timestamp: true,
+          wallTime: true,
+          faceConf: true,
+          au01: true,
+          au02: true,
+          au04: true,
+          au05: true,
+          au06: true,
+          au07: true,
+          au09: true,
+          au10: true,
+          au12: true,
+          au14: true,
+          au15: true,
+          au17: true,
+          au20: true,
+          au23: true,
+          au24: true,
+          au25: true,
+          au26: true,
+          au28: true,
+        },
+      }),
+      this.prisma.recordingSegment.findMany({
+        where: { sessionId },
+        orderBy: { startWallTime: 'asc' },
+        select: {
+          id: true,
+          uploadStatus: true,
+          pyfeatJobId: true,
+          startWallTime: true,
+          endWallTime: true,
+          durationMs: true,
+        },
+      }),
+      this.prisma.openface3Job.findMany({
+        where: { recordingSegment: { sessionId } },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          status: true,
+          errorMessage: true,
+          createdAt: true,
+          completedAt: true,
+          recordingSegmentId: true,
+        },
+      }),
+      this.prisma.pyfeatJob.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          status: true,
+          error: true,
+          createdAt: true,
+          completedAt: true,
+          sourceMinioKey: true,
+        },
+      }),
+      // All activity_log rows for this session — drives the new
+      // unified timeline track in the Replay tab (intervention
+      // start/view/complete, module navigation, chatbot turn
+      // markers, etc.). Includes metadata so per-event detail
+      // (latencyMs, score, stepNumber...) can be rendered in
+      // tooltips.
+      this.prisma.activityLog.findMany({
+        where: { sessionId },
+        orderBy: { occurredAt: 'asc' },
+        select: {
+          id: true,
+          action: true,
+          occurredAt: true,
+          courseId: true,
+          moduleId: true,
+          moduleItemId: true,
+          interventionId: true,
+          dialogueSessionId: true,
+          metadata: true,
+        },
+      }),
+      // EF text-mining detections for this session — overlays
+      // construct labels (procrastination / metacognition /
+      // off-task / etc.) on the replay timeline.
+      this.prisma.efDetection.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          messageId: true,
+          constructKey: true,
+          label: true,
+          confidence: true,
+          severity: true,
+          rationale: true,
+          createdAt: true,
+        },
+      }),
+      // Dialogue messages — time-window join by student id.
+      // Dialogue sessions persist across login boundaries (one
+      // DialogueSession can span many StudentSessions), so a join
+      // on session.id isn't enough. The padded window catches edge
+      // turns that arrive seconds before the first sample or after
+      // the session is flagged ended.
+      // Stable secondary sort (id) so same-ms turns keep a
+      // deterministic order across reloads.
+      session && paddedWindowStart && paddedWindowEnd
+        ? this.prisma.dialogueMessage.findMany({
+            where: {
+              createdAt: { gte: paddedWindowStart, lte: paddedWindowEnd },
+              session: { studentId: session.userId },
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: {
+              id: true,
+              sessionId: true,
+              role: true,
+              content: true,
+              tokenUsage: true,
+              createdAt: true,
+            },
+          })
+        : Promise.resolve([] as never[]),
+      // Floating/docked chatbot history. The primary anchor is
+      // `studentSessionId === sessionId`, but turns can carry a
+      // missing/mismatched session id when the chatbot was opened
+      // before the session row was written, or after a tab
+      // re-init that picked a new session. So we union with a
+      // student+time-window fallback (same window the dialogue
+      // query uses). The OR'd query naturally de-duplicates: if a
+      // row matches both clauses it appears once. Stable secondary
+      // sort matches the dialogue query so same-ms turns are
+      // deterministic.
+      this.prisma.chatbotMessage.findMany({
+        where:
+          session && paddedWindowStart && paddedWindowEnd
             ? {
                 OR: [
                   { studentSessionId: sessionId },
@@ -688,48 +689,48 @@ export class LogsService {
                 ],
               }
             : { studentSessionId: sessionId },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          select: {
-            id: true,
-            studentSessionId: true,
-            role: true,
-            content: true,
-            contextSource: true,
-            selectedText: true,
-            suggestedStrategy: true,
-            promptTokens: true,
-            completionTokens: true,
-            model: true,
-            moduleItemId: true,
-            createdAt: true,
-          },
-        }),
-        // Keystroke aggregates per field (count, pause, WPM). Note:
-        // these are summary rows, not raw key events — the platform
-        // does not store individual key presses by design.
-        this.prisma.keystroke_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        // Mouse-move trajectories. Can be large on long sessions; the
-        // payload is still bounded by the buffered batch size on the
-        // client, so we don't impose an extra cap here.
-        this.prisma.cursor_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        // Copy/paste/cut events.
-        this.prisma.clipboard_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-        // Tab visibility transitions — visible/hidden with optional
-        // duration spent in the previous state.
-        this.prisma.visibility_logs.findMany({
-          where: { sessionId },
-          orderBy: { timestamp: 'asc' },
-        }),
-      ]);
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          studentSessionId: true,
+          role: true,
+          content: true,
+          contextSource: true,
+          selectedText: true,
+          suggestedStrategy: true,
+          promptTokens: true,
+          completionTokens: true,
+          model: true,
+          moduleItemId: true,
+          createdAt: true,
+        },
+      }),
+      // Keystroke aggregates per field (count, pause, WPM). Note:
+      // these are summary rows, not raw key events — the platform
+      // does not store individual key presses by design.
+      this.prisma.keystroke_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      // Mouse-move trajectories. Can be large on long sessions; the
+      // payload is still bounded by the buffered batch size on the
+      // client, so we don't impose an extra cap here.
+      this.prisma.cursor_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      // Copy/paste/cut events.
+      this.prisma.clipboard_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+      // Tab visibility transitions — visible/hidden with optional
+      // duration spent in the previous state.
+      this.prisma.visibility_logs.findMany({
+        where: { sessionId },
+        orderBy: { timestamp: 'asc' },
+      }),
+    ]);
 
     // Intervention review payload. The per-intervention details
     // (LLM-generated questions, student answers, graded results,
@@ -740,9 +741,7 @@ export class LogsService {
     // session's activity logs, then hydrate them in one query.
     const interventionIds = Array.from(
       new Set(
-        activityLogs
-          .map((log) => log.interventionId)
-          .filter((id): id is string => Boolean(id)),
+        activityLogs.map((log) => log.interventionId).filter((id): id is string => Boolean(id)),
       ),
     );
     const interventions = interventionIds.length
@@ -828,12 +827,10 @@ export class LogsService {
         messageCounts: {
           dialogueFetched: dialogueMessages.length,
           chatbotFetched: chatbotMessages.length,
-          chatbotSessionAnchored: chatbotMessages.filter(
-            (m) => m.studentSessionId === sessionId,
-          ).length,
-          chatbotFromFallback: chatbotMessages.filter(
-            (m) => m.studentSessionId !== sessionId,
-          ).length,
+          chatbotSessionAnchored: chatbotMessages.filter((m) => m.studentSessionId === sessionId)
+            .length,
+          chatbotFromFallback: chatbotMessages.filter((m) => m.studentSessionId !== sessionId)
+            .length,
           messageWindowStartIso: paddedWindowStart?.toISOString() ?? null,
           messageWindowEndIso: paddedWindowEnd?.toISOString() ?? null,
         },
@@ -923,7 +920,7 @@ export class LogsService {
 
     const hasMore = rows.length > safeLimit;
     const page = hasMore ? rows.slice(0, safeLimit) : rows;
-    const nextCursor = hasMore ? page[page.length - 1]?.id ?? null : null;
+    const nextCursor = hasMore ? (page[page.length - 1]?.id ?? null) : null;
 
     return {
       snapshots: page.map((snapshot) => ({
@@ -977,5 +974,4 @@ export class LogsService {
       throw new BadRequestException('sessionId and userId are required');
     }
   }
-
 }

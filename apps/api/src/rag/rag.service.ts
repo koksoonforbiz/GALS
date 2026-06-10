@@ -202,11 +202,32 @@ export class RagService implements OnModuleInit {
       throw new ForbiddenException('Only the course teacher can delete documents');
     }
 
-    // Best-effort: drop the cached file on OpenAI before local delete so
-    // failures don't strand the row. Fire-and-forget; the delete helper
-    // logs but never throws.
+    // Delete per-page image blobs from MinIO before Cascade removes the chunk rows
+    const imageChunks = await this.prisma.documentChunk.findMany({
+      where: { documentId, imageObjectKey: { not: null } },
+      select: { imageObjectKey: true },
+    });
+    await Promise.all(
+      imageChunks.map((chunk) =>
+        this.blobService
+          .delete(chunk.imageObjectKey!)
+          .catch((err: unknown) =>
+            this.logger.warn(
+              `Failed to delete image chunk blob ${chunk.imageObjectKey}: ${(err as Error).message}`,
+            ),
+          ),
+      ),
+    );
+
+    // Await OpenAI file deletion so failures appear in logs instead of being silently dropped
     if (doc.openaiFileId) {
-      void this.llmService.deleteFileFromOpenAi(doc.uploadedById, doc.openaiFileId);
+      try {
+        await this.llmService.deleteFileFromOpenAi(doc.uploadedById, doc.openaiFileId);
+      } catch (err: unknown) {
+        this.logger.warn(
+          `Failed to delete OpenAI file ${doc.openaiFileId} for document ${documentId}: ${(err as Error).message}`,
+        );
+      }
     }
 
     await this.blobService.delete(doc.blobKey);

@@ -2378,7 +2378,7 @@ model SessionReplaySnapshot {
   session           StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   userId            String
   pageUrl           String
-  html              String
+  html              String?
   screenshotDataUrl String?        @map("screenshot_data_url") @db.Text
   width             Int
   height            Int

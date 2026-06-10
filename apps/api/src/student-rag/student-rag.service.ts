@@ -131,7 +131,12 @@ export class StudentRagService {
     const documentId = payload.documentId;
     const doc = await this.prisma.studentSourceDocument.findUnique({
       where: { id: documentId },
-      select: { id: true, studentId: true, courseId: true, course: { select: { teacherId: true } } },
+      select: {
+        id: true,
+        studentId: true,
+        courseId: true,
+        course: { select: { teacherId: true } },
+      },
     });
     if (!doc) {
       this.logger.warn(`Re-embed: document ${documentId} not found`);
@@ -329,28 +334,22 @@ export class StudentRagService {
       // `DialogueCourseSettings.contextualRetrieval` per-course
       // override. When disabled OR per-chunk blurb fails, ingest is
       // identical to Stage 02 — bare text is embedded.
-      const perCourseCtx = this.parseContextualRetrievalOverride(
-        document.course.dblSettings,
-      );
+      const perCourseCtx = this.parseContextualRetrievalOverride(document.course.dblSettings);
       let textsForEmbedding: Map<string, string> | null = null;
       if (contextualRetrievalEnabled(perCourseCtx) && createdChunks.length > 0) {
         textsForEmbedding = new Map();
         for (const chunk of createdChunks) {
           let blurb = '';
           try {
-            blurb = await this.contextualizeService.contextualizeChunk(
-              parsed.text,
-              chunk.content,
-              {
-                teacherId: document.course.teacherId,
-                documentTitle: document.originalName,
-                usageContext: {
-                  feature: 'rag.contextualize.student',
-                  courseId: document.courseId,
-                  triggeredByUserId: document.studentId,
-                },
+            blurb = await this.contextualizeService.contextualizeChunk(parsed.text, chunk.content, {
+              teacherId: document.course.teacherId,
+              documentTitle: document.originalName,
+              usageContext: {
+                feature: 'rag.contextualize.student',
+                courseId: document.courseId,
+                triggeredByUserId: document.studentId,
               },
-            );
+            });
           } catch (err) {
             this.logger.warn(
               `Contextualize threw for student chunk ${chunk.id}: ${(err as Error).message}`,
@@ -416,13 +415,8 @@ export class StudentRagService {
       // forces it on) AND the file is a PDF. Triple-defensive — any
       // failure logs + continues; text chunks above are already
       // persisted.
-      const perCourseMm = this.parseMultimodalPdfOverride(
-        document.course.dblSettings,
-      );
-      if (
-        multimodalPdfEnabled(perCourseMm) &&
-        document.mimeType === 'application/pdf'
-      ) {
+      const perCourseMm = this.parseMultimodalPdfOverride(document.course.dblSettings);
+      if (multimodalPdfEnabled(perCourseMm) && document.mimeType === 'application/pdf') {
         try {
           const imageChunks = await this.ingestPdfPageImages({
             buffer: blob.body,
@@ -498,7 +492,24 @@ export class StudentRagService {
   async deleteDocument(documentId: string, studentId: string) {
     const doc = await this.verifyOwnership(documentId, studentId);
 
-    // Delete blob from storage
+    // Delete per-page image blobs from MinIO before Cascade removes the chunk rows
+    const imageChunks = await this.prisma.studentRagChunk.findMany({
+      where: { documentId, imageObjectKey: { not: null } },
+      select: { imageObjectKey: true },
+    });
+    await Promise.all(
+      imageChunks.map((chunk) =>
+        this.blobService
+          .delete(chunk.imageObjectKey!)
+          .catch((err: unknown) =>
+            this.logger.warn(
+              `Failed to delete image chunk blob ${chunk.imageObjectKey}: ${(err as Error).message}`,
+            ),
+          ),
+      ),
+    );
+
+    // Delete main document blob from storage
     try {
       await this.blobService.delete(doc.blobKey);
     } catch (error) {
@@ -755,9 +766,7 @@ export class StudentRagService {
         }
       }),
     );
-    const uploaded = uploads.filter(
-      (u): u is NonNullable<typeof u> => u !== null,
-    );
+    const uploaded = uploads.filter((u): u is NonNullable<typeof u> => u !== null);
     if (uploaded.length === 0) return 0;
 
     const embedResult = await this.embeddingService.callMultimodalEmbedding(
@@ -780,15 +789,11 @@ export class StudentRagService {
         continue;
       }
 
-      const caption = await this.pageCaption.captionPageImage(
-        page.pngBuffer,
-        'image/png',
-        {
-          teacherId: args.teacherId,
-          courseId: args.courseId,
-          pageNumber: page.pageNumber,
-        },
-      );
+      const caption = await this.pageCaption.captionPageImage(page.pngBuffer, 'image/png', {
+        teacherId: args.teacherId,
+        courseId: args.courseId,
+        pageNumber: page.pageNumber,
+      });
 
       try {
         await this.prisma.studentRagChunk.create({

@@ -190,6 +190,8 @@ export class ActivityLogService {
         efDetections,
         emotionFrames,
         affectiveStateWindows,
+        replaySnapshots,
+        sessionSummaries,
       ] = await Promise.all([
         tx.chatbotMessage.deleteMany({ where: { studentSessionId: sessionId } }),
         tx.cursor_logs.deleteMany({ where: { sessionId } }),
@@ -212,6 +214,8 @@ export class ActivityLogService {
         tx.efDetection.deleteMany({ where: { sessionId } }),
         tx.emotionFrame.deleteMany({ where: { sessionId } }),
         tx.affectiveStateWindow.deleteMany({ where: { sessionId } }),
+        tx.sessionReplaySnapshot.deleteMany({ where: { sessionId } }),
+        tx.sessionSummary.deleteMany({ where: { sessionId } }),
       ]);
 
       await tx.studentSession.delete({ where: { id: sessionId } });
@@ -243,6 +247,8 @@ export class ActivityLogService {
           efDetections: efDetections.count,
           emotionFrames: emotionFrames.count,
           affectiveStateWindows: affectiveStateWindows.count,
+          replaySnapshots: replaySnapshots.count,
+          sessionSummaries: sessionSummaries.count,
         },
       };
     });

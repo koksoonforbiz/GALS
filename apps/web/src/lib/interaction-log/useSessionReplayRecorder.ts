@@ -36,6 +36,15 @@ interface UseSessionReplayRecorderParams {
   sessionId: string;
   userId: string;
   enabled?: boolean;
+  /**
+   * Whether to capture and store the full serialised DOM (html) with each
+   * snapshot. DOM capture produces very large payloads (~500 KB–5 MB per
+   * snapshot) and drives the majority of database storage growth.
+   *
+   * Defaults to false. Enable only when DOM-based session replay is
+   * required for research — pixel screenshots are always captured regardless.
+   */
+  captureDom?: boolean;
 }
 
 interface ReplayAoiRect {
@@ -72,7 +81,8 @@ interface ReplayScrollHost {
 
 interface ReplaySnapshotPayload {
   pageUrl: string;
-  html: string;
+  /** Omitted when captureDom=false (pixel-only mode). */
+  html?: string;
   screenshotDataUrl?: string;
   width: number;
   height: number;
@@ -358,9 +368,7 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
 
     // Determine quality based on whether this canvas is part of the
     // pdf-viewer region. `closest()` walks ancestors and is cheap.
-    const isInPdfViewer = Boolean(
-      liveCanvas.closest('[data-replay-region="pdf-viewer"]'),
-    );
+    const isInPdfViewer = Boolean(liveCanvas.closest('[data-replay-region="pdf-viewer"]'));
     const quality = isInPdfViewer ? PDF_CANVAS_JPEG_QUALITY : OTHER_CANVAS_JPEG_QUALITY;
 
     let dataUrl: string | null = null;
@@ -535,8 +543,7 @@ function captureScrollHosts(): ReplayScrollHost[] | undefined {
         // useful scroll state to record. We still include zero-scroll
         // panels (tagged via [data-replay-region]) below so each
         // panel gets a row in the CSV.
-        const overflows =
-          scrollHeight > clientHeight + 1 || scrollWidth > clientWidth + 1;
+        const overflows = scrollHeight > clientHeight + 1 || scrollWidth > clientWidth + 1;
         if (!overflows && !region) return;
         // 0 → 0/0 = NaN; clamp to a safe 0 so the JSON is well-formed.
         const maxScroll = Math.max(0, scrollHeight - clientHeight);
@@ -618,10 +625,7 @@ function captureScrollHosts(): ReplayScrollHost[] | undefined {
 function findInnerScrollHost(root: HTMLElement): HTMLElement | null {
   try {
     // If root itself overflows, it IS the host.
-    if (
-      root.scrollHeight > root.clientHeight + 1 ||
-      root.scrollWidth > root.clientWidth + 1
-    ) {
+    if (root.scrollHeight > root.clientHeight + 1 || root.scrollWidth > root.clientWidth + 1) {
       return root;
     }
     const queue: HTMLElement[] = [root];
@@ -787,6 +791,7 @@ export function useSessionReplayRecorder({
   sessionId,
   userId,
   enabled = true,
+  captureDom = false,
 }: UseSessionReplayRecorderParams) {
   const bufferRef = useRef<ReplaySnapshotPayload[]>([]);
   const lastSerializedRef = useRef('');
@@ -844,38 +849,55 @@ export function useSessionReplayRecorder({
     return canvas.toDataURL('image/jpeg', 0.7);
   }, []);
 
-  const captureSnapshot = useCallback((trigger: string) => {
-    const html = serializeDocument();
-    if (trigger !== 'periodic' && html === lastSerializedRef.current) return;
+  const captureSnapshot = useCallback(
+    (trigger: string) => {
+      // DOM serialisation — skipped when captureDom is false to avoid the
+      // per-snapshot 500 KB–5 MB HTML payload that drives most DB growth.
+      let html: string | undefined;
+      if (captureDom) {
+        html = serializeDocument();
+        // Deduplicate periodic DOM snapshots: skip if the page hasn't changed.
+        if (trigger === 'periodic' && html === lastSerializedRef.current) return;
+        lastSerializedRef.current = html;
+      }
 
-    lastSerializedRef.current = html;
-    // The triple-defensive captures live inside their own
-    // try/catch — but wrap once more here so any unexpected throw in
-    // a future capture helper never blocks the snapshot insert. Same
-    // invariant as the existing aois path.
-    let aois: ReplayAoiRect[] | undefined;
-    let scrollHosts: ReplayScrollHost[] | undefined;
-    let pdfState: { currentPage: number; totalPages: number } | null = null;
-    try { aois = captureAois(); } catch { aois = undefined; }
-    try { scrollHosts = captureScrollHosts(); } catch { scrollHosts = undefined; }
-    try { pdfState = capturePdfState(); } catch { pdfState = null; }
-    bufferRef.current.push({
-      pageUrl: window.location.pathname + window.location.search + window.location.hash,
-      html,
-      screenshotDataUrl: captureScreenshot(),
-      width: window.innerWidth,
-      height: window.innerHeight,
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
-      capturedAt: Date.now(),
-      trigger,
-      ...(aois ? { aois } : {}),
-      ...(scrollHosts ? { scrollHosts } : {}),
-      ...(pdfState
-        ? { pdfCurrentPage: pdfState.currentPage, pdfTotalPages: pdfState.totalPages }
-        : {}),
-    });
-  }, [captureScreenshot]);
+      let aois: ReplayAoiRect[] | undefined;
+      let scrollHosts: ReplayScrollHost[] | undefined;
+      let pdfState: { currentPage: number; totalPages: number } | null = null;
+      try {
+        aois = captureAois();
+      } catch {
+        aois = undefined;
+      }
+      try {
+        scrollHosts = captureScrollHosts();
+      } catch {
+        scrollHosts = undefined;
+      }
+      try {
+        pdfState = capturePdfState();
+      } catch {
+        pdfState = null;
+      }
+      bufferRef.current.push({
+        pageUrl: window.location.pathname + window.location.search + window.location.hash,
+        ...(html !== undefined ? { html } : {}),
+        screenshotDataUrl: captureScreenshot(),
+        width: window.innerWidth,
+        height: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        capturedAt: Date.now(),
+        trigger,
+        ...(aois ? { aois } : {}),
+        ...(scrollHosts ? { scrollHosts } : {}),
+        ...(pdfState
+          ? { pdfCurrentPage: pdfState.currentPage, pdfTotalPages: pdfState.totalPages }
+          : {}),
+      });
+    },
+    [captureDom, captureScreenshot],
+  );
 
   useEffect(() => {
     if (!enabled || !sessionId || !userId) return;
