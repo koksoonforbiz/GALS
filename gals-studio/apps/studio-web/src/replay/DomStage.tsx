@@ -22,8 +22,13 @@ export function DomStage(props: {
   lastClick: { x: number; y: number; ageMs: number } | null;
   aoiVisible: Record<string, boolean>;
   showScreenshot: boolean;
+  /** Lock the surface: no scroll/click, so it only ever shows the student's view. */
+  locked?: boolean;
+  /** Extra absolutely-positioned overlays (e.g. researcher AOI rects / draw layer). */
+  overlay?: React.ReactNode;
 }) {
-  const { sessionId, snapshot, gaze, lastClick, aoiVisible, showScreenshot } = props;
+  const { sessionId, snapshot, gaze, lastClick, aoiVisible, showScreenshot, locked, overlay } =
+    props;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
@@ -66,21 +71,29 @@ export function DomStage(props: {
           transformOrigin: 'top left',
         }}
       >
-        {showScreenshot ? (
-          <Screenshot
-            url={
-              snapshot.hasScreenshot ? `/api/media/snapshot/${sessionId}/${snapshot.id}.jpg` : null
-            }
-            width={snapshot.width}
-            height={snapshot.height}
-          />
-        ) : (
-          <DomFrame
-            url={`/api/media/snapshot/${sessionId}/${snapshot.id}.html`}
-            width={snapshot.width}
-            height={snapshot.height}
-          />
-        )}
+        <div style={{ pointerEvents: locked ? 'none' : 'auto' }}>
+          {showScreenshot ? (
+            <Screenshot
+              url={
+                snapshot.hasScreenshot
+                  ? `/api/media/snapshot/${sessionId}/${snapshot.id}.jpg`
+                  : null
+              }
+              width={snapshot.width}
+              height={snapshot.height}
+            />
+          ) : (
+            <DomFrame
+              url={`/api/media/snapshot/${sessionId}/${snapshot.id}.html`}
+              width={snapshot.width}
+              height={snapshot.height}
+              scroll={snapshot.scrollHosts as ScrollHost[]}
+            />
+          )}
+        </div>
+
+        {/* researcher overlay (AOI draw layer / rects) */}
+        {overlay}
 
         {/* AOI overlays */}
         {snapshot.aois.map((a, i) =>
@@ -166,12 +179,52 @@ function Screenshot({ url, width, height }: { url: string | null; width: number;
   return <img src={shown} alt="snapshot" style={{ width, height }} />;
 }
 
+interface ScrollHost {
+  region?: string | null;
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}
+
+/**
+ * Restore the student's inner-scroll positions. The recorder tags scroll
+ * containers with `data-replay-region`, so we can match each captured host to
+ * its element and scroll it — this is what makes the PDF/lesson show the page
+ * the student was actually reading (react-pdf renders pages stacked in a
+ * scroller; the visible page is purely a function of scrollTop).
+ */
+function applyScroll(iframe: HTMLIFrameElement | null, hosts?: ScrollHost[]): void {
+  if (!iframe || !hosts?.length) return;
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    for (const h of hosts) {
+      if (!h.region) continue;
+      const el = doc.querySelector<HTMLElement>(`[data-replay-region="${h.region}"]`);
+      if (el) el.scrollTop = h.scrollTop;
+    }
+  } catch {
+    /* cross-origin or not ready — never block */
+  }
+}
+
 /**
  * Double-buffered DOM iframe: load the incoming snapshot into a hidden iframe
  * and cross-fade only after it fires `load`, so the surface never blanks while
- * the next document parses.
+ * the next document parses. On load we also restore the student's scroll
+ * positions so the correct PDF/lesson page is shown.
  */
-function DomFrame({ url, width, height }: { url: string; width: number; height: number }) {
+function DomFrame({
+  url,
+  width,
+  height,
+  scroll,
+}: {
+  url: string;
+  width: number;
+  height: number;
+  scroll?: ScrollHost[];
+}) {
   const [slots, setSlots] = useState<[string, string]>([url, 'about:blank']);
   const [visible, setVisible] = useState(0);
   const target = useRef(url);
@@ -189,7 +242,8 @@ function DomFrame({ url, width, height }: { url: string; width: number; height: 
           title="dom-replay"
           sandbox="allow-same-origin"
           src={src}
-          onLoad={() => {
+          onLoad={(e) => {
+            applyScroll(e.currentTarget, scroll);
             if (src === target.current && i !== visible) setVisible(i);
           }}
           style={{
