@@ -414,3 +414,20 @@ model ReliabilityRun {
   params     String
   computedAt DateTime @default(now())
 }
+
+// Researcher-authored areas of interest, drawn on the replay surface in
+// snapshot (viewport) pixel coordinates. Not FK-bound to Session, so a
+// re-import never deletes them (durable, like coder annotations).
+model SessionAoi {
+  id        String   @id @default(uuid())
+  sessionId String
+  name      String
+  x         Float
+  y         Float
+  width     Float
+  height    Float
+  color     String?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+}

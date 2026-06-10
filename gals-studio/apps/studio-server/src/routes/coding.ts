@@ -154,10 +154,17 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  // Patch an existing annotation (timeline interval resize / notes / recode).
+  // Patch an existing annotation (timeline interval resize / recode / coding).
   app.patch<{
     Params: { id: string };
-    Body: { startWallMs?: number; endWallMs?: number; notes?: string | null; code?: string };
+    Body: {
+      startWallMs?: number;
+      endWallMs?: number;
+      notes?: string | null;
+      code?: string;
+      intensity?: number | null;
+      confidence?: string | null;
+    };
   }>('/api/annotations/:id', async (req, reply) => {
     const b = req.body;
     const data: Record<string, unknown> = {};
@@ -165,12 +172,46 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     if (b.endWallMs !== undefined) data.endWallMs = b.endWallMs;
     if (b.notes !== undefined) data.notes = b.notes;
     if (b.code !== undefined) data.code = b.code;
+    if (b.intensity !== undefined) data.intensity = b.intensity;
+    if (b.confidence !== undefined) data.confidence = b.confidence;
     if (Object.keys(data).length === 0) return reply.code(400).send({ error: 'nothing to update' });
     try {
       return await prisma.annotation.update({ where: { id: req.params.id }, data });
     } catch {
       return reply.code(404).send({ error: 'annotation not found' });
     }
+  });
+
+  // ── Researcher AOIs (drawn on the replay; durable across re-import) ────────
+  app.get<{ Params: { sessionId: string } }>('/api/sessions/:sessionId/aois', async (req) => {
+    const rows = await prisma.sessionAoi.findMany({
+      where: { sessionId: req.params.sessionId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { aois: rows };
+  });
+  app.post<{
+    Params: { sessionId: string };
+    Body: { name?: string; x: number; y: number; width: number; height: number; color?: string };
+  }>('/api/sessions/:sessionId/aois', async (req, reply) => {
+    const b = req.body;
+    if ([b.x, b.y, b.width, b.height].some((n) => typeof n !== 'number'))
+      return reply.code(400).send({ error: 'x,y,width,height required' });
+    return prisma.sessionAoi.create({
+      data: {
+        sessionId: req.params.sessionId,
+        name: b.name?.trim() || 'AOI',
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        color: b.color ?? null,
+      },
+    });
+  });
+  app.delete<{ Params: { id: string } }>('/api/aois/:id', async (req) => {
+    await prisma.sessionAoi.deleteMany({ where: { id: req.params.id } });
+    return { ok: true };
   });
 
   // ── Timeline interval annotations (free-range coding, no window) ───────────
@@ -194,7 +235,93 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
           startWallMs: a.startWallMs,
           endWallMs: a.endWallMs,
           notes: a.notes,
+          intensity: a.intensity,
+          confidence: a.confidence,
         })),
+      };
+    },
+  );
+
+  // ── Session summary: coding, intervention scores, time, abandonment ───────
+  app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(
+    '/api/coding/:sessionId/summary',
+    async (req, reply) => {
+      const { sessionId } = req.params;
+      const { coderId } = req.query;
+      const session = await prisma.session.findUnique({ where: { id: sessionId } });
+      if (!session) return reply.code(404).send({ error: 'session not found' });
+      const [interventions, visibilities, marks, lastActivity, messages] = await Promise.all([
+        prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.annotation.findMany({
+          where: { sessionId, codingPass: 'timeline', ...(coderId ? { coderId } : {}) },
+        }),
+        prisma.activityEvent.findFirst({ where: { sessionId }, orderBy: { wallMs: 'desc' } }),
+        prisma.chatbotMessage.count({ where: { sessionId } }),
+      ]);
+
+      const base = session.baseWallClockMs;
+      const ivs = interventions.map((iv) => {
+        let score: number | null = null;
+        try {
+          const d = JSON.parse(iv.sessionData ?? '{}');
+          if (typeof d?.score === 'number') score = d.score;
+        } catch {
+          /* ignore */
+        }
+        return { type: iv.type, status: iv.status, score, atMs: iv.wallMs - base };
+      });
+      const completed = ivs.filter((i) => (i.status ?? '').toUpperCase() === 'COMPLETED').length;
+      const incomplete = ivs.length - completed;
+      const scored = ivs.filter((i) => i.score != null);
+      const avgScore = scored.length
+        ? scored.reduce((s, i) => s + (i.score as number), 0) / scored.length
+        : null;
+
+      const totalMs = session.durationMs;
+      const hiddenMs = visibilities.reduce((s, v) => s + (v.hiddenDurationMs ?? 0), 0);
+      const activeMs = Math.max(0, totalMs - hiddenMs);
+      const lastVis = visibilities[visibilities.length - 1];
+
+      const byAffect: Record<string, { count: number; totalMs: number; intensities: number[] }> =
+        {};
+      for (const m of marks) {
+        const a = (byAffect[m.code] ??= { count: 0, totalMs: 0, intensities: [] });
+        a.count += 1;
+        if (m.startWallMs != null && m.endWallMs != null) a.totalMs += m.endWallMs - m.startWallMs;
+        if (m.intensity != null) a.intensities.push(m.intensity);
+      }
+      const coding = Object.entries(byAffect).map(([code, a]) => ({
+        code,
+        count: a.count,
+        totalMs: a.totalMs,
+        avgIntensity: a.intensities.length
+          ? a.intensities.reduce((s, x) => s + x, 0) / a.intensities.length
+          : null,
+      }));
+
+      const signals: string[] = [];
+      if (!session.endedAt) signals.push('session has no end timestamp');
+      if (incomplete > 0) signals.push(`${incomplete} intervention(s) not completed`);
+      if (lastVis && (lastVis.visibleState ?? 'visible') !== 'visible')
+        signals.push('page was hidden at the last visibility event');
+
+      return {
+        session: {
+          userDisplayName: session.userDisplayName,
+          startedAt: session.startedAt.toISOString(),
+          endedAt: session.endedAt ? session.endedAt.toISOString() : null,
+        },
+        time: {
+          totalMs,
+          activeMs,
+          hiddenMs,
+          lastActivityMs: lastActivity ? lastActivity.wallMs - base : null,
+        },
+        interventions: { items: ivs, total: ivs.length, completed, incomplete, avgScore },
+        coding: { marks: marks.length, byAffect: coding },
+        engagement: { chatbotMessages: messages },
+        abandoned: { likely: signals.length > 0, signals },
       };
     },
   );
