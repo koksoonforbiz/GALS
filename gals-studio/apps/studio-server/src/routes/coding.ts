@@ -40,40 +40,54 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // Create or fork a codebook version. Editing a locked version forks a new one.
-  app.post<{ Body: { id?: string; name?: string; version?: string; definition?: unknown; lock?: boolean } }>(
-    '/api/codebook',
-    async (req, reply) => {
-      const { id, name, version, definition, lock } = req.body;
-      if (id) {
-        const existing = await prisma.codebookVersion.findUnique({ where: { id } });
-        if (!existing) return reply.code(404).send({ error: 'version not found' });
-        if (lock) {
-          const locked = await prisma.codebookVersion.update({ where: { id }, data: { locked: true } });
-          return { id: locked.id, locked: true };
-        }
-        if (existing.locked) {
-          // fork
-          const forkVersion = bumpVersion(existing.version);
-          const fork = await prisma.codebookVersion.create({
-            data: { name: existing.name, version: forkVersion, definition: JSON.stringify(definition ?? safeParse(existing.definition)), locked: false },
-          });
-          return { id: fork.id, forkedFrom: id, version: forkVersion };
-        }
-        const updated = await prisma.codebookVersion.update({
+  app.post<{
+    Body: { id?: string; name?: string; version?: string; definition?: unknown; lock?: boolean };
+  }>('/api/codebook', async (req, reply) => {
+    const { id, name, version, definition, lock } = req.body;
+    if (id) {
+      const existing = await prisma.codebookVersion.findUnique({ where: { id } });
+      if (!existing) return reply.code(404).send({ error: 'version not found' });
+      if (lock) {
+        const locked = await prisma.codebookVersion.update({
           where: { id },
-          data: { definition: JSON.stringify(definition ?? safeParse(existing.definition)) },
+          data: { locked: true },
         });
-        return { id: updated.id, version: updated.version };
+        return { id: locked.id, locked: true };
       }
-      const created = await prisma.codebookVersion.create({
-        data: { name: name ?? 'Custom', version: version ?? '1.0', definition: JSON.stringify(definition ?? DEFAULT_CODEBOOK), locked: false },
+      if (existing.locked) {
+        // fork
+        const forkVersion = bumpVersion(existing.version);
+        const fork = await prisma.codebookVersion.create({
+          data: {
+            name: existing.name,
+            version: forkVersion,
+            definition: JSON.stringify(definition ?? safeParse(existing.definition)),
+            locked: false,
+          },
+        });
+        return { id: fork.id, forkedFrom: id, version: forkVersion };
+      }
+      const updated = await prisma.codebookVersion.update({
+        where: { id },
+        data: { definition: JSON.stringify(definition ?? safeParse(existing.definition)) },
       });
-      return { id: created.id, version: created.version };
-    },
-  );
+      return { id: updated.id, version: updated.version };
+    }
+    const created = await prisma.codebookVersion.create({
+      data: {
+        name: name ?? 'Custom',
+        version: version ?? '1.0',
+        definition: JSON.stringify(definition ?? DEFAULT_CODEBOOK),
+        locked: false,
+      },
+    });
+    return { id: created.id, version: created.version };
+  });
 
   // ── Coders ──────────────────────────────────────────────────────────────
-  app.get('/api/coders', async () => ({ coders: await prisma.coder.findMany({ orderBy: { createdAt: 'asc' } }) }));
+  app.get('/api/coders', async () => ({
+    coders: await prisma.coder.findMany({ orderBy: { createdAt: 'asc' } }),
+  }));
   app.post<{ Body: { name: string; role: string } }>('/api/coders', async (req, reply) => {
     const { name, role } = req.body;
     if (!name) return reply.code(400).send({ error: 'name required' });
@@ -91,12 +105,25 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     // single-valued (affect/behavior): upsert on (windowId,coderId,pass,dimension)
     if (SINGLE_DIMS.includes(b.dimension) && b.windowId) {
       const existing = await prisma.annotation.findFirst({
-        where: { sessionId: b.sessionId, windowId: b.windowId, coderId: b.coderId, codingPass: b.codingPass, dimension: b.dimension },
+        where: {
+          sessionId: b.sessionId,
+          windowId: b.windowId,
+          coderId: b.coderId,
+          codingPass: b.codingPass,
+          dimension: b.dimension,
+        },
       });
       if (existing) {
         const updated = await prisma.annotation.update({
           where: { id: existing.id },
-          data: { code: b.code, intensity: b.intensity ?? null, confidence: b.confidence ?? null, notes: b.notes ?? null, codingMs: b.codingMs ?? existing.codingMs, codebookVersionId },
+          data: {
+            code: b.code,
+            intensity: b.intensity ?? null,
+            confidence: b.confidence ?? null,
+            notes: b.notes ?? null,
+            codingMs: b.codingMs ?? existing.codingMs,
+            codebookVersionId,
+          },
         });
         return updated;
       }
@@ -127,15 +154,67 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  // Clear affect for a window/coder/pass (the '0' key).
-  app.post<{ Body: { sessionId: string; windowId: string; coderId: string; codingPass: string; dimension: string } }>(
-    '/api/annotations/clear',
+  // Patch an existing annotation (timeline interval resize / notes / recode).
+  app.patch<{
+    Params: { id: string };
+    Body: { startWallMs?: number; endWallMs?: number; notes?: string | null; code?: string };
+  }>('/api/annotations/:id', async (req, reply) => {
+    const b = req.body;
+    const data: Record<string, unknown> = {};
+    if (b.startWallMs !== undefined) data.startWallMs = b.startWallMs;
+    if (b.endWallMs !== undefined) data.endWallMs = b.endWallMs;
+    if (b.notes !== undefined) data.notes = b.notes;
+    if (b.code !== undefined) data.code = b.code;
+    if (Object.keys(data).length === 0) return reply.code(400).send({ error: 'nothing to update' });
+    try {
+      return await prisma.annotation.update({ where: { id: req.params.id }, data });
+    } catch {
+      return reply.code(404).send({ error: 'annotation not found' });
+    }
+  });
+
+  // ── Timeline interval annotations (free-range coding, no window) ───────────
+  // Stored as Annotation rows with codingPass='timeline' & windowId=null, so
+  // they never enter the window-based reliability/gold computations.
+  app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(
+    '/api/coding/:sessionId/intervals',
     async (req) => {
-      const { sessionId, windowId, coderId, codingPass, dimension } = req.body;
-      await prisma.annotation.deleteMany({ where: { sessionId, windowId, coderId, codingPass, dimension } });
-      return { ok: true };
+      const { sessionId } = req.params;
+      const { coderId } = req.query;
+      const rows = await prisma.annotation.findMany({
+        where: { sessionId, codingPass: 'timeline', ...(coderId ? { coderId } : {}) },
+        orderBy: { startWallMs: 'asc' },
+      });
+      return {
+        intervals: rows.map((a) => ({
+          id: a.id,
+          coderId: a.coderId,
+          dimension: a.dimension,
+          code: a.code,
+          startWallMs: a.startWallMs,
+          endWallMs: a.endWallMs,
+          notes: a.notes,
+        })),
+      };
     },
   );
+
+  // Clear affect for a window/coder/pass (the '0' key).
+  app.post<{
+    Body: {
+      sessionId: string;
+      windowId: string;
+      coderId: string;
+      codingPass: string;
+      dimension: string;
+    };
+  }>('/api/annotations/clear', async (req) => {
+    const { sessionId, windowId, coderId, codingPass, dimension } = req.body;
+    await prisma.annotation.deleteMany({
+      where: { sessionId, windowId, coderId, codingPass, dimension },
+    });
+    return { ok: true };
+  });
 
   // ── Coding state for a coder/pass ─────────────────────────────────────────
   app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string; pass?: string } }>(
@@ -143,12 +222,17 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const { sessionId } = req.params;
       const { coderId, pass } = req.query;
-      const windows = await prisma.codingWindow.findMany({ where: { sessionId }, orderBy: { index: 'asc' } });
-      const anns = coderId && pass
-        ? await prisma.annotation.findMany({ where: { sessionId, coderId, codingPass: pass } })
-        : [];
+      const windows = await prisma.codingWindow.findMany({
+        where: { sessionId },
+        orderBy: { index: 'asc' },
+      });
+      const anns =
+        coderId && pass
+          ? await prisma.annotation.findMany({ where: { sessionId, coderId, codingPass: pass } })
+          : [];
       const byWindow: Record<string, any> = {};
-      for (const w of windows) byWindow[w.id] = { affect: null, behavior: null, ef_event: [], motivation: [] };
+      for (const w of windows)
+        byWindow[w.id] = { affect: null, behavior: null, ef_event: [], motivation: [] };
       let missingAffect = 0;
       for (const a of anns) {
         if (!a.windowId || !byWindow[a.windowId]) continue;
@@ -162,7 +246,13 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
       for (const w of windows) if (!byWindow[w.id].affect) missingAffect += 1;
 
       return {
-        windows: windows.map((w) => ({ id: w.id, index: w.index, startWallMs: w.startWallMs, endWallMs: w.endWallMs, durationMs: w.durationMs })),
+        windows: windows.map((w) => ({
+          id: w.id,
+          index: w.index,
+          startWallMs: w.startWallMs,
+          endWallMs: w.endWallMs,
+          durationMs: w.durationMs,
+        })),
         annotations: byWindow,
         progress: { total: windows.length, codedAffect, codedBehavior, missingAffect },
       };
@@ -170,50 +260,70 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ── Disagreement queue ────────────────────────────────────────────────────
-  app.get<{ Params: { sessionId: string } }>('/api/coding/:sessionId/disagreements', async (req) => {
-    const { sessionId } = req.params;
-    const anns = await prisma.annotation.findMany({
-      where: { sessionId, codingPass: { in: ['primary_rater_1', 'primary_rater_2', 'tiebreaker'] }, dimension: { in: ['affect', 'behavior'] }, windowId: { not: null } },
-    });
-    const windows = await prisma.codingWindow.findMany({ where: { sessionId }, orderBy: { index: 'asc' } });
-    const winMeta = new Map(windows.map((w) => [w.id, w]));
-    const byWin = new Map<string, Record<string, Record<string, any>>>();
-    for (const a of anns) {
-      const w = a.windowId!;
-      byWin.set(w, byWin.get(w) ?? {});
-      const dims = byWin.get(w)!;
-      dims[a.dimension] = dims[a.dimension] ?? {};
-      dims[a.dimension][a.codingPass] = annDto(a);
-    }
-    const disagreements: any[] = [];
-    for (const [winId, dims] of byWin) {
-      for (const dim of ['affect', 'behavior']) {
-        const p = dims[dim];
-        if (p?.primary_rater_1 && p?.primary_rater_2 && p.primary_rater_1.code !== p.primary_rater_2.code) {
-          const w = winMeta.get(winId);
-          disagreements.push({
-            windowId: winId,
-            index: w?.index,
-            startWallMs: w?.startWallMs,
-            endWallMs: w?.endWallMs,
-            dimension: dim,
-            rater1: p.primary_rater_1,
-            rater2: p.primary_rater_2,
-            tiebreaker: p.tiebreaker ?? null,
-            resolved: !!p.tiebreaker,
-          });
+  app.get<{ Params: { sessionId: string } }>(
+    '/api/coding/:sessionId/disagreements',
+    async (req) => {
+      const { sessionId } = req.params;
+      const anns = await prisma.annotation.findMany({
+        where: {
+          sessionId,
+          codingPass: { in: ['primary_rater_1', 'primary_rater_2', 'tiebreaker'] },
+          dimension: { in: ['affect', 'behavior'] },
+          windowId: { not: null },
+        },
+      });
+      const windows = await prisma.codingWindow.findMany({
+        where: { sessionId },
+        orderBy: { index: 'asc' },
+      });
+      const winMeta = new Map(windows.map((w) => [w.id, w]));
+      const byWin = new Map<string, Record<string, Record<string, any>>>();
+      for (const a of anns) {
+        const w = a.windowId!;
+        byWin.set(w, byWin.get(w) ?? {});
+        const dims = byWin.get(w)!;
+        dims[a.dimension] = dims[a.dimension] ?? {};
+        dims[a.dimension][a.codingPass] = annDto(a);
+      }
+      const disagreements: any[] = [];
+      for (const [winId, dims] of byWin) {
+        for (const dim of ['affect', 'behavior']) {
+          const p = dims[dim];
+          if (
+            p?.primary_rater_1 &&
+            p?.primary_rater_2 &&
+            p.primary_rater_1.code !== p.primary_rater_2.code
+          ) {
+            const w = winMeta.get(winId);
+            disagreements.push({
+              windowId: winId,
+              index: w?.index,
+              startWallMs: w?.startWallMs,
+              endWallMs: w?.endWallMs,
+              dimension: dim,
+              rater1: p.primary_rater_1,
+              rater2: p.primary_rater_2,
+              tiebreaker: p.tiebreaker ?? null,
+              resolved: !!p.tiebreaker,
+            });
+          }
         }
       }
-    }
-    disagreements.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
-    return { disagreements, pending: disagreements.filter((d) => !d.resolved).length };
-  });
+      disagreements.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      return { disagreements, pending: disagreements.filter((d) => !d.resolved).length };
+    },
+  );
 
   // ── Gold consensus derivation ─────────────────────────────────────────────
   app.post<{ Params: { sessionId: string } }>('/api/coding/:sessionId/derive-gold', async (req) => {
     const { sessionId } = req.params;
     const anns = await prisma.annotation.findMany({
-      where: { sessionId, codingPass: { in: ['primary_rater_1', 'primary_rater_2', 'tiebreaker'] }, dimension: { in: ['affect', 'behavior'] }, windowId: { not: null } },
+      where: {
+        sessionId,
+        codingPass: { in: ['primary_rater_1', 'primary_rater_2', 'tiebreaker'] },
+        dimension: { in: ['affect', 'behavior'] },
+        windowId: { not: null },
+      },
     });
     const goldCoder = await goldConsensusCoder();
     const codebookVersionId = await ensureDefaultCodebook();
@@ -236,7 +346,11 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         const p = dims[dim];
         if (!p) continue;
         let goldCode: string | null = null;
-        if (p.primary_rater_1 && p.primary_rater_2 && p.primary_rater_1.code === p.primary_rater_2.code) {
+        if (
+          p.primary_rater_1 &&
+          p.primary_rater_2 &&
+          p.primary_rater_1.code === p.primary_rater_2.code
+        ) {
           goldCode = p.primary_rater_1.code;
         } else if (p.primary_rater_1 && p.primary_rater_2 && p.tiebreaker) {
           goldCode = p.tiebreaker.code;
@@ -249,7 +363,15 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         }
         if (goldCode) {
           await prisma.annotation.create({
-            data: { sessionId, windowId: winId, coderId: goldCoder, codingPass: 'gold_consensus', codebookVersionId, dimension: dim, code: goldCode },
+            data: {
+              sessionId,
+              windowId: winId,
+              coderId: goldCoder,
+              codingPass: 'gold_consensus',
+              codebookVersionId,
+              dimension: dim,
+              code: goldCode,
+            },
           });
           written += 1;
         }
@@ -260,7 +382,17 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
 }
 
 function annDto(a: any) {
-  return { id: a.id, code: a.code, intensity: a.intensity, confidence: a.confidence, notes: a.notes, atWallMs: a.atWallMs, startWallMs: a.startWallMs, endWallMs: a.endWallMs, coderId: a.coderId };
+  return {
+    id: a.id,
+    code: a.code,
+    intensity: a.intensity,
+    confidence: a.confidence,
+    notes: a.notes,
+    atWallMs: a.atWallMs,
+    startWallMs: a.startWallMs,
+    endWallMs: a.endWallMs,
+    coderId: a.coderId,
+  };
 }
 
 function safeParse(v: string): unknown {
@@ -279,7 +411,9 @@ function bumpVersion(version: string): string {
 
 /** A synthetic system coder that owns gold_consensus rows. */
 async function goldConsensusCoder(): Promise<string> {
-  const existing = await prisma.coder.findFirst({ where: { name: 'gold_consensus', role: 'expert' } });
+  const existing = await prisma.coder.findFirst({
+    where: { name: 'gold_consensus', role: 'expert' },
+  });
   if (existing) return existing.id;
   const created = await prisma.coder.create({ data: { name: 'gold_consensus', role: 'expert' } });
   return created.id;

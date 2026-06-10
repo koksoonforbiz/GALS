@@ -6,6 +6,7 @@ import { App } from './App';
 import { Library } from './pages/Library';
 import { Replay } from './pages/Replay';
 import { Coding } from './pages/Coding';
+import { TimelineCoding } from './pages/TimelineCoding';
 import { Analysis } from './pages/Analysis';
 import { Codebook } from './pages/Codebook';
 
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { index: true, element: <Library /> },
       { path: 'replay/:sessionId', element: <Replay /> },
       { path: 'coding/:sessionId', element: <Coding /> },
+      { path: 'timeline/:sessionId', element: <TimelineCoding /> },
       { path: 'codebook', element: <Codebook /> },
       { path: 'analysis', element: <Analysis /> },
     ],

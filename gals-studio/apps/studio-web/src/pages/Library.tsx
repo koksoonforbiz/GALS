@@ -116,17 +116,24 @@ export function Library() {
             </div>
             {report.ok && (
               <div className="text-slate-600">
-                {report.windows} windows · {Object.entries(report.inserted).map(([k, v]) => `${k}:${v}`).join('  ')}
+                {report.windows} windows ·{' '}
+                {Object.entries(report.inserted)
+                  .map(([k, v]) => `${k}:${v}`)
+                  .join('  ')}
               </div>
             )}
             {report.errors.length > 0 && (
               <ul className="mt-1 list-disc pl-5 text-rose-700">
-                {report.errors.map((e, i) => <li key={i}>{e}</li>)}
+                {report.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
               </ul>
             )}
             {report.warnings.length > 0 && (
               <ul className="mt-1 list-disc pl-5 text-amber-700">
-                {report.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                {report.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
               </ul>
             )}
           </div>
@@ -145,10 +152,18 @@ export function Library() {
               className="rounded border border-slate-300 px-2 py-1"
             >
               <option value="">All courses</option>
-              {courses.map((c) => <option key={c} value={c}>{c}</option>)}
+              {courses.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
             </select>
             <label className="flex items-center gap-1">
-              <input type="checkbox" checked={webcamOnly} onChange={(e) => setWebcamOnly(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={webcamOnly}
+                onChange={(e) => setWebcamOnly(e.target.checked)}
+              />
               webcam only
             </label>
             <button onClick={refresh} className="rounded border border-slate-300 px-2 py-1">
@@ -179,9 +194,13 @@ export function Library() {
             <tbody>
               {filtered.map((s) => (
                 <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-2 font-medium">{s.userDisplayName ?? s.userId.slice(0, 8)}</td>
+                  <td className="px-4 py-2 font-medium">
+                    {s.userDisplayName ?? s.userId.slice(0, 8)}
+                  </td>
                   <td className="px-4 py-2">{s.courseTitle ?? s.courseId.slice(0, 8)}</td>
-                  <td className="px-4 py-2 text-slate-500">{new Date(s.startedAt).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-slate-500">
+                    {new Date(s.startedAt).toLocaleString()}
+                  </td>
                   <td className="px-4 py-2">{fmtDuration(s.durationMs)}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">
                     <span title="snapshots">📸 {s.counts.snapshots}</span>{' '}
@@ -204,13 +223,28 @@ export function Library() {
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex gap-2">
-                      <Link to={`/replay/${s.id}`} className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100">
+                      <Link
+                        to={`/replay/${s.id}`}
+                        className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100"
+                      >
                         Replay
                       </Link>
-                      <Link to={`/coding/${s.id}`} className="rounded bg-slate-900 px-2 py-1 text-white hover:bg-slate-700">
+                      <Link
+                        to={`/coding/${s.id}`}
+                        className="rounded bg-slate-900 px-2 py-1 text-white hover:bg-slate-700"
+                      >
                         Code
                       </Link>
-                      <button onClick={() => del(s)} className="rounded border border-rose-300 px-2 py-1 text-rose-600 hover:bg-rose-50">
+                      <Link
+                        to={`/timeline/${s.id}`}
+                        className="rounded bg-indigo-600 px-2 py-1 text-white hover:bg-indigo-500"
+                      >
+                        Timeline
+                      </Link>
+                      <button
+                        onClick={() => del(s)}
+                        className="rounded border border-rose-300 px-2 py-1 text-rose-600 hover:bg-rose-50"
+                      >
                         Delete
                       </button>
                     </div>
@@ -223,21 +257,39 @@ export function Library() {
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">Backup coding (durability)</h2>
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Backup coding (durability)
+        </h2>
         <p className="mb-3 text-xs text-slate-500">
-          Coding labels are the most valuable artifact. Export them independently of media; restore on any machine.
+          Coding labels are the most valuable artifact. Export them independently of media; restore
+          on any machine.
         </p>
         <div className="flex items-center gap-2">
-          <a href={api.exportCodingUrl} className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white">Export all coding (.zip)</a>
-          <button onClick={() => codingFileRef.current?.click()} className="rounded border border-slate-300 px-3 py-1.5 text-sm">Import coding…</button>
-          <input ref={codingFileRef} type="file" accept=".zip" className="hidden"
+          <a
+            href={api.exportCodingUrl}
+            className="rounded bg-slate-900 px-3 py-1.5 text-sm text-white"
+          >
+            Export all coding (.zip)
+          </a>
+          <button
+            onClick={() => codingFileRef.current?.click()}
+            className="rounded border border-slate-300 px-3 py-1.5 text-sm"
+          >
+            Import coding…
+          </button>
+          <input
+            ref={codingFileRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
             onChange={async (e) => {
               const f = e.target.files?.[0];
               if (!f) return;
               const r = await api.importCoding(f);
               alert(`Restored: ${JSON.stringify(r.restored ?? r)}`);
               await refresh();
-            }} />
+            }}
+          />
         </div>
       </section>
     </div>
@@ -246,6 +298,15 @@ export function Library() {
 
 function ProgressPill({ label, pct }: { label: string; pct: number }) {
   const p = Math.round(pct * 100);
-  const color = p >= 100 ? 'bg-emerald-100 text-emerald-700' : p > 0 ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-500';
-  return <span className={`rounded px-1.5 py-0.5 ${color}`}>{label} {p}%</span>;
+  const color =
+    p >= 100
+      ? 'bg-emerald-100 text-emerald-700'
+      : p > 0
+        ? 'bg-sky-100 text-sky-700'
+        : 'bg-slate-100 text-slate-500';
+  return (
+    <span className={`rounded px-1.5 py-0.5 ${color}`}>
+      {label} {p}%
+    </span>
+  );
 }

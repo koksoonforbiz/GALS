@@ -9,7 +9,13 @@ export interface SessionListItem {
   startedAt: string;
   durationMs: number;
   hasWebcam: boolean;
-  counts: { snapshots: number; gaze: number; emotion: number; webcamSegments: number; messages: number };
+  counts: {
+    snapshots: number;
+    gaze: number;
+    emotion: number;
+    webcamSegments: number;
+    messages: number;
+  };
   coding: { windows: number; pctRater1: number; pctRater2: number; disagreementsPending: number };
 }
 
@@ -58,7 +64,9 @@ export const api = {
   replayMeta: (id: string) => jget<any>(`/api/replay/${id}/meta`),
   replaySnapshotIndex: (id: string) => jget<any>(`/api/replay/${id}/snapshots/index`),
   replayStreams: (id: string, signals: string[], from?: number, to?: number) =>
-    jget<any>(`/api/replay/${id}/streams?signals=${signals.join(',')}${from != null ? `&from=${from}` : ''}${to != null ? `&to=${to}` : ''}`),
+    jget<any>(
+      `/api/replay/${id}/streams?signals=${signals.join(',')}${from != null ? `&from=${from}` : ''}${to != null ? `&to=${to}` : ''}`,
+    ),
   replaySparse: (id: string) => jget<any>(`/api/replay/${id}/sparse`),
   replayCoverage: (id: string) => jget<any>(`/api/replay/${id}/coverage`),
 
@@ -71,7 +79,11 @@ export const api = {
   codingState: (id: string, coderId: string, pass: string) =>
     jget<any>(`/api/coding/${id}/state?coderId=${coderId}&pass=${pass}`),
   upsertAnnotation: (body: unknown) => jsend<any>('/api/annotations', 'POST', body),
+  updateAnnotation: (annId: string, body: unknown) =>
+    jsend<any>(`/api/annotations/${annId}`, 'PATCH', body),
   deleteAnnotation: (annId: string) => jsend<any>(`/api/annotations/${annId}`, 'DELETE'),
+  timelineIntervals: (id: string, coderId: string) =>
+    jget<any>(`/api/coding/${id}/intervals?coderId=${coderId}`),
   disagreements: (id: string) => jget<any>(`/api/coding/${id}/disagreements`),
   deriveGold: (id: string) => jsend<any>(`/api/coding/${id}/derive-gold`, 'POST'),
 
@@ -80,7 +92,9 @@ export const api = {
     jget<any>(`/api/analysis/reliability?scope=${scope}&dimension=${dimension}`),
   saveReliability: (body: unknown) => jsend<any>('/api/analysis/reliability', 'POST', body),
   dynamics: (id: string, params?: Record<string, unknown>) =>
-    jget<any>(`/api/analysis/dynamics?session=${id}${params?.resolutionWindows ? `&resolutionWindows=${params.resolutionWindows}` : ''}`),
+    jget<any>(
+      `/api/analysis/dynamics?session=${id}${params?.resolutionWindows ? `&resolutionWindows=${params.resolutionWindows}` : ''}`,
+    ),
   attention: (id: string) => jget<any>(`/api/analysis/attention?session=${id}`),
   reading: (id: string) => jget<any>(`/api/analysis/reading?session=${id}`),
   groundTruth: (id: string) => jget<any>(`/api/analysis/ground-truth?session=${id}`),
