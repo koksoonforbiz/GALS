@@ -84,6 +84,11 @@ export const api = {
   deleteAnnotation: (annId: string) => jsend<any>(`/api/annotations/${annId}`, 'DELETE'),
   timelineIntervals: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/intervals?coderId=${coderId}`),
+  sessionSummary: (id: string, coderId: string) =>
+    jget<any>(`/api/coding/${id}/summary?coderId=${coderId}`),
+  aois: (id: string) => jget<any>(`/api/sessions/${id}/aois`),
+  createAoi: (id: string, body: unknown) => jsend<any>(`/api/sessions/${id}/aois`, 'POST', body),
+  deleteAoi: (aoiId: string) => jsend<any>(`/api/aois/${aoiId}`, 'DELETE'),
   disagreements: (id: string) => jget<any>(`/api/coding/${id}/disagreements`),
   deriveGold: (id: string) => jsend<any>(`/api/coding/${id}/derive-gold`, 'POST'),
 

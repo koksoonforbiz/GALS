@@ -33,12 +33,37 @@ const DETECT_DEFAULTS: AffectThresholds = {
 // Allow brief dips below threshold (sensor noise) without splitting one episode.
 const DETECT_GAP_MS = 4000;
 
+// Default FACS-informed AU sets per affect (researcher-editable in AU mode).
+type AuMap = {
+  engagement: string[];
+  boredom: string[];
+  confusion: string[];
+  frustration: string[];
+};
+const AU_DEFAULTS: AuMap = {
+  engagement: ['au06', 'au12', 'au01', 'au02'], // cheek raise + smile + brow raise
+  boredom: [], // AU-based boredom needs eye/blink AUs not captured — researcher picks
+  confusion: ['au04', 'au07'], // brow lowerer + lid tightener
+  frustration: ['au04', 'au07', 'au23', 'au24'], // + lip tightener/pressor
+};
+
 interface Interval {
   id: string;
   code: string;
   startWallMs: number;
   endWallMs: number;
   notes?: string | null;
+  intensity?: number | null;
+  confidence?: string | null;
+}
+interface Aoi {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string | null;
 }
 type Streams = {
   aus: Record<string, { t: number; v: number }[]>;
@@ -73,6 +98,23 @@ export function TimelineCoding() {
   const [thresholds, setThresholds] = useState<AffectThresholds>(DETECT_DEFAULTS);
   const [detectMinSec, setDetectMinSec] = useState(30);
   const [showDetections, setShowDetections] = useState(true);
+  const [method, setMethod] = useState<'emotion' | 'au'>('emotion');
+  const [auMap, setAuMap] = useState<AuMap>(() => {
+    try {
+      const s = localStorage.getItem('gals.auMap');
+      if (s) return { ...AU_DEFAULTS, ...JSON.parse(s) };
+    } catch {
+      /* fall through */
+    }
+    return AU_DEFAULTS;
+  });
+  const [auPanelOpen, setAuPanelOpen] = useState(true);
+  const [rowHidden, setRowHidden] = useState<Record<string, boolean>>({});
+  const [rowMenuOpen, setRowMenuOpen] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [aois, setAois] = useState<Aoi[]>([]);
+  const [aoiDraw, setAoiDraw] = useState(false);
 
   const storeRef = useRef<PlayheadStore | null>(null);
   if (!storeRef.current)
@@ -113,6 +155,35 @@ export function TimelineCoding() {
   useEffect(() => {
     if (coderId) localStorage.setItem('gals.coderId', coderId);
   }, [coderId]);
+  useEffect(() => {
+    localStorage.setItem('gals.auMap', JSON.stringify(auMap));
+  }, [auMap]);
+
+  const refreshAois = useCallback(async () => {
+    const r = await api.aois(sessionId);
+    setAois(r.aois ?? []);
+  }, [sessionId]);
+  useEffect(() => {
+    void refreshAois();
+  }, [refreshAois]);
+
+  const createAoi = useCallback(
+    async (rect: { x: number; y: number; width: number; height: number }) => {
+      const name = window.prompt('Name this AOI', `AOI ${aois.length + 1}`);
+      if (name == null) return;
+      await api.createAoi(sessionId, { ...rect, name: name.trim() || 'AOI', color: '#e11d48' });
+      setAoiDraw(false);
+      await refreshAois();
+    },
+    [sessionId, aois.length, refreshAois],
+  );
+  const delAoi = useCallback(
+    async (id: string) => {
+      await api.deleteAoi(id);
+      await refreshAois();
+    },
+    [refreshAois],
+  );
 
   // measure the visible track area (scroll viewport minus the label column)
   useEffect(() => {
@@ -139,14 +210,59 @@ export function TimelineCoding() {
     [sparse, absoluteMs],
   );
 
-  // model affective detections: contiguous runs where the emotion-derived affect
-  // score stays at/above threshold for >= the min duration (values in relative ms).
+  // model affective detections: contiguous runs where the affect score (from the
+  // selected method) stays at/above threshold for >= the min duration (relative ms).
   const detections = useMemo(
     () =>
       streams
-        ? computeDetections(streams.emotions, thresholds, detectMinSec * 1000)
+        ? computeDetections(method, streams, thresholds, detectMinSec * 1000, auMap)
         : ({} as Record<string, { startMs: number; endMs: number }[]>),
-    [streams, thresholds, detectMinSec],
+    [streams, method, thresholds, detectMinSec, auMap],
+  );
+
+  // researcher-AOI gaze dwell over the review segment (or whole session).
+  const aoiDwell = useMemo(() => {
+    const g: { wallMs: number; x: number; y: number }[] = sparse?.gaze ?? [];
+    if (!aois.length || !g.length) return [];
+    const lo = review ? base + review.startMs : -Infinity;
+    const hi = review ? base + review.endMs : Infinity;
+    const counts = aois.map((a) => ({ a, n: 0 }));
+    let total = 0;
+    for (const p of g) {
+      if (p.wallMs < lo || p.wallMs > hi) continue;
+      total += 1;
+      for (const c of counts) {
+        if (p.x >= c.a.x && p.x <= c.a.x + c.a.width && p.y >= c.a.y && p.y <= c.a.y + c.a.height)
+          c.n += 1;
+      }
+    }
+    return counts.map((c) => ({
+      id: c.a.id,
+      name: c.a.name,
+      color: c.a.color ?? '#e11d48',
+      pct: total ? c.n / total : 0,
+    }));
+  }, [aois, sparse, review, base]);
+
+  const aoiOverlay = currentSnapshot ? (
+    <AoiLayer
+      width={currentSnapshot.width}
+      height={currentSnapshot.height}
+      aois={aois}
+      drawing={aoiDraw}
+      onCreate={createAoi}
+      onDelete={delAoi}
+    />
+  ) : null;
+
+  const rowConfig = useMemo(
+    () => [
+      { key: 'webcam', label: '📹 webcam', color: '#334155' },
+      ...AFFECT_TRACKS.map((t) => ({ key: t.code, label: t.label, color: t.color })),
+      { key: 'interventions', label: '⚡ interventions', color: '#7c3aed' },
+      ...dataRows.map((r) => ({ key: r.id, label: dataRowName(r), color: r.color })),
+    ],
+    [dataRows],
   );
 
   // loop the segment under review
@@ -267,6 +383,44 @@ export function TimelineCoding() {
         >
           window coding →
         </Link>
+        <button
+          onClick={async () => {
+            setShowSummary(true);
+            try {
+              setSummary(await api.sessionSummary(sessionId, coderId || 'none'));
+            } catch {
+              setSummary(null);
+            }
+          }}
+          className="rounded bg-slate-900 px-2 py-1 text-xs text-white"
+        >
+          📋 Summary
+        </button>
+        <div className="relative">
+          <button
+            onClick={() => setRowMenuOpen((v) => !v)}
+            className="rounded border border-slate-300 px-2 py-1 text-xs"
+          >
+            Rows ▾
+          </button>
+          {rowMenuOpen && (
+            <div className="absolute z-30 mt-1 w-44 rounded border border-slate-200 bg-white p-1 shadow-lg">
+              {rowConfig.map((r) => (
+                <label
+                  key={r.key}
+                  className="flex items-center gap-2 px-1 py-0.5 hover:bg-slate-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!rowHidden[r.key]}
+                    onChange={(e) => setRowHidden((h) => ({ ...h, [r.key]: !e.target.checked }))}
+                  />
+                  <span style={{ color: r.color }}>{r.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
         <span className="ml-auto flex items-center gap-1 text-xs">
           zoom
           <button
@@ -288,12 +442,29 @@ export function TimelineCoding() {
       {/* player */}
       <div className="grid grid-cols-[1fr_300px] gap-2">
         <div className="space-y-1">
-          <button
-            onClick={() => setShowScreenshot((v) => !v)}
-            className="rounded border border-slate-300 px-2 py-0.5 text-xs"
-          >
-            {showScreenshot ? '🖼 Pixels' : '⟨⟩ DOM'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button
+              onClick={() => setShowScreenshot((v) => !v)}
+              className="rounded border border-slate-300 px-2 py-0.5"
+            >
+              {showScreenshot ? '🖼 Pixels (as seen)' : '⟨⟩ DOM'}
+            </button>
+            {currentSnapshot?.pdfTotalPages ? (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
+                PDF p.{currentSnapshot.pdfCurrentPage ?? '?'}/{currentSnapshot.pdfTotalPages}
+              </span>
+            ) : null}
+            {!showScreenshot && currentSnapshot?.pdfTotalPages ? (
+              <span className="text-slate-400">— PDF page only renders in Pixels view</span>
+            ) : null}
+            <button
+              onClick={() => setAoiDraw((v) => !v)}
+              className={`rounded border px-2 py-0.5 ${aoiDraw ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-300'}`}
+            >
+              {aoiDraw ? '✏ drawing AOI… (drag on view)' : '＋ AOI'}
+            </button>
+            <span className="ml-auto text-slate-400">🔒 locked to student view</span>
+          </div>
           <DomStage
             sessionId={sessionId}
             snapshot={currentSnapshot}
@@ -301,6 +472,8 @@ export function TimelineCoding() {
             lastClick={null}
             aoiVisible={{}}
             showScreenshot={showScreenshot}
+            locked
+            overlay={aoiOverlay}
           />
         </div>
         <div className="space-y-2">
@@ -373,11 +546,44 @@ export function TimelineCoding() {
                   </button>
                 )}
               </div>
+              {review.savedId && (
+                <RegionCoding
+                  interval={intervals.find((i) => i.id === review.savedId)}
+                  onSave={async (patch) => {
+                    await api.updateAnnotation(review.savedId!, patch);
+                    await refreshIntervals();
+                  }}
+                />
+              )}
             </div>
           ) : (
             <div className="rounded border border-dashed border-slate-300 p-2 text-xs text-slate-400">
               Detected affect segments (≥{detectMinSec}s over threshold) are shaded on each lane —
               click one to review, then ✓ accept. Or drag a lane to mark your own.
+            </div>
+          )}
+
+          {aois.length > 0 && (
+            <div className="rounded border border-slate-200 bg-white p-2 text-xs">
+              <div className="mb-1 font-semibold text-slate-500">
+                AOI gaze dwell {review ? '(this segment)' : '(whole session)'}
+              </div>
+              {aoiDwell.map((d) => (
+                <div key={d.id} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 truncate" style={{ color: d.color }}>
+                    {d.name}
+                  </span>
+                  <div className="h-2 flex-1 rounded bg-slate-100">
+                    <div
+                      className="h-2 rounded"
+                      style={{ width: `${Math.round(d.pct * 100)}%`, backgroundColor: d.color }}
+                    />
+                  </div>
+                  <span className="w-8 shrink-0 tabular-nums text-slate-400">
+                    {Math.round(d.pct * 100)}%
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -392,6 +598,17 @@ export function TimelineCoding() {
       {/* affect-detection settings */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
         <span className="font-semibold text-slate-500">Affect detection</span>
+        <label className="flex items-center gap-1">
+          method
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value as 'emotion' | 'au')}
+            className="rounded border border-slate-300 px-1 py-0.5"
+          >
+            <option value="emotion">rule-based (emotion)</option>
+            <option value="au">AU-based</option>
+          </select>
+        </label>
         <label className="flex items-center gap-1">
           <input
             type="checkbox"
@@ -435,6 +652,60 @@ export function TimelineCoding() {
         </span>
       </div>
 
+      {/* AU → affect mapping (AU-based method only) */}
+      {method === 'au' && streams && (
+        <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+          <button
+            onClick={() => setAuPanelOpen((v) => !v)}
+            className="mb-1 flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
+          >
+            <span>{auPanelOpen ? '▾' : '▸'}</span>
+            AU → affect mapping{' '}
+            {auPanelOpen ? '— click action units to include in each affect' : '(click to edit)'}
+          </button>
+          <div className={`space-y-1 ${auPanelOpen ? '' : 'hidden'}`}>
+            {(['engagement', 'boredom', 'confusion', 'frustration'] as const).map((aff) => {
+              const auKeys = Object.keys(streams.aus)
+                .filter((k) => streams.aus[k]?.length)
+                .sort();
+              return (
+                <div key={aff} className="flex flex-wrap items-center gap-1">
+                  <span className="w-20 shrink-0 font-medium" style={{ color: colorFor(aff) }}>
+                    {labelFor(aff)}
+                  </span>
+                  {auKeys.length === 0 && <span className="text-slate-400">no AU data</span>}
+                  {auKeys.map((au) => {
+                    const on = auMap[aff].includes(au);
+                    return (
+                      <button
+                        key={au}
+                        onClick={() =>
+                          setAuMap((m) => ({
+                            ...m,
+                            [aff]: on ? m[aff].filter((x) => x !== au) : [...m[aff], au],
+                          }))
+                        }
+                        className="rounded px-1 py-0.5 font-mono text-[10px]"
+                        style={{
+                          background: on ? colorFor(aff) + '33' : '#f1f5f9',
+                          color: on ? colorFor(aff) : '#94a3b8',
+                          outline: on ? `1px solid ${colorFor(aff)}` : 'none',
+                        }}
+                      >
+                        {au}
+                      </button>
+                    );
+                  })}
+                  {auMap[aff].length === 0 && (
+                    <span className="text-slate-300">(none → no detection)</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* timeline */}
       <div className="rounded-lg border border-slate-200 bg-white">
         <div className="overflow-x-auto" ref={scrollRef}>
@@ -445,26 +716,28 @@ export function TimelineCoding() {
             </Row>
 
             {/* webcam coverage */}
-            <Row label="📹 webcam">
-              <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
-                {webcamSegs.map((s, i) => {
-                  const a = s.startWallMs - base;
-                  const b = (s.endWallMs ?? s.startWallMs) - base;
-                  return (
-                    <div
-                      key={i}
-                      className="absolute top-1 h-4 rounded bg-slate-700/70"
-                      style={{ left: offToX(a), width: Math.max(2, offToX(b - a)) }}
-                      title={`video ${fmtRel(a)}–${fmtRel(b)}`}
-                    />
-                  );
-                })}
-                <Playhead x={offToX(ph.offsetMs)} />
-              </Lane>
-            </Row>
+            {!rowHidden['webcam'] && (
+              <Row label="📹 webcam">
+                <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
+                  {webcamSegs.map((s, i) => {
+                    const a = s.startWallMs - base;
+                    const b = (s.endWallMs ?? s.startWallMs) - base;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-1 h-4 rounded bg-slate-700/70"
+                        style={{ left: offToX(a), width: Math.max(2, offToX(b - a)) }}
+                        title={`video ${fmtRel(a)}–${fmtRel(b)}`}
+                      />
+                    );
+                  })}
+                  <Playhead x={offToX(ph.offsetMs)} />
+                </Lane>
+              </Row>
+            )}
 
             {/* affect coder tiers */}
-            {AFFECT_TRACKS.map((tr) => (
+            {AFFECT_TRACKS.filter((tr) => !rowHidden[tr.code]).map((tr) => (
               <Row
                 key={tr.code}
                 label={
@@ -535,59 +808,63 @@ export function TimelineCoding() {
             ))}
 
             {/* learning interventions (data) */}
-            <Row label="⚡ interventions">
-              <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
-                {interventions.map((iv, i) => {
-                  const a = iv.wallMs - base;
-                  return (
-                    <div
-                      key={i}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        store.seek(a);
-                      }}
-                      className="absolute top-1 h-5 w-1.5 -translate-x-1/2 cursor-pointer rounded bg-violet-600"
-                      style={{ left: offToX(a) }}
-                      title={`${iv.type ?? 'intervention'} ${iv.status ?? ''} @ ${fmtRel(a)}`}
-                    />
-                  );
-                })}
-                <Playhead x={offToX(ph.offsetMs)} />
-              </Lane>
-            </Row>
-
-            {/* on-demand data rows */}
-            {dataRows.map((row) => (
-              <Row
-                key={row.id}
-                label={
-                  <span className="flex w-full items-center gap-1">
-                    <span className="truncate" title={dataRowName(row)}>
-                      {dataRowName(row)}
-                    </span>
-                    <button
-                      onClick={() => removeDataRow(row.id)}
-                      className="ml-auto text-slate-300 hover:text-rose-500"
-                      title="remove row"
-                    >
-                      ✕
-                    </button>
-                  </span>
-                }
-              >
+            {!rowHidden['interventions'] && (
+              <Row label="⚡ interventions">
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
-                  <DataTrack
-                    row={row}
-                    streams={streams}
-                    ef={sparse?.efDetections ?? []}
-                    base={base}
-                    offToX={offToX}
-                    fullW={fullW}
-                  />
+                  {interventions.map((iv, i) => {
+                    const a = iv.wallMs - base;
+                    return (
+                      <div
+                        key={i}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          store.seek(a);
+                        }}
+                        className="absolute top-1 h-5 w-1.5 -translate-x-1/2 cursor-pointer rounded bg-violet-600"
+                        style={{ left: offToX(a) }}
+                        title={`${iv.type ?? 'intervention'} ${iv.status ?? ''} @ ${fmtRel(a)}`}
+                      />
+                    );
+                  })}
                   <Playhead x={offToX(ph.offsetMs)} />
                 </Lane>
               </Row>
-            ))}
+            )}
+
+            {/* on-demand data rows */}
+            {dataRows
+              .filter((row) => !rowHidden[row.id])
+              .map((row) => (
+                <Row
+                  key={row.id}
+                  label={
+                    <span className="flex w-full items-center gap-1">
+                      <span className="truncate" title={dataRowName(row)}>
+                        {dataRowName(row)}
+                      </span>
+                      <button
+                        onClick={() => removeDataRow(row.id)}
+                        className="ml-auto text-slate-300 hover:text-rose-500"
+                        title="remove row"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  }
+                >
+                  <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
+                    <DataTrack
+                      row={row}
+                      streams={streams}
+                      ef={sparse?.efDetections ?? []}
+                      base={base}
+                      offToX={offToX}
+                      fullW={fullW}
+                    />
+                    <Playhead x={offToX(ph.offsetMs)} />
+                  </Lane>
+                </Row>
+              ))}
 
             {/* add row */}
             <div className="flex items-center gap-2 px-2 py-2" style={{ paddingLeft: LABEL_W }}>
@@ -600,6 +877,133 @@ export function TimelineCoding() {
           </div>
         </div>
       </div>
+
+      {showSummary && <SummaryModal summary={summary} onClose={() => setShowSummary(false)} />}
+    </div>
+  );
+}
+
+function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void }) {
+  const fmt = (ms: number) => fmtRel(ms);
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-[560px] overflow-auto rounded-lg bg-white p-4 text-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold">Session summary</h2>
+          <button onClick={onClose} className="rounded border border-slate-300 px-2 py-0.5 text-xs">
+            close
+          </button>
+        </div>
+        {!summary ? (
+          <div className="text-slate-400">Loading…</div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <div className="font-semibold">{summary.session.userDisplayName ?? 'student'}</div>
+              <div className="text-xs text-slate-500">
+                {new Date(summary.session.startedAt).toLocaleString()} →{' '}
+                {summary.session.endedAt
+                  ? new Date(summary.session.endedAt).toLocaleTimeString()
+                  : '— (no end)'}
+              </div>
+            </div>
+
+            {summary.abandoned?.likely && (
+              <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
+                <span className="font-semibold">⚠ Possibly abandoned</span> —{' '}
+                {summary.abandoned.signals.join('; ')}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <Stat label="total time" value={fmt(summary.time.totalMs)} />
+              <Stat label="active (visible)" value={fmt(summary.time.activeMs)} />
+              <Stat label="hidden/away" value={fmt(summary.time.hiddenMs)} />
+            </div>
+
+            <div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Learning interventions — {summary.interventions.completed}/
+                {summary.interventions.total} completed
+                {summary.interventions.avgScore != null && (
+                  <> · avg score {Math.round(summary.interventions.avgScore)}</>
+                )}
+              </div>
+              <table className="w-full text-xs">
+                <thead className="text-left text-slate-400">
+                  <tr>
+                    <th className="py-0.5">type</th>
+                    <th>status</th>
+                    <th>score</th>
+                    <th>at</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.interventions.items.map((iv: any, i: number) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="py-0.5">{iv.type}</td>
+                      <td
+                        className={
+                          (iv.status ?? '').toUpperCase() === 'COMPLETED'
+                            ? 'text-emerald-600'
+                            : 'text-amber-600'
+                        }
+                      >
+                        {iv.status}
+                      </td>
+                      <td>{iv.score ?? '—'}</td>
+                      <td className="font-mono text-slate-400">{fmt(iv.atMs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Coding — {summary.coding.marks} affect mark(s)
+              </div>
+              {summary.coding.byAffect.length === 0 ? (
+                <div className="text-xs text-slate-400">No affect marks coded yet</div>
+              ) : (
+                summary.coding.byAffect.map((c: any) => (
+                  <div key={c.code} className="flex items-center gap-2 text-xs">
+                    <span className="w-24" style={{ color: colorFor(c.code) }}>
+                      {labelFor(c.code)}
+                    </span>
+                    <span>{c.count} mark(s)</span>
+                    <span className="text-slate-400">· {fmt(c.totalMs)} total</span>
+                    {c.avgIntensity != null && (
+                      <span className="text-slate-400">
+                        · avg intensity {c.avgIntensity.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="text-xs text-slate-400">
+              Chatbot messages: {summary.engagement?.chatbotMessages ?? 0}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-slate-200 p-2">
+      <div className="font-mono text-base">{value}</div>
+      <div className="text-[10px] text-slate-400">{label}</div>
     </div>
   );
 }
@@ -787,7 +1191,7 @@ function AddRowMenu({
           }}
           className="rounded bg-indigo-100 px-1.5 py-0.5 text-indigo-700"
         >
-          EF detections
+          Text-mining (EF)
         </button>
       )}
       <Picker
@@ -841,27 +1245,72 @@ function Picker({
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */
 
+type AffectScoresT = {
+  engagement: number;
+  boredom: number;
+  confusion: number;
+  frustration: number;
+};
+
+/** Researcher-configured mapping: each affect's score is the mean normalised
+ * intensity (AU value / 3, capped) of the AUs assigned to it. */
+function auAffectScores(au: Record<string, number>, auMap: AuMap): AffectScoresT {
+  const n = (k: string) => Math.min(1, (au[k] ?? 0) / 3);
+  const score = (keys: string[]) =>
+    keys.length ? Math.min(1, keys.reduce((s, k) => s + n(k), 0) / keys.length) : 0;
+  return {
+    engagement: score(auMap.engagement),
+    boredom: score(auMap.boredom),
+    confusion: score(auMap.confusion),
+    frustration: score(auMap.frustration),
+  };
+}
+
+/** Per-frame {t, scores} from whichever stream the chosen method uses. */
+function scoredFrames(
+  method: 'emotion' | 'au',
+  streams: Streams,
+  auMap: AuMap,
+): { t: number; scores: AffectScoresT }[] {
+  const src = method === 'au' ? streams.aus : streams.emotions;
+  const keys =
+    method === 'au'
+      ? Object.keys(src)
+      : ['happiness', 'sadness', 'surprise', 'fear', 'anger', 'disgust', 'contempt', 'neutral'];
+  const len = Math.max(0, ...keys.map((k) => src[k]?.length ?? 0));
+  const frames: { t: number; scores: AffectScoresT }[] = [];
+  let lastT = 0;
+  for (let i = 0; i < len; i++) {
+    const vals: Record<string, number> = {};
+    let t = lastT;
+    for (const k of keys) {
+      const pt = src[k]?.[i];
+      if (pt) {
+        vals[k] = pt.v;
+        t = pt.t;
+      }
+    }
+    lastT = t;
+    frames.push({
+      t,
+      scores: method === 'au' ? auAffectScores(vals, auMap) : affectScores(vals as EmotionProbs),
+    });
+  }
+  return frames;
+}
+
 /**
- * Derive duration-based affect detections from the emotion-probability series:
- * a detection is a contiguous run where the emotion-derived affect score stays
- * at/above its threshold for at least `minMs` (timestamps are relative ms).
+ * Duration-based affect detections: a detection is a contiguous run where the
+ * affect score (from the chosen method) stays at/above its threshold for at
+ * least `minMs` (brief sub-threshold dips up to DETECT_GAP_MS are bridged).
  */
 function computeDetections(
-  emotions: Record<string, { t: number; v: number }[]>,
+  method: 'emotion' | 'au',
+  streams: Streams,
   thresholds: AffectThresholds,
   minMs: number,
+  auMap: AuMap,
 ): Record<string, { startMs: number; endMs: number }[]> {
-  const keys = [
-    'happiness',
-    'sadness',
-    'surprise',
-    'fear',
-    'anger',
-    'disgust',
-    'contempt',
-    'neutral',
-  ] as const;
-  const len = Math.max(0, ...keys.map((k) => emotions[k]?.length ?? 0));
   const affects = ['engagement', 'boredom', 'confusion', 'frustration'] as const;
   const out: Record<string, { startMs: number; endMs: number }[]> = {
     engagement: [],
@@ -869,7 +1318,8 @@ function computeDetections(
     confusion: [],
     frustration: [],
   };
-  if (len === 0) return out;
+  const frames = scoredFrames(method, streams, auMap);
+  if (frames.length === 0) return out;
   const runStart: Record<string, number | null> = {
     engagement: null,
     boredom: null,
@@ -882,36 +1332,215 @@ function computeDetections(
     confusion: 0,
     frustration: 0,
   };
-  let lastT = 0;
   const close = (aff: string) => {
     if (runStart[aff] != null && lastAbove[aff] - (runStart[aff] as number) >= minMs) {
       out[aff].push({ startMs: runStart[aff] as number, endMs: lastAbove[aff] });
     }
     runStart[aff] = null;
   };
-  for (let i = 0; i < len; i++) {
-    const probs: EmotionProbs = {};
-    let t = lastT;
-    for (const k of keys) {
-      const pt = emotions[k]?.[i];
-      if (pt) {
-        (probs as Record<string, number>)[k] = pt.v;
-        t = pt.t;
-      }
-    }
-    lastT = t;
-    const scores = affectScores(probs);
+  for (const f of frames) {
     for (const aff of affects) {
-      if (scores[aff] >= thresholds[aff]) {
-        if (runStart[aff] == null) runStart[aff] = t;
-        lastAbove[aff] = t;
-      } else if (runStart[aff] != null && t - lastAbove[aff] > DETECT_GAP_MS) {
-        close(aff); // sustained dip — end the episode at its last above-threshold frame
+      if (f.scores[aff] >= thresholds[aff]) {
+        if (runStart[aff] == null) runStart[aff] = f.t;
+        lastAbove[aff] = f.t;
+      } else if (runStart[aff] != null && f.t - lastAbove[aff] > DETECT_GAP_MS) {
+        close(aff);
       }
     }
   }
   for (const aff of affects) close(aff);
   return out;
+}
+
+/** Draw/show researcher AOIs in snapshot-pixel space over the (locked) replay. */
+function AoiLayer({
+  width,
+  height,
+  aois,
+  drawing,
+  onCreate,
+  onDelete,
+}: {
+  width: number;
+  height: number;
+  aois: Aoi[];
+  drawing: boolean;
+  onCreate: (rect: { x: number; y: number; width: number; height: number }) => void;
+  onDelete: (id: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(
+    null,
+  );
+  const toLocal = (cx: number, cy: number) => {
+    const r = ref.current!.getBoundingClientRect();
+    return {
+      x: ((cx - r.left) / (r.width || 1)) * width,
+      y: ((cy - r.top) / (r.height || 1)) * height,
+    };
+  };
+  const start = (e: React.MouseEvent) => {
+    if (!drawing || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const p = toLocal(e.clientX, e.clientY);
+    setDraft({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
+    const move = (ev: MouseEvent) => {
+      const q = toLocal(ev.clientX, ev.clientY);
+      setDraft((d) => (d ? { ...d, x1: q.x, y1: q.y } : d));
+    };
+    const up = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      const q = toLocal(ev.clientX, ev.clientY);
+      setDraft(null);
+      const x = Math.min(p.x, q.x),
+        y = Math.min(p.y, q.y),
+        w = Math.abs(q.x - p.x),
+        h = Math.abs(q.y - p.y);
+      if (w > 8 && h > 8) onCreate({ x, y, width: w, height: h });
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+  return (
+    <div
+      ref={ref}
+      className="absolute left-0 top-0"
+      style={{
+        width,
+        height,
+        pointerEvents: drawing ? 'auto' : 'none',
+        cursor: drawing ? 'crosshair' : 'default',
+      }}
+      onMouseDown={start}
+    >
+      {aois.map((a) => (
+        <div
+          key={a.id}
+          className="absolute"
+          style={{
+            left: a.x,
+            top: a.y,
+            width: a.width,
+            height: a.height,
+            border: `2px solid ${a.color ?? '#e11d48'}`,
+            background: `${a.color ?? '#e11d48'}1f`,
+            pointerEvents: 'auto',
+          }}
+        >
+          <span
+            className="absolute left-0 top-0 flex items-center gap-1 bg-white/85 px-1 text-[10px] font-semibold"
+            style={{ color: a.color ?? '#e11d48' }}
+          >
+            {a.name}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(a.id);
+              }}
+              className="text-slate-400 hover:text-rose-600"
+              title="delete AOI"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      ))}
+      {draft && (
+        <div
+          className="absolute border-2 border-dashed border-rose-500 bg-rose-500/10"
+          style={{
+            left: Math.min(draft.x0, draft.x1),
+            top: Math.min(draft.y0, draft.y1),
+            width: Math.abs(draft.x1 - draft.x0),
+            height: Math.abs(draft.y1 - draft.y0),
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Coding form for a saved affect region: intensity, confidence, notes. */
+function RegionCoding({
+  interval,
+  onSave,
+}: {
+  interval?: Interval;
+  onSave: (patch: {
+    intensity?: number | null;
+    confidence?: string | null;
+    notes?: string | null;
+  }) => Promise<void>;
+}) {
+  const [intensity, setIntensity] = useState(interval?.intensity ?? 3);
+  const [confidence, setConfidence] = useState(interval?.confidence ?? 'medium');
+  const [notes, setNotes] = useState(interval?.notes ?? '');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setIntensity(interval?.intensity ?? 3);
+    setConfidence(interval?.confidence ?? 'medium');
+    setNotes(interval?.notes ?? '');
+    setSaved(false);
+  }, [interval?.id]);
+  if (!interval) return null;
+  return (
+    <div className="mt-2 space-y-1 border-t border-slate-100 pt-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+        code this region
+      </div>
+      <label className="flex items-center gap-2">
+        intensity
+        <input
+          type="range"
+          min={1}
+          max={5}
+          value={intensity}
+          onChange={(e) => {
+            setIntensity(Number(e.target.value));
+            setSaved(false);
+          }}
+          className="flex-1"
+        />
+        <span className="w-4 tabular-nums">{intensity}</span>
+      </label>
+      <label className="flex items-center gap-2">
+        confidence
+        <select
+          value={confidence}
+          onChange={(e) => {
+            setConfidence(e.target.value);
+            setSaved(false);
+          }}
+          className="rounded border border-slate-300 px-1 py-0.5"
+        >
+          {['low', 'medium', 'high'].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+      </label>
+      <textarea
+        value={notes}
+        onChange={(e) => {
+          setNotes(e.target.value);
+          setSaved(false);
+        }}
+        placeholder="notes…"
+        rows={2}
+        className="w-full rounded border border-slate-300 p-1"
+      />
+      <button
+        onClick={async () => {
+          await onSave({ intensity, confidence, notes: notes || null });
+          setSaved(true);
+        }}
+        className="rounded bg-slate-900 px-2 py-0.5 text-white"
+      >
+        {saved ? 'saved ✓' : 'save coding'}
+      </button>
+    </div>
+  );
 }
 
 function colorFor(code: string): string {
@@ -922,7 +1551,7 @@ function labelFor(code: string): string {
 }
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';
-  if (row.kind === 'ef') return 'EF detections';
+  if (row.kind === 'ef') return 'Text-mining (EF)';
   return `${row.kind === 'au' ? 'AU' : 'emotion'}: ${row.key}`;
 }
 function sevColor(sev?: string): string {
