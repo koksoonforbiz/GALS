@@ -5,10 +5,7 @@
  * the existing schema/types. Run `pnpm db:generate` once before exporting.
  * Connects directly to Postgres — the Nest app does NOT need to be running.
  */
-import {
-  S3Client,
-  GetObjectCommand,
-} from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import type {
   SessionDataSource,
   SessionJson,
@@ -21,14 +18,29 @@ import type {
 
 const BATCH = 5000;
 const AU_KEYS = [
-  'au01', 'au02', 'au04', 'au05', 'au06', 'au07', 'au09', 'au10', 'au12',
-  'au14', 'au15', 'au17', 'au20', 'au23', 'au24', 'au25', 'au26', 'au28',
+  'au01',
+  'au02',
+  'au04',
+  'au05',
+  'au06',
+  'au07',
+  'au09',
+  'au10',
+  'au12',
+  'au14',
+  'au15',
+  'au17',
+  'au20',
+  'au23',
+  'au24',
+  'au25',
+  'au26',
+  'au28',
 ] as const;
 
 const num = (v: bigint | number | null | undefined): number =>
   typeof v === 'bigint' ? Number(v) : typeof v === 'number' ? v : 0;
-const dateMs = (d: Date | null | undefined): number | null =>
-  d ? d.getTime() : null;
+const dateMs = (d: Date | null | undefined): number | null => (d ? d.getTime() : null);
 
 export interface PrismaLike {
   studentSession: any;
@@ -133,35 +145,56 @@ export class PrismaDataSource implements SessionDataSource {
   }
 
   async *getSnapshots(sessionId: string): AsyncIterable<SnapshotRecord> {
-    let skip = 0;
-    for (;;) {
-      const rows = await this.prisma.sessionReplaySnapshot.findMany({
+    const toRecord = (r: any): SnapshotRecord => ({
+      snapshotId: r.id,
+      wallMs: num(r.capturedAt),
+      trigger: r.trigger,
+      pageUrl: r.pageUrl,
+      width: r.width,
+      height: r.height,
+      scrollX: r.scrollX,
+      scrollY: r.scrollY,
+      aois: r.aois ?? null,
+      scrollHosts: r.scrollHosts ?? null,
+      pdfCurrentPage: r.pdfCurrentPage ?? null,
+      pdfTotalPages: r.pdfTotalPages ?? null,
+      html: r.html ?? '',
+      screenshotDataUrl: r.screenshotDataUrl ?? null,
+    });
+
+    // Page over ids first (cheap — no html/screenshot payload). A single row
+    // whose html holds bytes the Prisma engine can't convert to a JS string
+    // ("Failed to convert rust String into napi string") otherwise throws for
+    // the whole page and silently truncates the export. So on a page error we
+    // fall back to per-row reads and skip only the offending snapshot.
+    const ids = (
+      await this.prisma.sessionReplaySnapshot.findMany({
         where: { sessionId },
         orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
-        skip,
-        take: 200,
-      });
-      if (rows.length === 0) break;
-      for (const r of rows) {
-        yield {
-          snapshotId: r.id,
-          wallMs: num(r.capturedAt),
-          trigger: r.trigger,
-          pageUrl: r.pageUrl,
-          width: r.width,
-          height: r.height,
-          scrollX: r.scrollX,
-          scrollY: r.scrollY,
-          aois: r.aois ?? null,
-          scrollHosts: r.scrollHosts ?? null,
-          pdfCurrentPage: r.pdfCurrentPage ?? null,
-          pdfTotalPages: r.pdfTotalPages ?? null,
-          html: r.html ?? '',
-          screenshotDataUrl: r.screenshotDataUrl ?? null,
-        };
+        select: { id: true },
+      })
+    ).map((r: any) => r.id as string);
+
+    for (let i = 0; i < ids.length; i += 200) {
+      const pageIds = ids.slice(i, i + 200);
+      let rows: any[];
+      try {
+        rows = await this.prisma.sessionReplaySnapshot.findMany({
+          where: { id: { in: pageIds } },
+          orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+        });
+      } catch {
+        rows = [];
+        for (const id of pageIds) {
+          try {
+            const r = await this.prisma.sessionReplaySnapshot.findUnique({ where: { id } });
+            if (r) rows.push(r);
+          } catch {
+            /* unconvertible row — skip it, keep the rest of the page */
+          }
+        }
       }
-      skip += rows.length;
-      if (rows.length < 200) break;
+      for (const r of rows) yield toRecord(r);
     }
   }
 
@@ -182,9 +215,7 @@ export class PrismaDataSource implements SessionDataSource {
 
   async getBlob(blobKey: string): Promise<Buffer | null> {
     try {
-      const res = await this.s3.send(
-        new GetObjectCommand({ Bucket: this.bucket, Key: blobKey }),
-      );
+      const res = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: blobKey }));
       if (!res.Body) return null;
       const bytes = await (res.Body as any).transformToByteArray();
       return Buffer.from(bytes);
@@ -217,9 +248,14 @@ export class PrismaDataSource implements SessionDataSource {
           faceDetected: r.faceDetected,
           dominant: r.dominantEmotion ?? null,
           dominantProbability: r.dominantProbability ?? null,
-          pHappiness: r.pHappiness, pSadness: r.pSadness, pSurprise: r.pSurprise,
-          pFear: r.pFear, pAnger: r.pAnger, pDisgust: r.pDisgust,
-          pContempt: r.pContempt, pNeutral: r.pNeutral,
+          pHappiness: r.pHappiness,
+          pSadness: r.pSadness,
+          pSurprise: r.pSurprise,
+          pFear: r.pFear,
+          pAnger: r.pAnger,
+          pDisgust: r.pDisgust,
+          pContempt: r.pContempt,
+          pNeutral: r.pNeutral,
           headPoseYaw: r.headPoseYaw ?? null,
           headPosePitch: r.headPosePitch ?? null,
           headPoseRoll: r.headPoseRoll ?? null,
@@ -252,52 +288,79 @@ export class PrismaDataSource implements SessionDataSource {
       }
       case 'clicks':
         yield* this.batched(this.prisma.click_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), x: r.x, y: r.y,
-          target: r.elementSelector ?? null, text: r.elementText ?? null, pageUrl: r.pageUrl,
+          wallMs: num(r.timestamp),
+          x: r.x,
+          y: r.y,
+          target: r.elementSelector ?? null,
+          text: r.elementText ?? null,
+          pageUrl: r.pageUrl,
         }));
         return;
       case 'scrolls':
         yield* this.batched(this.prisma.scroll_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), scrollY: r.scrollY, scrollPercent: r.scrollPercent, pageUrl: r.pageUrl,
+          wallMs: num(r.timestamp),
+          scrollY: r.scrollY,
+          scrollPercent: r.scrollPercent,
+          pageUrl: r.pageUrl,
         }));
         return;
       case 'cursors':
         yield* this.batched(this.prisma.cursor_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), x: r.x, y: r.y, target: r.elementTarget ?? null, pageUrl: r.pageUrl,
+          wallMs: num(r.timestamp),
+          x: r.x,
+          y: r.y,
+          target: r.elementTarget ?? null,
+          pageUrl: r.pageUrl,
         }));
         return;
       case 'keystrokes':
         yield* this.batched(this.prisma.keystroke_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), fieldId: r.fieldId, keystrokeCount: r.keystrokeCount,
-          pauseDurationMs: r.pauseDurationMs, typingSpeedWPM: r.typingSpeedWPM ?? null,
+          wallMs: num(r.timestamp),
+          fieldId: r.fieldId,
+          keystrokeCount: r.keystrokeCount,
+          pauseDurationMs: r.pauseDurationMs,
+          typingSpeedWPM: r.typingSpeedWPM ?? null,
         }));
         return;
       case 'clipboard':
         yield* this.batched(this.prisma.clipboard_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), action: r.action, textLength: r.textLength,
-          sourceElement: r.sourceElement ?? null, pageUrl: r.pageUrl,
+          wallMs: num(r.timestamp),
+          action: r.action,
+          textLength: r.textLength,
+          sourceElement: r.sourceElement ?? null,
+          pageUrl: r.pageUrl,
         }));
         return;
       case 'visibility':
         yield* this.batched(this.prisma.visibility_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), visibleState: r.visibleState,
-          hiddenDurationMs: r.hiddenDurationMs ?? null, pageUrl: r.pageUrl,
+          wallMs: num(r.timestamp),
+          visibleState: r.visibleState,
+          hiddenDurationMs: r.hiddenDurationMs ?? null,
+          pageUrl: r.pageUrl,
         }));
         return;
       case 'viewport':
         yield* this.batched(this.prisma.viewport_logs, sessionId, 'timestamp', (r) => ({
-          wallMs: num(r.timestamp), width: r.width, height: r.height, orientation: r.orientation,
+          wallMs: num(r.timestamp),
+          width: r.width,
+          height: r.height,
+          orientation: r.orientation,
         }));
         return;
       case 'activity': {
         const rows = await this.prisma.activityLog.findMany({
-          where: { sessionId }, orderBy: { occurredAt: 'asc' },
+          where: { sessionId },
+          orderBy: { occurredAt: 'asc' },
         });
         for (const r of rows) {
           yield {
-            wallMs: r.occurredAt.getTime(), action: r.action, metadata: r.metadata ?? null,
-            courseId: r.courseId ?? null, moduleId: r.moduleId ?? null,
-            moduleItemId: r.moduleItemId ?? null, interventionId: r.interventionId ?? null,
+            wallMs: r.occurredAt.getTime(),
+            action: r.action,
+            metadata: r.metadata ?? null,
+            courseId: r.courseId ?? null,
+            moduleId: r.moduleId ?? null,
+            moduleItemId: r.moduleItemId ?? null,
+            interventionId: r.interventionId ?? null,
             dialogueSessionId: r.dialogueSessionId ?? null,
           };
         }
@@ -305,13 +368,18 @@ export class PrismaDataSource implements SessionDataSource {
       }
       case 'chatbot': {
         const rows = await this.prisma.chatbotMessage.findMany({
-          where: { studentSessionId: sessionId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          where: { studentSessionId: sessionId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         });
         for (const r of rows) {
           yield {
-            wallMs: r.createdAt.getTime(), role: r.role, content: r.content,
-            contextSource: r.contextSource ?? null, selectedText: r.selectedText ?? null,
-            suggestedStrategy: r.suggestedStrategy ?? null, model: r.model ?? null,
+            wallMs: r.createdAt.getTime(),
+            role: r.role,
+            content: r.content,
+            contextSource: r.contextSource ?? null,
+            selectedText: r.selectedText ?? null,
+            suggestedStrategy: r.suggestedStrategy ?? null,
+            model: r.model ?? null,
             moduleItemId: r.moduleItemId ?? null,
           };
         }
@@ -319,7 +387,8 @@ export class PrismaDataSource implements SessionDataSource {
       }
       case 'dialogue': {
         const s = await this.prisma.studentSession.findUnique({
-          where: { id: sessionId }, select: { userId: true, startedAt: true, endedAt: true },
+          where: { id: sessionId },
+          select: { userId: true, startedAt: true, endedAt: true },
         });
         if (!s) return;
         const pad = 5 * 60 * 1000;
@@ -335,7 +404,9 @@ export class PrismaDataSource implements SessionDataSource {
         });
         for (const r of rows) {
           yield {
-            wallMs: r.createdAt.getTime(), role: r.role, content: r.content,
+            wallMs: r.createdAt.getTime(),
+            role: r.role,
+            content: r.content,
             dialogueSessionId: r.sessionId ?? null,
           };
         }
@@ -343,52 +414,70 @@ export class PrismaDataSource implements SessionDataSource {
       }
       case 'interventions': {
         const ids = await this.prisma.activityLog.findMany({
-          where: { sessionId, interventionId: { not: null } }, select: { interventionId: true },
+          where: { sessionId, interventionId: { not: null } },
+          select: { interventionId: true },
         });
         const unique = Array.from(new Set(ids.map((a: any) => a.interventionId).filter(Boolean)));
         if (unique.length === 0) return;
         const rows = await this.prisma.learningIntervention.findMany({
-          where: { id: { in: unique } }, orderBy: { createdAt: 'asc' },
+          where: { id: { in: unique } },
+          orderBy: { createdAt: 'asc' },
         });
         for (const r of rows) {
           yield {
-            wallMs: r.createdAt.getTime(), id: r.id, type: r.type, status: r.status,
-            selectedText: r.selectedText ?? null, sessionData: r.sessionData ?? null,
+            wallMs: r.createdAt.getTime(),
+            id: r.id,
+            type: r.type,
+            status: r.status,
+            selectedText: r.selectedText ?? null,
+            sessionData: r.sessionData ?? null,
             completedAt: r.completedAt ? r.completedAt.toISOString() : null,
-            pageType: r.pageType ?? null, contentId: r.contentId ?? null, courseId: r.courseId ?? null,
+            pageType: r.pageType ?? null,
+            contentId: r.contentId ?? null,
+            courseId: r.courseId ?? null,
           };
         }
         return;
       }
       case 'ef_detections': {
         const rows = await this.prisma.efDetection.findMany({
-          where: { sessionId }, orderBy: { createdAt: 'asc' },
+          where: { sessionId },
+          orderBy: { createdAt: 'asc' },
         });
         for (const r of rows) {
           yield {
-            wallMs: r.createdAt.getTime(), messageId: r.messageId ?? null,
-            construct: r.constructKey, label: r.label, confidence: r.confidence ?? null,
-            severity: r.severity ?? null, rationale: r.rationale ?? null,
+            wallMs: r.createdAt.getTime(),
+            messageId: r.messageId ?? null,
+            construct: r.constructKey,
+            label: r.label,
+            confidence: r.confidence ?? null,
+            severity: r.severity ?? null,
+            rationale: r.rationale ?? null,
           };
         }
         return;
       }
       case 'mastery': {
         const s = await this.prisma.studentSession.findUnique({
-          where: { id: sessionId }, select: { userId: true, updatedAt: true },
+          where: { id: sessionId },
+          select: { userId: true, updatedAt: true },
         });
         if (!s) return;
         const rows = await this.prisma.userMastery
           .findMany({ where: { userId: s.userId } })
           .catch(() => []);
         for (const r of rows) {
-          yield { wallMs: (r.updatedAt ?? r.createdAt ?? s.updatedAt).getTime?.() ?? 0, ...serializeRow(r) };
+          yield {
+            wallMs: (r.updatedAt ?? r.createdAt ?? s.updatedAt).getTime?.() ?? 0,
+            ...serializeRow(r),
+          };
         }
         return;
       }
       case 'cards': {
         const s = await this.prisma.studentSession.findUnique({
-          where: { id: sessionId }, select: { userId: true },
+          where: { id: sessionId },
+          select: { userId: true },
         });
         if (!s) return;
         const rows = await this.prisma.spacedRepetitionCard
@@ -401,7 +490,8 @@ export class PrismaDataSource implements SessionDataSource {
       }
       case 'attempts': {
         const s = await this.prisma.studentSession.findUnique({
-          where: { id: sessionId }, select: { userId: true },
+          where: { id: sessionId },
+          select: { userId: true },
         });
         if (!s) return;
         const rows = await this.prisma.attempt
