@@ -1,4 +1,4 @@
-import { mkdir, copyFile, rm, stat } from 'node:fs/promises';
+import { mkdir, copyFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -31,8 +31,7 @@ export interface ImportReport {
   validation?: BundleValidationReport;
 }
 
-const n = (v: unknown): number | null =>
-  typeof v === 'number' && Number.isFinite(v) ? v : null;
+const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const i = (v: unknown): number | null => (n(v) == null ? null : Math.trunc(v as number));
 const s = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 /** SQLite has no JSON type — JSON-bearing columns are stringified. */
@@ -56,7 +55,9 @@ export async function ensureDefaultCodebook(): Promise<string> {
 }
 
 /** Resolve a bundle path: unzip a .zip to a temp dir, else use the folder. */
-async function resolveBundleDir(path: string): Promise<{ dir: string; cleanup?: () => Promise<void> }> {
+async function resolveBundleDir(
+  path: string,
+): Promise<{ dir: string; cleanup?: () => Promise<void> }> {
   if (path.toLowerCase().endsWith('.zip')) {
     const out = join(tmpdir(), `gals-import-${Date.now()}-${basename(path, '.zip')}`);
     new AdmZip(path).extractAllTo(out, true);
@@ -220,7 +221,10 @@ export async function importBundle(path: string): Promise<ImportReport> {
     const winRows = [];
     for (let idx = 0; idx < count; idx++) {
       const start = m.baseWallClockMs + idx * WINDOW_MS;
-      const end = Math.min(m.baseWallClockMs + (idx + 1) * WINDOW_MS, m.baseWallClockMs + m.durationMs);
+      const end = Math.min(
+        m.baseWallClockMs + (idx + 1) * WINDOW_MS,
+        m.baseWallClockMs + m.durationMs,
+      );
       winRows.push({
         id: windowId(sessionId, idx),
         sessionId,
@@ -252,17 +256,29 @@ export async function importBundle(path: string): Promise<ImportReport> {
 function streamFile(key: StreamKey): string {
   // mirrors STREAM_FILES; kept local to avoid importing the const map twice
   const map: Record<StreamKey, string> = {
-    webgazer: 'streams/webgazer.jsonl', pupil: 'streams/pupil.jsonl',
-    emotion_frames: 'streams/emotion_frames.jsonl', au_results: 'streams/au_results.jsonl',
-    clicks: 'streams/clicks.jsonl', scrolls: 'streams/scrolls.jsonl',
-    cursors: 'streams/cursors.jsonl', keystrokes: 'streams/keystrokes.jsonl',
-    clipboard: 'streams/clipboard.jsonl', visibility: 'streams/visibility.jsonl',
-    viewport: 'streams/viewport.jsonl', activity: 'streams/activity.jsonl',
-    chatbot: 'messages/chatbot.jsonl', dialogue: 'messages/dialogue.jsonl',
-    interventions: 'messages/interventions.jsonl', ef_detections: 'messages/ef_detections.jsonl',
-    mastery: 'kc/mastery.jsonl', cards: 'kc/cards.jsonl', attempts: 'kc/attempts.jsonl',
-    probes: 'probes/probes.jsonl', questionnaires: 'questionnaires/questionnaires.jsonl',
-    annotations: 'annotations/annotations.jsonl', codes: 'annotations/codes.jsonl',
+    webgazer: 'streams/webgazer.jsonl',
+    pupil: 'streams/pupil.jsonl',
+    emotion_frames: 'streams/emotion_frames.jsonl',
+    au_results: 'streams/au_results.jsonl',
+    clicks: 'streams/clicks.jsonl',
+    scrolls: 'streams/scrolls.jsonl',
+    cursors: 'streams/cursors.jsonl',
+    keystrokes: 'streams/keystrokes.jsonl',
+    clipboard: 'streams/clipboard.jsonl',
+    visibility: 'streams/visibility.jsonl',
+    viewport: 'streams/viewport.jsonl',
+    activity: 'streams/activity.jsonl',
+    chatbot: 'messages/chatbot.jsonl',
+    dialogue: 'messages/dialogue.jsonl',
+    interventions: 'messages/interventions.jsonl',
+    ef_detections: 'messages/ef_detections.jsonl',
+    mastery: 'kc/mastery.jsonl',
+    cards: 'kc/cards.jsonl',
+    attempts: 'kc/attempts.jsonl',
+    probes: 'probes/probes.jsonl',
+    questionnaires: 'questionnaires/questionnaires.jsonl',
+    annotations: 'annotations/annotations.jsonl',
+    codes: 'annotations/codes.jsonl',
   };
   return map[key];
 }
@@ -294,92 +310,356 @@ async function insertStream<T>(
 }
 
 const streamInserters: Record<StreamKey, (dir: string, sessionId: string) => Promise<number>> = {
-  webgazer: (d, sid) => insertStream(d, 'webgazer',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, x: n(r.x) ?? 0, y: n(r.y) ?? 0, confidence: n(r.confidence) }),
-    (rows) => prisma.gazeSample.createMany({ data: rows as never })),
-  pupil: (d, sid) => insertStream(d, 'pupil',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, diameter: n(r.diameter) ?? 0 }),
-    (rows) => prisma.pupilSample.createMany({ data: rows as never })),
-  emotion_frames: (d, sid) => insertStream(d, 'emotion_frames',
-    (r) => (n(r.wallMs) == null ? null : {
-      sessionId: sid, wallMs: r.wallMs as number, faceDetected: !!r.faceDetected,
-      dominant: s(r.dominant), dominantProbability: n(r.dominantProbability),
-      pHappiness: n(r.pHappiness), pSadness: n(r.pSadness), pSurprise: n(r.pSurprise),
-      pFear: n(r.pFear), pAnger: n(r.pAnger), pDisgust: n(r.pDisgust),
-      pContempt: n(r.pContempt), pNeutral: n(r.pNeutral),
-    }),
-    (rows) => prisma.emotionFrame.createMany({ data: rows as never })),
-  au_results: (d, sid) => insertStream(d, 'au_results',
-    (r) => {
-      if (n(r.wallMs) == null) return null;
-      const aus: Record<string, number> = {};
-      for (const [k, val] of Object.entries(r)) if (/^au\d+$/.test(k) && typeof val === 'number') aus[k] = val;
-      return { sessionId: sid, wallMs: r.wallMs as number, faceConf: n(r.faceConf), aus };
-    },
-    (rows) => prisma.auResult.createMany({ data: rows as never })),
-  clicks: (d, sid) => insertStream(d, 'clicks',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, x: n(r.x) ?? 0, y: n(r.y) ?? 0, target: s(r.target), pageUrl: s(r.pageUrl) }),
-    (rows) => prisma.click.createMany({ data: rows as never })),
-  scrolls: (d, sid) => insertStream(d, 'scrolls',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, scrollY: n(r.scrollY), scrollPercent: n(r.scrollPercent), pageUrl: s(r.pageUrl), scrollHosts: J(r.scrollHosts) }),
-    (rows) => prisma.scroll.createMany({ data: rows as never })),
-  cursors: (d, sid) => insertStream(d, 'cursors',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, x: n(r.x) ?? 0, y: n(r.y) ?? 0, target: s(r.target) }),
-    (rows) => prisma.cursor.createMany({ data: rows as never })),
-  keystrokes: (d, sid) => insertStream(d, 'keystrokes',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, fieldId: s(r.fieldId), keystrokeCount: i(r.keystrokeCount), pauseDurationMs: i(r.pauseDurationMs), typingSpeedWPM: n(r.typingSpeedWPM) }),
-    (rows) => prisma.keystroke.createMany({ data: rows as never })),
-  clipboard: (d, sid) => insertStream(d, 'clipboard',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, action: s(r.action), textLength: i(r.textLength), sourceElement: s(r.sourceElement) }),
-    (rows) => prisma.clipboard.createMany({ data: rows as never })),
-  visibility: (d, sid) => insertStream(d, 'visibility',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, visibleState: s(r.visibleState), hiddenDurationMs: i(r.hiddenDurationMs) }),
-    (rows) => prisma.visibility.createMany({ data: rows as never })),
-  viewport: (d, sid) => insertStream(d, 'viewport',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, width: i(r.width), height: i(r.height), orientation: s(r.orientation) }),
-    (rows) => prisma.viewport.createMany({ data: rows as never })),
-  activity: (d, sid) => insertStream(d, 'activity',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, action: s(r.action) ?? 'unknown', metadata: J(r.metadata), interventionId: s(r.interventionId), dialogueSessionId: s(r.dialogueSessionId), moduleItemId: s(r.moduleItemId) }),
-    (rows) => prisma.activityEvent.createMany({ data: rows as never })),
-  chatbot: (d, sid) => insertStream(d, 'chatbot',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, role: s(r.role) ?? 'unknown', content: s(r.content) ?? '', selectedText: s(r.selectedText), model: s(r.model) }),
-    (rows) => prisma.chatbotMessage.createMany({ data: rows as never })),
-  dialogue: (d, sid) => insertStream(d, 'dialogue',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, role: s(r.role) ?? 'unknown', content: s(r.content) ?? '', dialogueSessionId: s(r.dialogueSessionId) }),
-    (rows) => prisma.dialogueMessage.createMany({ data: rows as never })),
-  interventions: (d, sid) => insertStream(d, 'interventions',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, externalId: s(r.id), type: s(r.type), status: s(r.status), sessionData: J(r.sessionData), selectedText: s(r.selectedText) }),
-    (rows) => prisma.intervention.createMany({ data: rows as never })),
-  ef_detections: (d, sid) => insertStream(d, 'ef_detections',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, construct: s(r.construct) ?? 'unknown', label: s(r.label) ?? '', confidence: n(r.confidence), severity: s(r.severity), rationale: s(r.rationale), sourceRef: s(r.messageId) }),
-    (rows) => prisma.efDetection.createMany({ data: rows as never })),
-  mastery: (d, sid) => insertStream(d, 'mastery',
-    (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
-    (rows) => prisma.mastery.createMany({ data: rows as never })),
-  cards: (d, sid) => insertStream(d, 'cards',
-    (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
-    (rows) => prisma.spacedRepCard.createMany({ data: rows as never })),
-  attempts: (d, sid) => insertStream(d, 'attempts',
-    (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
-    (rows) => prisma.attempt.createMany({ data: rows as never })),
-  probes: (d, sid) => insertStream(d, 'probes',
-    (r) => (n(r.wallMs) == null ? null : { sessionId: sid, wallMs: r.wallMs as number, probeType: s(r.probeType) ?? 'unknown', items: JSON.stringify(r.items ?? {}), latencyMs: i(r.latencyMs), scheduledWallMs: n(r.scheduledWallMs), shownWallMs: n(r.shownWallMs), completed: r.completed !== false }),
-    (rows) => prisma.probeResponse.createMany({ data: rows as never })),
-  questionnaires: (d, sid) => insertStream(d, 'questionnaires',
-    (r) => {
-      const instrument = s(r.instrument) ?? 'unknown';
-      // Score subscales on import when not already provided (published keys).
-      let scored = r.scoredSubscales;
-      if (scored == null && r.items && typeof r.items === 'object') {
-        const result = scoreInstrument(instrument, r.items as Record<string, number>);
-        if (result) scored = result.subscales;
-      }
-      return { sessionId: sid, userId: s(r.userId), instrument, phase: s(r.phase) ?? 'post', items: JSON.stringify(r.items ?? {}), scoredSubscales: J(scored), completedAt: r.completedAt ? new Date(r.completedAt as string) : null };
-    },
-    (rows) => prisma.questionnaire.createMany({ data: rows as never })),
-  annotations: (d, sid) => insertStream(d, 'annotations',
-    (r) => ({ sessionId: sid, externalId: s(r.id), startMs: n(r.startMs) ?? 0, endMs: n(r.endMs), note: s(r.note), codeId: s(r.codeId), researcherId: s(r.researcherId) }),
-    (rows) => prisma.carriedAnnotation.createMany({ data: rows as never })),
+  webgazer: (d, sid) =>
+    insertStream(
+      d,
+      'webgazer',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              x: n(r.x) ?? 0,
+              y: n(r.y) ?? 0,
+              confidence: n(r.confidence),
+            },
+      (rows) => prisma.gazeSample.createMany({ data: rows as never }),
+    ),
+  pupil: (d, sid) =>
+    insertStream(
+      d,
+      'pupil',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : { sessionId: sid, wallMs: r.wallMs as number, diameter: n(r.diameter) ?? 0 },
+      (rows) => prisma.pupilSample.createMany({ data: rows as never }),
+    ),
+  emotion_frames: (d, sid) =>
+    insertStream(
+      d,
+      'emotion_frames',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              faceDetected: !!r.faceDetected,
+              dominant: s(r.dominant),
+              dominantProbability: n(r.dominantProbability),
+              pHappiness: n(r.pHappiness),
+              pSadness: n(r.pSadness),
+              pSurprise: n(r.pSurprise),
+              pFear: n(r.pFear),
+              pAnger: n(r.pAnger),
+              pDisgust: n(r.pDisgust),
+              pContempt: n(r.pContempt),
+              pNeutral: n(r.pNeutral),
+            },
+      (rows) => prisma.emotionFrame.createMany({ data: rows as never }),
+    ),
+  au_results: (d, sid) =>
+    insertStream(
+      d,
+      'au_results',
+      (r) => {
+        if (n(r.wallMs) == null) return null;
+        const aus: Record<string, number> = {};
+        for (const [k, val] of Object.entries(r))
+          if (/^au\d+$/.test(k) && typeof val === 'number') aus[k] = val;
+        // AuResult.aus is a String column (read back with JSON.parse in routes/replay.ts) — serialize here.
+        return {
+          sessionId: sid,
+          wallMs: r.wallMs as number,
+          faceConf: n(r.faceConf),
+          aus: JSON.stringify(aus),
+        };
+      },
+      (rows) => prisma.auResult.createMany({ data: rows as never }),
+    ),
+  clicks: (d, sid) =>
+    insertStream(
+      d,
+      'clicks',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              x: n(r.x) ?? 0,
+              y: n(r.y) ?? 0,
+              target: s(r.target),
+              pageUrl: s(r.pageUrl),
+            },
+      (rows) => prisma.click.createMany({ data: rows as never }),
+    ),
+  scrolls: (d, sid) =>
+    insertStream(
+      d,
+      'scrolls',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              scrollY: n(r.scrollY),
+              scrollPercent: n(r.scrollPercent),
+              pageUrl: s(r.pageUrl),
+              scrollHosts: J(r.scrollHosts),
+            },
+      (rows) => prisma.scroll.createMany({ data: rows as never }),
+    ),
+  cursors: (d, sid) =>
+    insertStream(
+      d,
+      'cursors',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              x: n(r.x) ?? 0,
+              y: n(r.y) ?? 0,
+              target: s(r.target),
+            },
+      (rows) => prisma.cursor.createMany({ data: rows as never }),
+    ),
+  keystrokes: (d, sid) =>
+    insertStream(
+      d,
+      'keystrokes',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              fieldId: s(r.fieldId),
+              keystrokeCount: i(r.keystrokeCount),
+              pauseDurationMs: i(r.pauseDurationMs),
+              typingSpeedWPM: n(r.typingSpeedWPM),
+            },
+      (rows) => prisma.keystroke.createMany({ data: rows as never }),
+    ),
+  clipboard: (d, sid) =>
+    insertStream(
+      d,
+      'clipboard',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              action: s(r.action),
+              textLength: i(r.textLength),
+              sourceElement: s(r.sourceElement),
+            },
+      (rows) => prisma.clipboard.createMany({ data: rows as never }),
+    ),
+  visibility: (d, sid) =>
+    insertStream(
+      d,
+      'visibility',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              visibleState: s(r.visibleState),
+              hiddenDurationMs: i(r.hiddenDurationMs),
+            },
+      (rows) => prisma.visibility.createMany({ data: rows as never }),
+    ),
+  viewport: (d, sid) =>
+    insertStream(
+      d,
+      'viewport',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              width: i(r.width),
+              height: i(r.height),
+              orientation: s(r.orientation),
+            },
+      (rows) => prisma.viewport.createMany({ data: rows as never }),
+    ),
+  activity: (d, sid) =>
+    insertStream(
+      d,
+      'activity',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              action: s(r.action) ?? 'unknown',
+              metadata: J(r.metadata),
+              interventionId: s(r.interventionId),
+              dialogueSessionId: s(r.dialogueSessionId),
+              moduleItemId: s(r.moduleItemId),
+            },
+      (rows) => prisma.activityEvent.createMany({ data: rows as never }),
+    ),
+  chatbot: (d, sid) =>
+    insertStream(
+      d,
+      'chatbot',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              role: s(r.role) ?? 'unknown',
+              content: s(r.content) ?? '',
+              selectedText: s(r.selectedText),
+              model: s(r.model),
+            },
+      (rows) => prisma.chatbotMessage.createMany({ data: rows as never }),
+    ),
+  dialogue: (d, sid) =>
+    insertStream(
+      d,
+      'dialogue',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              role: s(r.role) ?? 'unknown',
+              content: s(r.content) ?? '',
+              dialogueSessionId: s(r.dialogueSessionId),
+            },
+      (rows) => prisma.dialogueMessage.createMany({ data: rows as never }),
+    ),
+  interventions: (d, sid) =>
+    insertStream(
+      d,
+      'interventions',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              externalId: s(r.id),
+              type: s(r.type),
+              status: s(r.status),
+              sessionData: J(r.sessionData),
+              selectedText: s(r.selectedText),
+            },
+      (rows) => prisma.intervention.createMany({ data: rows as never }),
+    ),
+  ef_detections: (d, sid) =>
+    insertStream(
+      d,
+      'ef_detections',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              construct: s(r.construct) ?? 'unknown',
+              label: s(r.label) ?? '',
+              confidence: n(r.confidence),
+              severity: s(r.severity),
+              rationale: s(r.rationale),
+              sourceRef: s(r.messageId),
+            },
+      (rows) => prisma.efDetection.createMany({ data: rows as never }),
+    ),
+  mastery: (d, sid) =>
+    insertStream(
+      d,
+      'mastery',
+      (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
+      (rows) => prisma.mastery.createMany({ data: rows as never }),
+    ),
+  cards: (d, sid) =>
+    insertStream(
+      d,
+      'cards',
+      (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
+      (rows) => prisma.spacedRepCard.createMany({ data: rows as never }),
+    ),
+  attempts: (d, sid) =>
+    insertStream(
+      d,
+      'attempts',
+      (r) => ({ sessionId: sid, wallMs: n(r.wallMs) ?? 0, data: JSON.stringify(r) }),
+      (rows) => prisma.attempt.createMany({ data: rows as never }),
+    ),
+  probes: (d, sid) =>
+    insertStream(
+      d,
+      'probes',
+      (r) =>
+        n(r.wallMs) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              probeType: s(r.probeType) ?? 'unknown',
+              items: JSON.stringify(r.items ?? {}),
+              latencyMs: i(r.latencyMs),
+              scheduledWallMs: n(r.scheduledWallMs),
+              shownWallMs: n(r.shownWallMs),
+              completed: r.completed !== false,
+            },
+      (rows) => prisma.probeResponse.createMany({ data: rows as never }),
+    ),
+  questionnaires: (d, sid) =>
+    insertStream(
+      d,
+      'questionnaires',
+      (r) => {
+        const instrument = s(r.instrument) ?? 'unknown';
+        // Score subscales on import when not already provided (published keys).
+        let scored = r.scoredSubscales;
+        if (scored == null && r.items && typeof r.items === 'object') {
+          const result = scoreInstrument(instrument, r.items as Record<string, number>);
+          if (result) scored = result.subscales;
+        }
+        return {
+          sessionId: sid,
+          userId: s(r.userId),
+          instrument,
+          phase: s(r.phase) ?? 'post',
+          items: JSON.stringify(r.items ?? {}),
+          scoredSubscales: J(scored),
+          completedAt: r.completedAt ? new Date(r.completedAt as string) : null,
+        };
+      },
+      (rows) => prisma.questionnaire.createMany({ data: rows as never }),
+    ),
+  annotations: (d, sid) =>
+    insertStream(
+      d,
+      'annotations',
+      (r) => ({
+        sessionId: sid,
+        externalId: s(r.id),
+        startMs: n(r.startMs) ?? 0,
+        endMs: n(r.endMs),
+        note: s(r.note),
+        codeId: s(r.codeId),
+        researcherId: s(r.researcherId),
+      }),
+      (rows) => prisma.carriedAnnotation.createMany({ data: rows as never }),
+    ),
   // `codes` are reference label definitions; the simplest durable home is to
   // leave them embedded on the carried annotations' codeId (resolved in the UI).
   codes: async () => 0,
