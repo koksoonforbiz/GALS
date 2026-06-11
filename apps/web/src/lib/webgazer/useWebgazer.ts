@@ -176,6 +176,8 @@ export function useWebgazer(
 
     let cancelled = false;
 
+    const resetTimer = () => resetInactivityTimer();
+
     async function start() {
       try {
         // Check WebGL support before proceeding
@@ -183,7 +185,9 @@ export function useWebgazer(
           const canvas = document.createElement('canvas');
           const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
           if (!gl) {
-            console.warn('[WebGazer] WebGL not supported — eye tracking unavailable in this browser');
+            console.warn(
+              '[WebGazer] WebGL not supported — eye tracking unavailable in this browser',
+            );
             setIsActive(false);
             return;
           }
@@ -223,7 +227,9 @@ export function useWebgazer(
 
         // Register WebGazer's video stream in the shared registry
         try {
-          const videoEl = document.getElementById('webgazerVideoFeed') as HTMLVideoElement | undefined;
+          const videoEl = document.getElementById('webgazerVideoFeed') as
+            | HTMLVideoElement
+            | undefined;
           const stream = videoEl?.srcObject as MediaStream | null;
           if (stream) {
             mediaStreamRegistry.register('webgazer', stream);
@@ -245,6 +251,10 @@ export function useWebgazer(
           wgContainer.style.opacity = '0';
           wgContainer.style.pointerEvents = 'none';
         }
+        // Hide the gaze dot at both the API level and the DOM level.
+        // showPredictionPoints(false) prevents WebGazer from re-showing it
+        // on every gaze update; the DOM fallback covers the initial frame.
+        wg.showPredictionPoints(false);
         const wgGazeDot = document.getElementById('webgazerGazeDot');
         if (wgGazeDot) wgGazeDot.style.display = 'none';
 
@@ -285,7 +295,6 @@ export function useWebgazer(
         flushIntervalRef.current = setInterval(flushBuffer, 30000);
 
         // Inactivity detection
-        const resetTimer = () => resetInactivityTimer();
         for (const event of ['mousemove', 'keydown', 'scroll', 'click']) {
           document.addEventListener(event, resetTimer);
         }
@@ -300,6 +309,9 @@ export function useWebgazer(
 
     return () => {
       cancelled = true;
+      for (const event of ['mousemove', 'keydown', 'scroll', 'click']) {
+        document.removeEventListener(event, resetTimer);
+      }
       if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
 

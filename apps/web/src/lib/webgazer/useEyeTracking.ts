@@ -187,6 +187,8 @@ export function useEyeTracking(
     if (!courseId || !sessionId) return;
     let cancelled = false;
 
+    const resetTimer = () => resetInactivityTimer();
+
     async function start() {
       try {
         const cfg = await api.get<EyeTrackingConfig>(`/webgazer/config/${courseId}`);
@@ -258,6 +260,7 @@ export function useEyeTracking(
           pointerEvents: 'none',
         });
       }
+      wg.showPredictionPoints(false);
       const wgDot = document.getElementById('webgazerGazeDot');
       if (wgDot) wgDot.style.display = 'none';
 
@@ -270,7 +273,6 @@ export function useEyeTracking(
       if (cfg.calibrationOnNewSession) setNeedsCalibration(true);
       flushIntervalRef.current = setInterval(flushBuffer, 30000);
 
-      const resetTimer = () => resetInactivityTimer();
       for (const ev of ['mousemove', 'keydown', 'scroll', 'click']) {
         document.addEventListener(ev, resetTimer);
       }
@@ -324,6 +326,9 @@ export function useEyeTracking(
 
     return () => {
       cancelled = true;
+      for (const ev of ['mousemove', 'keydown', 'scroll', 'click']) {
+        document.removeEventListener(ev, resetTimer);
+      }
       if (flushIntervalRef.current) clearInterval(flushIntervalRef.current);
       if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
 

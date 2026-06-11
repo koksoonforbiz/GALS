@@ -6,6 +6,7 @@ import type {
   SessionReplayIntervention,
   SessionReplaySnapshot,
 } from '../hooks/useSessionReplay';
+import { exportReplayCsv, downloadCsvFile } from '../lib/exportReplayCsv';
 import { api } from '../../../../lib/api';
 import {
   computeAoiScoring,
@@ -755,6 +756,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       new Set<SignalKey>(['boredomScore', 'frustrationScore', 'engagementScore', 'confusionScore']),
   );
   const [showAoiOverlay, setShowAoiOverlay] = useState(true);
+  const [isExportingCsv, setIsExportingCsv] = useState(false);
 
   // Researcher annotation layer (prompt 06). Owns its own
   // load/CRUD via the hook; ReplayTab just hands it the session id +
@@ -816,6 +818,43 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     }
     return Math.max(1_000, maxTime - baseWallClockMs);
   }, [baseWallClockMs, data]);
+
+  const handleExportCsv = useCallback(() => {
+    if (!data || isExportingCsv) return;
+    setIsExportingCsv(true);
+    try {
+      const csvText = exportReplayCsv(
+        {
+          session: data.session,
+          snapshots: data.snapshots,
+          clickLogs: data.clickLogs,
+          scrollLogs: data.scrollLogs,
+          gazeLogs: data.gazeLogs,
+          pupilLogs: data.pupilLogs,
+          emotionFrames: data.emotionFrames,
+          auResults: data.auResults,
+          activityLogs: data.activityLogs,
+          efDetections: data.efDetections,
+          dialogueMessages: data.dialogueMessages,
+          chatbotMessages: data.chatbotMessages,
+          keystrokeLogs: data.keystrokeLogs,
+          cursorLogs: data.cursorLogs,
+          clipboardLogs: data.clipboardLogs,
+          visibilityLogs: data.visibilityLogs,
+          viewportLogs: data.viewportLogs,
+        },
+        baseWallClockMs,
+        durationMs,
+        { thresholds: learningThresholds },
+      );
+      const sessionStart = data.session?.startedAt
+        ? new Date(data.session.startedAt).toISOString().slice(0, 10)
+        : 'session';
+      downloadCsvFile(csvText, `replay-${sessionId}-${sessionStart}.csv`);
+    } finally {
+      setIsExportingCsv(false);
+    }
+  }, [data, baseWallClockMs, durationMs, learningThresholds, sessionId, isExportingCsv]);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -1622,7 +1661,16 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       <div className="rounded-xl border border-gray-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-900">Signal Timeline</h3>
-          <div className="text-xs text-gray-500">Click chart to seek replay</div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-gray-500">Click chart to seek replay</div>
+            <button
+              onClick={handleExportCsv}
+              disabled={!data || isExportingCsv}
+              className="text-xs px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 transition-colors"
+            >
+              {isExportingCsv ? 'Exporting…' : 'Export CSV'}
+            </button>
+          </div>
         </div>
         <div className="mb-3 flex max-h-24 flex-wrap gap-2 overflow-y-auto">
           {[...EMOTION_SIGNALS, ...LEARNING_STATE_SIGNALS, ...AU_SIGNALS].map((signal) => {

@@ -244,6 +244,29 @@ export class LogExportService {
         metadata: l.metadata,
       }));
 
+    // Hydrate the actual attempt records so the export carries full
+    // question text, selected answers, and auto-grade scores — not just IDs.
+    const attemptIds = Array.from(
+      new Set(logs.map((l) => l.attemptId).filter((id): id is string => Boolean(id))),
+    );
+    const assessmentAttempts = attemptIds.length
+      ? await this.prisma.attempt.findMany({
+          where: { id: { in: attemptIds } },
+          include: {
+            question: {
+              select: {
+                id: true,
+                prompt: true,
+                type: true,
+                maxScore: true,
+                options: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' as const },
+        })
+      : [];
+
     const masteryTrajectory = logs
       .filter((l) => l.action === 'MASTERY_UPDATED')
       .map((l) => ({
@@ -402,6 +425,23 @@ export class LogExportService {
       learning: {
         interventionEvents,
         assessmentEvents,
+        assessmentAttempts: assessmentAttempts.map((a) => ({
+          attemptId: a.id,
+          assessmentId: a.assessmentId,
+          questionId: a.questionId,
+          status: a.status,
+          selectedOptionIds: a.selectedOptionIds,
+          question: {
+            prompt: a.question.prompt,
+            type: a.question.type,
+            maxScore: a.question.maxScore,
+            options: a.question.options,
+          },
+          score: a.currentScore ?? null,
+          maxScore: a.question.maxScore,
+          autoFeedback: a.autoFeedback ?? null,
+          submittedAt: a.submittedAt?.toISOString() ?? null,
+        })),
         masteryTrajectory,
         efDetections: efDetections.map((e) => ({
           createdAt: e.createdAt.toISOString(),

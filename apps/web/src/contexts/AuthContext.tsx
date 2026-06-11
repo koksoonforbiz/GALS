@@ -4,6 +4,10 @@ import { joinStudentRoom, disconnectSocket } from '../lib/socket';
 import { initActivitySession, clearActivitySession } from '../lib/activity-log';
 import { mediaStreamRegistry } from '../lib/biometrics/mediaStreamRegistry';
 import type { UserRole } from '@ats/shared';
+import {
+  PERMISSION_SESSION_KEY,
+  clearPermittedScreenStream,
+} from '../lib/biometrics/permittedStreams';
 
 interface User {
   id: string;
@@ -156,6 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }).catch(() => {});
     }
     clearActivitySession();
+    sessionStorage.removeItem(PERMISSION_SESSION_KEY);
+    clearPermittedScreenStream();
 
     // Stop all active webcam/media streams before clearing auth
     // NOTE: keep token in localStorage during cleanup so that async

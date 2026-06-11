@@ -37,8 +37,9 @@ export class AttemptsService {
   ) {}
 
   async create(studentId: string, dto: CreateAttempt, sessionId?: string) {
-    // If assessmentId is provided, get the first question from the assessment
-    if (dto.assessmentId) {
+    // If a specific questionId is given, use it directly (even when assessmentId is also present)
+    // If only assessmentId is provided, derive the first question from the assessment
+    if (dto.assessmentId && !dto.questionId) {
       const assessmentQuestion = await this.prisma.assessmentQuestion.findFirst({
         where: { assessmentId: dto.assessmentId },
         orderBy: { orderIndex: 'asc' },
@@ -125,6 +126,7 @@ export class AttemptsService {
         data: {
           studentId,
           questionId: dto.questionId,
+          assessmentId: dto.assessmentId ?? undefined,
           status: 'in_progress',
         },
         include: {
@@ -137,6 +139,7 @@ export class AttemptsService {
           sessionId,
           userId: studentId,
           action: ActivityAction.ASSESSMENT_STARTED,
+          assessmentId: dto.assessmentId ?? undefined,
           attemptId: attempt.id,
           courseId: courseId ?? undefined,
           metadata: { summary: `Started attempt on question: ${dto.questionId}` },

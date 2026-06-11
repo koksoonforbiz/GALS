@@ -42,9 +42,21 @@ QUEUE_KEY = "pyfeat:jobs"
 CONCURRENCY = int(os.environ.get("WORKER_CONCURRENCY", "2"))
 
 
-def worker_loop(redis_client: redis.Redis, worker_id: int) -> None:
+def create_redis_client() -> redis.Redis:
+    """Create a Redis client with keepalive and health-check to survive idle periods."""
+    return redis.from_url(
+        REDIS_URL,
+        socket_keepalive=True,
+        retry_on_timeout=True,
+        health_check_interval=30,
+    )
+
+
+def worker_loop(worker_id: int) -> None:
     """Block-wait on the Redis queue and process jobs."""
     logger.info(f"Worker {worker_id} started, waiting for jobs on '{QUEUE_KEY}'")
+
+    redis_client = create_redis_client()
 
     while True:
         try:
@@ -69,6 +81,16 @@ def worker_loop(redis_client: redis.Redis, worker_id: int) -> None:
             update_job_status(job_id, "COMPLETED", result_minio_key=result_key)
             logger.info(f"Worker {worker_id} completed job {job_id} -> {result_key}")
 
+        except redis.ConnectionError as e:
+            logger.warning(f"Worker {worker_id} Redis connection lost: {e}. Reconnecting in 2s...")
+            time.sleep(2)
+            try:
+                redis_client = create_redis_client()
+                redis_client.ping()
+                logger.info(f"Worker {worker_id} reconnected to Redis")
+            except Exception as reconnect_err:
+                logger.error(f"Worker {worker_id} failed to reconnect: {reconnect_err}")
+
         except Exception as e:
             logger.error(f"Worker {worker_id} error: {e}", exc_info=True)
             try:
@@ -83,11 +105,11 @@ def worker_loop(redis_client: redis.Redis, worker_id: int) -> None:
 def main() -> None:
     logger.info(f"Starting py-feat worker with {CONCURRENCY} threads")
 
-    redis_client = redis.from_url(REDIS_URL)
-
-    # Verify Redis connectivity
+    # Verify Redis connectivity at startup
     try:
-        redis_client.ping()
+        probe = create_redis_client()
+        probe.ping()
+        probe.close()
         logger.info("Connected to Redis")
     except redis.ConnectionError:
         logger.error("Cannot connect to Redis")
@@ -97,7 +119,7 @@ def main() -> None:
     for i in range(CONCURRENCY):
         t = threading.Thread(
             target=worker_loop,
-            args=(redis_client, i),
+            args=(i,),
             name=f"pyfeat-worker-{i}",
             daemon=True,
         )

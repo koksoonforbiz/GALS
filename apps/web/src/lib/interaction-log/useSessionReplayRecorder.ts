@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { api } from '../api';
+import { peekPermittedScreenStream } from '../biometrics/permittedStreams';
 
 const API_BASE = '/api';
 const FLUSH_INTERVAL_MS = 10_000;
-const PERIODIC_SNAPSHOT_MS = 1_000;
+const PERIODIC_SNAPSHOT_MS = 3_000;
 // Per-snapshot HTML cap. The previous 250k was hit hard by PDF lessons:
 // react-pdf renders every character of every page as a positioned
 // <span> for selectable text, and a single PDF page can easily push
@@ -732,7 +733,7 @@ function capturePdfState(): { currentPage: number; totalPages: number } | null {
 }
 
 function serializeDocument(): string {
-  const clone = document.documentElement.cloneNode(true) as HTMLHtmlElement;
+  let clone: HTMLHtmlElement | null = document.documentElement.cloneNode(true) as HTMLHtmlElement;
   syncInputState(document, clone);
   // Inline canvas pixels BEFORE removing scripts — script removal can
   // skip past canvas elements, but the per-canvas walk needs the
@@ -772,19 +773,20 @@ function serializeDocument(): string {
   `;
   head.appendChild(style);
 
-  const html = `<!DOCTYPE html>\n${clone.outerHTML}`;
-  if (html.length > MAX_HTML_CHARS) {
+  const raw = `<!DOCTYPE html>\n${clone.outerHTML}`;
+  clone = null; // release DOM clone before string operations to reduce peak heap usage
+  if (raw.length > MAX_HTML_CHARS) {
     // Loud warning so this surfaces in the browser console next time
     // the DOM outgrows the cap (don't repeat the previous silent
     // truncation that dropped the docked chatbot).
     // eslint-disable-next-line no-console
     console.warn(
-      `[session-replay] Snapshot HTML truncated: ${html.length} > ${MAX_HTML_CHARS} chars. ` +
+      `[session-replay] Snapshot HTML truncated: ${raw.length} > ${MAX_HTML_CHARS} chars. ` +
         `Trailing DOM (likely the right-most column / floating widgets) will be missing from replay.`,
     );
-    return html.slice(0, MAX_HTML_CHARS);
+    return raw.slice(0, MAX_HTML_CHARS);
   }
-  return html;
+  return raw;
 }
 
 export function useSessionReplayRecorder({
@@ -800,6 +802,12 @@ export function useSessionReplayRecorder({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // True when the stream came from PermissionGate. Gate streams must NOT be
+  // stopped in the effect cleanup — React StrictMode runs cleanup+remount once
+  // in dev, and stopping the tracks on the first cleanup would kill the live
+  // stream before the second mount can reuse it. Gate streams are stopped by
+  // clearPermittedScreenStream() on logout or by the browser's stop-sharing UI.
+  const streamFromGateRef = useRef(false);
 
   const flush = useCallback(
     async (useKeepalive = false) => {
@@ -895,6 +903,9 @@ export function useSessionReplayRecorder({
           ? { pdfCurrentPage: pdfState.currentPage, pdfTotalPages: pdfState.totalPages }
           : {}),
       });
+      if (bufferRef.current.length > 15) {
+        bufferRef.current.splice(0, bufferRef.current.length - 15);
+      }
     },
     [captureDom, captureScreenshot],
   );
@@ -903,12 +914,20 @@ export function useSessionReplayRecorder({
     if (!enabled || !sessionId || !userId) return;
 
     const initScreenCapture = async () => {
-      if (!navigator.mediaDevices?.getDisplayMedia) return;
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: false,
-        });
+        // Use the stream pre-obtained by PermissionGate when available so
+        // the browser doesn't show a second prompt. We PEEK (not take) so
+        // React StrictMode's cleanup+remount cycle can reuse the same stream
+        // on the second mount without calling getDisplayMedia() again.
+        const gateStream = peekPermittedScreenStream();
+        let stream: MediaStream;
+        if (gateStream) {
+          stream = gateStream;
+          streamFromGateRef.current = true;
+        } else {
+          stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+          streamFromGateRef.current = false;
+        }
         screenStreamRef.current = stream;
         const video = document.createElement('video');
         video.muted = true;
@@ -917,13 +936,14 @@ export function useSessionReplayRecorder({
         await video.play();
         screenVideoRef.current = video;
       } catch {
-        // Permission denied or capture unavailable; fallback to DOM-only replay.
+        // User denied or stream unusable — no screenshots.
       }
     };
 
     void initScreenCapture().finally(() => {
       captureSnapshot('initial');
     });
+
     const onPageHide = () => {
       captureSnapshot('pagehide');
       flush(true);
@@ -980,7 +1000,13 @@ export function useSessionReplayRecorder({
       window.history.replaceState = originalReplaceState;
       clearInterval(flushTimerRef.current);
       clearInterval(periodicTimerRef.current);
-      screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      // Gate-provided streams survive cleanup so React StrictMode's second
+      // mount can reuse them. clearPermittedScreenStream() (called on logout)
+      // is responsible for stopping those tracks. Self-obtained streams
+      // (getDisplayMedia fallback for teacher accounts) are stopped here.
+      if (!streamFromGateRef.current) {
+        screenStreamRef.current?.getTracks().forEach((track) => track.stop());
+      }
       screenStreamRef.current = null;
       screenVideoRef.current = null;
       screenCanvasRef.current = null;

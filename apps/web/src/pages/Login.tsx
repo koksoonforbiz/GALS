@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../lib/api';
+import { PERMISSION_SESSION_KEY } from '../lib/biometrics/permittedStreams';
 
 export function Login() {
   // Prompt 05: a single identifier input that accepts either the
@@ -15,6 +16,12 @@ export function Login() {
 
   const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // Clear the permission gate flag on every visit to the login page so a
+  // fresh login always shows the gate, even if a previous session set it.
+  useEffect(() => {
+    sessionStorage.removeItem(PERMISSION_SESSION_KEY);
+  }, []);
 
   // Redirect if already logged in
   useEffect(() => {
@@ -48,9 +55,7 @@ export function Login() {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h1 className="text-center text-4xl font-bold tracking-tight text-gray-900">GALS</h1>
-          <p className="mt-2 text-center text-base text-gray-600">
-            Generative AI Learning System
-          </p>
+          <p className="mt-2 text-center text-base text-gray-600">Generative AI Learning System</p>
           <h2 className="mt-6 text-center text-2xl font-semibold text-gray-700">
             Sign in to your account
           </h2>

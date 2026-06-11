@@ -45,7 +45,6 @@ export function StudentAssessmentsPage() {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [starting, setStarting] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -69,35 +68,13 @@ export function StudentAssessmentsPage() {
     return attempts.find((a) => a.assessmentId === assessmentId);
   };
 
-  const handleStartAttempt = async (assessment: Assessment) => {
-    const existingAttempt = getAttemptForAssessment(assessment.id);
-    if (existingAttempt && existingAttempt.status === 'in_progress') {
-      navigate(`/student/attempt/${existingAttempt.id}`);
-      return;
-    }
-
-    setStarting(assessment.id);
-    setError(null);
-
-    try {
-      const attempt = await apiFetch<Attempt>('/attempts', {
-        method: 'POST',
-        body: JSON.stringify({
-          assessmentId: assessment.id,
-        }),
-      });
-      track('ASSESSMENT_STARTED', {
-        assessmentId: assessment.id,
-        attemptId: attempt.id,
-        courseId: assessment.courseId,
-        metadata: { summary: `Started assessment: ${assessment.title}` },
-      });
-      navigate(`/student/attempt/${attempt.id}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start assessment');
-    } finally {
-      setStarting(null);
-    }
+  const handleStartAttempt = (assessment: Assessment) => {
+    track('ASSESSMENT_STARTED', {
+      assessmentId: assessment.id,
+      courseId: assessment.courseId,
+      metadata: { summary: `Started assessment: ${assessment.title}` },
+    });
+    navigate(`/student/courses/${assessment.courseId}/assessment/${assessment.id}`);
   };
 
   if (loading) {
@@ -163,19 +140,18 @@ export function StudentAssessmentsPage() {
                   {!isCompleted && (
                     <button
                       onClick={() => handleStartAttempt(assessment)}
-                      disabled={starting === assessment.id}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                     >
-                      {starting === assessment.id
-                        ? 'Starting...'
-                        : isInProgress
-                          ? 'Continue'
-                          : 'Start'}
+                      {isInProgress ? 'Continue' : 'Start'}
                     </button>
                   )}
                   {isCompleted && (
                     <button
-                      onClick={() => navigate(`/student/results/${attempt?.id}`)}
+                      onClick={() =>
+                        navigate(
+                          `/student/courses/${assessment.courseId}/assessment/${assessment.id}`,
+                        )
+                      }
                       className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                       View Results

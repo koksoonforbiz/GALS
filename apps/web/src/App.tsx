@@ -34,6 +34,7 @@ import { StudentDashboard } from './pages/student/StudentDashboard';
 import { StudentAssessmentsPage } from './pages/student/StudentAssessmentsPage';
 import { StudentResultsPage } from './pages/student/StudentResultsPage';
 import { AttemptPage } from './pages/student/AttemptPage';
+import { AssessmentAttemptPage } from './pages/student/AssessmentAttemptPage';
 import { CatalogPage } from './pages/student/CatalogPage';
 import { MyCoursesPage } from './pages/student/MyCoursesPage';
 import { StudentCourseViewPage } from './pages/student/StudentCourseViewPage';
@@ -41,10 +42,13 @@ import { ReviewQueuePage } from './pages/student/ReviewQueuePage';
 import { DialogueLearning } from './pages/student/DialogueLearning';
 import { DialogueSessionHistory } from './pages/student/DialogueSessionHistory';
 import { ChatHistoryPage } from './pages/student/ChatHistoryPage';
+import { useState } from 'react';
 import { BiometricsWrapper } from './components/student/BiometricsWrapper';
+import { PermissionGate } from './components/student/PermissionGate';
 import { LoggingProvider } from './components/LoggingProvider';
 import { useAuth } from './contexts/AuthContext';
 import { useActivityLog } from './lib/activity-log';
+import { PERMISSION_SESSION_KEY } from './lib/biometrics/permittedStreams';
 
 function getToken() {
   return localStorage.getItem('token');
@@ -53,7 +57,16 @@ function getToken() {
 function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { sessionId } = useActivityLog();
+  const [permissionsGranted, setPermissionsGranted] = useState(
+    () => sessionStorage.getItem(PERMISSION_SESSION_KEY) === '1',
+  );
+
+  if (user?.role === 'student' && !permissionsGranted) {
+    return <PermissionGate onGranted={() => setPermissionsGranted(true)} />;
+  }
+
   if (!user || !sessionId) return <>{children}</>;
+
   return (
     <LoggingProvider sessionId={sessionId} userId={user.id}>
       {children}
@@ -246,6 +259,16 @@ function App() {
                     <RoleRoute allowedRoles={['student']}>
                       <BiometricsWrapper>
                         <AttemptPage />
+                      </BiometricsWrapper>
+                    </RoleRoute>
+                  }
+                />
+                <Route
+                  path="/student/courses/:courseId/assessment/:assessmentId"
+                  element={
+                    <RoleRoute allowedRoles={['student']}>
+                      <BiometricsWrapper>
+                        <AssessmentAttemptPage />
                       </BiometricsWrapper>
                     </RoleRoute>
                   }

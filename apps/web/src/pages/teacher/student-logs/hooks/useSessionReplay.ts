@@ -150,6 +150,7 @@ export interface SessionReplayActivityLog {
   moduleId?: string | null;
   moduleItemId?: string | null;
   interventionId?: string | null;
+  attemptId?: string | null;
   dialogueSessionId?: string | null;
   metadata?: Record<string, unknown> | null;
 }
@@ -425,14 +426,17 @@ export function useSessionReplay(sessionId: string) {
   const [data, setData] = useState<SessionReplayResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingSnapshots, setIsLoadingSnapshots] = useState(false);
-  const [snapshotLoadProgress, setSnapshotLoadProgress] = useState<{ loaded: number; total: number }>({
+  const [snapshotLoadProgress, setSnapshotLoadProgress] = useState<{
+    loaded: number;
+    total: number;
+  }>({
     loaded: 0,
     total: 0,
   });
   const [error, setError] = useState<string | null>(null);
-  const [snapshotContentById, setSnapshotContentById] = useState<Record<string, SessionReplaySnapshot>>(
-    {},
-  );
+  const [snapshotContentById, setSnapshotContentById] = useState<
+    Record<string, SessionReplaySnapshot>
+  >({});
 
   const refresh = useCallback(() => {
     if (!sessionId) return;

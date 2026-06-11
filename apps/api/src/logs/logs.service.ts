@@ -620,6 +620,7 @@ export class LogsService {
           moduleId: true,
           moduleItemId: true,
           interventionId: true,
+          attemptId: true,
           dialogueSessionId: true,
           metadata: true,
         },
@@ -763,6 +764,37 @@ export class LogsService {
         })
       : [];
 
+    // Hydrate assessment attempt records so the replay panel and CSV
+    // exporter can show question text, selected answers, and scores.
+    const attemptIds = Array.from(
+      new Set(activityLogs.map((log) => log.attemptId).filter((id): id is string => Boolean(id))),
+    );
+    const assessmentAttempts = attemptIds.length
+      ? await this.prisma.attempt.findMany({
+          where: { id: { in: attemptIds } },
+          select: {
+            id: true,
+            assessmentId: true,
+            questionId: true,
+            status: true,
+            selectedOptionIds: true,
+            submittedAt: true,
+            currentScore: true,
+            autoFeedback: true,
+            question: {
+              select: {
+                id: true,
+                prompt: true,
+                type: true,
+                maxScore: true,
+                options: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' as const },
+        })
+      : [];
+
     return {
       session,
       snapshotCount,
@@ -882,6 +914,23 @@ export class LogsService {
           completedAt: iv.completedAt?.toISOString() ?? null,
         }))
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      assessmentAttempts: assessmentAttempts.map((a) => ({
+        attemptId: a.id,
+        assessmentId: a.assessmentId,
+        questionId: a.questionId,
+        status: a.status,
+        selectedOptionIds: a.selectedOptionIds,
+        submittedAt: a.submittedAt?.toISOString() ?? null,
+        question: {
+          prompt: a.question.prompt,
+          type: a.question.type,
+          maxScore: a.question.maxScore,
+          options: a.question.options,
+        },
+        score: a.currentScore ?? null,
+        maxScore: a.question.maxScore,
+        autoFeedback: a.autoFeedback ?? null,
+      })),
     };
   }
 

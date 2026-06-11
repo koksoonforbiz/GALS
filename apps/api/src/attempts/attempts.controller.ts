@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Body,
-  Param,
-  UseGuards,
-  Request,
-  UsePipes,
-} from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { AttemptsService } from './attempts.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { ZodValidationPipe, SessionId } from '../common';
@@ -38,10 +28,9 @@ export class AttemptsController {
 
   @Post()
   @Roles('student')
-  @UsePipes(new ZodValidationPipe(CreateAttemptSchema))
   create(
     @Request() req: { user: RequestUser },
-    @Body() dto: CreateAttempt,
+    @Body(new ZodValidationPipe(CreateAttemptSchema)) dto: CreateAttempt,
     @SessionId() sessionId?: string,
   ) {
     return this.attemptsService.create(req.user.id, dto, sessionId);

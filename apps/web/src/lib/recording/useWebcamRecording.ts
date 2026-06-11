@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { toWallTime } from '../biometrics/time';
 import { mediaStreamRegistry } from '../biometrics/mediaStreamRegistry';
+import { takePermittedWebcamStream } from '../biometrics/permittedStreams';
 
 export interface RecordingState {
   isActive: boolean;
@@ -99,10 +100,17 @@ export function useWebcamRecording(
     if (!isEnabled || !hasConsent || !courseId || !sessionId) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, frameRate: 15 },
-        audio: false,
-      });
+      // Use the stream pre-obtained by PermissionGate when available so the
+      // browser does not show a second permission prompt on first course visit.
+      // takePermittedWebcamStream() returns null on subsequent navigations
+      // (already consumed) — getUserMedia() then succeeds silently because the
+      // browser cached the permission from the gate.
+      const stream =
+        takePermittedWebcamStream() ??
+        (await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, frameRate: 15 },
+          audio: false,
+        }));
       streamRef.current = stream;
       mediaStreamRegistry.register('recording', stream);
 
