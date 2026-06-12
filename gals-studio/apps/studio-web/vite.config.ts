@@ -6,7 +6,8 @@ const SERVER = process.env.STUDIO_SERVER ?? 'http://127.0.0.1:5174';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 5180,
+    strictPort: true,
     proxy: {
       '/api': { target: SERVER, changeOrigin: true },
     },

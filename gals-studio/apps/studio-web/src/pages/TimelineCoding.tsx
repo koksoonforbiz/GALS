@@ -1252,12 +1252,13 @@ type AffectScoresT = {
   frustration: number;
 };
 
-/** Researcher-configured mapping: each affect's score is the mean normalised
- * intensity (AU value / 3, capped) of the AUs assigned to it. */
+/** Researcher-configured mapping: each affect's score is the mean of the pyfeat
+ * AU probabilities (already 0–1) of the AUs assigned to it. The per-affect
+ * threshold slider is then the cutoff applied to this mean. */
 function auAffectScores(au: Record<string, number>, auMap: AuMap): AffectScoresT {
-  const n = (k: string) => Math.min(1, (au[k] ?? 0) / 3);
+  const n = (k: string) => Math.max(0, Math.min(1, au[k] ?? 0));
   const score = (keys: string[]) =>
-    keys.length ? Math.min(1, keys.reduce((s, k) => s + n(k), 0) / keys.length) : 0;
+    keys.length ? keys.reduce((s, k) => s + n(k), 0) / keys.length : 0;
   return {
     engagement: score(auMap.engagement),
     boredom: score(auMap.boredom),
