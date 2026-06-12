@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../lib/api';
@@ -12,16 +12,8 @@ export function Register() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register, user } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user) {
-      const destination = user.role === 'student' ? '/student' : '/teacher';
-      navigate(destination, { replace: true });
-    }
-  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +22,7 @@ export function Register() {
 
     try {
       await register(email, password, name, role);
-      // Navigation happens via useEffect in App
+      navigate('/login', { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

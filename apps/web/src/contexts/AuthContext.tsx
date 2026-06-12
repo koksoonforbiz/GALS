@@ -126,20 +126,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (email: string, password: string, name: string, role: UserRole) => {
-      const response = await api.post<AuthResponse>('/auth/register', {
+      await api.post<AuthResponse>('/auth/register', {
         email,
         password,
         name,
         role,
       });
-
-      localStorage.setItem('token', response.accessToken);
-      localStorage.setItem('user', JSON.stringify(response.user));
-      setUser(response.user);
-
-      if (response.user.role === 'student') {
-        joinStudentRoom(response.user.id);
-      }
+      // Account created — do NOT auto-login; caller navigates to /login
     },
     [],
   );
