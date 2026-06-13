@@ -70,7 +70,7 @@ export const BulkProvisionUserRowSchema = z.object({
   loginId: z.string().min(3).max(64).regex(LOGIN_ID_PATTERN, {
     message: 'loginId may only contain letters, digits, dot, underscore, hyphen',
   }),
-  password: z.string().min(8),
+  password: z.string().min(6),
   name: z.string().min(1).max(120).optional(),
   role: z.enum(['student', 'teacher', 'admin']).optional(),
 });
@@ -151,7 +151,7 @@ export type BulkEnrollResponse = z.infer<typeof BulkEnrollResponseSchema>;
 // sets `isTemporaryPassword = true` so the teacher roster still shows
 // the "Temp pwd" badge until the teacher decides otherwise.
 //
-// Strength rules match the existing bulk-provision row: min 8 chars.
+// Strength rules match the existing bulk-provision row: min 6 chars.
 // We don't enforce the uppercase/lowercase/digit triple here so a
 // teacher can use a simple memorable handout password and rotate it
 // later. The endpoint is teacher/admin-guarded so the floor is

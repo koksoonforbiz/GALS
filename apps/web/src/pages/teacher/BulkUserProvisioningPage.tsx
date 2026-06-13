@@ -90,7 +90,7 @@ function validateRow(r: GridRow): { ok: boolean; errors: Partial<Record<keyof Gr
   if (lid.length < 3) errors.loginId = 'Min 3 chars';
   else if (lid.length > 64) errors.loginId = 'Max 64 chars';
   else if (!LOGIN_ID_RE.test(lid)) errors.loginId = 'Only letters/digits/._-';
-  if (r.password.length < 8) errors.password = 'Min 8 chars';
+  if (r.password.length < 6) errors.password = 'Min 6 chars';
   return { ok: Object.keys(errors).length === 0, errors };
 }
 
@@ -460,7 +460,7 @@ export function BulkUserProvisioningPage() {
                       value={row.password}
                       onChange={(e) => updateRow(row.clientId, { password: e.target.value })}
                       onPaste={(e) => handleCellPaste(e, row.clientId, 'password')}
-                      placeholder="min 8 chars"
+                      placeholder="min 6 chars"
                       className={`w-full px-2 py-1 text-sm border rounded font-mono ${
                         v.errors.password ? 'border-red-300' : 'border-gray-200'
                       }`}

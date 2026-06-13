@@ -67,13 +67,13 @@ function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }
 
   if (!user || !sessionId) return <>{children}</>;
 
+  // captureDom intentionally OFF for the 2026-06-13 study to keep
+  // snapshot storage under control. Pixel screenshots + activity
+  // logs still capture the full session — the loss is the ability
+  // to inspect the DOM tree on replay (text selection targets,
+  // hover behaviour, click target inference). Flip to `true` when
+  // DOM analysis is required and disk space allows.
   return (
-    {/* captureDom intentionally OFF for the 2026-06-13 study to keep
-        snapshot storage under control. Pixel screenshots + activity
-        logs still capture the full session — the loss is the ability
-        to inspect the DOM tree on replay (text selection targets,
-        hover behaviour, click target inference). Flip to `true` when
-        DOM analysis is required and disk space allows. */}
     <LoggingProvider sessionId={sessionId} userId={user.id} captureDom={false}>
       {children}
     </LoggingProvider>
