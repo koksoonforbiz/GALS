@@ -68,7 +68,7 @@ function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }
   if (!user || !sessionId) return <>{children}</>;
 
   return (
-    <LoggingProvider sessionId={sessionId} userId={user.id}>
+    <LoggingProvider sessionId={sessionId} userId={user.id} captureDom={true}>
       {children}
     </LoggingProvider>
   );

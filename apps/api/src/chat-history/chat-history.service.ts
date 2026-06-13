@@ -208,6 +208,7 @@ export class ChatHistoryService {
           createdAt: true,
           contextSource: true,
           selectedText: true,
+          currentPage: true,
           suggestedStrategy: true,
           courseId: true,
           moduleItemId: true,
@@ -243,6 +244,7 @@ export class ChatHistoryService {
           createdAt: r.createdAt.toISOString(),
           contextSource: r.contextSource,
           selectedText: r.selectedText,
+          currentPage: r.currentPage,
           suggestedStrategy: r.suggestedStrategy,
         })),
       };
@@ -295,6 +297,7 @@ export class ChatHistoryService {
         citations: r.citations,
         contextSource: null,
         selectedText: null,
+        currentPage: null,
         suggestedStrategy: null,
       })),
     };

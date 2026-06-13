@@ -1,0 +1,30 @@
+# Force LF line endings for files that need to run on Linux inside containers.
+# Without this, git on Windows auto-converts to CRLF, which breaks /bin/sh
+# parsing (`start-dev.sh: set: line 2: illegal option -<CR>`).
+
+# Shell scripts MUST be LF — they execute via /bin/sh in the api container.
+*.sh                  text eol=lf
+
+# Dockerfiles + compose
+Dockerfile            text eol=lf
+*.dockerfile          text eol=lf
+docker-compose.yml    text eol=lf
+docker-compose.*.yml  text eol=lf
+
+# Common config / source — let git normalize but allow OS-native checkout.
+# (No eol=lf here so Windows devs see CRLF in editors that need it.)
+*.ts                  text
+*.tsx                 text
+*.js                  text
+*.json                text
+*.md                  text
+*.yml                 text
+*.yaml                text
+*.sql                 text
+
+# Binary — never normalize.
+*.png                 binary
+*.jpg                 binary
+*.pdf                 binary
+*.webm                binary
+*.mp4                 binary

@@ -32,6 +32,12 @@ interface ConversationMessage {
   createdAt: string;
   contextSource?: string | null;
   selectedText?: string | null;
+  // Bug 4 (2026-06-12): per-turn slide context. USER rows carry the
+  // PDF page the student was viewing AT THE MOMENT of this question;
+  // ASSISTANT rows and dialogue-surface rows leave it null. Lets the
+  // review surface render "Re: «…» (page X)" per turn instead of just
+  // the LAST selectedText overwriting every prior question.
+  currentPage?: number | null;
   suggestedStrategy?: string | null;
   citations?: unknown;
 }
@@ -255,11 +261,38 @@ export function ChatHistoryPage() {
               ) : (
                 detail.messages.map((m) => {
                   const isUser = m.role === 'USER' || m.role === 'user';
+                  // Bug 4 (2026-06-12): show per-turn highlighted text +
+                  // page number so the student can see "I asked this
+                  // about page X" rather than only the LAST selection
+                  // overwriting every prior question.
+                  const turnSel =
+                    isUser &&
+                    typeof m.selectedText === 'string' &&
+                    m.selectedText.trim().length > 0
+                      ? m.selectedText.trim()
+                      : null;
+                  const turnPage =
+                    isUser && typeof m.currentPage === 'number' && m.currentPage > 0
+                      ? m.currentPage
+                      : null;
                   return (
                     <div
                       key={m.id}
-                      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+                      className={`flex flex-col ${
+                        isUser ? 'items-end' : 'items-start'
+                      }`}
                     >
+                      {(turnSel || turnPage) && (
+                        <div className="max-w-[85%] mb-1 text-[10px] italic text-gray-500">
+                          {turnSel
+                            ? `Re: «${turnSel.slice(0, 80)}${
+                                turnSel.length > 80 ? '…' : ''
+                              }»`
+                            : null}
+                          {turnSel && turnPage ? ' ' : ''}
+                          {turnPage ? `(page ${turnPage})` : null}
+                        </div>
+                      )}
                       <div
                         className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                           isUser

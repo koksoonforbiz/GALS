@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import { useActivityLog } from '../../../lib/activity-log';
+import { usePageContext } from '../../../contexts/PageContext';
 import type { SaveForReviewInput } from '../types';
 import { MessageCircleQuestion, Trophy, AlertTriangle, Lightbulb, Loader } from 'lucide-react';
 import { ChatMessageContent } from '../../ChatMessageContent';
@@ -83,6 +84,16 @@ export function InterrogativeElaborationView({
   const initialGenDone = useRef(false);
 
   const { track } = useActivityLog();
+  // Bug 3 (2026-06-12): pull the CURRENT slide + selection from the
+  // page context on every send rather than the props captured at
+  // session start. Without this, the backend keeps grounding on the
+  // slide the student was on when they OPENED Elab.
+  const {
+    pdfCurrentPage: currentPdfPage,
+    selectedText: currentSelectedText,
+    courseId: ctxCourseId,
+    contentId: ctxContentId,
+  } = usePageContext();
   // Typing-pattern signals for the free-text question input. We
   // measure latency-to-first-keystroke (idle thinking time before
   // typing starts), total characters typed (typing volume), and
@@ -238,6 +249,20 @@ export function InterrogativeElaborationView({
             role: m.role,
             content: m.content,
           })),
+          // Bug 3 (2026-06-12): per-turn context refresh. Read STRAIGHT
+          // from the PageContext (not props) so the values reflect what
+          // the student is looking at AT SEND TIME, not session start.
+          // The backend re-resolves grounded text via
+          // resolveInterventionContext({ coverage: { pages: ±W } }).
+          // Absent values keep the session-start behaviour.
+          selectedText:
+            typeof currentSelectedText === 'string' && currentSelectedText.trim().length > 0
+              ? currentSelectedText
+              : undefined,
+          contentId: ctxContentId || contentId || undefined,
+          currentPage:
+            typeof currentPdfPage === 'number' && currentPdfPage > 0 ? currentPdfPage : undefined,
+          courseId: ctxCourseId || courseId || undefined,
         },
       );
 

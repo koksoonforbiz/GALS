@@ -931,6 +931,12 @@ model ChatbotMessage {
   // material drove the question.
   selectedText String? @map("selected_text") @db.Text
 
+  // 1-based PDF page number the student was viewing for THIS turn.
+  // Bug 4 (2026-06-12) — see apps/api migration
+  // 20260612000000_add_chatbot_message_selection_context. Mirrored
+  // here so the gals-export tool can dump the column.
+  currentPage Int? @map("current_page")
+
   // Strategy the LLM suggested in its reply (PRACTICE_TESTING |
   // DISTRIBUTED_PRACTICE | STEPWISE_LEARNING | INTERROGATIVE_ELABORATION),
   // parsed out of the [SUGGEST:X] tag. Null on USER rows.
@@ -2378,7 +2384,7 @@ model SessionReplaySnapshot {
   session           StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   userId            String
   pageUrl           String
-  html              String
+  html              String?
   screenshotDataUrl String?        @map("screenshot_data_url") @db.Text
   width             Int
   height            Int

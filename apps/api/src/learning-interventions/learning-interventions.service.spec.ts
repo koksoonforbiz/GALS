@@ -331,3 +331,287 @@ describe('LearningInterventionsService.generatePracticeTest — config & coverag
     });
   });
 });
+
+// ─── Bug 1/3/4 — Page-aware chat + Elab refresh (2026-06-12) ──────────
+//
+// The three tests below cover the new behaviour added in BUG_REPORT
+// 2026-06-12:
+//   1. chat() with { contentId, currentPage } narrows via the paged
+//      helper around [currentPage ± W].
+//   2. chat() falls back to the unwindowed resolver when no chunks
+//      exist in the requested range.
+//   3. askQuestion() with a per-turn currentPage re-resolves via
+//      resolveInterventionContext using the LATEST page, not the
+//      session-start one stored in sessionData.selectedText.
+describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-06-12)', () => {
+  // Helper — minimal Prisma stub for chat()'s persistence path. The
+  // service fires-and-forgets the createMany so a permissive stub is
+  // enough; assertion happens on the spied resolver calls instead.
+  function makeChatPrismaStub() {
+    return {
+      moduleItem: {
+        findUnique: jest.fn().mockResolvedValue({
+          type: 'PDF',
+          pdfFilename: 'lesson.pdf',
+          module: { courseId: 'course-1' },
+          contentMdx: null,
+        }),
+      },
+      sourceDocument: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'doc-1' }),
+      },
+      documentChunk: {
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      chatbotMessage: {
+        createMany: jest.fn().mockResolvedValue({ count: 2 }),
+      },
+      course: {
+        findUnique: jest.fn().mockResolvedValue({ teacherId: 'teacher-1' }),
+      },
+    };
+  }
+
+  // Stub the LLM funnel + everything else chat() touches so the focus
+  // is purely on which resolver path was taken. callLlmStructured
+  // returns a canned reply with no SUGGEST tag so no strategy parse
+  // logic runs.
+  function stubChatDependencies(
+    svc: LearningInterventionsService,
+    llmStub: { callLlmStructured: jest.Mock },
+  ) {
+    llmStub.callLlmStructured = jest.fn().mockResolvedValue({
+      content: 'stub reply',
+      promptTokens: 1,
+      completionTokens: 1,
+      model: 'gpt-stub',
+    });
+
+    // Quiet the helpers that pull noisy metadata for the citation
+    // label / teacher key lookup so they don't blow up on the bare
+    // Prisma stub.
+    (svc as unknown as { lookupPdfFilenameForContent: jest.Mock }).lookupPdfFilenameForContent =
+      jest.fn().mockResolvedValue('lesson.pdf');
+    (
+      svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }
+    ).getCourseTeacherIdWithApiKey = jest.fn().mockResolvedValue('teacher-1');
+  }
+
+  it('chat() with { contentId, currentPage: 10 } fetches page-windowed chunks via tryResolveFromModuleItemPaged', async () => {
+    const prisma = makeChatPrismaStub();
+    const stub = {} as unknown;
+    const llmService = { callLlmStructured: jest.fn() };
+    const svc = new LearningInterventionsService(
+      prisma as never,
+      llmService as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+    );
+    stubChatDependencies(svc, llmService);
+
+    const hasChunksSpy = jest
+      .spyOn(
+        svc as unknown as { hasChunksInPageRange: jest.Mock },
+        'hasChunksInPageRange',
+      )
+      .mockResolvedValue(true);
+    const pagedSpy = jest
+      .spyOn(
+        svc as unknown as { tryResolveFromModuleItemPaged: jest.Mock },
+        'tryResolveFromModuleItemPaged',
+      )
+      .mockResolvedValue('PAGED PDF TEXT pp.8-12');
+    const unwindowedSpy = jest
+      .spyOn(
+        svc as unknown as { tryResolveFromModuleItem: jest.Mock },
+        'tryResolveFromModuleItem',
+      )
+      .mockResolvedValue('FULL PDF TEXT (should not be used)');
+
+    delete process.env.RAG_PAGE_WINDOW; // default window = 2
+
+    await svc.chat(
+      'student-1',
+      {
+        message: 'what is this page about?',
+        conversationHistory: [],
+        courseId: 'course-1',
+        contentId: 'item-1',
+        currentPage: 10,
+      },
+      undefined,
+    );
+
+    // Window default = 2 → [8, 12].
+    expect(hasChunksSpy).toHaveBeenCalledWith('course-1', 'item-1', 8, 12);
+    expect(pagedSpy).toHaveBeenCalledWith('course-1', 'item-1', 8, 12);
+    // The unwindowed resolver must NOT have been called when the
+    // paged fetch succeeded.
+    expect(unwindowedSpy).not.toHaveBeenCalled();
+  });
+
+  it('chat() falls back to tryResolveFromModuleItem when no chunks exist in the page range', async () => {
+    const prisma = makeChatPrismaStub();
+    const stub = {} as unknown;
+    const llmService = { callLlmStructured: jest.fn() };
+    const svc = new LearningInterventionsService(
+      prisma as never,
+      llmService as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+    );
+    stubChatDependencies(svc, llmService);
+
+    // hasChunksInPageRange = false → the chat() guard should skip
+    // the paged fetch entirely and fall through to the unwindowed
+    // resolver.
+    const hasChunksSpy = jest
+      .spyOn(
+        svc as unknown as { hasChunksInPageRange: jest.Mock },
+        'hasChunksInPageRange',
+      )
+      .mockResolvedValue(false);
+    const pagedSpy = jest
+      .spyOn(
+        svc as unknown as { tryResolveFromModuleItemPaged: jest.Mock },
+        'tryResolveFromModuleItemPaged',
+      )
+      .mockResolvedValue(null);
+    const unwindowedSpy = jest
+      .spyOn(
+        svc as unknown as { tryResolveFromModuleItem: jest.Mock },
+        'tryResolveFromModuleItem',
+      )
+      .mockResolvedValue('FULL PDF TEXT (fallback)');
+
+    delete process.env.RAG_PAGE_WINDOW;
+
+    await svc.chat(
+      'student-1',
+      {
+        message: 'anything',
+        conversationHistory: [],
+        courseId: 'course-1',
+        contentId: 'item-1',
+        currentPage: 10,
+      },
+      undefined,
+    );
+
+    expect(hasChunksSpy).toHaveBeenCalledWith('course-1', 'item-1', 8, 12);
+    expect(pagedSpy).not.toHaveBeenCalled();
+    // Triple-defensive: when the page window has no chunks, the
+    // chat() path must still produce a grounded reply by falling
+    // back to the unwindowed PDF text.
+    expect(unwindowedSpy).toHaveBeenCalledWith('course-1', 'item-1');
+  });
+
+  it('askQuestion() with per-turn currentPage re-resolves via resolveInterventionContext (NOT the frozen session-start text)', async () => {
+    const SESSION_START_TEXT = 'slide-10 frozen context — must NOT be used';
+    const REFRESHED_TEXT = 'slide-12 fresh context after scroll';
+
+    const prisma = {
+      learningIntervention: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'student-1',
+          type: 'INTERROGATIVE_ELABORATION',
+          courseId: 'course-1',
+          sessionData: {
+            suggestedQuestions: [],
+            keyConcepts: [],
+            conversation: [],
+            selectedText: SESSION_START_TEXT,
+            questionsAsked: 0,
+          },
+        }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const stub = {} as unknown;
+    const llmService = {
+      callLlmForUser: jest.fn().mockResolvedValue({ content: 'fresh answer' }),
+    } as unknown;
+    const svc = new LearningInterventionsService(
+      prisma as never,
+      llmService as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+      stub as never,
+    );
+
+    (
+      svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }
+    ).getCourseTeacherIdWithApiKey = jest.fn().mockResolvedValue('teacher-1');
+
+    const resolveSpy = jest
+      .spyOn(
+        svc as unknown as { resolveInterventionContext: jest.Mock },
+        'resolveInterventionContext',
+      )
+      .mockResolvedValue({
+        text: REFRESHED_TEXT,
+        source: 'pdf-source',
+        evidence: null,
+      });
+
+    delete process.env.RAG_PAGE_WINDOW; // default window = 2
+
+    const out = await svc.askQuestion('student-1', 'session-1', {
+      question: 'what is on this NEW slide?',
+      conversationHistory: [],
+      // The per-turn payload — currentPage 12 must beat
+      // sessionData.selectedText which was frozen at slide 10.
+      currentPage: 12,
+      contentId: 'item-1',
+      courseId: 'course-1',
+    });
+
+    // The resolver MUST have been called, and with the FRESH page
+    // window — not the session-start state.
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    const callArgs = resolveSpy.mock.calls[0]![1] as {
+      coverage?: { mode: string; pageStart: number; pageEnd: number };
+      contentId?: string;
+    };
+    expect(callArgs.coverage).toEqual({
+      mode: 'pages',
+      pageStart: 10,
+      pageEnd: 14,
+    });
+    expect(callArgs.contentId).toBe('item-1');
+
+    // The downstream LLM must have been called with the REFRESHED
+    // text in the system prompt — buildElaborationAnswerPrompt embeds
+    // sourceText into `system`, with the bare question going as
+    // `user`. callLlmForUser(teacherId, system, user, opts).
+    const llmCalls = (llmService as { callLlmForUser: jest.Mock }).callLlmForUser.mock.calls;
+    expect(llmCalls.length).toBe(1);
+    const systemPrompt = String(llmCalls[0][1] ?? '');
+    expect(systemPrompt).toContain(REFRESHED_TEXT);
+    expect(systemPrompt).not.toContain(SESSION_START_TEXT);
+
+    expect(out).toEqual({ answer: 'fresh answer' });
+
+    // The new conversation entry must persist the per-turn page so
+    // the student review surface can render "(page 12)".
+    const updateCall = (prisma.learningIntervention.update as jest.Mock).mock.calls[0]![0];
+    const sessionData = updateCall.data.sessionData as {
+      conversation: Array<{ role: string; currentPage?: number }>;
+    };
+    const userTurn = sessionData.conversation.find((m) => m.role === 'user');
+    expect(userTurn?.currentPage).toBe(12);
+  });
+});

@@ -564,6 +564,12 @@ interface ConversationMsg {
   role?: string;
   content?: string;
   wasSuggested?: boolean;
+  // Bug 4 (2026-06-12): per-turn slide/selection context. Saved by
+  // askQuestion() so the review surface can show which slide the
+  // student was on for THIS question (rather than only the
+  // session-start selection at the top of the saved review).
+  selectedText?: string;
+  currentPage?: number;
 }
 
 const DEPTH_COLORS: Record<string, string> = {
@@ -624,23 +630,45 @@ function ElaborationRenderer({ data }: { data: Record<string, unknown> }) {
 
       {/* Conversation transcript */}
       <div className="space-y-1.5">
-        {conversation.map((msg, i) => (
-          <div key={i} className="text-xs">
-            <div className="text-[10px] text-gray-400 mb-0.5">
-              {msg.role === 'user' ? 'You' : 'Tutor'}
-              {msg.wasSuggested && <span className="ml-1 text-blue-400">(suggested)</span>}
+        {conversation.map((msg, i) => {
+          // Bug 4 (2026-06-12): per-turn "Re: «…» (page X)" badge so the
+          // student review surface shows WHICH slide and selection drove
+          // each individual question — previously the page only carried
+          // the session-start selection at the top level.
+          const turnSel =
+            typeof msg.selectedText === 'string' && msg.selectedText.trim().length > 0
+              ? msg.selectedText.trim()
+              : null;
+          const turnPage =
+            typeof msg.currentPage === 'number' && msg.currentPage > 0 ? msg.currentPage : null;
+          const showCtx = msg.role === 'user' && (turnSel || turnPage);
+          return (
+            <div key={i} className="text-xs">
+              <div className="text-[10px] text-gray-400 mb-0.5">
+                {msg.role === 'user' ? 'You' : 'Tutor'}
+                {msg.wasSuggested && <span className="ml-1 text-blue-400">(suggested)</span>}
+              </div>
+              {showCtx && (
+                <div className="text-[10px] italic text-gray-500 mb-0.5">
+                  {turnSel
+                    ? `Re: «${turnSel.slice(0, 80)}${turnSel.length > 80 ? '…' : ''}»`
+                    : null}
+                  {turnSel && turnPage ? ' ' : ''}
+                  {turnPage ? `(page ${turnPage})` : null}
+                </div>
+              )}
+              <div
+                className={`rounded-lg p-2 ${
+                  msg.role === 'user'
+                    ? 'bg-blue-50 border border-blue-200 text-gray-800'
+                    : 'bg-gray-50 border border-gray-200 text-gray-700'
+                }`}
+              >
+                {msg.content}
+              </div>
             </div>
-            <div
-              className={`rounded-lg p-2 ${
-                msg.role === 'user'
-                  ? 'bg-blue-50 border border-blue-200 text-gray-800'
-                  : 'bg-gray-50 border border-gray-200 text-gray-700'
-              }`}
-            >
-              {msg.content}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

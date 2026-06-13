@@ -692,8 +692,8 @@ model SourceDocument {
   createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  course                Course                @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  uploadedBy            User                  @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
+  course                Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy            User                   @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: Cascade)
   chunks                DocumentChunk[]
   preGeneratedExercises PreGeneratedExercise[]
 
@@ -930,6 +930,12 @@ model ChatbotMessage {
   // null if no selection was used. Lets us understand what slice of the
   // material drove the question.
   selectedText String? @map("selected_text") @db.Text
+
+  // 1-based PDF page number the student was viewing for THIS turn.
+  // Bug 4 (2026-06-12): without it the review surface couldn't show
+  // which slide a given question referred to — only the most recent
+  // selection (overwritten on each subsequent question).
+  currentPage Int? @map("current_page")
 
   // Strategy the LLM suggested in its reply (PRACTICE_TESTING |
   // DISTRIBUTED_PRACTICE | STEPWISE_LEARNING | INTERROGATIVE_ELABORATION),

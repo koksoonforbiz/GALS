@@ -47,6 +47,18 @@ function sharedRetrieverEnabled(): boolean {
   const v = (process.env.RAG_USE_SHARED_RETRIEVER ?? 'true').toLowerCase();
   return v !== 'false' && v !== '0' && v !== 'off';
 }
+
+// Bug 1 (2026-06-12) — chat() page-window width around `currentPage`.
+// Tunable via `RAG_PAGE_WINDOW`; defaults to 2 so a student on slide 10
+// gets pp. 8-12 fed to the LLM. Negative / non-numeric values fall back
+// to the default to avoid `Math.max(1, n - NaN)` style breakage.
+function parsePageWindowEnv(): number {
+  const raw = process.env.RAG_PAGE_WINDOW;
+  if (raw == null || raw === '') return 2;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) return 2;
+  return n;
+}
 import type {
   CreateSavedReviewDto,
   UpdateSavedReviewDto,
@@ -156,6 +168,14 @@ interface ConversationMessage {
   content: string;
   timestamp: string;
   wasSuggested?: boolean;
+  // Bug 4 (2026-06-12) — per-turn slide/selection metadata so the
+  // student review surface can render which page each individual
+  // question referred to, instead of only the session-start selection
+  // stored in `sessionData.selectedText`. Optional so legacy sessions
+  // (created before the fix) keep deserializing cleanly. Only USER
+  // turns carry these; ASSISTANT replies leave them undefined.
+  selectedText?: string;
+  currentPage?: number;
 }
 
 // ─── Stage 3: JSON schemas for intervention generators ──────────────
@@ -2616,9 +2636,51 @@ export class LearningInterventionsService {
 
     const sessionData = intervention.sessionData as unknown as ElaborationSessionData;
 
+    // Bug 3 (2026-06-12): re-resolve grounded text when the client
+    // supplies per-turn context. Previously `askQuestion()` only ever
+    // looked at `sessionData.selectedText` — which was frozen at
+    // session start. A student who scrolled from slide 10 to slide 12
+    // mid-session kept getting slide-10 answers.
+    //
+    // Trigger only if the client sent any of the per-turn fields; if
+    // none are present, fall through to legacy behaviour so older
+    // builds of the web app stay correct.
+    let sourceText = sessionData.selectedText;
+    const wantsTurnRefresh =
+      (typeof dto.selectedText === 'string' && dto.selectedText.trim().length > 0) ||
+      typeof dto.contentId === 'string' ||
+      typeof dto.currentPage === 'number';
+    if (wantsTurnRefresh) {
+      try {
+        const pageNum = typeof dto.currentPage === 'number' ? dto.currentPage : undefined;
+        const window = parsePageWindowEnv();
+        const ctx = await this.resolveInterventionContext(userId, {
+          selectedText: dto.selectedText ?? '',
+          courseId: dto.courseId ?? intervention.courseId,
+          contentId: dto.contentId,
+          coverage:
+            pageNum && pageNum > 0
+              ? {
+                  mode: 'pages' as const,
+                  pageStart: Math.max(1, pageNum - window),
+                  pageEnd: pageNum + window,
+                }
+              : undefined,
+        });
+        if (ctx.text && ctx.text.trim().length > 0) {
+          sourceText = ctx.text;
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[elab.askQuestion] per-turn context refresh failed (session=${sessionId}): ${(err as Error).message}; falling back to session-start context`,
+        );
+      }
+    }
+
     // Build the answer prompt with conversation history
     const { system, user } = buildElaborationAnswerPrompt({
-      sourceText: sessionData.selectedText,
+      sourceText,
       conversationHistory: dto.conversationHistory || [],
       studentQuestion: dto.question,
     });
@@ -2635,11 +2697,31 @@ export class LearningInterventionsService {
       throw new BadRequestException('Failed to generate answer. Please try again.');
     }
 
+    // Bug 4 (2026-06-12): persist the per-turn slide / selection on the
+    // USER conversation entry so the student review surface can show
+    // *what slide the student was on for each individual question*
+    // instead of just the session-start selection. Optional fields stay
+    // undefined when the client didn't supply them.
+    const turnSelected =
+      typeof dto.selectedText === 'string' && dto.selectedText.trim().length > 0
+        ? dto.selectedText.trim().slice(0, 4000)
+        : undefined;
+    const turnPage =
+      typeof dto.currentPage === 'number' && dto.currentPage > 0
+        ? Math.floor(dto.currentPage)
+        : undefined;
+
     // Append both messages to the conversation
     const now = new Date().toISOString();
-    const updatedConversation = [
+    const updatedConversation: ConversationMessage[] = [
       ...sessionData.conversation,
-      { role: 'user' as const, content: dto.question, timestamp: now },
+      {
+        role: 'user' as const,
+        content: dto.question,
+        timestamp: now,
+        ...(turnSelected ? { selectedText: turnSelected } : {}),
+        ...(turnPage ? { currentPage: turnPage } : {}),
+      },
       { role: 'assistant' as const, content: answer, timestamp: now },
     ];
 
@@ -3995,15 +4077,87 @@ export class LearningInterventionsService {
 
     if (dto.contentId) {
       try {
-        const pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
+        // Page-aware resolution (Bug 1 fix, 2026-06-12). When the
+        // client supplies `currentPage` (the slide the student is
+        // currently viewing in the PDF reader), narrow the grounded
+        // text to a small window around it via the same paged helper
+        // the four intervention generators use. Without this, the
+        // LLM saw the full 50KB cap of joined chunks and would answer
+        // about slide 1 (e.g. an agenda) when the student asked
+        // about slide 10 (e.g. a Generative AI diagram).
+        //
+        // Window width is configurable so a teacher / ops can widen
+        // it for documents with split slides; default ±2 gives margin
+        // without dragging in unrelated material.
+        //
+        // Triple-defensive: the paged helper itself falls back to the
+        // full PDF text when no chunks match the range; on top of
+        // that, an exception path here still tries the unwindowed
+        // resolver. So a misconfigured window or legacy ingest never
+        // breaks chat — it just degrades to today's behaviour.
+        let pdfText: string | null = null;
+        let appliedPageStart: number | undefined;
+        let appliedPageEnd: number | undefined;
+        const window = parsePageWindowEnv();
+        if (typeof dto.currentPage === 'number' && dto.currentPage > 0) {
+          try {
+            const lo = Math.max(1, dto.currentPage - window);
+            const hi = dto.currentPage + window;
+            // tryResolveFromModuleItemPaged falls back to the full-text
+            // resolver internally when zero chunks match the range, so
+            // a non-empty return is NOT a guarantee that the slice was
+            // actually applied. Verify with hasChunksInPageRange before
+            // claiming page coverage in the citation label.
+            const hasAny = await this.hasChunksInPageRange(
+              dto.courseId,
+              dto.contentId,
+              lo,
+              hi,
+            );
+            if (hasAny) {
+              const sliced = await this.tryResolveFromModuleItemPaged(
+                dto.courseId,
+                dto.contentId,
+                lo,
+                hi,
+              );
+              if (sliced && sliced.length > 0) {
+                pdfText = sliced;
+                appliedPageStart = lo;
+                appliedPageEnd = hi;
+              } else {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  `[chat] paged resolve returned empty text for content=${dto.contentId} pp.${lo}-${hi}; falling back to full PDF`,
+                );
+              }
+            } else {
+              // eslint-disable-next-line no-console
+              console.warn(
+                `[chat] no chunks in page range for content=${dto.contentId} pp.${lo}-${hi} (legacy ingest or out-of-range slide); falling back to full PDF`,
+              );
+            }
+          } catch (err) {
+            this.logger.warn(
+              `chat() paged PDF resolve failed for page ${dto.currentPage}; falling back to full text: ${(err as Error).message}`,
+            );
+          }
+        }
+        if (!pdfText) {
+          pdfText = await this.tryResolveFromModuleItem(dto.courseId, dto.contentId);
+        }
         if (pdfText) {
           const filename = await this.lookupPdfFilenameForContent(dto.courseId, dto.contentId);
+          const pageSuffix =
+            appliedPageStart != null && appliedPageEnd != null
+              ? ` (pp. ${appliedPageStart}-${appliedPageEnd})`
+              : '';
           evidence = {
             contextChunks: [
               {
                 id: `pdf-source:${dto.contentId}`,
                 text: pdfText,
-                citationLabel: `Source 1: ${filename ?? 'lesson PDF'}`,
+                citationLabel: `Source 1: ${filename ?? 'lesson PDF'}${pageSuffix}`,
               },
             ],
             images: [],
@@ -4079,7 +4233,13 @@ Formatting (the UI renders GitHub-flavored Markdown with KaTeX math):
 - Render math with LaTeX inside dollar-sign delimiters: $E = mc^2$ for inline and $$...$$ on its own line for display equations. Use \\frac, \\sum, \\int, \\sqrt, etc.
 - Prefer plain prose for short answers; reach for tables / code / equations only when they genuinely help.
 
-When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'course material'}, remember they are looking at that page right now.`;
+When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'course material'}, remember they are looking at that page right now.${
+      typeof dto.currentPage === 'number' && dto.currentPage > 0
+        ? `
+
+The student is currently viewing slide ${Math.floor(dto.currentPage)} of the document. If they ask "which slide am I on" or anything about the current page/position, use this number. If their highlighted selection (below) appears to come from a DIFFERENT slide than slide ${Math.floor(dto.currentPage)}, treat the selection as the topic they want to discuss but answer the position question based on their CURRENT viewing slide (${Math.floor(dto.currentPage)}).`
+        : ''
+    }`;
 
     const grounded = buildGroundedMessages({
       systemPersona,
@@ -4143,6 +4303,13 @@ When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'cour
     // every turn. Fire-and-forget so persistence failures never break
     // the student's chat experience.
     const selPersist = (dto.selectedText ?? '').trim().slice(0, 4000) || null;
+    // Bug 4 (2026-06-12): persist `currentPage` on the USER row so the
+    // review surface can render "Re: «…» (page X)" per turn rather than
+    // only the most recent selection.
+    const pagePersist =
+      typeof dto.currentPage === 'number' && dto.currentPage > 0
+        ? Math.floor(dto.currentPage)
+        : null;
     this.prisma.chatbotMessage
       .createMany({
         data: [
@@ -4155,6 +4322,7 @@ When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'cour
             content: dto.message.slice(0, 8000),
             contextSource,
             selectedText: selPersist,
+            currentPage: pagePersist,
             // suggestedStrategy / tokens / model are reply-side fields
             suggestedStrategy: null,
             promptTokens: null,
@@ -4170,6 +4338,7 @@ When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'cour
             content: reply.slice(0, 8000),
             contextSource,
             selectedText: null,
+            currentPage: null,
             suggestedStrategy,
             promptTokens: llmPromptTokens,
             completionTokens: llmCompletionTokens,

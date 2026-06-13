@@ -399,6 +399,16 @@ export function ChatbotPanel({
           contentId: contentId || undefined,
           contentTitle: contentTitle || undefined,
           selectedText: effectiveSelectedText || undefined,
+          // Bug 1/5/6 (2026-06-12): tell the backend which PDF slide the
+          // student is currently viewing so chat() can narrow the
+          // grounded PDF text to a small window around it. Without this,
+          // the LLM saw the full 50KB cap and answered about slide 1.
+          // Undefined for non-PDF surfaces (PAGE-type lessons), which
+          // the backend treats as a request for full-document context.
+          currentPage:
+            typeof pdfCurrentPage === 'number' && pdfCurrentPage > 0
+              ? pdfCurrentPage
+              : undefined,
         },
       );
 
