@@ -249,6 +249,27 @@ export class ActivityLogController {
   }
 
   /**
+   * GET /activity-log/teacher/sessions/:sessionId/export/screenshots
+   * Returns a page of screenshot data URLs for the export ZIP.
+   * The frontend calls this repeatedly to avoid the server embedding all
+   * base64 images in the main JSON (which hits Node's string length limit
+   * for sessions longer than ~30 minutes).
+   */
+  @Get('teacher/sessions/:sessionId/export/screenshots')
+  @Roles('teacher')
+  async getExportScreenshots(
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.logExportService.getExportScreenshots(
+      sessionId,
+      Math.max(0, Number(offset ?? '0')),
+      Math.min(50, Math.max(1, Number(limit ?? '50'))),
+    );
+  }
+
+  /**
    * GET /activity-log/teacher/sessions/:sessionId/export-url
    * Upload to MinIO and return a presigned URL (for large files).
    */

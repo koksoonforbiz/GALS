@@ -487,25 +487,39 @@ export async function exportSessionData(
   const sessionData: any = await res.json();
   report('fetching', 25, 'Session data received');
 
-  // ── Step 2: Extract screenshots from snapshots ────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const snapshots: any[] = sessionData?.replay?.snapshots ?? [];
+  // ── Step 2: Fetch screenshots in batches from the dedicated endpoint ─────
+  // screenshotDataUrl is no longer inlined in the main JSON (it would cause
+  // JSON.stringify to exceed Node's string length limit for sessions > ~30 min).
+  // The /export/screenshots endpoint returns them in batches of 50.
+  const snapshotCount: number = sessionData?.replay?.snapshotCount ?? 0;
   const screenshotFrames: { index: number; dataUrl: string; filename: string }[] = [];
-  let frameIdx = 0;
-  for (const snap of snapshots) {
-    if (snap.screenshotDataUrl) {
-      const filename = `frame_${String(frameIdx).padStart(4, '0')}.jpg`;
-      screenshotFrames.push({
-        index: frameIdx,
-        dataUrl: snap.screenshotDataUrl as string,
-        filename,
-      });
-      snap.screenshotFile = `screen_recording/${filename}`;
-      delete snap.screenshotDataUrl;
-      frameIdx++;
+  const SCREENSHOT_BATCH = 50;
+  for (let offset = 0; offset < snapshotCount; offset += SCREENSHOT_BATCH) {
+    const pct = 25 + Math.round((offset / Math.max(snapshotCount, 1)) * 10);
+    report(
+      'fetching',
+      pct,
+      `Fetching screenshots ${offset + 1}–${Math.min(offset + SCREENSHOT_BATCH, snapshotCount)} of ${snapshotCount}…`,
+    );
+    const sRes = await fetch(
+      `/api/activity-log/teacher/sessions/${sessionId}/export/screenshots?offset=${offset}&limit=${SCREENSHOT_BATCH}`,
+      { headers },
+    );
+    if (!sRes.ok) break;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const page: any = await sRes.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const frame of page.frames ?? []) {
+      if (frame.screenshotDataUrl) {
+        screenshotFrames.push({
+          index: frame.snapshotIndex as number,
+          dataUrl: frame.screenshotDataUrl as string,
+          filename: `frame_${String(frame.snapshotIndex as number).padStart(4, '0')}.jpg`,
+        });
+      }
     }
   }
-  report('fetching', 30, `Extracted ${screenshotFrames.length} screenshot frames`);
+  report('fetching', 35, `Fetched ${screenshotFrames.length} screenshot frames`);
 
   // ── Step 3: Download webcam recording videos ──────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -518,7 +532,7 @@ export async function exportSessionData(
 
   for (let i = 0; i < completedRecs.length; i++) {
     const rec = completedRecs[i];
-    const pct = 30 + Math.round(((i + 1) / Math.max(completedRecs.length, 1)) * 20);
+    const pct = 35 + Math.round(((i + 1) / Math.max(completedRecs.length, 1)) * 15);
     report('downloading', pct, `Downloading webcam recording ${i + 1} of ${completedRecs.length}…`);
     try {
       const vRes = await fetch(rec.downloadUrl as string);

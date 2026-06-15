@@ -165,21 +165,10 @@ export class LogExportService {
       }),
     ]);
 
-    // Fetch screenshotDataUrl in batches to avoid Prisma rust→napi size limit.
-    // html is NOT fetched here — it is served via the paginated dom-snapshots endpoint
-    // to avoid holding gigabytes in memory for long sessions.
-    const BATCH = 50;
-    const screenshotMap = new Map<string, string | null>();
-    for (let i = 0; i < replaySnapshots.length; i += BATCH) {
-      const batchIds = replaySnapshots.slice(i, i + BATCH).map((s) => s.id);
-      const rows = await this.prisma.sessionReplaySnapshot.findMany({
-        where: { id: { in: batchIds } },
-        select: { id: true, screenshotDataUrl: true },
-      });
-      for (const row of rows) {
-        screenshotMap.set(row.id, row.screenshotDataUrl ?? null);
-      }
-    }
+    // screenshotDataUrl is NOT inlined here — it is served via the paginated
+    // /export/screenshots endpoint to avoid holding gigabytes in memory for long
+    // sessions (a 2-hour session at 1 screenshot/3s ≈ 2400 × ~50 KB base64 = 120 MB+
+    // which exceeds Node's JSON.stringify string length limit).
 
     // Generate presigned download URLs for each completed recording segment
     const recordingsWithUrls = await Promise.all(
@@ -482,7 +471,7 @@ export class LogExportService {
           scrollY: s.scrollY,
           capturedAt: Number(s.capturedAt),
           trigger: s.trigger,
-          screenshotDataUrl: screenshotMap.get(s.id) ?? null,
+          screenshotFile: `screen_recording/frame_${String(idx).padStart(4, '0')}.jpg`,
           htmlFile: `dom_snapshots/snapshot_${String(idx).padStart(4, '0')}.html`,
         })),
       },
@@ -526,11 +515,48 @@ export class LogExportService {
   }
 
   /**
+   * Return a page of screenshot data URLs for the export ZIP.
+   * Mirrors getExportDomSnapshots — called in batches so the caller never
+   * holds all screenshots in memory at once.
+   */
+  async getExportScreenshots(
+    sessionId: string,
+    offset: number,
+    limit: number,
+  ): Promise<{
+    total: number;
+    frames: Array<{
+      snapshotIndex: number;
+      screenshotFile: string;
+      screenshotDataUrl: string | null;
+    }>;
+  }> {
+    const total = await this.prisma.sessionReplaySnapshot.count({ where: { sessionId } });
+
+    const rows = await this.prisma.sessionReplaySnapshot.findMany({
+      where: { sessionId },
+      orderBy: { capturedAt: 'asc' },
+      skip: offset,
+      take: limit,
+      select: { id: true, screenshotDataUrl: true },
+    });
+
+    return {
+      total,
+      frames: rows.map((row, i) => ({
+        snapshotIndex: offset + i,
+        screenshotFile: `screen_recording/frame_${String(offset + i).padStart(4, '0')}.jpg`,
+        screenshotDataUrl: row.screenshotDataUrl ?? null,
+      })),
+    };
+  }
+
+  /**
    * Upload a session log to MinIO and return a 1-hour presigned download URL.
    */
   async exportToStorage(sessionId: string, userId: string): Promise<string> {
     const doc = await this.buildSessionLogDocument(sessionId);
-    const json = JSON.stringify(doc, null, 2);
+    const json = JSON.stringify(doc);
     const key = `student-logs/${userId}/${sessionId}.json`;
 
     await this.s3.send(
