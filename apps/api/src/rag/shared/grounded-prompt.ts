@@ -202,34 +202,29 @@ export function buildGroundedMessages(
   }
   const contextBlock = lines.join('\n').trim();
 
-  // ─── History block ──────────────────────────────────────
-  // We flatten conversation history into the user message rather
-  // than emitting it as separate role=user/role=assistant turns so
-  // the model sees the SAME shape every surface uses (dialogue and
-  // chat both prefix-flatten today). Keeps token usage predictable.
-  const historyStr =
-    history.length > 0
-      ? history
-          .map(
-            (m) =>
-              `${m.role === 'user' ? 'Student' : 'Assistant'}: ${m.content}`,
-          )
-          .join('\n\n')
-      : '';
+  // ─── History turns ──────────────────────────────────────
+  // Emit prior turns as proper role=user / role=assistant message
+  // pairs so the LLM can follow the conversation naturally. Flattening
+  // into plain text (the old approach) broke follow-up questions like
+  // "give me more examples" because the model had no structural signal
+  // about what was asked vs. answered.
+  const historyMessages: FunnelMessage[] = history.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
-  // ─── User message ───────────────────────────────────────
-  // Build content parts: optional context block + history + question,
-  // followed by one `image_url` part per image. The funnel translates
+  // ─── Final user message ─────────────────────────────────
+  // The current question carries the grounded context + images so the
+  // model always has the relevant sources alongside the latest ask.
+  // Build content parts: optional context block + question, followed
+  // by one `image_url` part per image. The funnel translates
   // `image_url` to Gemini `inlineData` automatically; OpenAI sees it
   // unchanged.
   const userTextParts: string[] = [];
   if (contextBlock.length > 0) {
     userTextParts.push(contextBlock);
   }
-  if (historyStr.length > 0) {
-    userTextParts.push(`Conversation so far:\n${historyStr}`);
-  }
-  userTextParts.push(`Student: ${question}`);
+  userTextParts.push(question);
   const userText = userTextParts.join('\n\n');
 
   const contentParts: FunnelContentPart[] = [{ type: 'text', text: userText }];
@@ -256,7 +251,7 @@ export function buildGroundedMessages(
       ? (contentParts[0] as { type: 'text'; text: string }).text
       : contentParts;
 
-  const messages: FunnelMessage[] = [{ role: 'user', content: userContent }];
+  const messages: FunnelMessage[] = [...historyMessages, { role: 'user', content: userContent }];
 
   return { systemPrompt, messages };
 }
