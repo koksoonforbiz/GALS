@@ -267,7 +267,7 @@ export function StepwiseLearningView({
   const currentResult = stepResults[currentStep];
 
   const handleSubmitCheck = async () => {
-    if (!interventionId || !inputValue.trim() || inputValue.trim().length < 10) return;
+    if (!interventionId || !inputValue.trim()) return;
 
     setIsChecking(true);
     setLastCheck(null);
@@ -798,7 +798,7 @@ export function StepwiseLearningView({
             />
             <button
               onClick={handleSubmitCheck}
-              disabled={isChecking || !inputValue.trim() || inputValue.trim().length < 10}
+              disabled={isChecking || !inputValue.trim()}
               className="w-full text-xs bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               {isChecking ? 'Checking...' : 'Submit Answer'}
