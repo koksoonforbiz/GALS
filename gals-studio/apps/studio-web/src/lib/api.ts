@@ -37,9 +37,12 @@ async function jget<T>(url: string): Promise<T> {
 }
 
 async function jsend<T>(url: string, method: string, body?: unknown): Promise<T> {
+  // Only set the JSON content-type when there's a body — Fastify rejects a
+  // request that declares application/json but sends an empty body
+  // (FST_ERR_CTP_EMPTY_JSON_BODY), which broke every bodiless DELETE.
   const res = await fetch(url, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: body == null ? undefined : { 'content-type': 'application/json' },
     body: body == null ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
