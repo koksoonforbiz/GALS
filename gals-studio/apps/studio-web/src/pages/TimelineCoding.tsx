@@ -73,7 +73,36 @@ type Streams = {
 type DataRow =
   | { id: string; kind: 'au' | 'emotion'; key: string; color: string; domain: [number, number] }
   | { id: string; kind: 'pupil'; key: 'pupil'; color: string; domain?: undefined }
-  | { id: string; kind: 'ef'; key: 'ef'; color: string; domain?: undefined };
+  | { id: string; kind: 'ef'; key: 'ef'; color: string; domain?: undefined }
+  | {
+      id: string;
+      kind: 'chat' | 'dialogue';
+      key: 'chat' | 'dialogue';
+      color: string;
+      domain?: undefined;
+    };
+
+// Coding vocabularies for per-utterance coding.
+const EF_CONSTRUCTS = [
+  'working_memory',
+  'cognitive_flexibility',
+  'metacognitive_monitoring',
+  'attention_regulation',
+  'metacognition_general',
+];
+const AFFECT_CODES = ['boredom', 'engagement', 'confusion', 'frustration'];
+const STRATEGY_CODES = [
+  'PRACTICE_TESTING',
+  'STEPWISE_LEARNING',
+  'INTERROGATIVE_ELABORATION',
+  'DISTRIBUTED_PRACTICE',
+];
+type UtterRef = {
+  source: string;
+  refWallMs: number;
+  role?: string | null;
+  preview?: string | null;
+};
 
 export function TimelineCoding() {
   const { sessionId = '' } = useParams();
@@ -115,6 +144,8 @@ export function TimelineCoding() {
   const [showSummary, setShowSummary] = useState(false);
   const [aois, setAois] = useState<Aoi[]>([]);
   const [aoiDraw, setAoiDraw] = useState(false);
+  const [utterCodings, setUtterCodings] = useState<Record<string, any>>({});
+  const [codingUtter, setCodingUtter] = useState<UtterRef | null>(null);
 
   const storeRef = useRef<PlayheadStore | null>(null);
   if (!storeRef.current)
@@ -183,6 +214,70 @@ export function TimelineCoding() {
       await refreshAois();
     },
     [refreshAois],
+  );
+
+  // ── per-utterance coding (chat / dialogue / intervention) ─────────────────
+  const refreshUtterCodings = useCallback(async () => {
+    if (!coderId) {
+      setUtterCodings({});
+      return;
+    }
+    const r = await api.utteranceCodings(sessionId, coderId);
+    const map: Record<string, any> = {};
+    for (const c of r.codings) map[`${c.source}:${c.refWallMs}`] = c;
+    setUtterCodings(map);
+  }, [sessionId, coderId]);
+  useEffect(() => {
+    void refreshUtterCodings();
+  }, [refreshUtterCodings]);
+
+  const saveUtterCoding = useCallback(
+    async (patch: {
+      efConstruct?: string | null;
+      affect?: string | null;
+      strategy?: string | null;
+      notes?: string | null;
+    }) => {
+      if (!codingUtter || !coderId) return;
+      await api.upsertUtteranceCoding(sessionId, {
+        coderId,
+        source: codingUtter.source,
+        refWallMs: codingUtter.refWallMs,
+        role: codingUtter.role ?? null,
+        preview: codingUtter.preview ?? null,
+        ...patch,
+      });
+      await refreshUtterCodings();
+    },
+    [codingUtter, coderId, sessionId, refreshUtterCodings],
+  );
+  const clearUtterCoding = useCallback(async () => {
+    if (!codingUtter) return;
+    const c = utterCodings[`${codingUtter.source}:${codingUtter.refWallMs}`];
+    if (c?.id) await api.deleteUtteranceCoding(c.id);
+    setCodingUtter(null);
+    await refreshUtterCodings();
+  }, [codingUtter, utterCodings, refreshUtterCodings]);
+
+  const openUtter = useCallback(
+    (
+      source: string,
+      u: {
+        wallMs: number;
+        role?: string | null;
+        content?: string;
+        type?: string | null;
+        status?: string | null;
+      },
+    ) => {
+      const preview =
+        source === 'intervention'
+          ? `${u.type ?? 'intervention'} ${u.status ?? ''}`.trim()
+          : (u.content ?? '').slice(0, 200);
+      setCodingUtter({ source, refWallMs: u.wallMs, role: u.role ?? null, preview });
+      store.seek(u.wallMs - (meta?.baseWallClockMs ?? 0));
+    },
+    [store, meta],
   );
 
   // measure the visible track area (scroll viewport minus the label column)
@@ -348,6 +443,10 @@ export function TimelineCoding() {
 
   const interventions: { wallMs: number; type?: string; status?: string }[] =
     sparse?.interventions ?? [];
+  const chatMsgs: { wallMs: number; role?: string; content?: string }[] = sparse?.chatbot ?? [];
+  const dialogueMsgs: { wallMs: number; role?: string; content?: string }[] =
+    sparse?.dialogue ?? [];
+  const utterItems = (kind: 'chat' | 'dialogue') => (kind === 'chat' ? chatMsgs : dialogueMsgs);
   const webcamSegs: WebcamSeg[] = (sparse?.webcam ?? []).filter(
     (s: WebcamSeg) => s.status === 'ok',
   );
@@ -396,6 +495,13 @@ export function TimelineCoding() {
         >
           📋 Summary
         </button>
+        <a
+          href={coderId ? api.utteranceExportUrl(sessionId, coderId) : undefined}
+          className={`rounded border border-slate-300 px-2 py-1 text-xs ${coderId ? '' : 'pointer-events-none opacity-50'}`}
+          title="Export utterance coding (EF / affect / strategy) as CSV"
+        >
+          ⬇ Export coding
+        </a>
         <div className="relative">
           <button
             onClick={() => setRowMenuOpen((v) => !v)}
@@ -499,6 +605,16 @@ export function TimelineCoding() {
               {fmtRel(ph.offsetMs)} / {fmtRel(durationMs)}
             </span>
           </div>
+          {codingUtter && (
+            <UtteranceCodingPanel
+              utter={codingUtter}
+              base={base}
+              existing={utterCodings[`${codingUtter.source}:${codingUtter.refWallMs}`]}
+              onSave={saveUtterCoding}
+              onClear={clearUtterCoding}
+              onClose={() => setCodingUtter(null)}
+            />
+          )}
           {review ? (
             <div
               className="rounded border-2 bg-white p-2 text-xs"
@@ -813,16 +929,32 @@ export function TimelineCoding() {
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
                   {interventions.map((iv, i) => {
                     const a = iv.wallMs - base;
+                    const c = utterCodings[`intervention:${iv.wallMs}`];
+                    const coded = c && (c.efConstruct || c.affect || c.strategy);
+                    const active =
+                      codingUtter?.source === 'intervention' && codingUtter.refWallMs === iv.wallMs;
                     return (
                       <div
                         key={i}
                         onClick={(e) => {
                           e.stopPropagation();
-                          store.seek(a);
+                          openUtter('intervention', iv);
                         }}
-                        className="absolute top-1 h-5 w-1.5 -translate-x-1/2 cursor-pointer rounded bg-violet-600"
-                        style={{ left: offToX(a) }}
-                        title={`${iv.type ?? 'intervention'} ${iv.status ?? ''} @ ${fmtRel(a)}`}
+                        className="absolute top-1 h-5 w-2 -translate-x-1/2 cursor-pointer rounded"
+                        style={{
+                          left: offToX(a),
+                          background: coded
+                            ? c.affect
+                              ? colorFor(c.affect)
+                              : '#7c3aed'
+                            : '#c4b5fd',
+                          outline: active
+                            ? '2px solid #0f172a'
+                            : coded
+                              ? '1px solid white'
+                              : undefined,
+                        }}
+                        title={`${iv.type ?? 'intervention'} ${iv.status ?? ''} @ ${fmtRel(a)} — click to code`}
                       />
                     );
                   })}
@@ -853,14 +985,26 @@ export function TimelineCoding() {
                   }
                 >
                   <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
-                    <DataTrack
-                      row={row}
-                      streams={streams}
-                      ef={sparse?.efDetections ?? []}
-                      base={base}
-                      offToX={offToX}
-                      fullW={fullW}
-                    />
+                    {row.kind === 'chat' || row.kind === 'dialogue' ? (
+                      <UtteranceTrack
+                        items={utterItems(row.kind)}
+                        source={row.kind}
+                        base={base}
+                        offToX={offToX}
+                        codings={utterCodings}
+                        active={codingUtter}
+                        onPick={openUtter}
+                      />
+                    ) : (
+                      <DataTrack
+                        row={row}
+                        streams={streams}
+                        ef={sparse?.efDetections ?? []}
+                        base={base}
+                        offToX={offToX}
+                        fullW={fullW}
+                      />
+                    )}
                     <Playhead x={offToX(ph.offsetMs)} />
                   </Lane>
                 </Row>
@@ -871,6 +1015,8 @@ export function TimelineCoding() {
               <AddRowMenu
                 streams={streams}
                 hasEf={(sparse?.efDetections ?? []).length > 0}
+                hasChat={chatMsgs.length > 0}
+                hasDialogue={dialogueMsgs.length > 0}
                 onAdd={addDataRow}
               />
             </div>
@@ -1146,10 +1292,14 @@ function DataTrack({
 function AddRowMenu({
   streams,
   hasEf,
+  hasChat,
+  hasDialogue,
   onAdd,
 }: {
   streams: Streams | null;
   hasEf: boolean;
+  hasChat: boolean;
+  hasDialogue: boolean;
   onAdd: (r: DataRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1192,6 +1342,28 @@ function AddRowMenu({
           className="rounded bg-indigo-100 px-1.5 py-0.5 text-indigo-700"
         >
           Text-mining (EF)
+        </button>
+      )}
+      {hasChat && (
+        <button
+          onClick={() => {
+            onAdd({ id: newRowId(), kind: 'chat', key: 'chat', color: '#0ea5e9' });
+            setOpen(false);
+          }}
+          className="rounded bg-sky-100 px-1.5 py-0.5 text-sky-700"
+        >
+          Chat utterances
+        </button>
+      )}
+      {hasDialogue && (
+        <button
+          onClick={() => {
+            onAdd({ id: newRowId(), kind: 'dialogue', key: 'dialogue', color: '#0d9488' });
+            setOpen(false);
+          }}
+          className="rounded bg-teal-100 px-1.5 py-0.5 text-teal-700"
+        >
+          Dialogue (interrog. elab.)
         </button>
       )}
       <Picker
@@ -1464,6 +1636,129 @@ function AoiLayer({
 }
 
 /** Coding form for a saved affect region: intensity, confidence, notes. */
+/** Code a single utterance/intervention: EF construct, affect, learning strategy, notes. */
+function UtteranceCodingPanel({
+  utter,
+  base,
+  existing,
+  onSave,
+  onClear,
+  onClose,
+}: {
+  utter: UtterRef;
+  base: number;
+  existing?: {
+    efConstruct?: string | null;
+    affect?: string | null;
+    strategy?: string | null;
+    notes?: string | null;
+  };
+  onSave: (patch: {
+    efConstruct?: string | null;
+    affect?: string | null;
+    strategy?: string | null;
+    notes?: string | null;
+  }) => Promise<void>;
+  onClear: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [ef, setEf] = useState(existing?.efConstruct ?? '');
+  const [aff, setAff] = useState(existing?.affect ?? '');
+  const [strat, setStrat] = useState(existing?.strategy ?? '');
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setEf(existing?.efConstruct ?? '');
+    setAff(existing?.affect ?? '');
+    setStrat(existing?.strategy ?? '');
+    setNotes(existing?.notes ?? '');
+    setSaved(false);
+  }, [utter.source, utter.refWallMs]);
+  const label =
+    utter.source === 'intervention'
+      ? 'Intervention'
+      : utter.source === 'chat'
+        ? 'Chat utterance'
+        : 'Dialogue utterance';
+  const sel = (val: string, set: (v: string) => void, opts: string[]) => (
+    <select
+      value={val}
+      onChange={(e) => {
+        set(e.target.value);
+        setSaved(false);
+      }}
+      className="flex-1 rounded border border-slate-300 px-1 py-0.5"
+    >
+      <option value="">—</option>
+      {opts.map((o) => (
+        <option key={o} value={o}>
+          {o}
+        </option>
+      ))}
+    </select>
+  );
+  return (
+    <div className="rounded border-2 border-sky-400 bg-white p-2 text-xs">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-semibold text-sky-700">
+          Code {label} · {fmtRel(utter.refWallMs - base)}
+        </span>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          ✕
+        </button>
+      </div>
+      <div className="mb-2 max-h-20 overflow-auto rounded bg-slate-50 p-1 text-slate-600">
+        {utter.role ? <b>{utter.role}: </b> : null}
+        {utter.preview || '(no text)'}
+      </div>
+      <label className="mb-1 flex items-center gap-2">
+        <span className="w-14 text-slate-500">EF</span>
+        {sel(ef, setEf, EF_CONSTRUCTS)}
+      </label>
+      <label className="mb-1 flex items-center gap-2">
+        <span className="w-14 text-slate-500">affect</span>
+        {sel(aff, setAff, AFFECT_CODES)}
+      </label>
+      <label className="mb-1 flex items-center gap-2">
+        <span className="w-14 text-slate-500">strategy</span>
+        {sel(strat, setStrat, STRATEGY_CODES)}
+      </label>
+      <textarea
+        value={notes}
+        onChange={(e) => {
+          setNotes(e.target.value);
+          setSaved(false);
+        }}
+        placeholder="notes…"
+        rows={2}
+        className="mb-1 w-full rounded border border-slate-300 p-1"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            await onSave({
+              efConstruct: ef || null,
+              affect: aff || null,
+              strategy: strat || null,
+              notes: notes || null,
+            });
+            setSaved(true);
+          }}
+          className="rounded bg-slate-900 px-2 py-0.5 text-white"
+        >
+          {saved ? 'saved ✓' : 'save'}
+        </button>
+        <button
+          onClick={() => void onClear()}
+          className="ml-auto rounded border border-rose-300 px-2 py-0.5 text-rose-600"
+        >
+          clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RegionCoding({
   interval,
   onSave,
@@ -1553,7 +1848,67 @@ function labelFor(code: string): string {
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';
   if (row.kind === 'ef') return 'Text-mining (EF)';
+  if (row.kind === 'chat') return '💬 Chat utterances';
+  if (row.kind === 'dialogue') return '🗣 Dialogue (interrog. elab.)';
   return `${row.kind === 'au' ? 'AU' : 'emotion'}: ${row.key}`;
+}
+
+/** Markers for chat/dialogue utterances; coded ones are solid, clickable to code. */
+function UtteranceTrack({
+  items,
+  source,
+  base,
+  offToX,
+  codings,
+  active,
+  onPick,
+}: {
+  items: { wallMs: number; role?: string; content?: string }[];
+  source: 'chat' | 'dialogue';
+  base: number;
+  offToX: (o: number) => number;
+  codings: Record<
+    string,
+    { efConstruct?: string | null; affect?: string | null; strategy?: string | null }
+  >;
+  active: UtterRef | null;
+  onPick: (source: string, u: { wallMs: number; role?: string | null; content?: string }) => void;
+}) {
+  return (
+    <>
+      {items.map((u, i) => {
+        const c = codings[`${source}:${u.wallMs}`];
+        const coded = !!(c && (c.efConstruct || c.affect || c.strategy));
+        const isActive = active?.source === source && active.refWallMs === u.wallMs;
+        const isUser = (u.role ?? '').toLowerCase() === 'user';
+        return (
+          <div
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              onPick(source, u);
+            }}
+            className="absolute w-2 -translate-x-1/2 cursor-pointer rounded"
+            style={{
+              left: offToX(u.wallMs - base),
+              top: isUser ? 2 : 14,
+              height: 12,
+              background: coded
+                ? c?.affect
+                  ? colorFor(c.affect)
+                  : '#0f172a'
+                : isUser
+                  ? '#0ea5e9'
+                  : '#cbd5e1',
+              opacity: coded ? 1 : 0.6,
+              outline: isActive ? '2px solid #0f172a' : coded ? '1px solid white' : undefined,
+            }}
+            title={`${isUser ? 'student' : (u.role ?? 'assistant')} @ ${fmtRel(u.wallMs - base)}\n${(u.content ?? '').slice(0, 120)}${coded ? '\n[coded]' : ''} — click to code`}
+          />
+        );
+      })}
+    </>
+  );
 }
 function sevColor(sev?: string): string {
   return sev === 'high'

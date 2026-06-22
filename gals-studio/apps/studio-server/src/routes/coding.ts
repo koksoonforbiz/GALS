@@ -326,6 +326,125 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  // ── Per-utterance coding (chat / dialogue / intervention) ─────────────────
+  app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(
+    '/api/coding/:sessionId/utterances',
+    async (req) => {
+      const { sessionId } = req.params;
+      const { coderId } = req.query;
+      const codings = await prisma.utteranceCoding.findMany({
+        where: { sessionId, ...(coderId ? { coderId } : {}) },
+        orderBy: { refWallMs: 'asc' },
+      });
+      return { codings };
+    },
+  );
+
+  app.post<{
+    Params: { sessionId: string };
+    Body: {
+      coderId: string;
+      source: string;
+      refWallMs: number;
+      role?: string | null;
+      preview?: string | null;
+      efConstruct?: string | null;
+      affect?: string | null;
+      strategy?: string | null;
+      notes?: string | null;
+    };
+  }>('/api/coding/:sessionId/utterances', async (req, reply) => {
+    const { sessionId } = req.params;
+    const b = req.body;
+    if (!b.coderId || !b.source || typeof b.refWallMs !== 'number') {
+      return reply.code(400).send({ error: 'coderId, source, refWallMs required' });
+    }
+    const fields = {
+      role: b.role ?? null,
+      preview: b.preview ?? null,
+      efConstruct: b.efConstruct ?? null,
+      affect: b.affect ?? null,
+      strategy: b.strategy ?? null,
+      notes: b.notes ?? null,
+    };
+    return prisma.utteranceCoding.upsert({
+      where: {
+        sessionId_coderId_source_refWallMs: {
+          sessionId,
+          coderId: b.coderId,
+          source: b.source,
+          refWallMs: b.refWallMs,
+        },
+      },
+      update: fields,
+      create: {
+        sessionId,
+        coderId: b.coderId,
+        source: b.source,
+        refWallMs: b.refWallMs,
+        ...fields,
+      },
+    });
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/coding/utterances/:id', async (req) => {
+    await prisma.utteranceCoding.deleteMany({ where: { id: req.params.id } });
+    return { ok: true };
+  });
+
+  // CSV export of the utterance coding for a session (one row per coded utterance).
+  app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(
+    '/api/coding/:sessionId/utterances/export',
+    async (req, reply) => {
+      const { sessionId } = req.params;
+      const { coderId } = req.query;
+      const [rows, session] = await Promise.all([
+        prisma.utteranceCoding.findMany({
+          where: { sessionId, ...(coderId ? { coderId } : {}) },
+          orderBy: { refWallMs: 'asc' },
+        }),
+        prisma.session.findUnique({ where: { id: sessionId } }),
+      ]);
+      const base = session?.baseWallClockMs ?? 0;
+      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const header = [
+        'sessionId',
+        'coderId',
+        'relSec',
+        'source',
+        'role',
+        'efConstruct',
+        'affect',
+        'strategy',
+        'notes',
+        'preview',
+      ];
+      const lines = [header.join(',')];
+      for (const r of rows) {
+        lines.push(
+          [
+            sessionId,
+            r.coderId,
+            Math.round((r.refWallMs - base) / 1000),
+            r.source,
+            r.role,
+            r.efConstruct,
+            r.affect,
+            r.strategy,
+            r.notes,
+            r.preview,
+          ]
+            .map(esc)
+            .join(','),
+        );
+      }
+      reply
+        .header('Content-Type', 'text/csv; charset=utf-8')
+        .header('Content-Disposition', `attachment; filename="utterance-coding-${sessionId}.csv"`)
+        .send(lines.join('\n'));
+    },
+  );
+
   // Clear affect for a window/coder/pass (the '0' key).
   app.post<{
     Body: {

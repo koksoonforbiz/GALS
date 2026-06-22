@@ -86,6 +86,14 @@ export const api = {
     jget<any>(`/api/coding/${id}/intervals?coderId=${coderId}`),
   sessionSummary: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/summary?coderId=${coderId}`),
+  utteranceCodings: (id: string, coderId: string) =>
+    jget<any>(`/api/coding/${id}/utterances?coderId=${coderId}`),
+  upsertUtteranceCoding: (id: string, body: unknown) =>
+    jsend<any>(`/api/coding/${id}/utterances`, 'POST', body),
+  deleteUtteranceCoding: (codingId: string) =>
+    jsend<any>(`/api/coding/utterances/${codingId}`, 'DELETE'),
+  utteranceExportUrl: (id: string, coderId: string) =>
+    `/api/coding/${id}/utterances/export?coderId=${coderId}`,
   aois: (id: string) => jget<any>(`/api/sessions/${id}/aois`),
   createAoi: (id: string, body: unknown) => jsend<any>(`/api/sessions/${id}/aois`, 'POST', body),
   deleteAoi: (aoiId: string) => jsend<any>(`/api/aois/${aoiId}`, 'DELETE'),

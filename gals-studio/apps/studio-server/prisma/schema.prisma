@@ -431,3 +431,25 @@ model SessionAoi {
 
   @@index([sessionId])
 }
+
+// Per-utterance coding (chat / dialogue / intervention): the researcher codes
+// each message for EF construct, affective state, and learning strategy.
+// Durable (no FK to Session), keyed by (sessionId, coderId, source, refWallMs).
+model UtteranceCoding {
+  id          String   @id @default(uuid())
+  sessionId   String
+  coderId     String
+  source      String // chat | dialogue | intervention
+  refWallMs   Float // identifies the utterance/intervention by its wall-clock time
+  role        String?
+  preview     String? // first chars of the utterance, for the export/summary
+  efConstruct String?
+  affect      String?
+  strategy    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([sessionId, coderId, source, refWallMs])
+  @@index([sessionId, coderId])
+}
