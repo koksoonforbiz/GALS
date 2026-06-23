@@ -24,6 +24,9 @@ export function App() {
             <NavLink to="/analysis" className={linkCls}>
               Analysis
             </NavLink>
+            <NavLink to="/analysis-studio" className={linkCls}>
+              Cohort
+            </NavLink>
           </nav>
         </div>
       </header>
