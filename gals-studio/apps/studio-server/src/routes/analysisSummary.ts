@@ -121,17 +121,36 @@ async function summariseSession(sessionId: string, base: number): Promise<unknow
     severity: d.severity,
   }));
 
-  // 1f — coder coding (timeline + reliability passes)
+  // 1f — coder coding (timeline + reliability passes). matchesMachine compares
+  // the coder's label against the model pre-fill captured at coding time.
   const coderCoding = anns.map((a) => ({
     coderId: a.coderId,
     codingPass: a.codingPass,
+    dimension: a.dimension,
     codeLabel: a.code,
     startMs:
       a.startWallMs != null ? a.startWallMs - base : a.atWallMs != null ? a.atWallMs - base : null,
     endMs: a.endWallMs != null ? a.endWallMs - base : null,
     confidence: a.confidence,
     notes: a.notes,
+    machineGuess: a.machineGuess ?? null,
+    matchesMachine: a.machineGuess != null ? a.machineGuess === a.code : null,
   }));
+
+  // Part A flow-back — coder confirmations/overrides of the model guesses. Only
+  // timeline marks that carried a machineGuess count toward agreement.
+  const overridesFor = (dimension: string) => {
+    const marks = anns.filter((a) => a.codingPass === 'timeline' && a.dimension === dimension);
+    const withGuess = marks.filter((a) => a.machineGuess != null);
+    const agree = withGuess.filter((a) => a.machineGuess === a.code).length;
+    return {
+      marks: marks.length,
+      withGuess: withGuess.length,
+      agree,
+      override: withGuess.length - agree,
+      agreementPct: withGuess.length ? agree / withGuess.length : null,
+    };
+  };
 
   return {
     interventions: {
@@ -142,6 +161,7 @@ async function summariseSession(sessionId: string, base: number): Promise<unknow
     practiceTesting,
     efDetections,
     coderCoding,
+    coderOverrides: { activity: overridesFor('activity'), affect: overridesFor('affect') },
   };
 }
 
@@ -247,6 +267,56 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const result = await classifyActivity(req.params.sessionId, { binMs, gazeConf });
       if (!result) return reply.code(404).send({ error: 'session not found' });
       return result;
+    },
+  );
+
+  // Machine guesses for the coder timeline: per-window activity (Part B) + fused
+  // affect (Part C), collapsed into contiguous same-label SEGMENTS so the coder
+  // can click one to accept/override (the accepted mark stores machineGuess).
+  app.get<{ Params: { sessionId: string }; Querystring: { binMs?: string; gazeConf?: string } }>(
+    '/api/analysis/:sessionId/guesses',
+    async (req, reply) => {
+      const binMs = Number(req.query.binMs) || 1000;
+      const gazeConf = Number(req.query.gazeConf) || 0.5;
+      const activity = await classifyActivity(req.params.sessionId, { binMs, gazeConf });
+      if (!activity) return reply.code(404).send({ error: 'session not found' });
+      const affect = await computeAffect(
+        req.params.sessionId,
+        { ...DEFAULT_AFFECT_OPTS, binMs, emitWindows: true },
+        activity.windows,
+      );
+
+      // collapse a per-window label stream into [start,end) segments
+      const segmentsOf = <T extends string>(
+        items: Array<{ tMs: number; label: T }>,
+        drop: (l: T) => boolean,
+      ) => {
+        const segs: Array<{ code: T; startMs: number; endMs: number }> = [];
+        for (const it of items) {
+          const last = segs[segs.length - 1];
+          if (last && last.code === it.label && it.tMs === last.endMs) last.endMs = it.tMs + binMs;
+          else segs.push({ code: it.label, startMs: it.tMs, endMs: it.tMs + binMs });
+        }
+        return segs.filter((s) => !drop(s.code));
+      };
+
+      const activitySegments = segmentsOf(
+        activity.windows.map((w) => ({ tMs: w.tMs, label: w.primaryActivity })),
+        (l) => l === 'idle' || l === 'gaze_unknown', // don't ask the coder to confirm dead air
+      );
+      const affectSegments = affect?.windowStates
+        ? segmentsOf(
+            affect.windowStates.map((w) => ({ tMs: w.tMs, label: w.fused })),
+            (l) => l === 'neutral',
+          )
+        : [];
+
+      return {
+        binMs,
+        configVersion: affect?.configVersion ?? null,
+        activitySegments,
+        affectSegments,
+      };
     },
   );
 }

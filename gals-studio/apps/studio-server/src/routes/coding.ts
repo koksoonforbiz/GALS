@@ -20,6 +20,7 @@ interface AnnotationBody {
   notes?: string | null;
   codingMs?: number | null;
   codebookVersionId?: string;
+  machineGuess?: string | null;
 }
 
 export async function codingRoutes(app: FastifyInstance): Promise<void> {
@@ -145,6 +146,7 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         endWallMs: b.endWallMs ?? null,
         notes: b.notes ?? null,
         codingMs: b.codingMs ?? null,
+        machineGuess: b.machineGuess ?? null,
       },
     });
   });
@@ -164,6 +166,7 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
       code?: string;
       intensity?: number | null;
       confidence?: string | null;
+      machineGuess?: string | null;
     };
   }>('/api/annotations/:id', async (req, reply) => {
     const b = req.body;
@@ -174,6 +177,7 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     if (b.code !== undefined) data.code = b.code;
     if (b.intensity !== undefined) data.intensity = b.intensity;
     if (b.confidence !== undefined) data.confidence = b.confidence;
+    if (b.machineGuess !== undefined) data.machineGuess = b.machineGuess;
     if (Object.keys(data).length === 0) return reply.code(400).send({ error: 'nothing to update' });
     try {
       return await prisma.annotation.update({ where: { id: req.params.id }, data });
@@ -237,6 +241,7 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
           notes: a.notes,
           intensity: a.intensity,
           confidence: a.confidence,
+          machineGuess: a.machineGuess,
         })),
       };
     },
@@ -638,6 +643,7 @@ function annDto(a: any) {
     startWallMs: a.startWallMs,
     endWallMs: a.endWallMs,
     coderId: a.coderId,
+    machineGuess: a.machineGuess,
   };
 }
 

@@ -13,7 +13,24 @@ const AFFECT_TRACKS = [
   { code: 'engagement', label: 'Engagement', color: '#16a34a' },
   { code: 'confusion', label: 'Confusion', color: '#8b5cf6' },
   { code: 'frustration', label: 'Frustration', color: '#dc2626' },
+  { code: 'delight', label: 'Delight', color: '#0ea5e9' },
 ] as const;
+
+/** Coder-drawn activity tiers (Part B) — confirm/override the model guess. */
+const ACTIVITY_TRACKS = [
+  { code: 'reading_lesson', label: 'Reading lesson', color: '#2563eb' },
+  { code: 'chatbot', label: 'Chatbot', color: '#0d9488' },
+  { code: 'intervention', label: 'Intervention', color: '#7c3aed' },
+  { code: 'navigating', label: 'Navigating', color: '#94a3b8' },
+] as const;
+
+// Full code→color/label lookup across affect + activity vocabularies (the model
+// affect lane can also surface 'neutral' for completeness).
+const CODE_META: Record<string, { label: string; color: string }> = {
+  ...Object.fromEntries(AFFECT_TRACKS.map((t) => [t.code, { label: t.label, color: t.color }])),
+  ...Object.fromEntries(ACTIVITY_TRACKS.map((t) => [t.code, { label: t.label, color: t.color }])),
+  neutral: { label: 'Neutral', color: '#cbd5e1' },
+};
 
 const LABEL_W = 150;
 const ROW_H = 30;
@@ -50,12 +67,15 @@ const AU_DEFAULTS: AuMap = {
 interface Interval {
   id: string;
   code: string;
+  dimension?: string;
   startWallMs: number;
   endWallMs: number;
   notes?: string | null;
   intensity?: number | null;
   confidence?: string | null;
+  machineGuess?: string | null;
 }
+type GuessSeg = { code: string; startMs: number; endMs: number };
 interface Aoi {
   id: string;
   name: string;
@@ -113,17 +133,28 @@ export function TimelineCoding() {
   const [coders, setCoders] = useState<any[]>([]);
   const [coderId, setCoderId] = useState(() => localStorage.getItem('gals.coderId') ?? '');
   const [intervals, setIntervals] = useState<Interval[]>([]);
+  const [guesses, setGuesses] = useState<{
+    activitySegments: GuessSeg[];
+    affectSegments: GuessSeg[];
+  } | null>(null);
   const [review, setReview] = useState<{
     code: string;
+    dimension: string;
     startMs: number;
     endMs: number;
     savedId: string | null;
+    machineGuess?: string | null;
   } | null>(null);
   const [looping, setLooping] = useState(true);
   const [showScreenshot, setShowScreenshot] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [dataRows, setDataRows] = useState<DataRow[]>([]);
-  const [draft, setDraft] = useState<{ code: string; aMs: number; bMs: number } | null>(null);
+  const [draft, setDraft] = useState<{
+    code: string;
+    dimension: string;
+    aMs: number;
+    bMs: number;
+  } | null>(null);
   const [thresholds, setThresholds] = useState<AffectThresholds>(DETECT_DEFAULTS);
   const [detectMinSec, setDetectMinSec] = useState(30);
   const [showDetections, setShowDetections] = useState(true);
@@ -172,6 +203,16 @@ export function TimelineCoding() {
       setStreams({ aus: st.aus ?? {}, emotions: st.emotions ?? {}, pupil: st.pupil ?? [] });
       store.setConfig({ baseWallClockMs: m.baseWallClockMs, durationMs: m.durationMs });
     })();
+    // model guesses (Part B activity + Part C affect) — best-effort, non-blocking
+    api
+      .analysisGuesses(sessionId)
+      .then((g) =>
+        setGuesses({
+          activitySegments: g.activitySegments ?? [],
+          affectSegments: g.affectSegments ?? [],
+        }),
+      )
+      .catch(() => setGuesses(null));
   }, [sessionId]);
 
   const refreshIntervals = useCallback(async () => {
@@ -353,6 +394,9 @@ export function TimelineCoding() {
   const rowConfig = useMemo(
     () => [
       { key: 'webcam', label: '📹 webcam', color: '#334155' },
+      { key: 'model_activity', label: '🤖 activity (model)', color: '#2563eb' },
+      { key: 'model_affect', label: '🤖 affect (model)', color: '#8b5cf6' },
+      ...ACTIVITY_TRACKS.map((t) => ({ key: `act:${t.code}`, label: t.label, color: t.color })),
       ...AFFECT_TRACKS.map((t) => ({ key: t.code, label: t.label, color: t.color })),
       { key: 'interventions', label: '⚡ interventions', color: '#7c3aed' },
       ...dataRows.map((r) => ({ key: r.id, label: dataRowName(r), color: r.color })),
@@ -368,41 +412,51 @@ export function TimelineCoding() {
   }, [ph.offsetMs, ph.playing, looping, review, store]);
 
   const createInterval = useCallback(
-    async (code: string, startOff: number, endOff: number) => {
+    async (
+      code: string,
+      startOff: number,
+      endOff: number,
+      dimension = 'affect',
+      machineGuess: string | null = null,
+    ) => {
       if (!coderId) return;
       await api.upsertAnnotation({
         sessionId,
         coderId,
         codingPass: 'timeline',
-        dimension: 'affect',
+        dimension,
         code,
         startWallMs: Math.round(base + Math.min(startOff, endOff)),
         endWallMs: Math.round(base + Math.max(startOff, endOff)),
+        machineGuess,
       });
       await refreshIntervals();
     },
     [coderId, sessionId, base, refreshIntervals],
   );
 
-  // drag-to-create on an affect lane
-  const beginDraft = (code: string) => (e: React.MouseEvent) => {
-    if (!coderId || e.button !== 0) return;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const startMs = xToOff(e.clientX - rect.left);
-    setDraft({ code, aMs: startMs, bMs: startMs });
-    const move = (ev: MouseEvent) =>
-      setDraft((d) => (d ? { ...d, bMs: xToOff(ev.clientX - rect.left) } : d));
-    const up = (ev: MouseEvent) => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      const endMs = xToOff(ev.clientX - rect.left);
-      setDraft(null);
-      if (Math.abs(endMs - startMs) >= MIN_INTERVAL_MS) void createInterval(code, startMs, endMs);
-      else store.seek(startMs); // a click (not a drag) just seeks
+  // drag-to-create on an affect/activity lane
+  const beginDraft =
+    (code: string, dimension = 'affect') =>
+    (e: React.MouseEvent) => {
+      if (!coderId || e.button !== 0) return;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const startMs = xToOff(e.clientX - rect.left);
+      setDraft({ code, dimension, aMs: startMs, bMs: startMs });
+      const move = (ev: MouseEvent) =>
+        setDraft((d) => (d ? { ...d, bMs: xToOff(ev.clientX - rect.left) } : d));
+      const up = (ev: MouseEvent) => {
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        const endMs = xToOff(ev.clientX - rect.left);
+        setDraft(null);
+        if (Math.abs(endMs - startMs) >= MIN_INTERVAL_MS)
+          void createInterval(code, startMs, endMs, dimension);
+        else store.seek(startMs); // a click (not a drag) just seeks
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-  };
 
   const delInterval = useCallback(
     async (id: string) => {
@@ -416,23 +470,37 @@ export function TimelineCoding() {
   const reviewInterval = (iv: Interval) => {
     setReview({
       code: iv.code,
+      dimension: iv.dimension ?? 'affect',
       startMs: iv.startWallMs - base,
       endMs: iv.endWallMs - base,
       savedId: iv.id,
+      machineGuess: iv.machineGuess ?? null,
     });
     store.seek(iv.startWallMs - base);
     if (looping) store.play();
   };
 
-  const reviewDetection = (code: string, startMs: number, endMs: number) => {
-    setReview({ code, startMs, endMs, savedId: null });
+  const reviewDetection = (
+    code: string,
+    startMs: number,
+    endMs: number,
+    dimension = 'affect',
+    machineGuess: string | null = null,
+  ) => {
+    setReview({ code, dimension, startMs, endMs, savedId: null, machineGuess });
     store.seek(startMs);
     if (looping) store.play();
   };
 
   const acceptReview = useCallback(async () => {
     if (!review || !coderId) return;
-    await createInterval(review.code, review.startMs, review.endMs);
+    await createInterval(
+      review.code,
+      review.startMs,
+      review.endMs,
+      review.dimension,
+      review.machineGuess ?? null,
+    );
     setReview(null);
   }, [review, coderId, createInterval]);
 
@@ -627,6 +695,20 @@ export function TimelineCoding() {
               <div className="text-slate-500">
                 {fmtRel(review.startMs)} – {fmtRel(review.endMs)}
               </div>
+              {review.machineGuess != null && (
+                <div className="mt-0.5 text-[11px] text-slate-500">
+                  model guess:{' '}
+                  <span style={{ color: colorFor(review.machineGuess) }}>
+                    {labelFor(review.machineGuess)}
+                  </span>
+                  {review.savedId != null &&
+                    (review.machineGuess === review.code ? (
+                      <span className="ml-1 text-emerald-600">✓ confirmed</span>
+                    ) : (
+                      <span className="ml-1 text-amber-600">✎ overridden</span>
+                    ))}
+                </div>
+              )}
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => {
@@ -852,6 +934,91 @@ export function TimelineCoding() {
               </Row>
             )}
 
+            {/* model guess lanes (read-only) — click a segment to review & accept/override */}
+            {guesses && !rowHidden['model_activity'] && (
+              <Row label="🤖 activity (model)">
+                <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
+                  {guesses.activitySegments.map((s, i) => (
+                    <GuessSegment
+                      key={`ga${i}`}
+                      seg={s}
+                      offToX={offToX}
+                      onPick={() => reviewDetection(s.code, s.startMs, s.endMs, 'activity', s.code)}
+                    />
+                  ))}
+                  <Playhead x={offToX(ph.offsetMs)} />
+                </Lane>
+              </Row>
+            )}
+            {guesses && !rowHidden['model_affect'] && (
+              <Row label="🤖 affect (model)">
+                <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
+                  {guesses.affectSegments.map((s, i) => (
+                    <GuessSegment
+                      key={`gf${i}`}
+                      seg={s}
+                      offToX={offToX}
+                      onPick={() => reviewDetection(s.code, s.startMs, s.endMs, 'affect', s.code)}
+                    />
+                  ))}
+                  <Playhead x={offToX(ph.offsetMs)} />
+                </Lane>
+              </Row>
+            )}
+
+            {/* activity coder tiers (Part B) — drag to mark; accept a model guess to pre-fill */}
+            {ACTIVITY_TRACKS.filter((tr) => !rowHidden[`act:${tr.code}`]).map((tr) => (
+              <Row
+                key={`act-${tr.code}`}
+                label={
+                  <span className="flex items-center gap-1">
+                    <span className="h-2.5 w-2.5 rounded" style={{ background: tr.color }} />
+                    {tr.label}
+                  </span>
+                }
+              >
+                <Lane fullW={fullW} onMouseDownLane={beginDraft(tr.code, 'activity')}>
+                  {intervals
+                    .filter((iv) => iv.dimension === 'activity' && iv.code === tr.code)
+                    .map((iv) => {
+                      const a = iv.startWallMs - base;
+                      const w = Math.max(3, offToX(iv.endWallMs - iv.startWallMs));
+                      const overridden = iv.machineGuess != null && iv.machineGuess !== iv.code;
+                      return (
+                        <div
+                          key={iv.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            reviewInterval(iv);
+                          }}
+                          className="absolute top-1 flex h-5 cursor-pointer items-center justify-center rounded text-[9px] text-white"
+                          style={{
+                            left: offToX(a),
+                            width: w,
+                            background: tr.color,
+                            outline: review?.savedId === iv.id ? '2px solid #0f172a' : undefined,
+                          }}
+                          title={`${tr.label} ${fmtRel(a)}–${fmtRel(iv.endWallMs - base)}${iv.machineGuess ? ` · model said ${labelFor(iv.machineGuess)}${overridden ? ' (overridden)' : ' (confirmed)'}` : ''}`}
+                        >
+                          {overridden ? '✎' : w > 28 ? fmtRel(iv.endWallMs - iv.startWallMs) : ''}
+                        </div>
+                      );
+                    })}
+                  {draft && draft.dimension === 'activity' && draft.code === tr.code && (
+                    <div
+                      className="absolute top-1 h-5 rounded opacity-50"
+                      style={{
+                        left: offToX(Math.min(draft.aMs, draft.bMs)),
+                        width: Math.max(1, offToX(Math.abs(draft.bMs - draft.aMs))),
+                        background: tr.color,
+                      }}
+                    />
+                  )}
+                  <Playhead x={offToX(ph.offsetMs)} />
+                </Lane>
+              </Row>
+            ))}
+
             {/* affect coder tiers */}
             {AFFECT_TRACKS.filter((tr) => !rowHidden[tr.code]).map((tr) => (
               <Row
@@ -884,7 +1051,7 @@ export function TimelineCoding() {
                       />
                     ))}
                   {intervals
-                    .filter((iv) => iv.code === tr.code)
+                    .filter((iv) => iv.dimension !== 'activity' && iv.code === tr.code)
                     .map((iv) => {
                       const a = iv.startWallMs - base;
                       const w = Math.max(3, offToX(iv.endWallMs - iv.startWallMs));
@@ -908,7 +1075,7 @@ export function TimelineCoding() {
                         </div>
                       );
                     })}
-                  {draft && draft.code === tr.code && (
+                  {draft && draft.dimension !== 'activity' && draft.code === tr.code && (
                     <div
                       className="absolute top-1 h-5 rounded opacity-50"
                       style={{
@@ -1203,6 +1370,32 @@ function Playhead({ x }: { x: number }) {
       className="pointer-events-none absolute top-0 z-10 h-full w-0.5 bg-slate-900"
       style={{ left: x }}
     />
+  );
+}
+
+/** A read-only model-guess segment; click to review and accept/override. */
+function GuessSegment({
+  seg,
+  offToX,
+  onPick,
+}: {
+  seg: GuessSeg;
+  offToX: (o: number) => number;
+  onPick: () => void;
+}) {
+  const w = Math.max(2, offToX(seg.endMs - seg.startMs));
+  return (
+    <div
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick();
+      }}
+      className="absolute top-1 flex h-5 cursor-pointer items-center justify-center overflow-hidden rounded text-[9px] text-white"
+      style={{ left: offToX(seg.startMs), width: w, background: `${colorFor(seg.code)}cc` }}
+      title={`model: ${labelFor(seg.code)} ${fmtRel(seg.startMs)}–${fmtRel(seg.endMs)} — click to review & accept/override`}
+    >
+      {w > 44 ? labelFor(seg.code) : ''}
+    </div>
   );
 }
 
@@ -1840,10 +2033,10 @@ function RegionCoding({
 }
 
 function colorFor(code: string): string {
-  return AFFECT_TRACKS.find((t) => t.code === code)?.color ?? '#475569';
+  return CODE_META[code]?.color ?? '#475569';
 }
 function labelFor(code: string): string {
-  return AFFECT_TRACKS.find((t) => t.code === code)?.label ?? code;
+  return CODE_META[code]?.label ?? code;
 }
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';

@@ -387,6 +387,10 @@ model Annotation {
   endWallMs         Float?
   notes             String?
   codingMs          Int?
+  // The model's pre-fill at the moment this mark was created/confirmed (Part B
+  // activity label or Part C affect state). Lets Part A report coder-vs-machine
+  // agreement and "coderConfirmed" without re-running inference.
+  machineGuess      String?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   @@index([sessionId, windowId, coderId, codingPass, dimension])

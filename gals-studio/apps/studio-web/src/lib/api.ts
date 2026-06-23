@@ -106,6 +106,7 @@ export const api = {
         `&activationThreshold=${opts.activationThreshold}&persistenceWindowMs=${opts.persistenceWindowMs}` +
         `&personBaseline=${opts.personBaseline}`,
     ),
+  analysisGuesses: (id: string) => jget<any>(`/api/analysis/${id}/guesses`),
   utteranceCodings: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/utterances?coderId=${coderId}`),
   upsertUtteranceCoding: (id: string, body: unknown) =>

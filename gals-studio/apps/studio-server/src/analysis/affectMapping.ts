@@ -52,6 +52,9 @@ export interface AffectResult {
   opts: AffectOpts;
   byMethod: Partial<Record<AffectMethod, AffectMethodResult>>;
   framesSeen: { au: number; emotion: number; pupil: number };
+  // Per-window smoothed fused state (only when opts.emitWindows). This is the
+  // machine guess the coder pre-fills from on the timeline.
+  windowStates?: Array<{ tMs: number; fused: AffectState }>;
 }
 
 export interface AffectOpts {
@@ -60,6 +63,7 @@ export interface AffectOpts {
   persistenceWindowMs: number; // min dwell for an episode; resolution window for confusion
   personBaseline: boolean;
   binMs?: number;
+  emitWindows?: boolean; // also return the per-window smoothed fused sequence
 }
 
 export const DEFAULT_AFFECT_OPTS: AffectOpts = {
@@ -464,6 +468,24 @@ export async function computeAffect(
     }
   }
 
+  // optional per-window fused machine guess (timeline pre-fill source)
+  let windowStates: AffectResult['windowStates'];
+  if (opts.emitWindows) {
+    const fw = AFFECT_CONFIG.fusionWeights;
+    const fusedSeq = wickSeqPost.map((wick, i) =>
+      dominant(
+        fuse([
+          { w: auSeqPost[i] ? fw.au_mapping : 0, p: auSeqPost[i] ?? zero() },
+          { w: emoSeqPost[i] ? fw.openface_emotion : 0, p: emoSeqPost[i] ?? zero() },
+          { w: fw.wickens, p: wick },
+        ]),
+        opts.activationThreshold,
+      ),
+    );
+    const minWins = Math.max(1, Math.round(opts.persistenceWindowMs / binMs));
+    windowStates = smooth(fusedSeq, minWins).map((state, i) => ({ tMs: i * binMs, fused: state }));
+  }
+
   return {
     configVersion: AFFECT_CONFIG.version,
     binMs,
@@ -474,5 +496,6 @@ export async function computeAffect(
       emotion: emoRows.filter((e) => e.faceDetected).length,
       pupil: pupilRows.length,
     },
+    windowStates,
   };
 }
