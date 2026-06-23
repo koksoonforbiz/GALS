@@ -92,6 +92,20 @@ export const api = {
   analysisUsers: () => jget<any>('/api/analysis/users'),
   cohortSummary: (userIds: string[]) =>
     jget<any>(`/api/analysis/cohort-summary?userIds=${userIds.join(',')}`),
+  affect: (
+    sessionIds: string[],
+    opts: {
+      methods: string[];
+      activationThreshold: number;
+      persistenceWindowMs: number;
+      personBaseline: boolean;
+    },
+  ) =>
+    jget<any>(
+      `/api/analysis/affect?sessionIds=${sessionIds.join(',')}&methods=${opts.methods.join(',')}` +
+        `&activationThreshold=${opts.activationThreshold}&persistenceWindowMs=${opts.persistenceWindowMs}` +
+        `&personBaseline=${opts.personBaseline}`,
+    ),
   utteranceCodings: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/utterances?coderId=${coderId}`),
   upsertUtteranceCoding: (id: string, body: unknown) =>

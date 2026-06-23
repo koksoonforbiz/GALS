@@ -1,14 +1,45 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../prisma.js';
 import { classifyActivity } from '../analysis/activityInference.js';
+import {
+  computeAffect,
+  DEFAULT_AFFECT_OPTS,
+  type AffectOpts,
+  type AffectMethod,
+} from '../analysis/affectMapping.js';
 
 /**
  * Research Analysis Studio: cross-session cohort summary.
  * Returns, per (user, session), read-only aggregates from existing studio
  * tables — interventions (1a), practice-testing (1c), EF detections (1e),
- * coder coding (1f) — plus the Part B activity-inference rollup (1b).
- * Affect mapping (Part C) is deferred to a later PR.
+ * coder coding (1f) — plus the Part B activity-inference rollup (1b) and the
+ * Part C per-method affect rollup (1d).
  */
+
+const ALL_METHODS: AffectMethod[] = ['au_mapping', 'openface_emotion', 'wickens', 'fused'];
+
+function affectOptsFromQuery(q: Record<string, string | undefined>): AffectOpts {
+  const methods = (q.methods ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s): s is AffectMethod => (ALL_METHODS as string[]).includes(s));
+  return {
+    methods: methods.length ? methods : DEFAULT_AFFECT_OPTS.methods,
+    activationThreshold:
+      q.activationThreshold != null
+        ? Number(q.activationThreshold)
+        : DEFAULT_AFFECT_OPTS.activationThreshold,
+    persistenceWindowMs:
+      q.persistenceWindowMs != null
+        ? Number(q.persistenceWindowMs)
+        : DEFAULT_AFFECT_OPTS.persistenceWindowMs,
+    personBaseline:
+      q.personBaseline != null
+        ? q.personBaseline === 'true' || q.personBaseline === '1'
+        : DEFAULT_AFFECT_OPTS.personBaseline,
+    binMs: q.binMs != null ? Number(q.binMs) : DEFAULT_AFFECT_OPTS.binMs,
+  };
+}
 
 const INTERVENTION_TYPES = [
   'PRACTICE_TESTING',
@@ -154,17 +185,21 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const binMs = Number(req.query.binMs) || 1000;
       const gazeConf = Number(req.query.gazeConf) || 0.5;
 
+      const affectOpts = affectOptsFromQuery(req.query as Record<string, string | undefined>);
+
       const sessions = await prisma.session.findMany({
         where: { userId: { in: userIds } },
         orderBy: [{ userId: 'asc' }, { startedAt: 'asc' }],
       });
 
       // sessions are summarised sequentially to avoid loading every learner's
-      // raw gaze/cursor stream into memory at once.
+      // raw gaze/cursor stream into memory at once. The activity windows are
+      // reused for the affect Wickens channel rather than reclassifying.
       const summaries = [];
       for (const s of sessions) {
         const core = (await summariseSession(s.id, s.baseWallClockMs)) as object;
         const activity = await classifyActivity(s.id, { binMs, gazeConf });
+        const affect = await computeAffect(s.id, affectOpts, activity?.windows);
         summaries.push({
           userId: s.userId,
           userDisplayName: s.userDisplayName,
@@ -175,9 +210,31 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           durationSecs: Math.round(s.durationMs / 1000),
           ...core,
           activity: activity?.rollup ?? null,
+          affect: affect?.byMethod ?? null,
+          affectFrames: affect?.framesSeen ?? null,
         });
       }
-      return { sessions: summaries };
+      return { sessions: summaries, affectConfigVersion: affectOpts };
+    },
+  );
+
+  // Recompute affect for selected sessions under new thresholds (live panel) —
+  // returns only the per-method affect rollups, not the full summary.
+  app.get<{ Querystring: Record<string, string | undefined> }>(
+    '/api/analysis/affect',
+    async (req, reply) => {
+      const sessionIds = (req.query.sessionIds ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (sessionIds.length === 0) return reply.code(400).send({ error: 'sessionIds required' });
+      const opts = affectOptsFromQuery(req.query);
+      const out: Record<string, unknown> = {};
+      for (const id of sessionIds) {
+        const r = await computeAffect(id, opts);
+        out[id] = r ? { byMethod: r.byMethod, framesSeen: r.framesSeen } : null;
+      }
+      return { affect: out, opts };
     },
   );
 

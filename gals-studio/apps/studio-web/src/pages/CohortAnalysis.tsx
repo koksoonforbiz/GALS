@@ -51,6 +51,38 @@ export function CohortAnalysis() {
     return m;
   }, [sessions]);
 
+  // affect threshold panel (Part C) — live recompute via the lightweight endpoint
+  const [affectOpts, setAffectOpts] = useState<AffectOpts>(DEFAULT_AFFECT_OPTS);
+  const [affectOv, setAffectOv] = useState<Record<string, any>>({});
+  const sessionIds = useMemo(() => sessions.map((s) => s.sessionId), [sessions]);
+
+  useEffect(() => {
+    if (sessionIds.length === 0) {
+      setAffectOv({});
+      return;
+    }
+    if (isDefaultAffect(affectOpts)) {
+      setAffectOv({});
+      return;
+    } // cohort-summary already carries default-opt affect
+    let cancelled = false;
+    const t = setTimeout(() => {
+      api
+        .affect(sessionIds, affectOpts)
+        .then((r) => {
+          if (cancelled) return;
+          const m: Record<string, any> = {};
+          for (const [id, v] of Object.entries<any>(r.affect)) m[id] = v?.byMethod ?? null;
+          setAffectOv(m);
+        })
+        .catch(() => {});
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [sessionIds, affectOpts]);
+
   const toggle = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -113,19 +145,27 @@ export function CohortAnalysis() {
           ) : loading ? (
             <div className="p-8 text-center text-slate-400">Loading cohort…</div>
           ) : (
-            [...byUser.entries()].map(([userId, sess]) => (
-              <div key={userId}>
-                <div className="mb-2 text-sm font-semibold text-slate-700">
-                  {sess[0].userDisplayName ?? userId.slice(0, 8)}{' '}
-                  <span className="text-slate-400">· {sess.length} session(s)</span>
+            <>
+              <AffectPanel opts={affectOpts} onChange={setAffectOpts} />
+              {[...byUser.entries()].map(([userId, sess]) => (
+                <div key={userId}>
+                  <div className="mb-2 text-sm font-semibold text-slate-700">
+                    {sess[0].userDisplayName ?? userId.slice(0, 8)}{' '}
+                    <span className="text-slate-400">· {sess.length} session(s)</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+                    {sess.map((s) => (
+                      <SessionCard
+                        key={s.sessionId}
+                        s={s}
+                        affect={affectOv[s.sessionId] ?? s.affect}
+                        methods={affectOpts.methods}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                  {sess.map((s) => (
-                    <SessionCard key={s.sessionId} s={s} />
-                  ))}
-                </div>
-              </div>
-            ))
+              ))}
+            </>
           )}
         </div>
       </div>
@@ -133,7 +173,7 @@ export function CohortAnalysis() {
   );
 }
 
-function SessionCard({ s }: { s: any }) {
+function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: string[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const iv = s.interventions;
   const sysTypes = Object.entries(iv.system.byType as Record<string, number>).filter(
@@ -217,6 +257,45 @@ function SessionCard({ s }: { s: any }) {
             >
               allocation score {s.activity.allocationScore.toFixed(2)}
             </span>
+          </div>
+        </Section>
+      )}
+
+      {/* 1d affect — per method (Part C) */}
+      {affect && (
+        <Section title="Affect (per method)">
+          <div className="space-y-1.5">
+            {(methods as string[]).map((m) => {
+              const r = affect[m];
+              if (!r) return null;
+              return (
+                <div key={m}>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>{AFFECT_METHOD_LABEL[m] ?? m}</span>
+                    {r.unresolvedConfusionEpisodes > 0 && (
+                      <span
+                        className="rounded bg-amber-100 px-1 text-amber-700"
+                        title="confusion episodes that did not resolve to engagement within the persistence window"
+                      >
+                        {r.unresolvedConfusionEpisodes} unresolved confusion
+                      </span>
+                    )}
+                  </div>
+                  <AffectStateBar pct={r.pctByState} />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-400">
+            {AFFECT_STATES.map((st) => (
+              <span key={st} className="flex items-center gap-1">
+                <span
+                  className="h-2 w-2 rounded-sm"
+                  style={{ background: AFFECT_STATE_COLOR[st] }}
+                />
+                {st}
+              </span>
+            ))}
           </div>
         </Section>
       )}
@@ -325,6 +404,132 @@ function ActivityBar({ pct }: { pct: Record<string, number> }) {
           title={`${k.replace(/_/g, ' ')} ${((pct[k] ?? 0) * 100).toFixed(0)}%`}
         />
       ))}
+    </div>
+  );
+}
+
+// ── affect (Part C) ──
+interface AffectOpts {
+  methods: string[];
+  activationThreshold: number;
+  persistenceWindowMs: number;
+  personBaseline: boolean;
+}
+const DEFAULT_AFFECT_OPTS: AffectOpts = {
+  methods: ['au_mapping', 'openface_emotion', 'wickens', 'fused'],
+  activationThreshold: 0.3,
+  persistenceWindowMs: 3000,
+  personBaseline: true,
+};
+const ALL_METHODS = ['au_mapping', 'openface_emotion', 'wickens', 'fused'];
+const AFFECT_METHOD_LABEL: Record<string, string> = {
+  au_mapping: 'AU mapping',
+  openface_emotion: 'OpenFace emotion',
+  wickens: 'Wickens (attention)',
+  fused: 'Fused',
+};
+const AFFECT_STATES = ['confusion', 'frustration', 'engagement', 'boredom', 'delight', 'neutral'];
+const AFFECT_STATE_COLOR: Record<string, string> = {
+  confusion: '#f59e0b',
+  frustration: '#ef4444',
+  engagement: '#10b981',
+  boredom: '#64748b',
+  delight: '#a855f7',
+  neutral: '#e2e8f0',
+};
+function isDefaultAffect(o: AffectOpts): boolean {
+  const d = DEFAULT_AFFECT_OPTS;
+  return (
+    o.activationThreshold === d.activationThreshold &&
+    o.persistenceWindowMs === d.persistenceWindowMs &&
+    o.personBaseline === d.personBaseline &&
+    o.methods.length === d.methods.length
+  );
+}
+
+function AffectStateBar({ pct }: { pct: Record<string, number> }) {
+  return (
+    <div className="flex h-3 w-full overflow-hidden rounded bg-slate-100">
+      {AFFECT_STATES.filter((k) => (pct[k] ?? 0) > 0).map((k) => (
+        <div
+          key={k}
+          style={{ width: `${(pct[k] ?? 0) * 100}%`, background: AFFECT_STATE_COLOR[k] }}
+          title={`${k} ${((pct[k] ?? 0) * 100).toFixed(0)}%`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AffectPanel({ opts, onChange }: { opts: AffectOpts; onChange: (o: AffectOpts) => void }) {
+  const toggleMethod = (m: string) =>
+    onChange({
+      ...opts,
+      methods: opts.methods.includes(m)
+        ? opts.methods.filter((x) => x !== m)
+        : [...ALL_METHODS.filter((x) => opts.methods.includes(x) || x === m)],
+    });
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="font-semibold text-slate-600">Affect thresholds</span>
+        <span className="text-[10px] text-slate-400">live recompute · D'Mello/Pekrun states</span>
+        {!isDefaultAffect(opts) && (
+          <button
+            onClick={() => onChange(DEFAULT_AFFECT_OPTS)}
+            className="ml-auto text-slate-400 hover:text-slate-700"
+          >
+            reset
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">methods</span>
+          {ALL_METHODS.map((m) => (
+            <label key={m} className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={opts.methods.includes(m)}
+                onChange={() => toggleMethod(m)}
+              />
+              {AFFECT_METHOD_LABEL[m]}
+            </label>
+          ))}
+        </div>
+        <label className="flex items-center gap-2">
+          <span className="text-slate-400">activation</span>
+          <input
+            type="range"
+            min={0.1}
+            max={0.7}
+            step={0.05}
+            value={opts.activationThreshold}
+            onChange={(e) => onChange({ ...opts, activationThreshold: Number(e.target.value) })}
+          />
+          <span className="tabular-nums">{opts.activationThreshold.toFixed(2)}</span>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="text-slate-400">persistence</span>
+          <input
+            type="range"
+            min={1000}
+            max={12000}
+            step={500}
+            value={opts.persistenceWindowMs}
+            onChange={(e) => onChange({ ...opts, persistenceWindowMs: Number(e.target.value) })}
+          />
+          <span className="tabular-nums">{(opts.persistenceWindowMs / 1000).toFixed(1)}s</span>
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={opts.personBaseline}
+            onChange={(e) => onChange({ ...opts, personBaseline: e.target.checked })}
+          />
+          <span>person baseline</span>
+        </label>
+      </div>
     </div>
   );
 }
