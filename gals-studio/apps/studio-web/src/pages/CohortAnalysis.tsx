@@ -147,6 +147,7 @@ export function CohortAnalysis() {
           ) : (
             <>
               <AffectPanel opts={affectOpts} onChange={setAffectOpts} />
+              <AgreementPanel sessions={sessions} />
               {[...byUser.entries()].map(([userId, sess]) => (
                 <div key={userId}>
                   <div className="mb-2 text-sm font-semibold text-slate-700">
@@ -190,6 +191,8 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
           {fmtDur(s.durationSecs)} · {s.courseTitle ?? 'no course'}
         </span>
       </div>
+
+      {s.dataHealth && <DataHealth health={s.dataHealth} />}
 
       {/* 1a interventions — system vs coder */}
       <Section title="Interventions">
@@ -377,6 +380,41 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
   );
 }
 
+/** Fetched-vs-expected data diagnostics — raw stream counts + gap warnings. */
+function DataHealth({ health }: { health: { counts: Record<string, number>; flags: string[] } }) {
+  const c = health.counts;
+  const chip = (label: string, n: number) => (
+    <span
+      key={label}
+      className={`rounded px-1.5 py-0.5 ${n > 0 ? 'bg-slate-100 text-slate-500' : 'bg-rose-50 text-rose-600'}`}
+      title={`${label}: ${n}`}
+    >
+      {label} {n}
+    </span>
+  );
+  return (
+    <div className="mb-2 space-y-1">
+      <div className="flex flex-wrap gap-1 text-[10px]">
+        {chip('snapshots', c.snapshots)}
+        {chip('gaze', c.gaze)}
+        {chip('AU', c.au)}
+        {chip('face', c.emotion)}
+        {chip('webcam', c.webcam)}
+        {chip('chat', c.chatbot)}
+      </div>
+      {health.flags.length > 0 && (
+        <div className="flex flex-col gap-0.5">
+          {health.flags.map((f) => (
+            <span key={f} className="text-[10px] text-amber-700">
+              ⚠ {f}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ACTIVITY_COLOR: Record<string, string> = {
   reading_lesson: '#10b981',
   chatbot: '#0ea5e9',
@@ -530,6 +568,105 @@ function AffectPanel({ opts, onChange }: { opts: AffectOpts; onChange: (o: Affec
           <span>person baseline</span>
         </label>
       </div>
+    </div>
+  );
+}
+
+// ── machine-vs-coder agreement (PR5) ──
+type AgreeStats = { n: number; po: number; kappa: number | null; pabak: number };
+
+/** Cohen's κ + PABAK over (machineGuess, coderLabel) pairs for one dimension. */
+function agreementFor(pairs: Array<[string, string]>): AgreeStats | null {
+  const n = pairs.length;
+  if (n === 0) return null;
+  const cats = [...new Set(pairs.flat())];
+  const rowM: Record<string, number> = {}; // machine marginals
+  const colM: Record<string, number> = {}; // coder marginals
+  let agree = 0;
+  for (const [m, c] of pairs) {
+    rowM[m] = (rowM[m] ?? 0) + 1;
+    colM[c] = (colM[c] ?? 0) + 1;
+    if (m === c) agree += 1;
+  }
+  const po = agree / n;
+  const pe = cats.reduce((s, k) => s + ((rowM[k] ?? 0) / n) * ((colM[k] ?? 0) / n), 0);
+  const kappa = pe >= 1 ? null : (po - pe) / (1 - pe);
+  return { n, po, kappa, pabak: 2 * po - 1 };
+}
+
+/** Cohort agreement across every coded timeline mark that carried a model guess. */
+function cohortAgreement(sessions: any[]): {
+  activity: AgreeStats | null;
+  affect: AgreeStats | null;
+} {
+  const collect = (dim: string): Array<[string, string]> => {
+    const out: Array<[string, string]> = [];
+    for (const s of sessions)
+      for (const c of s.coderCoding ?? [])
+        if (c.dimension === dim && c.machineGuess != null && c.codingPass === 'timeline')
+          out.push([c.machineGuess, c.codeLabel]);
+    return out;
+  };
+  return { activity: agreementFor(collect('activity')), affect: agreementFor(collect('affect')) };
+}
+
+function fmtK(k: number | null): string {
+  return k == null ? '—' : k.toFixed(2);
+}
+function kappaLabel(k: number | null): string {
+  if (k == null) return '';
+  if (k < 0) return 'poor';
+  if (k < 0.2) return 'slight';
+  if (k < 0.4) return 'fair';
+  if (k < 0.6) return 'moderate';
+  if (k < 0.8) return 'substantial';
+  return 'almost perfect';
+}
+
+function AgreementPanel({ sessions }: { sessions: any[] }) {
+  const agree = useMemo(() => cohortAgreement(sessions), [sessions]);
+  const rows = (['activity', 'affect'] as const)
+    .map((dim) => ({ dim, st: agree[dim] }))
+    .filter((r) => r.st && r.st.n > 0);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="font-semibold text-slate-600">Coder vs. model agreement</span>
+        <span className="text-[10px] text-slate-400">
+          over timeline marks where the coder accepted/overrode a model guess
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="text-slate-400">
+          No confirmed/overridden marks yet — accept or override model guesses in the timeline coder
+          (🤖 lanes) to populate this.
+        </div>
+      ) : (
+        <table className="w-full">
+          <thead className="text-left text-[10px] uppercase text-slate-400">
+            <tr>
+              <th className="py-0.5">dimension</th>
+              <th>n</th>
+              <th>observed</th>
+              <th>Cohen's κ</th>
+              <th>PABAK</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ dim, st }) => (
+              <tr key={dim} className="border-t border-slate-100">
+                <td className="py-0.5 capitalize text-slate-600">{dim}</td>
+                <td className="tabular-nums">{st!.n}</td>
+                <td className="tabular-nums">{(st!.po * 100).toFixed(0)}%</td>
+                <td className="tabular-nums">
+                  {fmtK(st!.kappa)} <span className="text-slate-400">{kappaLabel(st!.kappa)}</span>
+                </td>
+                <td className="tabular-nums">{st!.pabak.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

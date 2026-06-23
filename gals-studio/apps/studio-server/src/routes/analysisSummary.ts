@@ -65,11 +65,12 @@ const parse = <T>(v: string | null | undefined, fallback: T): T => {
 };
 
 async function summariseSession(sessionId: string, base: number): Promise<unknown> {
-  const [interventions, utterCodings, anns, efs] = await Promise.all([
+  const [interventions, utterCodings, anns, efs, dataHealth] = await Promise.all([
     prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
     prisma.utteranceCoding.findMany({ where: { sessionId, source: 'intervention' } }),
     prisma.annotation.findMany({ where: { sessionId, codingPass: { in: CODER_PASSES } } }),
     prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+    sessionDataHealth(sessionId),
   ]);
 
   // 1a — interventions: system vs coder, kept separate + explicit disagreement
@@ -162,6 +163,37 @@ async function summariseSession(sessionId: string, base: number): Promise<unknow
     efDetections,
     coderCoding,
     coderOverrides: { activity: overridesFor('activity'), affect: overridesFor('affect') },
+    dataHealth,
+  };
+}
+
+/**
+ * Fetched-vs-expected data diagnostics: raw stream counts plus flags for the
+ * known gaps that quietly degrade the analysis (no face → no affect; no gaze →
+ * no activity; fire-and-forget chatbot logging → messages can be missing even
+ * when interventions/dialogue happened). Surfaced so a researcher never reads a
+ * sparse result as a real null.
+ */
+async function sessionDataHealth(sessionId: string): Promise<unknown> {
+  const [snapshots, gaze, au, emotion, webcam, chatbot, dialogue] = await Promise.all([
+    prisma.snapshot.count({ where: { sessionId } }),
+    prisma.gazeSample.count({ where: { sessionId } }),
+    prisma.auResult.count({ where: { sessionId } }),
+    prisma.emotionFrame.count({ where: { sessionId, faceDetected: true } }),
+    prisma.webcamSegment.count({ where: { sessionId, status: 'ok' } }),
+    prisma.chatbotMessage.count({ where: { sessionId } }),
+    prisma.dialogueMessage.count({ where: { sessionId } }),
+  ]);
+  const flags: string[] = [];
+  if (snapshots === 0) flags.push('no DOM snapshots (activity inference blind)');
+  if (gaze === 0) flags.push('no gaze (activity falls back to DOM only)');
+  if (au === 0 && emotion === 0) flags.push('no face frames (affect is Wickens-only)');
+  if (webcam === 0) flags.push('no webcam video (cannot verify affect by replay)');
+  // fire-and-forget chatbot logging: dialogue exists but chat messages are empty
+  if (chatbot === 0 && dialogue > 0) flags.push('chatbot messages missing (fire-and-forget?)');
+  return {
+    counts: { snapshots, gaze, au, emotion, webcam, chatbot, dialogue },
+    flags,
   };
 }
 
