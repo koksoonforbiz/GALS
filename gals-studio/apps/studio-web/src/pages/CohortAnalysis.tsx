@@ -375,7 +375,33 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
             )}
           </div>
         )}
+        {s.coderOverrides && <CoderOverrides ov={s.coderOverrides} />}
       </Section>
+    </div>
+  );
+}
+
+/** Part A flow-back: how the coder confirmed/overrode the model on this session. */
+function CoderOverrides({ ov }: { ov: { activity: any; affect: any } }) {
+  const row = (label: string, o: any) => {
+    if (!o || o.withGuess === 0) return null;
+    return (
+      <span className="rounded bg-sky-50 px-1.5 py-0.5 text-sky-700" title={`${o.marks} mark(s)`}>
+        {label}: {o.agree}✓ / {o.override}✎{' '}
+        {o.agreementPct != null ? `(${(o.agreementPct * 100).toFixed(0)}%)` : ''}
+      </span>
+    );
+  };
+  const a = row('activity', ov.activity);
+  const f = row('affect', ov.affect);
+  if (!a && !f) return null;
+  return (
+    <div
+      className="mt-1 flex flex-wrap gap-1"
+      title="coder confirmed (✓) / overrode (✎) the model guess"
+    >
+      {a}
+      {f}
     </div>
   );
 }

@@ -16,12 +16,16 @@ const AFFECT_TRACKS = [
   { code: 'delight', label: 'Delight', color: '#0ea5e9' },
 ] as const;
 
-/** Coder-drawn activity tiers (Part B) — confirm/override the model guess. */
+/** Coder-drawn activity tiers (Part B) — confirm/override the model guess. Must
+ * cover every activity label the /guesses endpoint can surface (it only drops
+ * idle + gaze_unknown), else an accepted guess would render in no lane. */
 const ACTIVITY_TRACKS = [
   { code: 'reading_lesson', label: 'Reading lesson', color: '#2563eb' },
   { code: 'chatbot', label: 'Chatbot', color: '#0d9488' },
   { code: 'intervention', label: 'Intervention', color: '#7c3aed' },
   { code: 'navigating', label: 'Navigating', color: '#94a3b8' },
+  { code: 'divided_attention', label: 'Divided attention', color: '#f43f5e' },
+  { code: 'off_task_tab_switch', label: 'Off-task (tab)', color: '#a8a29e' },
 ] as const;
 
 // Full code→color/label lookup across affect + activity vocabularies (the model
