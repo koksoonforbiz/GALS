@@ -67,7 +67,7 @@ export function CohortAnalysis() {
         <span className="font-semibold">Research Analysis Studio</span>
         <span className="text-slate-400">· cohort summary</span>
         <span className="ml-auto text-xs text-slate-400">
-          PR1 — read-only aggregates (no inference yet)
+          interventions · practice-testing · EF · activity inference
         </span>
       </div>
 
@@ -186,6 +186,41 @@ function SessionCard({ s }: { s: any }) {
         )}
       </Section>
 
+      {/* 1b activity (Part B inference) */}
+      {s.activity && (
+        <Section title="Activity (gaze × DOM × interaction)">
+          <ActivityBar pct={s.activity.pctByActivity} />
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-slate-500">
+            {(Object.entries(s.activity.pctByActivity) as [string, number][])
+              .filter(([, v]) => v > 0.005)
+              .sort((a, b) => b[1] - a[1])
+              .map(([k, v]) => (
+                <span key={k} className="flex items-center gap-1">
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ background: ACTIVITY_COLOR[k] ?? '#94a3b8' }}
+                  />
+                  {k.replace(/_/g, ' ')} {(v * 100).toFixed(0)}%
+                </span>
+              ))}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            <span
+              className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700"
+              title="windows where the page is the lesson but gaze is on the chatbot (divided attention, off-task relative to lesson)"
+            >
+              reading-but-gaze-elsewhere {(s.activity.pctReadingButGazeElsewhere * 100).toFixed(1)}%
+            </span>
+            <span
+              className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600"
+              title="total-variation distance of observed allocation from expected weights (0 = matches expectation)"
+            >
+              allocation score {s.activity.allocationScore.toFixed(2)}
+            </span>
+          </div>
+        </Section>
+      )}
+
       {/* 1c practice testing */}
       {s.practiceTesting.length > 0 && (
         <Section title="Practice testing">
@@ -259,6 +294,37 @@ function SessionCard({ s }: { s: any }) {
           </div>
         )}
       </Section>
+    </div>
+  );
+}
+
+const ACTIVITY_COLOR: Record<string, string> = {
+  reading_lesson: '#10b981',
+  chatbot: '#0ea5e9',
+  intervention: '#8b5cf6',
+  navigating: '#64748b',
+  idle: '#cbd5e1',
+  off_task: '#f43f5e',
+};
+const ACTIVITY_ORDER = [
+  'reading_lesson',
+  'chatbot',
+  'intervention',
+  'navigating',
+  'off_task',
+  'idle',
+];
+
+function ActivityBar({ pct }: { pct: Record<string, number> }) {
+  return (
+    <div className="flex h-3 w-full overflow-hidden rounded bg-slate-100">
+      {ACTIVITY_ORDER.filter((k) => (pct[k] ?? 0) > 0).map((k) => (
+        <div
+          key={k}
+          style={{ width: `${(pct[k] ?? 0) * 100}%`, background: ACTIVITY_COLOR[k] ?? '#94a3b8' }}
+          title={`${k.replace(/_/g, ' ')} ${((pct[k] ?? 0) * 100).toFixed(0)}%`}
+        />
+      ))}
     </div>
   );
 }

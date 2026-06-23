@@ -1,13 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../prisma.js';
+import { classifyActivity } from '../analysis/activityInference.js';
 
 /**
- * PR1 of the Research Analysis Studio: cross-session cohort summary.
- * Returns, per (user, session), the read-only aggregates that come straight
- * from existing studio tables — interventions (1a), practice-testing (1c),
- * EF detections (1e), and coder coding (1f). Activity inference (Part B) and
- * affect mapping (Part C) are deferred to later PRs and are intentionally
- * absent here.
+ * Research Analysis Studio: cross-session cohort summary.
+ * Returns, per (user, session), read-only aggregates from existing studio
+ * tables — interventions (1a), practice-testing (1c), EF detections (1e),
+ * coder coding (1f) — plus the Part B activity-inference rollup (1b).
+ * Affect mapping (Part C) is deferred to a later PR.
  */
 
 const INTERVENTION_TYPES = [
@@ -143,7 +143,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
   });
 
   // Per (user, session) summary for the selected cohort.
-  app.get<{ Querystring: { userIds?: string } }>(
+  app.get<{ Querystring: { userIds?: string; binMs?: string; gazeConf?: string } }>(
     '/api/analysis/cohort-summary',
     async (req, reply) => {
       const userIds = (req.query.userIds ?? '')
@@ -151,14 +151,21 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         .map((s) => s.trim())
         .filter(Boolean);
       if (userIds.length === 0) return reply.code(400).send({ error: 'userIds required' });
+      const binMs = Number(req.query.binMs) || 1000;
+      const gazeConf = Number(req.query.gazeConf) || 0.5;
 
       const sessions = await prisma.session.findMany({
         where: { userId: { in: userIds } },
         orderBy: [{ userId: 'asc' }, { startedAt: 'asc' }],
       });
 
-      const summaries = await Promise.all(
-        sessions.map(async (s) => ({
+      // sessions are summarised sequentially to avoid loading every learner's
+      // raw gaze/cursor stream into memory at once.
+      const summaries = [];
+      for (const s of sessions) {
+        const core = (await summariseSession(s.id, s.baseWallClockMs)) as object;
+        const activity = await classifyActivity(s.id, { binMs, gazeConf });
+        summaries.push({
           userId: s.userId,
           userDisplayName: s.userDisplayName,
           sessionId: s.id,
@@ -166,10 +173,23 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           startedAt: s.startedAt.toISOString(),
           endedAt: s.endedAt ? s.endedAt.toISOString() : null,
           durationSecs: Math.round(s.durationMs / 1000),
-          ...((await summariseSession(s.id, s.baseWallClockMs)) as object),
-        })),
-      );
+          ...core,
+          activity: activity?.rollup ?? null,
+        });
+      }
       return { sessions: summaries };
+    },
+  );
+
+  // Per-window activity classification (provenance for the coder timeline).
+  app.get<{ Params: { sessionId: string }; Querystring: { binMs?: string; gazeConf?: string } }>(
+    '/api/analysis/:sessionId/activity',
+    async (req, reply) => {
+      const binMs = Number(req.query.binMs) || 1000;
+      const gazeConf = Number(req.query.gazeConf) || 0.5;
+      const result = await classifyActivity(req.params.sessionId, { binMs, gazeConf });
+      if (!result) return reply.code(404).send({ error: 'session not found' });
+      return result;
     },
   );
 }
