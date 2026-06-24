@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { PlayheadStore, usePlayhead, fmtRel } from '../replay/clock';
@@ -39,6 +39,8 @@ const CODE_META: Record<string, { label: string; color: string }> = {
 const LABEL_W = 150;
 const ROW_H = 30;
 const MIN_INTERVAL_MS = 500;
+const MIN_ZOOM = 1; // 1× = whole session fits the viewport
+const MAX_ZOOM = 512;
 
 let rowSeq = 0;
 const newRowId = () => `row${++rowSeq}`;
@@ -343,6 +345,49 @@ export function TimelineCoding() {
   const xToOff = (xContent: number) => (pxPerMs > 0 ? xContent / pxPerMs : 0);
   const offToX = (off: number) => off * pxPerMs;
 
+  // ── video-editor zoom: scale the time axis while keeping the time point under
+  // the cursor anchored in place (so zooming doesn't lose your spot). ─────────
+  const pendingAnchorRef = useRef<{ offMs: number; clientX: number } | null>(null);
+  const zoomAround = useCallback(
+    (factor: number, clientX: number) => {
+      const el = scrollRef.current;
+      if (!el || pxPerMs <= 0) return;
+      const rect = el.getBoundingClientRect();
+      const xInLane = clientX - rect.left + el.scrollLeft - LABEL_W;
+      pendingAnchorRef.current = { offMs: xInLane / pxPerMs, clientX };
+      setZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z * factor)));
+    },
+    [pxPerMs],
+  );
+  // re-anchor the horizontal scroll after the new zoom has laid out
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const a = pendingAnchorRef.current;
+    if (!el || !a || pxPerMs <= 0) return;
+    pendingAnchorRef.current = null;
+    const rect = el.getBoundingClientRect();
+    el.scrollLeft = a.offMs * pxPerMs + LABEL_W - (a.clientX - rect.left);
+  }, [zoom, pxPerMs]);
+  // Ctrl/⌘ + wheel zooms anchored at the pointer; plain/shift wheel scrolls
+  // (native). Attached non-passively so we can preventDefault the page zoom.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      zoomAround(Math.pow(1.0018, -e.deltaY), e.clientX);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoomAround]);
+  // buttons zoom around the centre of the visible track area
+  const zoomButton = (factor: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    zoomAround(factor, el.getBoundingClientRect().left + LABEL_W + areaW / 2);
+  };
+
   const absoluteMs = base + ph.offsetMs;
   const currentSnapshot = useMemo(() => snapshotAt(snaps, absoluteMs), [snaps, absoluteMs]);
   const currentGaze = useMemo(
@@ -600,20 +645,38 @@ export function TimelineCoding() {
           )}
         </div>
         <span className="ml-auto flex items-center gap-1 text-xs">
-          zoom
+          <span
+            className="text-slate-400"
+            title="Ctrl/⌘ + scroll over the timeline to zoom at the cursor · Shift + scroll to pan"
+          >
+            zoom
+          </span>
           <button
-            onClick={() => setZoom((z) => Math.max(1, z / 2))}
-            className="rounded border border-slate-300 px-1.5"
+            onClick={() => zoomButton(0.5)}
+            disabled={zoom <= MIN_ZOOM}
+            className="rounded border border-slate-300 px-1.5 disabled:opacity-40"
           >
             −
           </button>
-          <span className="w-8 text-center tabular-nums">{zoom}×</span>
+          <span className="w-10 text-center tabular-nums">
+            {zoom >= 10 ? Math.round(zoom) : zoom.toFixed(1)}×
+          </span>
           <button
-            onClick={() => setZoom((z) => Math.min(64, z * 2))}
-            className="rounded border border-slate-300 px-1.5"
+            onClick={() => zoomButton(2)}
+            disabled={zoom >= MAX_ZOOM}
+            className="rounded border border-slate-300 px-1.5 disabled:opacity-40"
           >
             +
           </button>
+          {zoom > MIN_ZOOM && (
+            <button
+              onClick={() => zoomButton(MIN_ZOOM / zoom)}
+              className="rounded border border-slate-300 px-1.5 text-slate-500"
+              title="reset zoom to fit"
+            >
+              fit
+            </button>
+          )}
         </span>
       </div>
 
