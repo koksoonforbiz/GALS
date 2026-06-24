@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, Check, Code, Image, Pause, Play, Swords } from 'lucide-react';
 import { api } from '../lib/api';
 import { DEFAULT_CODEBOOK, type CodeDef, type Dimension } from '@gals-studio/shared/browser';
 import { PlayheadStore, usePlayhead, fmtRel } from '../replay/clock';
@@ -268,7 +269,7 @@ export function Coding() {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
         <Link to="/" className="text-slate-400 hover:text-slate-700">
-          ← Library
+          <ArrowLeft size={14} className="inline align-[-2px]" /> Library
         </Link>
         <span className="font-semibold">
           {meta.session.userDisplayName ?? meta.session.userId.slice(0, 8)}
@@ -393,7 +394,11 @@ export function Coding() {
                     ◉
                   </span>
                 )}
-                {disagreementWinIds.has(w.id) && <span className="ml-auto text-amber-500">⚔</span>}
+                {disagreementWinIds.has(w.id) && (
+                  <span className="ml-auto text-amber-500">
+                    <Swords size={12} />
+                  </span>
+                )}
               </button>
             );
           })}
@@ -407,7 +412,17 @@ export function Coding() {
               className="rounded border border-slate-300 px-2 py-1"
               title="Pixels = the exact rendered frame the student saw (slides, canvas, styling). DOM = reconstructed live HTML (interactive, but canvas/slides may be blank)."
             >
-              {showScreenshot ? '🖼 Pixels (as seen)' : '⟨⟩ DOM (reconstructed)'}
+              <span className="inline-flex items-center gap-1">
+                {showScreenshot ? (
+                  <>
+                    <Image size={12} /> Pixels (as seen)
+                  </>
+                ) : (
+                  <>
+                    <Code size={12} /> DOM (reconstructed)
+                  </>
+                )}
+              </span>
             </button>
             {showScreenshot && currentSnapshot && !currentSnapshot.hasScreenshot && (
               <span className="text-amber-600">no screenshot at this moment — switch to DOM</span>
@@ -457,14 +472,17 @@ export function Coding() {
             >
               [ Prev
             </button>
-            <button onClick={playWindow} className="rounded bg-slate-900 px-3 py-1 text-white">
-              ▶ Play window
+            <button
+              onClick={playWindow}
+              className="flex items-center gap-1 rounded bg-slate-900 px-3 py-1 text-white"
+            >
+              <Play size={14} /> Play window
             </button>
             <button
               onClick={() => store.pause()}
               className="rounded border border-slate-300 px-2 py-1"
             >
-              ⏸
+              <Pause size={14} />
             </button>
             <button
               onClick={() => gotoWindow(active + 1)}
@@ -479,8 +497,14 @@ export function Coding() {
                 {fmtRel(activeWindow.endWallMs - meta.baseWallClockMs)}
               </span>
             )}
-            <span className="ml-auto text-emerald-600">
-              {winAnns?.affect && winAnns?.behavior ? 'saved ✓' : 'needs affect+behavior'}
+            <span className="ml-auto inline-flex items-center gap-1 text-emerald-600">
+              {winAnns?.affect && winAnns?.behavior ? (
+                <>
+                  saved <Check size={14} />
+                </>
+              ) : (
+                'needs affect+behavior'
+              )}
             </span>
           </div>
 
@@ -626,7 +650,11 @@ function DisagreementCompare({
           <span className="font-semibold">{d.dimension}:</span>
           <span style={{ color: colorOf(d.rater1.code) }}>R1 {d.rater1.code}</span>
           <span style={{ color: colorOf(d.rater2.code) }}>R2 {d.rater2.code}</span>
-          {d.tiebreaker && <span className="text-emerald-700">→ {d.tiebreaker.code}</span>}
+          {d.tiebreaker && (
+            <span className="inline-flex items-center gap-1 text-emerald-700">
+              <ArrowRight size={12} /> {d.tiebreaker.code}
+            </span>
+          )}
         </div>
       ))}
     </div>

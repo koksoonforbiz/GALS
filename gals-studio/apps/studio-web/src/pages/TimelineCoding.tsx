@@ -1,5 +1,27 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
+  Code,
+  Download,
+  Image,
+  Lock,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  SkipBack,
+  TriangleAlert,
+  Video,
+  X,
+  Zap,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import { PlayheadStore, usePlayhead, fmtRel } from '../replay/clock';
 import { snapshotAt, type SnapshotLite, type WebcamSeg } from '../replay/lookup';
@@ -442,12 +464,12 @@ export function TimelineCoding() {
 
   const rowConfig = useMemo(
     () => [
-      { key: 'webcam', label: '📹 webcam', color: '#334155' },
-      { key: 'model_activity', label: '🤖 activity (model)', color: '#2563eb' },
-      { key: 'model_affect', label: '🤖 affect (model)', color: '#8b5cf6' },
+      { key: 'webcam', label: 'webcam', color: '#334155' },
+      { key: 'model_activity', label: 'activity (model)', color: '#2563eb' },
+      { key: 'model_affect', label: 'affect (model)', color: '#8b5cf6' },
       ...ACTIVITY_TRACKS.map((t) => ({ key: `act:${t.code}`, label: t.label, color: t.color })),
       ...AFFECT_TRACKS.map((t) => ({ key: t.code, label: t.label, color: t.color })),
-      { key: 'interventions', label: '⚡ interventions', color: '#7c3aed' },
+      { key: 'interventions', label: 'interventions', color: '#7c3aed' },
       ...dataRows.map((r) => ({ key: r.id, label: dataRowName(r), color: r.color })),
     ],
     [dataRows],
@@ -572,8 +594,8 @@ export function TimelineCoding() {
     <div className="space-y-2">
       {/* top bar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-        <Link to="/" className="text-slate-400 hover:text-slate-700">
-          ← Library
+        <Link to="/" className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-700">
+          <ArrowLeft size={14} /> Library
         </Link>
         <span className="font-semibold">
           {meta.session.userDisplayName ?? meta.session.userId.slice(0, 8)}
@@ -595,9 +617,9 @@ export function TimelineCoding() {
         </select>
         <Link
           to={`/coding/${sessionId}`}
-          className="rounded border border-slate-300 px-2 py-1 text-xs"
+          className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs"
         >
-          window coding →
+          window coding <ArrowRight size={12} />
         </Link>
         <button
           onClick={async () => {
@@ -608,23 +630,23 @@ export function TimelineCoding() {
               setSummary(null);
             }
           }}
-          className="rounded bg-slate-900 px-2 py-1 text-xs text-white"
+          className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs text-white"
         >
-          📋 Summary
+          <ClipboardList size={12} /> Summary
         </button>
         <a
           href={coderId ? api.utteranceExportUrl(sessionId, coderId) : undefined}
-          className={`rounded border border-slate-300 px-2 py-1 text-xs ${coderId ? '' : 'pointer-events-none opacity-50'}`}
+          className={`inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs ${coderId ? '' : 'pointer-events-none opacity-50'}`}
           title="Export utterance coding (EF / affect / strategy) as CSV"
         >
-          ⬇ Export coding
+          <Download size={12} /> Export coding
         </a>
         <div className="relative">
           <button
             onClick={() => setRowMenuOpen((v) => !v)}
-            className="rounded border border-slate-300 px-2 py-1 text-xs"
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs"
           >
-            Rows ▾
+            Rows <ChevronDown size={12} />
           </button>
           {rowMenuOpen && (
             <div className="absolute z-30 mt-1 w-44 rounded border border-slate-200 bg-white p-1 shadow-lg">
@@ -686,9 +708,17 @@ export function TimelineCoding() {
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <button
               onClick={() => setShowScreenshot((v) => !v)}
-              className="rounded border border-slate-300 px-2 py-0.5"
+              className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-0.5"
             >
-              {showScreenshot ? '🖼 Pixels (as seen)' : '⟨⟩ DOM'}
+              {showScreenshot ? (
+                <>
+                  <Image size={13} /> Pixels (as seen)
+                </>
+              ) : (
+                <>
+                  <Code size={13} /> DOM
+                </>
+              )}
             </button>
             {currentSnapshot?.pdfTotalPages ? (
               <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
@@ -700,11 +730,21 @@ export function TimelineCoding() {
             ) : null}
             <button
               onClick={() => setAoiDraw((v) => !v)}
-              className={`rounded border px-2 py-0.5 ${aoiDraw ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-300'}`}
+              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 ${aoiDraw ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-slate-300'}`}
             >
-              {aoiDraw ? '✏ drawing AOI… (drag on view)' : '＋ AOI'}
+              {aoiDraw ? (
+                <>
+                  <Pencil size={13} /> drawing AOI… (drag on view)
+                </>
+              ) : (
+                <>
+                  <Plus size={13} /> AOI
+                </>
+              )}
             </button>
-            <span className="ml-auto text-slate-400">🔒 locked to student view</span>
+            <span className="ml-auto inline-flex items-center gap-1 text-slate-400">
+              <Lock size={13} /> locked to student view
+            </span>
           </div>
           <DomStage
             sessionId={sessionId}
@@ -726,15 +766,17 @@ export function TimelineCoding() {
           <div className="flex items-center gap-2 rounded border border-slate-200 bg-white px-2 py-1 text-sm">
             <button
               onClick={() => store.toggle()}
-              className="rounded bg-slate-900 px-3 py-1 text-white"
+              className="inline-flex items-center rounded bg-slate-900 px-3 py-1 text-white"
+              aria-label={ph.playing ? 'pause' : 'play'}
             >
-              {ph.playing ? '⏸' : '▶'}
+              {ph.playing ? <Pause size={14} /> : <Play size={14} />}
             </button>
             <button
               onClick={() => store.restart()}
-              className="rounded border border-slate-300 px-2 py-1"
+              className="inline-flex items-center rounded border border-slate-300 px-2 py-1"
+              aria-label="restart"
             >
-              ⏮
+              <SkipBack size={14} />
             </button>
             <span className="font-mono text-xs tabular-nums">
               {fmtRel(ph.offsetMs)} / {fmtRel(durationMs)}
@@ -770,9 +812,13 @@ export function TimelineCoding() {
                   </span>
                   {review.savedId != null &&
                     (review.machineGuess === review.code ? (
-                      <span className="ml-1 text-emerald-600">✓ confirmed</span>
+                      <span className="ml-1 inline-flex items-center gap-0.5 text-emerald-600">
+                        <Check size={11} /> confirmed
+                      </span>
                     ) : (
-                      <span className="ml-1 text-amber-600">✎ overridden</span>
+                      <span className="ml-1 inline-flex items-center gap-0.5 text-amber-600">
+                        <Pencil size={11} /> overridden
+                      </span>
                     ))}
                 </div>
               )}
@@ -782,9 +828,9 @@ export function TimelineCoding() {
                     store.seek(review.startMs);
                     store.play();
                   }}
-                  className="rounded bg-slate-900 px-2 py-0.5 text-white"
+                  className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-white"
                 >
-                  ▶ play segment
+                  <Play size={12} /> play segment
                 </button>
                 <label className="flex items-center gap-1">
                   <input
@@ -805,9 +851,9 @@ export function TimelineCoding() {
                   <button
                     onClick={() => void acceptReview()}
                     disabled={!coderId}
-                    className="ml-auto rounded bg-emerald-600 px-2 py-0.5 text-white disabled:opacity-50"
+                    className="ml-auto inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-0.5 text-white disabled:opacity-50"
                   >
-                    ✓ accept as {labelFor(review.code)} mark
+                    <Check size={12} /> accept as {labelFor(review.code)} mark
                   </button>
                 )}
               </div>
@@ -824,7 +870,8 @@ export function TimelineCoding() {
           ) : (
             <div className="rounded border border-dashed border-slate-300 p-2 text-xs text-slate-400">
               Detected affect segments (≥{detectMinSec}s over threshold) are shaded on each lane —
-              click one to review, then ✓ accept. Or drag a lane to mark your own.
+              click one to review, then <Check size={12} className="inline align-[-2px]" /> accept.
+              Or drag a lane to mark your own.
             </div>
           )}
 
@@ -924,8 +971,10 @@ export function TimelineCoding() {
             onClick={() => setAuPanelOpen((v) => !v)}
             className="mb-1 flex w-full items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400"
           >
-            <span>{auPanelOpen ? '▾' : '▸'}</span>
-            AU → affect mapping{' '}
+            {auPanelOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <span className="inline-flex items-center gap-1">
+              AU <ArrowRight size={11} /> affect mapping
+            </span>{' '}
             {auPanelOpen ? '— click action units to include in each affect' : '(click to edit)'}
           </button>
           <div className={`space-y-1 ${auPanelOpen ? '' : 'hidden'}`}>
@@ -962,7 +1011,9 @@ export function TimelineCoding() {
                     );
                   })}
                   {auMap[aff].length === 0 && (
-                    <span className="text-slate-300">(none → no detection)</span>
+                    <span className="inline-flex items-center gap-1 text-slate-300">
+                      (none <ArrowRight size={11} /> no detection)
+                    </span>
                   )}
                 </div>
               );
@@ -982,7 +1033,13 @@ export function TimelineCoding() {
 
             {/* webcam coverage */}
             {!rowHidden['webcam'] && (
-              <Row label="📹 webcam">
+              <Row
+                label={
+                  <span className="flex items-center gap-1">
+                    <Video size={14} /> webcam
+                  </span>
+                }
+              >
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
                   {webcamSegs.map((s, i) => {
                     const a = s.startWallMs - base;
@@ -1003,7 +1060,13 @@ export function TimelineCoding() {
 
             {/* model guess lanes (read-only) — click a segment to review & accept/override */}
             {guesses && !rowHidden['model_activity'] && (
-              <Row label="🤖 activity (model)">
+              <Row
+                label={
+                  <span className="flex items-center gap-1">
+                    <Bot size={14} /> activity (model)
+                  </span>
+                }
+              >
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
                   {guesses.activitySegments.map((s, i) => (
                     <GuessSegment
@@ -1018,7 +1081,13 @@ export function TimelineCoding() {
               </Row>
             )}
             {guesses && !rowHidden['model_affect'] && (
-              <Row label="🤖 affect (model)">
+              <Row
+                label={
+                  <span className="flex items-center gap-1">
+                    <Bot size={14} /> affect (model)
+                  </span>
+                }
+              >
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
                   {guesses.affectSegments.map((s, i) => (
                     <GuessSegment
@@ -1067,7 +1136,13 @@ export function TimelineCoding() {
                           }}
                           title={`${tr.label} ${fmtRel(a)}–${fmtRel(iv.endWallMs - base)}${iv.machineGuess ? ` · model said ${labelFor(iv.machineGuess)}${overridden ? ' (overridden)' : ' (confirmed)'}` : ''}`}
                         >
-                          {overridden ? '✎' : w > 28 ? fmtRel(iv.endWallMs - iv.startWallMs) : ''}
+                          {overridden ? (
+                            <Pencil size={10} />
+                          ) : w > 28 ? (
+                            fmtRel(iv.endWallMs - iv.startWallMs)
+                          ) : (
+                            ''
+                          )}
                         </div>
                       );
                     })}
@@ -1159,7 +1234,13 @@ export function TimelineCoding() {
 
             {/* learning interventions (data) */}
             {!rowHidden['interventions'] && (
-              <Row label="⚡ interventions">
+              <Row
+                label={
+                  <span className="flex items-center gap-1">
+                    <Zap size={14} /> interventions
+                  </span>
+                }
+              >
                 <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
                   {interventions.map((iv, i) => {
                     const a = iv.wallMs - base;
@@ -1212,8 +1293,9 @@ export function TimelineCoding() {
                         onClick={() => removeDataRow(row.id)}
                         className="ml-auto text-slate-300 hover:text-rose-500"
                         title="remove row"
+                        aria-label="remove row"
                       >
-                        ✕
+                        <X size={12} />
                       </button>
                     </span>
                   }
@@ -1286,8 +1368,9 @@ function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void 
           <div className="space-y-3">
             <div>
               <div className="font-semibold">{summary.session.userDisplayName ?? 'student'}</div>
-              <div className="text-xs text-slate-500">
-                {new Date(summary.session.startedAt).toLocaleString()} →{' '}
+              <div className="flex items-center gap-1 text-xs text-slate-500">
+                {new Date(summary.session.startedAt).toLocaleString()}
+                <ArrowRight size={11} />
                 {summary.session.endedAt
                   ? new Date(summary.session.endedAt).toLocaleTimeString()
                   : '— (no end)'}
@@ -1296,8 +1379,10 @@ function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void 
 
             {summary.abandoned?.likely && (
               <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800">
-                <span className="font-semibold">⚠ Possibly abandoned</span> —{' '}
-                {summary.abandoned.signals.join('; ')}
+                <span className="inline-flex items-center gap-1 font-semibold">
+                  <TriangleAlert size={12} /> Possibly abandoned
+                </span>{' '}
+                — {summary.abandoned.signals.join('; ')}
               </div>
             )}
 
@@ -1874,8 +1959,9 @@ function AoiLayer({
               }}
               className="text-slate-400 hover:text-rose-600"
               title="delete AOI"
+              aria-label="delete AOI"
             >
-              ✕
+              <X size={11} />
             </button>
           </span>
         </div>
@@ -1963,8 +2049,12 @@ function UtteranceCodingPanel({
         <span className="font-semibold text-sky-700">
           Code {label} · {fmtRel(utter.refWallMs - base)}
         </span>
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
-          ✕
+        <button
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-700"
+          aria-label="close"
+        >
+          <X size={13} />
         </button>
       </div>
       <div className="mb-2 max-h-20 overflow-auto rounded bg-slate-50 p-1 text-slate-600">
@@ -2006,7 +2096,13 @@ function UtteranceCodingPanel({
           }}
           className="rounded bg-slate-900 px-2 py-0.5 text-white"
         >
-          {saved ? 'saved ✓' : 'save'}
+          {saved ? (
+            <span className="inline-flex items-center gap-1">
+              saved <Check size={12} />
+            </span>
+          ) : (
+            'save'
+          )}
         </button>
         <button
           onClick={() => void onClear()}
@@ -2091,9 +2187,15 @@ function RegionCoding({
           await onSave({ intensity, confidence, notes: notes || null });
           setSaved(true);
         }}
-        className="rounded bg-slate-900 px-2 py-0.5 text-white"
+        className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5 text-white"
       >
-        {saved ? 'saved ✓' : 'save coding'}
+        {saved ? (
+          <span className="inline-flex items-center gap-1">
+            saved <Check size={12} />
+          </span>
+        ) : (
+          'save coding'
+        )}
       </button>
     </div>
   );
@@ -2108,8 +2210,8 @@ function labelFor(code: string): string {
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';
   if (row.kind === 'ef') return 'Text-mining (EF)';
-  if (row.kind === 'chat') return '💬 Chat utterances';
-  if (row.kind === 'dialogue') return '🗣 Dialogue (interrog. elab.)';
+  if (row.kind === 'chat') return 'Chat utterances';
+  if (row.kind === 'dialogue') return 'Dialogue (interrog. elab.)';
   return `${row.kind === 'au' ? 'AU' : 'emotion'}: ${row.key}`;
 }
 

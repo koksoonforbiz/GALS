@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowLeft, Bot, Check, Pencil, TriangleAlert, X } from 'lucide-react';
 import { api } from '../lib/api';
 
 /** PR1 of the Research Analysis Studio: pick a cohort, see per-session summary
@@ -93,8 +94,8 @@ export function CohortAnalysis() {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-        <Link to="/" className="text-slate-400 hover:text-slate-700">
-          ← Library
+        <Link to="/" className="inline-flex items-center gap-1 text-slate-400 hover:text-slate-700">
+          <ArrowLeft size={14} /> Library
         </Link>
         <span className="font-semibold">Research Analysis Studio</span>
         <span className="text-slate-400">· cohort summary</span>
@@ -330,7 +331,7 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
                       <tr key={q.idx} className="border-t border-slate-100">
                         <td className="py-0.5 pr-1 text-slate-400">Q{q.idx + 1}</td>
                         <td className={q.correct ? 'text-emerald-600' : 'text-rose-600'}>
-                          {q.correct ? '✓' : '✗'}
+                          {q.correct ? <Check size={12} /> : <X size={12} />}
                         </td>
                         <td className="truncate text-slate-500" title={q.feedback}>
                           {q.feedback}
@@ -386,9 +387,14 @@ function CoderOverrides({ ov }: { ov: { activity: any; affect: any } }) {
   const row = (label: string, o: any) => {
     if (!o || o.withGuess === 0) return null;
     return (
-      <span className="rounded bg-sky-50 px-1.5 py-0.5 text-sky-700" title={`${o.marks} mark(s)`}>
-        {label}: {o.agree}✓ / {o.override}✎{' '}
-        {o.agreementPct != null ? `(${(o.agreementPct * 100).toFixed(0)}%)` : ''}
+      <span
+        className="inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-sky-700"
+        title={`${o.marks} mark(s)`}
+      >
+        {label}: {o.agree}
+        <Check size={11} /> / {o.override}
+        <Pencil size={11} />
+        {o.agreementPct != null ? ` (${(o.agreementPct * 100).toFixed(0)}%)` : ''}
       </span>
     );
   };
@@ -396,10 +402,7 @@ function CoderOverrides({ ov }: { ov: { activity: any; affect: any } }) {
   const f = row('affect', ov.affect);
   if (!a && !f) return null;
   return (
-    <div
-      className="mt-1 flex flex-wrap gap-1"
-      title="coder confirmed (✓) / overrode (✎) the model guess"
-    >
+    <div className="mt-1 flex flex-wrap gap-1" title="coder confirmed / overrode the model guess">
       {a}
       {f}
     </div>
@@ -431,8 +434,8 @@ function DataHealth({ health }: { health: { counts: Record<string, number>; flag
       {health.flags.length > 0 && (
         <div className="flex flex-col gap-0.5">
           {health.flags.map((f) => (
-            <span key={f} className="text-[10px] text-amber-700">
-              ⚠ {f}
+            <span key={f} className="inline-flex items-center gap-1 text-[10px] text-amber-700">
+              <TriangleAlert size={11} /> {f}
             </span>
           ))}
         </div>
@@ -665,7 +668,7 @@ function AgreementPanel({ sessions }: { sessions: any[] }) {
       {rows.length === 0 ? (
         <div className="text-slate-400">
           No confirmed/overridden marks yet — accept or override model guesses in the timeline coder
-          (🤖 lanes) to populate this.
+          (<Bot size={12} className="inline align-[-2px]" /> lanes) to populate this.
         </div>
       ) : (
         <table className="w-full">

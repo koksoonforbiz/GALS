@@ -1,3 +1,4 @@
+import { Camera, Check, Eye, MessageSquare, Smile, Swords, Video, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, fmtDuration, type ImportReport, type SessionListItem } from '../lib/api';
@@ -112,7 +113,16 @@ export function Library() {
             className={`mt-3 rounded border p-3 text-sm ${report.ok ? 'border-emerald-300 bg-emerald-50' : 'border-rose-300 bg-rose-50'}`}
           >
             <div className="font-semibold">
-              {report.ok ? `✓ Imported ${report.sessionId}` : '✗ Import failed'}
+              {report.ok ? (
+                <>
+                  <Check size={14} className="inline align-[-2px] text-emerald-600" /> Imported{' '}
+                  {report.sessionId}
+                </>
+              ) : (
+                <>
+                  <X size={14} className="inline align-[-2px] text-rose-600" /> Import failed
+                </>
+              )}
             </div>
             {report.ok && (
               <div className="text-slate-600">
@@ -203,11 +213,22 @@ export function Library() {
                   </td>
                   <td className="px-4 py-2">{fmtDuration(s.durationMs)}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">
-                    <span title="snapshots">📸 {s.counts.snapshots}</span>{' '}
-                    <span title="gaze">👁 {s.counts.gaze}</span>{' '}
-                    <span title="emotion">😀 {s.counts.emotion}</span>{' '}
-                    <span title="webcam">🎥 {s.counts.webcamSegments}</span>{' '}
-                    <span title="messages">💬 {s.counts.messages}</span>
+                    <span title="snapshots">
+                      <Camera size={12} className="inline align-[-2px]" /> {s.counts.snapshots}
+                    </span>{' '}
+                    <span title="gaze">
+                      <Eye size={12} className="inline align-[-2px]" /> {s.counts.gaze}
+                    </span>{' '}
+                    <span title="emotion">
+                      <Smile size={12} className="inline align-[-2px]" /> {s.counts.emotion}
+                    </span>{' '}
+                    <span title="webcam">
+                      <Video size={12} className="inline align-[-2px]" /> {s.counts.webcamSegments}
+                    </span>{' '}
+                    <span title="messages">
+                      <MessageSquare size={12} className="inline align-[-2px]" />{' '}
+                      {s.counts.messages}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-xs">
                     <div className="flex items-center gap-2">
@@ -215,7 +236,8 @@ export function Library() {
                       <ProgressPill label="R2" pct={s.coding.pctRater2} />
                       {s.coding.disagreementsPending > 0 && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
-                          {s.coding.disagreementsPending} ⚔
+                          {s.coding.disagreementsPending}{' '}
+                          <Swords size={12} className="inline align-[-2px]" />
                         </span>
                       )}
                     </div>

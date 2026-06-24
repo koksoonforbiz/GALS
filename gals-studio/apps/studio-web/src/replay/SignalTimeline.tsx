@@ -1,3 +1,4 @@
+import { Circle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { AffectThresholds } from './affect';
 
@@ -21,11 +22,20 @@ const PLOT_H = 150;
 const LANE_TOP = 160;
 
 const EMOTION_COLORS: Record<string, string> = {
-  happiness: '#16a34a', sadness: '#3b82f6', surprise: '#a855f7', fear: '#8b5cf6',
-  anger: '#dc2626', disgust: '#65a30d', contempt: '#db2777', neutral: '#94a3b8',
+  happiness: '#16a34a',
+  sadness: '#3b82f6',
+  surprise: '#a855f7',
+  fear: '#8b5cf6',
+  anger: '#dc2626',
+  disgust: '#65a30d',
+  contempt: '#db2777',
+  neutral: '#94a3b8',
 };
 const AFFECT_COLORS: Record<string, string> = {
-  engagement: '#16a34a', boredom: '#6b7280', confusion: '#f59e0b', frustration: '#dc2626',
+  engagement: '#16a34a',
+  boredom: '#6b7280',
+  confusion: '#f59e0b',
+  frustration: '#dc2626',
 };
 
 /** Human-friendly tick step ladder. */
@@ -54,7 +64,17 @@ export function SignalTimeline(props: {
   events: TimelineEvents;
   onSeek: (offsetMs: number) => void;
 }) {
-  const { durationMs, emotions, affect, aus, offsetMs, events, onSeek, baseWallClockMs, thresholds } = props;
+  const {
+    durationMs,
+    emotions,
+    affect,
+    aus,
+    offsetMs,
+    events,
+    onSeek,
+    baseWallClockMs,
+    thresholds,
+  } = props;
   const [showEmotions, setShowEmotions] = useState(true);
   const [showAffect, setShowAffect] = useState(true);
   const [showAus, setShowAus] = useState(false);
@@ -90,7 +110,17 @@ export function SignalTimeline(props: {
     items.map((it, i) => {
       const t = it.wallMs - baseWallClockMs;
       if (t < 0 || t > durationMs) return null;
-      return <line key={i} x1={x(t)} x2={x(t)} y1={yPos} y2={yPos + 8} stroke={color} strokeWidth={1.5} />;
+      return (
+        <line
+          key={i}
+          x1={x(t)}
+          x2={x(t)}
+          y1={yPos}
+          y2={yPos + 8}
+          stroke={color}
+          strokeWidth={1.5}
+        />
+      );
     });
 
   return (
@@ -102,44 +132,99 @@ export function SignalTimeline(props: {
         <div className="flex flex-wrap gap-1">
           {showEmotions &&
             Object.keys(emotions).map((k) => (
-              <Chip key={k} label={k} color={EMOTION_COLORS[k]} off={hidden.has(`e:${k}`)} onClick={() => toggle(`e:${k}`)} />
+              <Chip
+                key={k}
+                label={k}
+                color={EMOTION_COLORS[k]}
+                off={hidden.has(`e:${k}`)}
+                onClick={() => toggle(`e:${k}`)}
+              />
             ))}
           {showAffect &&
             Object.keys(affect).map((k) => (
-              <Chip key={k} label={k} color={AFFECT_COLORS[k]} off={hidden.has(`a:${k}`)} onClick={() => toggle(`a:${k}`)} />
+              <Chip
+                key={k}
+                label={k}
+                color={AFFECT_COLORS[k]}
+                off={hidden.has(`a:${k}`)}
+                onClick={() => toggle(`a:${k}`)}
+              />
             ))}
           {showAus &&
             Object.keys(aus).map((k) => (
-              <Chip key={k} label={k} color="#0891b2" off={hidden.has(`u:${k}`)} onClick={() => toggle(`u:${k}`)} />
+              <Chip
+                key={k}
+                label={k}
+                color="#0891b2"
+                off={hidden.has(`u:${k}`)}
+                onClick={() => toggle(`u:${k}`)}
+              />
             ))}
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full cursor-crosshair" onClick={onClick} style={{ height: 240 }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full cursor-crosshair"
+        onClick={onClick}
+        style={{ height: 240 }}
+      >
         <rect x={0} y={0} width={W} height={PLOT_H} fill="#f8fafc" />
         {/* threshold guide lines */}
         {showAffect &&
           Object.entries(thresholds).map(([k, thr]) => (
-            <line key={k} x1={0} x2={W} y1={y(thr)} y2={y(thr)} stroke={AFFECT_COLORS[k] ?? '#cbd5e1'} strokeDasharray="3 3" strokeWidth={0.5} opacity={0.5} />
+            <line
+              key={k}
+              x1={0}
+              x2={W}
+              y1={y(thr)}
+              y2={y(thr)}
+              stroke={AFFECT_COLORS[k] ?? '#cbd5e1'}
+              strokeDasharray="3 3"
+              strokeWidth={0.5}
+              opacity={0.5}
+            />
           ))}
         {/* ticks */}
         {ticks.map((t, i) => (
           <g key={i}>
             <line x1={x(t)} x2={x(t)} y1={0} y2={PLOT_H} stroke="#e2e8f0" strokeWidth={0.5} />
-            <text x={x(t) + 2} y={PLOT_H - 2} fontSize={8} fill="#94a3b8">{fmtTick(t)}</text>
+            <text x={x(t) + 2} y={PLOT_H - 2} fontSize={8} fill="#94a3b8">
+              {fmtTick(t)}
+            </text>
           </g>
         ))}
         {/* emotion polylines */}
         {showEmotions &&
           Object.entries(emotions).map(([k, pts]) =>
-            hidden.has(`e:${k}`) ? null : <path key={k} d={path(pts)} fill="none" stroke={EMOTION_COLORS[k]} strokeWidth={0.8} opacity={0.8} />,
+            hidden.has(`e:${k}`) ? null : (
+              <path
+                key={k}
+                d={path(pts)}
+                fill="none"
+                stroke={EMOTION_COLORS[k]}
+                strokeWidth={0.8}
+                opacity={0.8}
+              />
+            ),
           )}
         {showAffect &&
           Object.entries(affect).map(([k, pts]) =>
-            hidden.has(`a:${k}`) ? null : <path key={k} d={path(pts)} fill="none" stroke={AFFECT_COLORS[k]} strokeWidth={1.4} />,
+            hidden.has(`a:${k}`) ? null : (
+              <path key={k} d={path(pts)} fill="none" stroke={AFFECT_COLORS[k]} strokeWidth={1.4} />
+            ),
           )}
         {showAus &&
           Object.entries(aus).map(([k, pts]) =>
-            hidden.has(`u:${k}`) ? null : <path key={k} d={path(normalizeAu(pts))} fill="none" stroke="#0891b2" strokeWidth={0.6} opacity={0.6} />,
+            hidden.has(`u:${k}`) ? null : (
+              <path
+                key={k}
+                d={path(normalizeAu(pts))}
+                fill="none"
+                stroke="#0891b2"
+                strokeWidth={0.6}
+                opacity={0.6}
+              />
+            ),
           )}
         {/* event lanes */}
         {lane(events.clicks, LANE_TOP, '#f59e0b')}
@@ -152,7 +237,21 @@ export function SignalTimeline(props: {
         <line x1={x(offsetMs)} x2={x(offsetMs)} y1={0} y2={H} stroke="#0f172a" strokeWidth={1} />
       </svg>
       <div className="flex gap-4 text-[10px] text-slate-400">
-        <span>🟠 clicks</span><span>🔵 chat</span><span>🟣 interventions</span><span>🔴 EF</span><span>🟢 probes</span>
+        <span className="flex items-center gap-1">
+          <Circle size={10} className="fill-current text-orange-500" /> clicks
+        </span>
+        <span className="flex items-center gap-1">
+          <Circle size={10} className="fill-current text-blue-500" /> chat
+        </span>
+        <span className="flex items-center gap-1">
+          <Circle size={10} className="fill-current text-purple-500" /> interventions
+        </span>
+        <span className="flex items-center gap-1">
+          <Circle size={10} className="fill-current text-red-500" /> EF
+        </span>
+        <span className="flex items-center gap-1">
+          <Circle size={10} className="fill-current text-green-500" /> probes
+        </span>
       </div>
     </div>
   );
@@ -172,7 +271,17 @@ function Group({ label, on, set }: { label: string; on: boolean; set: (v: boolea
   );
 }
 
-function Chip({ label, color, off, onClick }: { label: string; color: string; off: boolean; onClick: () => void }) {
+function Chip({
+  label,
+  color,
+  off,
+  onClick,
+}: {
+  label: string;
+  color: string;
+  off: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
