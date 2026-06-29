@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bot, Check, Pencil, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Bot, Check, Download, Pencil, TriangleAlert, X } from 'lucide-react';
 import { api } from '../lib/api';
 
 /** PR1 of the Research Analysis Studio: pick a cohort, see per-session summary
@@ -91,6 +91,20 @@ export function CohortAnalysis() {
       return n;
     });
 
+  const exportCsv = () => {
+    if (sessions.length === 0) return;
+    const csv = buildCohortCsv(sessions, (s) => affectOv[s.sessionId] ?? s.affect);
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cohort-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
@@ -99,9 +113,19 @@ export function CohortAnalysis() {
         </Link>
         <span className="font-semibold">Research Analysis Studio</span>
         <span className="text-slate-400">· cohort summary</span>
-        <span className="ml-auto text-xs text-slate-400">
-          interventions · practice-testing · EF · activity inference
-        </span>
+        <div className="ml-auto flex items-center gap-3">
+          <span className="hidden text-xs text-slate-400 lg:inline">
+            interventions · practice-testing · EF · activity inference
+          </span>
+          <button
+            onClick={exportCsv}
+            disabled={sessions.length === 0}
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40"
+            title="Export every selected session as one CSV (items × sessions)"
+          >
+            <Download size={13} /> Export CSV
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-[240px_1fr] gap-3">
@@ -709,6 +733,131 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
+}
+
+// ── one-file CSV export (PR5+): items down the rows, one column per session ──
+const csvEsc = (v: unknown): string => {
+  const s = v == null ? '' : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const pct1 = (v: number | null | undefined): string => (v == null ? '' : (v * 100).toFixed(1));
+const IV_TYPES = [
+  'PRACTICE_TESTING',
+  'DISTRIBUTED_PRACTICE',
+  'STEPWISE_LEARNING',
+  'INTERROGATIVE_ELABORATION',
+];
+const ACTIVITY_BUCKETS = [
+  'reading_lesson',
+  'chatbot',
+  'intervention',
+  'navigating',
+  'idle',
+  'off_task',
+];
+const HEALTH_KEYS = ['snapshots', 'gaze', 'au', 'emotion', 'webcam', 'chatbot', 'dialogue'];
+
+function sessionColHeader(s: any): string {
+  const who = s.userDisplayName ?? s.userId?.slice(0, 8) ?? 'session';
+  const when = s.startedAt ? new Date(s.startedAt).toLocaleString() : '';
+  return when ? `${who} · ${when}` : who;
+}
+
+/** Build the cohort report as a transposed CSV: row 1 = sessions, col 1 = item. */
+function buildCohortCsv(sessions: any[], affectFor: (s: any) => any): string {
+  type Row = { label: string; get: (s: any, aff: any) => unknown };
+  const rows: Row[] = [];
+  const add = (label: string, get: (s: any, aff: any) => unknown) => rows.push({ label, get });
+
+  // identity
+  add('User', (s) => s.userDisplayName ?? s.userId?.slice(0, 8));
+  add('Session ID', (s) => s.sessionId);
+  add('Course', (s) => s.courseTitle ?? '');
+  add('Started', (s) => (s.startedAt ? new Date(s.startedAt).toLocaleString() : ''));
+  add('Ended', (s) => (s.endedAt ? new Date(s.endedAt).toLocaleString() : ''));
+  add('Duration (s)', (s) => s.durationSecs);
+
+  // interventions (1a)
+  add('Interventions — system total', (s) => s.interventions.system.total);
+  for (const t of IV_TYPES) add(`  system: ${t}`, (s) => s.interventions.system.byType?.[t] ?? 0);
+  add('Interventions — coder total', (s) => s.interventions.coder.total);
+  for (const t of [...IV_TYPES, 'uncoded'])
+    add(`  coder: ${t}`, (s) => s.interventions.coder.byType?.[t] ?? 0);
+  add('Interventions — disagreement |sys−coder|', (s) => s.interventions.disagreement);
+
+  // activity (1b)
+  for (const k of ACTIVITY_BUCKETS)
+    add(`Activity % — ${k}`, (s) => pct1(s.activity?.pctByActivity?.[k]));
+  add('Reading-but-gaze-elsewhere %', (s) => pct1(s.activity?.pctReadingButGazeElsewhere));
+  add('Allocation score', (s) =>
+    s.activity?.allocationScore != null ? s.activity.allocationScore.toFixed(3) : '',
+  );
+
+  // affect per method (1d)
+  for (const m of ALL_METHODS) {
+    for (const st of AFFECT_STATES)
+      add(`Affect[${m}] % — ${st}`, (_s, aff) => pct1(aff?.[m]?.pctByState?.[st]));
+    add(`Affect[${m}] — transitions`, (_s, aff) => aff?.[m]?.transitions?.length ?? '');
+    add(
+      `Affect[${m}] — unresolved confusion`,
+      (_s, aff) => aff?.[m]?.unresolvedConfusionEpisodes ?? '',
+    );
+  }
+  add('Affect frames — AU', (s) => s.affectFrames?.au ?? '');
+  add('Affect frames — emotion', (s) => s.affectFrames?.emotion ?? '');
+  add('Affect frames — pupil', (s) => s.affectFrames?.pupil ?? '');
+
+  // practice testing (1c)
+  add('Practice tests — count', (s) => s.practiceTesting?.length ?? 0);
+  add('Practice tests — avg score', (s) => {
+    const arr = (s.practiceTesting ?? [])
+      .map((p: any) => p.score)
+      .filter((x: any) => typeof x === 'number');
+    return arr.length
+      ? (arr.reduce((a: number, b: number) => a + b, 0) / arr.length).toFixed(1)
+      : '';
+  });
+  add('Practice tests — MCQ correct/total', (s) => {
+    const pt = s.practiceTesting ?? [];
+    const c = pt.reduce((a: number, p: any) => a + (p.mcqCorrect || 0), 0);
+    const t = pt.reduce((a: number, p: any) => a + (p.mcqTotal || 0), 0);
+    return t ? `${c}/${t}` : '';
+  });
+  add('Practice tests — short correct/total', (s) => {
+    const pt = s.practiceTesting ?? [];
+    const c = pt.reduce((a: number, p: any) => a + (p.shortAnswerCorrect || 0), 0);
+    const t = pt.reduce((a: number, p: any) => a + (p.shortAnswerTotal || 0), 0);
+    return t ? `${c}/${t}` : '';
+  });
+
+  // EF (1e)
+  add('EF detections — count', (s) => s.efDetections?.length ?? 0);
+
+  // coder coding + flow-back (1f / Part A)
+  add('Coder marks — count', (s) => s.coderCoding?.length ?? 0);
+  const ov = (dim: string) => (s: any) => s.coderOverrides?.[dim];
+  add('Coder vs model — activity agree/override', (s) => {
+    const o = ov('activity')(s);
+    return o && o.withGuess ? `${o.agree}/${o.override}` : '';
+  });
+  add('Coder vs model — activity agreement %', (s) => pct1(ov('activity')(s)?.agreementPct));
+  add('Coder vs model — affect agree/override', (s) => {
+    const o = ov('affect')(s);
+    return o && o.withGuess ? `${o.agree}/${o.override}` : '';
+  });
+  add('Coder vs model — affect agreement %', (s) => pct1(ov('affect')(s)?.agreementPct));
+
+  // data diagnostics
+  for (const k of HEALTH_KEYS) add(`Data — ${k}`, (s) => s.dataHealth?.counts?.[k] ?? '');
+  add('Data — flags', (s) => (s.dataHealth?.flags ?? []).join(' | '));
+
+  const header = ['item', ...sessions.map(sessionColHeader)];
+  const lines = [header.map(csvEsc).join(',')];
+  for (const r of rows) {
+    const cells = [r.label, ...sessions.map((s) => r.get(s, affectFor(s)))];
+    lines.push(cells.map(csvEsc).join(','));
+  }
+  return lines.join('\r\n');
 }
 
 function topCounts(items: string[]): [string, number][] {
