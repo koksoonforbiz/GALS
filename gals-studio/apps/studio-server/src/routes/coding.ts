@@ -255,15 +255,29 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
       const { coderId } = req.query;
       const session = await prisma.session.findUnique({ where: { id: sessionId } });
       if (!session) return reply.code(404).send({ error: 'session not found' });
-      const [interventions, visibilities, marks, lastActivity, messages] = await Promise.all([
-        prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-        prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-        prisma.annotation.findMany({
-          where: { sessionId, codingPass: 'timeline', ...(coderId ? { coderId } : {}) },
-        }),
-        prisma.activityEvent.findFirst({ where: { sessionId }, orderBy: { wallMs: 'desc' } }),
-        prisma.chatbotMessage.count({ where: { sessionId } }),
-      ]);
+      const [interventions, visibilities, marks, efMarks, lastActivity, messages] =
+        await Promise.all([
+          prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+          prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+          prisma.annotation.findMany({
+            where: {
+              sessionId,
+              codingPass: 'timeline',
+              dimension: 'affect',
+              ...(coderId ? { coderId } : {}),
+            },
+          }),
+          prisma.annotation.findMany({
+            where: {
+              sessionId,
+              codingPass: 'timeline',
+              dimension: 'ef_event',
+              ...(coderId ? { coderId } : {}),
+            },
+          }),
+          prisma.activityEvent.findFirst({ where: { sessionId }, orderBy: { wallMs: 'desc' } }),
+          prisma.chatbotMessage.count({ where: { sessionId } }),
+        ]);
 
       const base = session.baseWallClockMs;
       const ivs = interventions.map((iv) => {
@@ -305,6 +319,29 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
           : null,
       }));
 
+      // coder EF coding (text-mining detections validated/recoded by the coder)
+      const efByConstruct: Record<string, number> = {};
+      let efAgree = 0;
+      let efWithGuess = 0;
+      for (const e of efMarks) {
+        efByConstruct[e.code] = (efByConstruct[e.code] ?? 0) + 1;
+        if (e.machineGuess != null) {
+          efWithGuess += 1;
+          if (e.machineGuess === e.code) efAgree += 1;
+        }
+      }
+      const efCoding = {
+        count: efMarks.length,
+        byConstruct: Object.entries(efByConstruct)
+          .map(([construct, count]) => ({ construct, count }))
+          .sort((a, b) => b.count - a.count),
+        agreement: {
+          withGuess: efWithGuess,
+          agree: efAgree,
+          pct: efWithGuess ? efAgree / efWithGuess : null,
+        },
+      };
+
       const signals: string[] = [];
       if (!session.endedAt) signals.push('session has no end timestamp');
       if (incomplete > 0) signals.push(`${incomplete} intervention(s) not completed`);
@@ -325,11 +362,99 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         },
         interventions: { items: ivs, total: ivs.length, completed, incomplete, avgScore },
         coding: { marks: marks.length, byAffect: coding },
+        efCoding,
         engagement: { chatbotMessages: messages },
         abandoned: { likely: signals.length > 0, signals },
       };
     },
   );
+
+  // ── Coder EF coding (validate/recode the text-mining EF detections) ────────
+  // Stored as point Annotations (dimension='ef_event', codingPass='timeline'),
+  // keyed by atWallMs so each detection has at most one coding per coder.
+  app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(
+    '/api/coding/:sessionId/ef-codings',
+    async (req) => {
+      const { sessionId } = req.params;
+      const { coderId } = req.query;
+      const rows = await prisma.annotation.findMany({
+        where: {
+          sessionId,
+          codingPass: 'timeline',
+          dimension: 'ef_event',
+          ...(coderId ? { coderId } : {}),
+        },
+        orderBy: { atWallMs: 'asc' },
+      });
+      return {
+        codings: rows.map((a) => ({
+          id: a.id,
+          coderId: a.coderId,
+          atWallMs: a.atWallMs,
+          code: a.code,
+          confidence: a.confidence,
+          notes: a.notes,
+          machineGuess: a.machineGuess,
+        })),
+      };
+    },
+  );
+
+  app.post<{
+    Params: { sessionId: string };
+    Body: {
+      coderId: string;
+      atWallMs: number;
+      code: string;
+      confidence?: string | null;
+      notes?: string | null;
+      machineGuess?: string | null;
+    };
+  }>('/api/coding/:sessionId/ef-codings', async (req, reply) => {
+    const { sessionId } = req.params;
+    const b = req.body;
+    if (!b.coderId || typeof b.atWallMs !== 'number' || !b.code) {
+      return reply.code(400).send({ error: 'coderId, atWallMs, code required' });
+    }
+    // identity of a detection is (timestamp, machine construct): multiple
+    // constructs can fire at the same wallMs, and each is coded independently.
+    const existing = await prisma.annotation.findFirst({
+      where: {
+        sessionId,
+        coderId: b.coderId,
+        codingPass: 'timeline',
+        dimension: 'ef_event',
+        atWallMs: b.atWallMs,
+        machineGuess: b.machineGuess ?? null,
+      },
+    });
+    if (existing) {
+      return prisma.annotation.update({
+        where: { id: existing.id },
+        data: {
+          code: b.code,
+          confidence: b.confidence ?? null,
+          notes: b.notes ?? null,
+          machineGuess: b.machineGuess ?? existing.machineGuess,
+        },
+      });
+    }
+    const codebookVersionId = await ensureDefaultCodebook();
+    return prisma.annotation.create({
+      data: {
+        sessionId,
+        coderId: b.coderId,
+        codingPass: 'timeline',
+        dimension: 'ef_event',
+        codebookVersionId,
+        code: b.code,
+        atWallMs: b.atWallMs,
+        confidence: b.confidence ?? null,
+        notes: b.notes ?? null,
+        machineGuess: b.machineGuess ?? null,
+      },
+    });
+  });
 
   // ── Per-utterance coding (chat / dialogue / intervention) ─────────────────
   app.get<{ Params: { sessionId: string }; Querystring: { coderId?: string } }>(

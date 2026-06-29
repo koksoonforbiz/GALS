@@ -107,6 +107,10 @@ export const api = {
         `&personBaseline=${opts.personBaseline}`,
     ),
   analysisGuesses: (id: string) => jget<any>(`/api/analysis/${id}/guesses`),
+  efCodings: (id: string, coderId: string) =>
+    jget<any>(`/api/coding/${id}/ef-codings?coderId=${coderId}`),
+  upsertEfCoding: (id: string, body: unknown) =>
+    jsend<any>(`/api/coding/${id}/ef-codings`, 'POST', body),
   utteranceCodings: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/utterances?coderId=${coderId}`),
   upsertUtteranceCoding: (id: string, body: unknown) =>

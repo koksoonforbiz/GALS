@@ -205,6 +205,13 @@ export function TimelineCoding() {
   const [aoiDraw, setAoiDraw] = useState(false);
   const [utterCodings, setUtterCodings] = useState<Record<string, any>>({});
   const [codingUtter, setCodingUtter] = useState<UtterRef | null>(null);
+  const [efCodings, setEfCodings] = useState<any[]>([]);
+  const [codingEf, setCodingEf] = useState<{
+    wallMs: number;
+    construct: string;
+    label: string;
+    severity?: string;
+  } | null>(null);
 
   const storeRef = useRef<PlayheadStore | null>(null);
   if (!storeRef.current)
@@ -348,6 +355,53 @@ export function TimelineCoding() {
     },
     [store, meta],
   );
+
+  // ── coder EF coding (validate/recode the text-mining EF detections) ────────
+  const refreshEfCodings = useCallback(async () => {
+    if (!coderId) {
+      setEfCodings([]);
+      return;
+    }
+    const r = await api.efCodings(sessionId, coderId);
+    setEfCodings(r.codings ?? []);
+  }, [sessionId, coderId]);
+  useEffect(() => {
+    void refreshEfCodings();
+  }, [refreshEfCodings]);
+  // keyed by (timestamp :: machine construct) — many constructs can share a wallMs
+  const efCodingByKey = useMemo(() => {
+    const m: Record<string, any> = {};
+    for (const c of efCodings) m[`${c.atWallMs}::${c.machineGuess ?? ''}`] = c;
+    return m;
+  }, [efCodings]);
+
+  const openEf = useCallback(
+    (d: { wallMs: number; construct: string; label: string; severity?: string }) => {
+      setCodingEf(d);
+      store.seek(d.wallMs - (meta?.baseWallClockMs ?? 0));
+    },
+    [store, meta],
+  );
+  const saveEfCoding = useCallback(
+    async (patch: { code: string; confidence?: string | null; notes?: string | null }) => {
+      if (!codingEf || !coderId) return;
+      await api.upsertEfCoding(sessionId, {
+        coderId,
+        atWallMs: codingEf.wallMs,
+        machineGuess: codingEf.construct,
+        ...patch,
+      });
+      await refreshEfCodings();
+    },
+    [codingEf, coderId, sessionId, refreshEfCodings],
+  );
+  const clearEfCoding = useCallback(async () => {
+    if (!codingEf) return;
+    const c = efCodingByKey[`${codingEf.wallMs}::${codingEf.construct}`];
+    if (c?.id) await api.deleteAnnotation(c.id);
+    setCodingEf(null);
+    await refreshEfCodings();
+  }, [codingEf, efCodingByKey, refreshEfCodings]);
 
   // measure the visible track area (scroll viewport minus the label column)
   useEffect(() => {
@@ -790,6 +844,17 @@ export function TimelineCoding() {
               onSave={saveUtterCoding}
               onClear={clearUtterCoding}
               onClose={() => setCodingUtter(null)}
+            />
+          )}
+          {codingEf && (
+            <EfCodingPanel
+              det={codingEf}
+              base={base}
+              coderSelected={!!coderId}
+              existing={efCodingByKey[`${codingEf.wallMs}::${codingEf.construct}`]}
+              onSave={saveEfCoding}
+              onClear={clearEfCoding}
+              onClose={() => setCodingEf(null)}
             />
           )}
           {review ? (
@@ -1316,6 +1381,9 @@ export function TimelineCoding() {
                         row={row}
                         streams={streams}
                         ef={sparse?.efDetections ?? []}
+                        efCodings={efCodingByKey}
+                        activeEfKey={codingEf ? `${codingEf.wallMs}::${codingEf.construct}` : null}
+                        onPickEf={openEf}
                         base={base}
                         offToX={offToX}
                         fullW={fullW}
@@ -1454,6 +1522,37 @@ function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void 
               )}
             </div>
 
+            <div>
+              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Text-mining (EF) coding — {summary.efCoding?.count ?? 0} coded
+                {summary.efCoding?.agreement?.withGuess > 0 && (
+                  <span className="ml-1 normal-case text-slate-400">
+                    · {summary.efCoding.agreement.agree}/{summary.efCoding.agreement.withGuess}{' '}
+                    agree with model
+                    {summary.efCoding.agreement.pct != null
+                      ? ` (${Math.round(summary.efCoding.agreement.pct * 100)}%)`
+                      : ''}
+                  </span>
+                )}
+              </div>
+              {!summary.efCoding || summary.efCoding.count === 0 ? (
+                <div className="text-xs text-slate-400">
+                  No EF detections coded yet — open the Text-mining (EF) row and click a detection.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {summary.efCoding.byConstruct.map((c: any) => (
+                    <span
+                      key={c.construct}
+                      className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700"
+                    >
+                      {c.construct} {c.count}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="text-xs text-slate-400">
               Chatbot messages: {summary.engagement?.chatbotMessages ?? 0}
             </div>
@@ -1583,6 +1682,9 @@ function DataTrack({
   row,
   streams,
   ef,
+  efCodings,
+  activeEfKey,
+  onPickEf,
   base,
   offToX,
   fullW,
@@ -1590,6 +1692,9 @@ function DataTrack({
   row: DataRow;
   streams: Streams | null;
   ef: any[];
+  efCodings?: Record<string, { code: string; machineGuess?: string | null }>;
+  activeEfKey?: string | null;
+  onPickEf?: (d: { wallMs: number; construct: string; label: string; severity?: string }) => void;
   base: number;
   offToX: (o: number) => number;
   fullW: number;
@@ -1598,14 +1703,42 @@ function DataTrack({
     const inj = ef as { wallMs: number; construct: string; label: string; severity?: string }[];
     return (
       <>
-        {inj.map((d, i) => (
-          <div
-            key={i}
-            className="absolute top-2 h-3 w-2 -translate-x-1/2 rounded-sm"
-            style={{ left: offToX(d.wallMs - base), background: sevColor(d.severity) }}
-            title={`${d.construct} — ${d.label}${d.severity ? ` (${d.severity})` : ''}`}
-          />
-        ))}
+        {inj.map((d, i) => {
+          const dkey = `${d.wallMs}::${d.construct}`;
+          const coded = efCodings?.[dkey];
+          const active = activeEfKey === dkey;
+          // outline shows whether the coder confirmed (green) or recoded (amber)
+          const ring = coded
+            ? coded.code === (coded.machineGuess ?? d.construct)
+              ? '#059669'
+              : '#d97706'
+            : null;
+          return (
+            <div
+              key={i}
+              onClick={
+                onPickEf
+                  ? (e) => {
+                      e.stopPropagation();
+                      onPickEf(d);
+                    }
+                  : undefined
+              }
+              className={`absolute top-1.5 h-4 w-2.5 -translate-x-1/2 rounded-sm ${onPickEf ? 'cursor-pointer' : ''}`}
+              style={{
+                left: offToX(d.wallMs - base),
+                background: sevColor(d.severity),
+                outline: active ? '2px solid #0f172a' : ring ? `2px solid ${ring}` : undefined,
+                outlineOffset: ring || active ? '1px' : undefined,
+              }}
+              title={
+                `${d.construct} — ${d.label}${d.severity ? ` (${d.severity})` : ''}` +
+                (coded ? `\n[coded: ${coded.code}]` : '') +
+                (onPickEf ? '\nclick to code' : '')
+              }
+            />
+          );
+        })}
       </>
     );
   }
@@ -1977,6 +2110,143 @@ function AoiLayer({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** Code a text-mining EF detection: confirm/recode its construct + confidence + notes. */
+function EfCodingPanel({
+  det,
+  base,
+  coderSelected,
+  existing,
+  onSave,
+  onClear,
+  onClose,
+}: {
+  det: { wallMs: number; construct: string; label: string; severity?: string };
+  base: number;
+  coderSelected: boolean;
+  existing?: { code?: string | null; confidence?: string | null; notes?: string | null };
+  onSave: (patch: {
+    code: string;
+    confidence?: string | null;
+    notes?: string | null;
+  }) => Promise<void>;
+  onClear: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const [code, setCode] = useState(existing?.code ?? det.construct);
+  const [confidence, setConfidence] = useState(existing?.confidence ?? 'medium');
+  const [notes, setNotes] = useState(existing?.notes ?? '');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setCode(existing?.code ?? det.construct);
+    setConfidence(existing?.confidence ?? 'medium');
+    setNotes(existing?.notes ?? '');
+    setSaved(false);
+  }, [det.wallMs]);
+  // EF construct choices = the standard set plus the machine's value if novel
+  const choices = EF_CONSTRUCTS.includes(det.construct)
+    ? EF_CONSTRUCTS
+    : [det.construct, ...EF_CONSTRUCTS];
+  return (
+    <div className="rounded border-2 border-indigo-400 bg-white p-2 text-xs">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-semibold text-indigo-700">
+          Code EF detection · {fmtRel(det.wallMs - base)}
+        </span>
+        <button
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-700"
+          aria-label="close"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="mb-2 rounded bg-slate-50 p-1 text-slate-600">
+        <b>model:</b> {det.construct} — {det.label}
+        {det.severity ? ` (${det.severity})` : ''}
+      </div>
+      {!coderSelected && <div className="mb-1 text-amber-700">Select a coder above to save.</div>}
+      <label className="mb-1 flex items-center gap-2">
+        <span className="w-16 text-slate-500">construct</span>
+        <select
+          value={code}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setSaved(false);
+          }}
+          className="flex-1 rounded border border-slate-300 px-1 py-0.5"
+        >
+          {choices.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mb-1 flex items-center gap-2">
+        <span className="w-16 text-slate-500">confidence</span>
+        <select
+          value={confidence}
+          onChange={(e) => {
+            setConfidence(e.target.value);
+            setSaved(false);
+          }}
+          className="rounded border border-slate-300 px-1 py-0.5"
+        >
+          {['low', 'medium', 'high'].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        {existing &&
+          (existing.code === det.construct ? (
+            <span className="inline-flex items-center gap-0.5 text-emerald-600">
+              <Check size={11} /> confirms model
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-0.5 text-amber-600">
+              <Pencil size={11} /> recoded
+            </span>
+          ))}
+      </label>
+      <textarea
+        value={notes}
+        onChange={(e) => {
+          setNotes(e.target.value);
+          setSaved(false);
+        }}
+        placeholder="notes…"
+        rows={2}
+        className="mb-1 w-full rounded border border-slate-300 p-1"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={async () => {
+            await onSave({ code, confidence, notes: notes || null });
+            setSaved(true);
+          }}
+          disabled={!coderSelected}
+          className="rounded bg-slate-900 px-2 py-0.5 text-white disabled:opacity-50"
+        >
+          {saved ? (
+            <span className="inline-flex items-center gap-1">
+              saved <Check size={12} />
+            </span>
+          ) : (
+            'save'
+          )}
+        </button>
+        {existing && (
+          <button
+            onClick={() => void onClear()}
+            className="ml-auto rounded border border-rose-300 px-2 py-0.5 text-rose-600"
+          >
+            clear
+          </button>
+        )}
+      </div>
     </div>
   );
 }
