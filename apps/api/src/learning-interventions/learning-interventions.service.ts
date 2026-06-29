@@ -2693,8 +2693,15 @@ export class LearningInterventionsService {
         triggeredByUserId: userId,
       });
       answer = result.content;
-    } catch {
-      throw new BadRequestException('Failed to generate answer. Please try again.');
+    } catch (err) {
+      // Live-study diagnostics: surface the actual provider error so
+      // operators can tell whether it's a timeout, rate limit, decrypt
+      // failure, or schema rejection. Without this the bare `catch {}`
+      // silently dropped the underlying cause.
+      this.logger.error(`Elab askQuestion failed: ${(err as Error).message}`, (err as Error).stack);
+      throw new BadRequestException(
+        `Failed to generate answer: ${(err as Error).message?.slice(0, 200) ?? 'unknown error'}. Please try again.`,
+      );
     }
 
     // Bug 4 (2026-06-12): persist the per-turn slide / selection on the
@@ -4108,12 +4115,7 @@ export class LearningInterventionsService {
             // a non-empty return is NOT a guarantee that the slice was
             // actually applied. Verify with hasChunksInPageRange before
             // claiming page coverage in the citation label.
-            const hasAny = await this.hasChunksInPageRange(
-              dto.courseId,
-              dto.contentId,
-              lo,
-              hi,
-            );
+            const hasAny = await this.hasChunksInPageRange(dto.courseId, dto.contentId, lo, hi);
             if (hasAny) {
               const sliced = await this.tryResolveFromModuleItemPaged(
                 dto.courseId,
