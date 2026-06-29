@@ -107,6 +107,8 @@ export const api = {
         `&personBaseline=${opts.personBaseline}`,
     ),
   analysisGuesses: (id: string) => jget<any>(`/api/analysis/${id}/guesses`),
+  analysisExportZipUrl: (userIds: string[]) =>
+    `/api/analysis/export.zip?userIds=${encodeURIComponent(userIds.join(','))}`,
   efCodings: (id: string, coderId: string) =>
     jget<any>(`/api/coding/${id}/ef-codings?coderId=${coderId}`),
   upsertEfCoding: (id: string, body: unknown) =>

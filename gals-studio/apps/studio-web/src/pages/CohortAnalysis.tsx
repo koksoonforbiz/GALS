@@ -91,6 +91,15 @@ export function CohortAnalysis() {
       return n;
     });
 
+  const exportZip = () => {
+    if (selected.size === 0) return;
+    const a = document.createElement('a');
+    a.href = api.analysisExportZipUrl([...selected]);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   const exportCsv = () => {
     if (sessions.length === 0) return;
     const csv = buildCohortCsv(sessions, (s) => affectOv[s.sessionId] ?? s.affect);
@@ -123,7 +132,15 @@ export function CohortAnalysis() {
             className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40"
             title="Export every selected session as one CSV (items × sessions)"
           >
-            <Download size={13} /> Export CSV
+            <Download size={13} /> Report CSV
+          </button>
+          <button
+            onClick={exportZip}
+            disabled={selected.size === 0}
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-40"
+            title="Export chat utterances + LLM text-mining (EF) results + a summary, as CSVs in a zip"
+          >
+            <Download size={13} /> Chat + EF (zip)
           </button>
         </div>
       </div>

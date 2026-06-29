@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import AdmZip from 'adm-zip';
 import { prisma } from '../prisma.js';
 import { classifyActivity } from '../analysis/activityInference.js';
 import {
@@ -349,6 +350,171 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         activitySegments,
         affectSegments,
       };
+    },
+  );
+
+  // One-click research export: chat utterances + the LLM (text-mining) EF results
+  // + a per-session summary, each as its own CSV inside a single zip ("tabs").
+  app.get<{ Querystring: { userIds?: string; sessionIds?: string } }>(
+    '/api/analysis/export.zip',
+    async (req, reply) => {
+      let sessionIds = (req.query.sessionIds ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const userIds = (req.query.userIds ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (sessionIds.length === 0 && userIds.length === 0)
+        return reply.code(400).send({ error: 'userIds or sessionIds required' });
+
+      const sessions = await prisma.session.findMany({
+        where: sessionIds.length ? { id: { in: sessionIds } } : { userId: { in: userIds } },
+        orderBy: [{ userId: 'asc' }, { startedAt: 'asc' }],
+      });
+      sessionIds = sessions.map((s) => s.id);
+      const meta = new Map(
+        sessions.map((s) => [
+          s.id,
+          {
+            base: s.baseWallClockMs,
+            user: s.userDisplayName ?? s.userId.slice(0, 8),
+            course: s.courseTitle ?? '',
+            started: s.startedAt.toISOString(),
+            durationSecs: Math.round(s.durationMs / 1000),
+          },
+        ]),
+      );
+
+      const [chat, dialogue, efs] = await Promise.all([
+        prisma.chatbotMessage.findMany({
+          where: { sessionId: { in: sessionIds } },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        }),
+        prisma.dialogueMessage.findMany({
+          where: { sessionId: { in: sessionIds } },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        }),
+        prisma.efDetection.findMany({
+          where: { sessionId: { in: sessionIds } },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        }),
+      ]);
+
+      const esc = (v: unknown) => {
+        const s = v == null ? '' : String(v);
+        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const toCsv = (header: string[], rows: unknown[][]) =>
+        '﻿' + [header, ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
+      const relSec = (sid: string, wallMs: number) =>
+        Math.round((wallMs - (meta.get(sid)?.base ?? 0)) / 1000);
+      const user = (sid: string) => meta.get(sid)?.user ?? '';
+
+      // chat-utterances.csv (chatbot + dialogue, distinguished by source)
+      const chatRows = [
+        ...chat.map((m) => [
+          user(m.sessionId),
+          m.sessionId,
+          'chat',
+          relSec(m.sessionId, m.wallMs),
+          m.role,
+          m.content,
+          m.model ?? '',
+          m.selectedText ?? '',
+        ]),
+        ...dialogue.map((m) => [
+          user(m.sessionId),
+          m.sessionId,
+          'dialogue',
+          relSec(m.sessionId, m.wallMs),
+          m.role,
+          m.content,
+          '',
+          '',
+        ]),
+      ].sort((a, b) => String(a[1]).localeCompare(String(b[1])) || Number(a[3]) - Number(b[3]));
+      const chatCsv = toCsv(
+        ['user', 'sessionId', 'source', 'relSec', 'role', 'content', 'model', 'selectedText'],
+        chatRows,
+      );
+
+      // ef-text-mining.csv (raw LLM EF detections)
+      const efCsv = toCsv(
+        [
+          'user',
+          'sessionId',
+          'relSec',
+          'construct',
+          'label',
+          'confidence',
+          'severity',
+          'rationale',
+          'model',
+          'sourceRef',
+        ],
+        efs.map((d) => [
+          user(d.sessionId),
+          d.sessionId,
+          relSec(d.sessionId, d.wallMs),
+          d.construct,
+          d.label,
+          d.confidence ?? '',
+          d.severity ?? '',
+          d.rationale ?? '',
+          d.model ?? '',
+          d.sourceRef ?? '',
+        ]),
+      );
+
+      // summary.csv (one row per session)
+      const countBy = <T extends { sessionId: string }>(arr: T[]) => {
+        const m: Record<string, number> = {};
+        for (const t of arr) m[t.sessionId] = (m[t.sessionId] ?? 0) + 1;
+        return m;
+      };
+      const chatN = countBy(chat);
+      const dialN = countBy(dialogue);
+      const efN = countBy(efs);
+      const efConstructs = new Map<string, Set<string>>();
+      for (const d of efs) {
+        if (!efConstructs.has(d.sessionId)) efConstructs.set(d.sessionId, new Set());
+        efConstructs.get(d.sessionId)!.add(d.construct);
+      }
+      const summaryCsv = toCsv(
+        [
+          'user',
+          'sessionId',
+          'course',
+          'started',
+          'durationSec',
+          'chatMessages',
+          'dialogueMessages',
+          'efDetections',
+          'efConstructs',
+        ],
+        sessions.map((s) => [
+          meta.get(s.id)?.user,
+          s.id,
+          meta.get(s.id)?.course,
+          meta.get(s.id)?.started,
+          meta.get(s.id)?.durationSecs,
+          chatN[s.id] ?? 0,
+          dialN[s.id] ?? 0,
+          efN[s.id] ?? 0,
+          [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
+        ]),
+      );
+
+      const zip = new AdmZip();
+      zip.addFile('chat-utterances.csv', Buffer.from(chatCsv, 'utf8'));
+      zip.addFile('ef-text-mining.csv', Buffer.from(efCsv, 'utf8'));
+      zip.addFile('summary.csv', Buffer.from(summaryCsv, 'utf8'));
+      return reply
+        .header('Content-Type', 'application/zip')
+        .header('Content-Disposition', 'attachment; filename="cohort-export.zip"')
+        .send(zip.toBuffer());
     },
   );
 }
