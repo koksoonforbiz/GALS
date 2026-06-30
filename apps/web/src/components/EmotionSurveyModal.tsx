@@ -15,6 +15,7 @@ interface Props {
 }
 
 export function EmotionSurveyModal({ onAnswer }: Props) {
+  const [selected, setSelected] = useState<EmotionOption | null>(null);
   const [shaking, setShaking] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
 
@@ -37,9 +38,6 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-500 mb-1">
-            Quick Check-in
-          </p>
           <h2 className="text-lg font-bold text-gray-800">How are you feeling right now?</h2>
         </div>
 
@@ -47,13 +45,29 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
           {OPTIONS.map((opt) => (
             <button
               key={opt.value}
-              onClick={() => onAnswer(opt.value)}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 transition-all text-left group"
+              onClick={() => setSelected(opt.value)}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left group ${
+                selected === opt.value
+                  ? 'border-indigo-500 bg-indigo-50'
+                  : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'
+              }`}
             >
-              <span className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 group-hover:bg-indigo-100 text-xs font-bold text-gray-500 group-hover:text-indigo-600 shrink-0">
+              <span
+                className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                  selected === opt.value
+                    ? 'bg-indigo-500 text-white'
+                    : 'bg-gray-100 text-gray-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'
+                }`}
+              >
                 {opt.letter}
               </span>
-              <span className="text-sm font-medium text-gray-700 group-hover:text-indigo-700">
+              <span
+                className={`text-sm font-medium ${
+                  selected === opt.value
+                    ? 'text-indigo-700'
+                    : 'text-gray-700 group-hover:text-indigo-700'
+                }`}
+              >
                 {opt.label}
               </span>
             </button>
@@ -65,6 +79,14 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
             Please select how you are feeling to continue.
           </p>
         )}
+
+        <button
+          onClick={() => selected && onAnswer(selected)}
+          disabled={!selected}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-indigo-600 hover:bg-indigo-700 text-white"
+        >
+          Confirm
+        </button>
       </div>
 
       <style>{`
