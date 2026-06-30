@@ -416,7 +416,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         ]),
       );
 
-      const [chatAll, dialogueAll, efsAll, trims] = await Promise.all([
+      const [chatAll, dialogueAll, efsAll, interventionsAll, trims] = await Promise.all([
         prisma.chatbotMessage.findMany({
           where: { sessionId: { in: sessionIds } },
           orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
@@ -429,8 +429,83 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           where: { sessionId: { in: sessionIds } },
           orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
         }),
+        prisma.intervention.findMany({
+          where: { sessionId: { in: sessionIds } },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        }),
         getTrims(sessionIds),
       ]);
+
+      // Some students never use the standalone chatbot — their conversation lives
+      // inside interrogative-elaboration interventions, and their typed reasoning
+      // inside stepwise / practice answers. Mine those out of sessionData so the
+      // export is not empty for them.
+      type ElabMsg = {
+        sessionId: string;
+        wallMs: number;
+        role: string;
+        content: string;
+        selectedText: string;
+      };
+      type IvResp = {
+        sessionId: string;
+        wallMs: number;
+        type: string;
+        kind: string;
+        prompt: string;
+        response: string;
+        isCorrect: string;
+        feedback: string;
+      };
+      const elabMsgs: ElabMsg[] = [];
+      const ivResponses: IvResp[] = [];
+      for (const iv of interventionsAll) {
+        const d = parse<any>(iv.sessionData, {});
+        const tsWall = (ts: unknown): number => {
+          const p = typeof ts === 'string' ? Date.parse(ts) : NaN;
+          return Number.isFinite(p) ? p : iv.wallMs;
+        };
+        if (iv.type === 'INTERROGATIVE_ELABORATION' && Array.isArray(d?.conversation)) {
+          for (const m of d.conversation)
+            elabMsgs.push({
+              sessionId: iv.sessionId,
+              wallMs: tsWall(m?.timestamp),
+              role: m?.role ?? '',
+              content: m?.content ?? '',
+              selectedText: m?.selectedText ?? d?.selectedText ?? '',
+            });
+        }
+        if (iv.type === 'STEPWISE_LEARNING') {
+          const qByNum = new Map<string, string>();
+          for (const s of Array.isArray(d?.steps) ? d.steps : [])
+            qByNum.set(String(s?.stepNumber), s?.comprehensionCheck?.question ?? '');
+          for (const [num, res] of Object.entries<any>(d?.stepResults ?? {}))
+            for (const ur of res?.userResponses ?? [])
+              ivResponses.push({
+                sessionId: iv.sessionId,
+                wallMs: tsWall(ur?.timestamp),
+                type: iv.type,
+                kind: 'stepwise_response',
+                prompt: qByNum.get(String(num)) ?? '',
+                response: ur?.response ?? '',
+                isCorrect: ur?.isCorrect == null ? '' : String(ur.isCorrect),
+                feedback: ur?.feedback ?? '',
+              });
+        }
+        if (iv.type === 'PRACTICE_TESTING') {
+          for (const r of Array.isArray(d?.results) ? d.results : [])
+            ivResponses.push({
+              sessionId: iv.sessionId,
+              wallMs: iv.wallMs,
+              type: iv.type,
+              kind: r?.type ?? 'practice',
+              prompt: r?.question ?? '',
+              response: r?.userAnswer ?? '',
+              isCorrect: r?.correct == null ? '' : String(r.correct),
+              feedback: r?.explanation ?? '',
+            });
+        }
+      }
 
       // keep only rows inside each session's retained window (if trimmed)
       const keepRow = (r: { sessionId: string; wallMs: number }) => {
@@ -440,6 +515,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const chat = chatAll.filter(keepRow);
       const dialogue = dialogueAll.filter(keepRow);
       const efs = efsAll.filter(keepRow);
+      const elab = elabMsgs.filter(keepRow);
+      const ivResp = ivResponses.filter(keepRow);
 
       const esc = (v: unknown) => {
         const s = v == null ? '' : String(v);
@@ -473,10 +550,52 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           '',
           '',
         ]),
+        // interrogative-elaboration conversation (chatbot dialogue stored inside
+        // the intervention, not the ChatbotMessage table)
+        ...elab.map((m) => [
+          user(m.sessionId),
+          m.sessionId,
+          'elaboration',
+          relSec(m.sessionId, m.wallMs),
+          m.role,
+          m.content,
+          '',
+          m.selectedText,
+        ]),
       ].sort((a, b) => String(a[1]).localeCompare(String(b[1])) || Number(a[3]) - Number(b[3]));
       const chatCsv = toCsv(
         ['user', 'sessionId', 'source', 'relSec', 'role', 'content', 'model', 'selectedText'],
         chatRows,
+      );
+
+      // intervention-responses.csv (the student's typed answers + AI feedback —
+      // stepwise free-text responses and practice-test answers)
+      const ivRespCsv = toCsv(
+        [
+          'user',
+          'sessionId',
+          'relSec',
+          'interventionType',
+          'kind',
+          'prompt',
+          'response',
+          'isCorrect',
+          'feedback',
+        ],
+        ivResp
+          .slice()
+          .sort((a, b) => a.sessionId.localeCompare(b.sessionId) || a.wallMs - b.wallMs)
+          .map((r) => [
+            user(r.sessionId),
+            r.sessionId,
+            relSec(r.sessionId, r.wallMs),
+            r.type,
+            r.kind,
+            r.prompt,
+            r.response,
+            r.isCorrect,
+            r.feedback,
+          ]),
       );
 
       // ef-text-mining.csv (raw LLM EF detections)
@@ -516,6 +635,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const chatN = countBy(chat);
       const dialN = countBy(dialogue);
       const efN = countBy(efs);
+      const elabN = countBy(elab);
+      const ivRespN = countBy(ivResp);
       const efConstructs = new Map<string, Set<string>>();
       for (const d of efs) {
         if (!efConstructs.has(d.sessionId)) efConstructs.set(d.sessionId, new Set());
@@ -531,6 +652,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           'trimmed',
           'chatMessages',
           'dialogueMessages',
+          'elaborationMessages',
+          'interventionResponses',
           'efDetections',
           'efConstructs',
         ],
@@ -545,6 +668,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
             isTrimmed(range) ? 'yes' : 'no',
             chatN[s.id] ?? 0,
             dialN[s.id] ?? 0,
+            elabN[s.id] ?? 0,
+            ivRespN[s.id] ?? 0,
             efN[s.id] ?? 0,
             [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
           ];
@@ -553,6 +678,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
 
       const zip = new AdmZip();
       zip.addFile('chat-utterances.csv', Buffer.from(chatCsv, 'utf8'));
+      zip.addFile('intervention-responses.csv', Buffer.from(ivRespCsv, 'utf8'));
       zip.addFile('ef-text-mining.csv', Buffer.from(efCsv, 'utf8'));
       zip.addFile('summary.csv', Buffer.from(summaryCsv, 'utf8'));
       return reply
