@@ -2,12 +2,12 @@ import { useState, useCallback } from 'react';
 
 export type EmotionOption = 'engaged' | 'bored' | 'confused' | 'frustrated' | 'neutral';
 
-const OPTIONS: { value: EmotionOption; label: string; letter: string }[] = [
-  { value: 'engaged', label: 'Engaged', letter: 'A' },
-  { value: 'bored', label: 'Bored', letter: 'B' },
-  { value: 'confused', label: 'Confused', letter: 'C' },
-  { value: 'frustrated', label: 'Frustrated', letter: 'D' },
-  { value: 'neutral', label: 'Neutral', letter: 'E' },
+const OPTIONS: { value: EmotionOption; label: string }[] = [
+  { value: 'engaged', label: 'Engaged' },
+  { value: 'bored', label: 'Bored' },
+  { value: 'confused', label: 'Confused' },
+  { value: 'frustrated', label: 'Frustrated' },
+  { value: 'neutral', label: 'Neutral' },
 ];
 
 interface Props {
@@ -46,26 +46,15 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
             <button
               key={opt.value}
               onClick={() => setSelected(opt.value)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left group ${
+              className={`flex items-center px-4 py-3 rounded-xl border-2 transition-all text-left ${
                 selected === opt.value
                   ? 'border-indigo-500 bg-indigo-50'
                   : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'
               }`}
             >
               <span
-                className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${
-                  selected === opt.value
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-gray-100 text-gray-500 group-hover:bg-indigo-100 group-hover:text-indigo-600'
-                }`}
-              >
-                {opt.letter}
-              </span>
-              <span
                 className={`text-sm font-medium ${
-                  selected === opt.value
-                    ? 'text-indigo-700'
-                    : 'text-gray-700 group-hover:text-indigo-700'
+                  selected === opt.value ? 'text-indigo-700' : 'text-gray-700'
                 }`}
               >
                 {opt.label}
