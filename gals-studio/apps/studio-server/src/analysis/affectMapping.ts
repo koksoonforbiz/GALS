@@ -276,6 +276,7 @@ export async function computeAffect(
   sessionId: string,
   opts: AffectOpts = DEFAULT_AFFECT_OPTS,
   activityWindows?: ActivityWindow[],
+  range?: { startMs: number | null; endMs: number | null },
 ): Promise<AffectResult | null> {
   const binMs = opts.binMs ?? 1000;
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
@@ -443,10 +444,16 @@ export async function computeAffect(
     wickSeqPost.push(wickensPosterior(actByWin.get(i), pupilElevated));
   }
 
-  // ── build per-method sequences ──
+  // ── build per-method sequences (clamped to the retained window, if trimmed) ──
+  const loIdx = range?.startMs != null ? Math.max(0, Math.floor(range.startMs / binMs)) : 0;
+  const hiIdx = range?.endMs != null ? Math.min(nWin, Math.ceil(range.endMs / binMs)) : nWin;
+  const clampSeq = (s: AffectState[]) => (range ? s.slice(loIdx, hiIdx) : s);
+
   const byMethod: Partial<Record<AffectMethod, AffectMethodResult>> = {};
   const toSeq = (posts: (Record<AffectState, number> | null)[]) =>
-    posts.map((p) => (p ? dominant(p, opts.activationThreshold) : ('neutral' as AffectState)));
+    clampSeq(
+      posts.map((p) => (p ? dominant(p, opts.activationThreshold) : ('neutral' as AffectState))),
+    );
 
   for (const m of opts.methods) {
     if (m === 'au_mapping') byMethod[m] = rollup(toSeq(auSeqPost), binMs, opts.persistenceWindowMs);
@@ -456,14 +463,16 @@ export async function computeAffect(
       byMethod[m] = rollup(toSeq(wickSeqPost), binMs, opts.persistenceWindowMs);
     else if (m === 'fused') {
       const fw = AFFECT_CONFIG.fusionWeights;
-      const seq = wickSeqPost.map((wick, i) => {
-        const fused = fuse([
-          { w: auSeqPost[i] ? fw.au_mapping : 0, p: auSeqPost[i] ?? zero() },
-          { w: emoSeqPost[i] ? fw.openface_emotion : 0, p: emoSeqPost[i] ?? zero() },
-          { w: fw.wickens, p: wick },
-        ]);
-        return dominant(fused, opts.activationThreshold);
-      });
+      const seq = clampSeq(
+        wickSeqPost.map((wick, i) => {
+          const fused = fuse([
+            { w: auSeqPost[i] ? fw.au_mapping : 0, p: auSeqPost[i] ?? zero() },
+            { w: emoSeqPost[i] ? fw.openface_emotion : 0, p: emoSeqPost[i] ?? zero() },
+            { w: fw.wickens, p: wick },
+          ]);
+          return dominant(fused, opts.activationThreshold);
+        }),
+      );
       byMethod[m] = rollup(seq, binMs, opts.persistenceWindowMs);
     }
   }

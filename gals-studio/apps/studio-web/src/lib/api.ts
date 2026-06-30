@@ -107,6 +107,14 @@ export const api = {
         `&personBaseline=${opts.personBaseline}`,
     ),
   analysisGuesses: (id: string) => jget<any>(`/api/analysis/${id}/guesses`),
+  getTrim: (id: string) =>
+    jget<{ startMs: number | null; endMs: number | null }>(`/api/sessions/${id}/trim`),
+  setTrim: (id: string, body: { startMs: number | null; endMs: number | null }) =>
+    jsend<{ startMs: number | null; endMs: number | null }>(
+      `/api/sessions/${id}/trim`,
+      'PUT',
+      body,
+    ),
   analysisExportZipUrl: (userIds: string[]) =>
     `/api/analysis/export.zip?userIds=${encodeURIComponent(userIds.join(','))}`,
   efCodings: (id: string, coderId: string) =>

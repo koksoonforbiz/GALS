@@ -8,6 +8,14 @@ import {
   type AffectOpts,
   type AffectMethod,
 } from '../analysis/affectMapping.js';
+import {
+  getTrims,
+  isTrimmed,
+  retainedDurationMs,
+  wallInRange,
+  FULL_RANGE,
+  type RetainRange,
+} from '../analysis/trim.js';
 
 /**
  * Research Analysis Studio: cross-session cohort summary.
@@ -65,14 +73,29 @@ const parse = <T>(v: string | null | undefined, fallback: T): T => {
   }
 };
 
-async function summariseSession(sessionId: string, base: number): Promise<unknown> {
-  const [interventions, utterCodings, anns, efs, dataHealth] = await Promise.all([
+async function summariseSession(
+  sessionId: string,
+  base: number,
+  range: RetainRange = FULL_RANGE,
+): Promise<unknown> {
+  const [allInterventions, allUtterCodings, allAnns, allEfs, dataHealth] = await Promise.all([
     prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
     prisma.utteranceCoding.findMany({ where: { sessionId, source: 'intervention' } }),
     prisma.annotation.findMany({ where: { sessionId, codingPass: { in: CODER_PASSES } } }),
     prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
     sessionDataHealth(sessionId),
   ]);
+
+  // Keep only what falls inside the retained window. Reliability-pass marks with
+  // no wall-clock time (window-coded) are kept regardless.
+  const keep = wallInRange(base, range);
+  const interventions = allInterventions.filter((iv) => keep(iv.wallMs));
+  const utterCodings = allUtterCodings.filter((c) => keep(c.refWallMs));
+  const efs = allEfs.filter((d) => keep(d.wallMs));
+  const anns = allAnns.filter((a) => {
+    const t = a.atWallMs ?? a.startWallMs ?? null;
+    return t == null || keep(t);
+  });
 
   // 1a — interventions: system vs coder, kept separate + explicit disagreement
   const systemByType: Record<string, number> = {};
@@ -244,15 +267,18 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         where: { userId: { in: userIds } },
         orderBy: [{ userId: 'asc' }, { startedAt: 'asc' }],
       });
+      const trims = await getTrims(sessions.map((s) => s.id));
 
       // sessions are summarised sequentially to avoid loading every learner's
       // raw gaze/cursor stream into memory at once. The activity windows are
-      // reused for the affect Wickens channel rather than reclassifying.
+      // reused for the affect Wickens channel rather than reclassifying. Every
+      // aggregate is computed over the researcher's retained window only.
       const summaries = [];
       for (const s of sessions) {
-        const core = (await summariseSession(s.id, s.baseWallClockMs)) as object;
-        const activity = await classifyActivity(s.id, { binMs, gazeConf });
-        const affect = await computeAffect(s.id, affectOpts, activity?.windows);
+        const range = trims.get(s.id) ?? FULL_RANGE;
+        const core = (await summariseSession(s.id, s.baseWallClockMs, range)) as object;
+        const activity = await classifyActivity(s.id, { binMs, gazeConf, range });
+        const affect = await computeAffect(s.id, affectOpts, activity?.windows, range);
         summaries.push({
           userId: s.userId,
           userDisplayName: s.userDisplayName,
@@ -260,7 +286,10 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           courseTitle: s.courseTitle,
           startedAt: s.startedAt.toISOString(),
           endedAt: s.endedAt ? s.endedAt.toISOString() : null,
-          durationSecs: Math.round(s.durationMs / 1000),
+          durationSecs: Math.round(retainedDurationMs(s.durationMs, range) / 1000),
+          fullDurationSecs: Math.round(s.durationMs / 1000),
+          trimmed: isTrimmed(range),
+          retainedWindow: range,
           ...core,
           activity: activity?.rollup ?? null,
           affect: affect?.byMethod ?? null,
@@ -387,7 +416,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         ]),
       );
 
-      const [chat, dialogue, efs] = await Promise.all([
+      const [chatAll, dialogueAll, efsAll, trims] = await Promise.all([
         prisma.chatbotMessage.findMany({
           where: { sessionId: { in: sessionIds } },
           orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
@@ -400,7 +429,17 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           where: { sessionId: { in: sessionIds } },
           orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
         }),
+        getTrims(sessionIds),
       ]);
+
+      // keep only rows inside each session's retained window (if trimmed)
+      const keepRow = (r: { sessionId: string; wallMs: number }) => {
+        const m = meta.get(r.sessionId);
+        return m ? wallInRange(m.base, trims.get(r.sessionId) ?? FULL_RANGE)(r.wallMs) : true;
+      };
+      const chat = chatAll.filter(keepRow);
+      const dialogue = dialogueAll.filter(keepRow);
+      const efs = efsAll.filter(keepRow);
 
       const esc = (v: unknown) => {
         const s = v == null ? '' : String(v);
@@ -489,22 +528,27 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           'course',
           'started',
           'durationSec',
+          'trimmed',
           'chatMessages',
           'dialogueMessages',
           'efDetections',
           'efConstructs',
         ],
-        sessions.map((s) => [
-          meta.get(s.id)?.user,
-          s.id,
-          meta.get(s.id)?.course,
-          meta.get(s.id)?.started,
-          meta.get(s.id)?.durationSecs,
-          chatN[s.id] ?? 0,
-          dialN[s.id] ?? 0,
-          efN[s.id] ?? 0,
-          [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
-        ]),
+        sessions.map((s) => {
+          const range = trims.get(s.id) ?? FULL_RANGE;
+          return [
+            meta.get(s.id)?.user,
+            s.id,
+            meta.get(s.id)?.course,
+            meta.get(s.id)?.started,
+            Math.round(retainedDurationMs(s.durationMs, range) / 1000),
+            isTrimmed(range) ? 'yes' : 'no',
+            chatN[s.id] ?? 0,
+            dialN[s.id] ?? 0,
+            efN[s.id] ?? 0,
+            [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
+          ];
+        }),
       );
 
       const zip = new AdmZip();

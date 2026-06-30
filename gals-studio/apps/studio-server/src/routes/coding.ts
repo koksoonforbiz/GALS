@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { DEFAULT_CODEBOOK } from '@gals-studio/shared';
 import { prisma } from '../prisma.js';
 import { ensureDefaultCodebook } from '../import/importer.js';
+import { getTrim, wallInRange, retainedDurationMs, isTrimmed } from '../analysis/trim.js';
 
 const SINGLE_DIMS = ['affect', 'behavior'];
 
@@ -218,6 +219,38 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
+  // ── Session trim (retained window): crop dead head/tail so the summary and
+  // exports reflect only the active part. Offsets are ms from baseWallClockMs. ─
+  app.get<{ Params: { sessionId: string } }>('/api/sessions/:sessionId/trim', async (req) => {
+    const t = await prisma.sessionTrim.findUnique({ where: { sessionId: req.params.sessionId } });
+    return { startMs: t?.startMs ?? null, endMs: t?.endMs ?? null };
+  });
+  app.put<{
+    Params: { sessionId: string };
+    Body: { startMs?: number | null; endMs?: number | null };
+  }>('/api/sessions/:sessionId/trim', async (req, reply) => {
+    const { sessionId } = req.params;
+    const startMs = req.body.startMs ?? null;
+    const endMs = req.body.endMs ?? null;
+    if (startMs != null && endMs != null && endMs <= startMs)
+      return reply.code(400).send({ error: 'endMs must be greater than startMs' });
+    // clearing both bounds removes the trim entirely
+    if (startMs == null && endMs == null) {
+      await prisma.sessionTrim.deleteMany({ where: { sessionId } });
+      return { startMs: null, endMs: null };
+    }
+    const row = await prisma.sessionTrim.upsert({
+      where: { sessionId },
+      update: { startMs, endMs },
+      create: { sessionId, startMs, endMs },
+    });
+    return { startMs: row.startMs ?? null, endMs: row.endMs ?? null };
+  });
+  app.delete<{ Params: { sessionId: string } }>('/api/sessions/:sessionId/trim', async (req) => {
+    await prisma.sessionTrim.deleteMany({ where: { sessionId: req.params.sessionId } });
+    return { ok: true };
+  });
+
   // ── Timeline interval annotations (free-range coding, no window) ───────────
   // Stored as Annotation rows with codingPass='timeline' & windowId=null, so
   // they never enter the window-based reliability/gold computations.
@@ -255,7 +288,21 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
       const { coderId } = req.query;
       const session = await prisma.session.findUnique({ where: { id: sessionId } });
       if (!session) return reply.code(404).send({ error: 'session not found' });
-      const [interventions, visibilities, marks, efMarks, lastActivity, messages] =
+      const range = await getTrim(sessionId);
+      const base = session.baseWallClockMs;
+      const keep = wallInRange(base, range);
+      // chatbot messages within the retained window (count via a wall-clock range)
+      const chatWhere =
+        range.startMs == null && range.endMs == null
+          ? { sessionId }
+          : {
+              sessionId,
+              wallMs: {
+                ...(range.startMs != null ? { gte: base + range.startMs } : {}),
+                ...(range.endMs != null ? { lte: base + range.endMs } : {}),
+              },
+            };
+      const [allInterventions, allVis, allMarks, allEfMarks, lastActivity, messages] =
         await Promise.all([
           prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
           prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
@@ -275,11 +322,18 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
               ...(coderId ? { coderId } : {}),
             },
           }),
-          prisma.activityEvent.findFirst({ where: { sessionId }, orderBy: { wallMs: 'desc' } }),
-          prisma.chatbotMessage.count({ where: { sessionId } }),
+          prisma.activityEvent.findFirst({
+            where: chatWhere, // last activity within the retained window
+            orderBy: { wallMs: 'desc' },
+          }),
+          prisma.chatbotMessage.count({ where: chatWhere }),
         ]);
 
-      const base = session.baseWallClockMs;
+      // restrict everything to the retained window
+      const interventions = allInterventions.filter((iv) => keep(iv.wallMs));
+      const visibilities = allVis.filter((v) => keep(v.wallMs));
+      const marks = allMarks.filter((m) => keep(m.atWallMs ?? m.startWallMs ?? base));
+      const efMarks = allEfMarks.filter((m) => keep(m.atWallMs ?? base));
       const ivs = interventions.map((iv) => {
         let score: number | null = null;
         try {
@@ -297,7 +351,7 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         ? scored.reduce((s, i) => s + (i.score as number), 0) / scored.length
         : null;
 
-      const totalMs = session.durationMs;
+      const totalMs = retainedDurationMs(session.durationMs, range);
       const hiddenMs = visibilities.reduce((s, v) => s + (v.hiddenDurationMs ?? 0), 0);
       const activeMs = Math.max(0, totalMs - hiddenMs);
       const lastVis = visibilities[visibilities.length - 1];
@@ -365,6 +419,12 @@ export async function codingRoutes(app: FastifyInstance): Promise<void> {
         efCoding,
         engagement: { chatbotMessages: messages },
         abandoned: { likely: signals.length > 0, signals },
+        trim: {
+          trimmed: isTrimmed(range),
+          startMs: range.startMs,
+          endMs: range.endMs,
+          fullDurationMs: session.durationMs,
+        },
       };
     },
   );

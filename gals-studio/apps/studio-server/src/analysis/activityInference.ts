@@ -103,7 +103,11 @@ const ROLLUP: Record<ActivityLabel, RollupActivity> = {
 
 export async function classifyActivity(
   sessionId: string,
-  opts: { binMs?: number; gazeConf?: number } = {},
+  opts: {
+    binMs?: number;
+    gazeConf?: number;
+    range?: { startMs: number | null; endMs: number | null };
+  } = {},
 ): Promise<ActivityResult | null> {
   const binMs = opts.binMs ?? 1000;
   const gazeConf = opts.gazeConf ?? 0.5;
@@ -308,7 +312,11 @@ export async function classifyActivity(
     });
   }
 
-  // ── rollup ──
+  // ── rollup (over the retained window only, if a trim is set) ──
+  const r = opts.range;
+  const inRange = (tMs: number) =>
+    (r?.startMs == null || tMs >= r.startMs) && (r?.endMs == null || tMs < r.endMs);
+  const retained = r ? windows.filter((w) => inRange(w.tMs)) : windows;
   const counts: Record<RollupActivity, number> = {
     reading_lesson: 0,
     chatbot: 0,
@@ -318,7 +326,7 @@ export async function classifyActivity(
     off_task: 0,
   };
   let dividedReadingGaze = 0;
-  for (const win of windows) {
+  for (const win of retained) {
     counts[ROLLUP[win.primaryActivity]] += 1;
     if (
       win.primaryActivity === 'divided_attention' &&
@@ -327,7 +335,7 @@ export async function classifyActivity(
     )
       dividedReadingGaze += 1;
   }
-  const total = windows.length || 1;
+  const total = retained.length || 1;
   const pctByActivity = Object.fromEntries(
     (Object.keys(counts) as RollupActivity[]).map((k) => [k, counts[k] / total]),
   ) as Record<RollupActivity, number>;

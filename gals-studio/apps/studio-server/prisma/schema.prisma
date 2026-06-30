@@ -436,6 +436,16 @@ model SessionAoi {
   @@index([sessionId])
 }
 
+// Researcher-set retained window: crop dead head/tail so the summary and the
+// exports reflect only the active part of the session. Offsets are ms from the
+// session's baseWallClockMs; null = unbounded on that side. Durable (no FK).
+model SessionTrim {
+  sessionId String   @id
+  startMs   Float?
+  endMs     Float?
+  updatedAt DateTime @updatedAt
+}
+
 // Per-utterance coding (chat / dialogue / intervention): the researcher codes
 // each message for EF construct, affective state, and learning strategy.
 // Durable (no FK to Session), keyed by (sessionId, coderId, source, refWallMs).

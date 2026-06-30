@@ -16,6 +16,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Scissors,
   SkipBack,
   TriangleAlert,
   Video,
@@ -205,6 +206,10 @@ export function TimelineCoding() {
   const [aoiDraw, setAoiDraw] = useState(false);
   const [utterCodings, setUtterCodings] = useState<Record<string, any>>({});
   const [codingUtter, setCodingUtter] = useState<UtterRef | null>(null);
+  const [trim, setTrim] = useState<{ startMs: number | null; endMs: number | null }>({
+    startMs: null,
+    endMs: null,
+  });
   const [efCodings, setEfCodings] = useState<any[]>([]);
   const [codingEf, setCodingEf] = useState<{
     wallMs: number;
@@ -403,6 +408,21 @@ export function TimelineCoding() {
     await refreshEfCodings();
   }, [codingEf, efCodingByKey, refreshEfCodings]);
 
+  // ── session trim (retained window): crop dead head/tail ────────────────────
+  useEffect(() => {
+    api
+      .getTrim(sessionId)
+      .then((t) => setTrim({ startMs: t.startMs ?? null, endMs: t.endMs ?? null }))
+      .catch(() => setTrim({ startMs: null, endMs: null }));
+  }, [sessionId]);
+  const saveTrim = useCallback(
+    async (next: { startMs: number | null; endMs: number | null }) => {
+      const t = await api.setTrim(sessionId, next);
+      setTrim({ startMs: t.startMs ?? null, endMs: t.endMs ?? null });
+    },
+    [sessionId],
+  );
+
   // measure the visible track area (scroll viewport minus the label column)
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -420,6 +440,23 @@ export function TimelineCoding() {
   const fullW = durationMs * pxPerMs;
   const xToOff = (xContent: number) => (pxPerMs > 0 ? xContent / pxPerMs : 0);
   const offToX = (off: number) => off * pxPerMs;
+
+  // retained window (trim) in offset-ms
+  const trimmed = trim.startMs != null || trim.endMs != null;
+  const trimStartOff = trim.startMs ?? 0;
+  const trimEndOff = trim.endMs ?? durationMs;
+  const retainedMs = Math.max(0, trimEndOff - trimStartOff);
+  const setTrimStart = () => {
+    const at = Math.round(ph.offsetMs);
+    if (trim.endMs != null && at >= trim.endMs) return;
+    void saveTrim({ startMs: at, endMs: trim.endMs });
+  };
+  const setTrimEnd = () => {
+    const at = Math.round(ph.offsetMs);
+    if (trim.startMs != null && at <= trim.startMs) return;
+    void saveTrim({ startMs: trim.startMs, endMs: at });
+  };
+  const clearTrim = () => void saveTrim({ startMs: null, endMs: null });
 
   // ── video-editor zoom: scale the time axis while keeping the time point under
   // the cursor anchored in place (so zooming doesn't lose your spot). ─────────
@@ -1087,10 +1124,72 @@ export function TimelineCoding() {
         </div>
       )}
 
+      {/* session trim — crop dead head/tail; summary & exports use only this window */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs">
+        <span className="flex items-center gap-1 font-semibold text-slate-500">
+          <Scissors size={13} /> Session trim
+        </span>
+        <span className="text-slate-400">
+          crop no-activity time — the summary &amp; exports reflect only the retained window
+        </span>
+        <button
+          onClick={setTrimStart}
+          className="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+          title="set the retained start to the playhead"
+        >
+          ⟦ start = playhead
+        </button>
+        <button
+          onClick={setTrimEnd}
+          className="rounded border border-slate-300 px-2 py-0.5 hover:bg-slate-50"
+          title="set the retained end to the playhead"
+        >
+          end = playhead ⟧
+        </button>
+        {trimmed && (
+          <button
+            onClick={clearTrim}
+            className="rounded border border-rose-300 px-2 py-0.5 text-rose-600 hover:bg-rose-50"
+          >
+            clear trim
+          </button>
+        )}
+        <span className="ml-auto tabular-nums text-slate-500">
+          {trimmed ? (
+            <>
+              retained {fmtRel(trimStartOff)}–{fmtRel(trimEndOff)}
+              <span className="ml-1 text-slate-400">
+                ({fmtRel(retainedMs)} of {fmtRel(durationMs)})
+              </span>
+            </>
+          ) : (
+            <span className="text-slate-400">full session — no trim</span>
+          )}
+        </span>
+      </div>
+
       {/* timeline */}
       <div className="rounded-lg border border-slate-200 bg-white">
         <div className="overflow-x-auto" ref={scrollRef}>
-          <div style={{ minWidth: LABEL_W + areaW }}>
+          <div className="relative" style={{ minWidth: LABEL_W + areaW }}>
+            {/* cut-region shading (the trimmed-away head/tail) */}
+            {trimmed && trimStartOff > 0 && (
+              <div
+                className="pointer-events-none absolute inset-y-0 z-20 border-r-2 border-rose-400 bg-slate-900/15"
+                style={{ left: LABEL_W, width: Math.max(0, offToX(trimStartOff)) }}
+                title="cut (before retained start)"
+              />
+            )}
+            {trimmed && trimEndOff < durationMs && (
+              <div
+                className="pointer-events-none absolute inset-y-0 z-20 border-l-2 border-rose-400 bg-slate-900/15"
+                style={{
+                  left: LABEL_W + offToX(trimEndOff),
+                  width: Math.max(0, offToX(durationMs - trimEndOff)),
+                }}
+                title="cut (after retained end)"
+              />
+            )}
             {/* ruler */}
             <Row label={<span className="text-[10px] text-slate-400">time</span>}>
               <Ruler durationMs={durationMs} offToX={offToX} fullW={fullW} />
@@ -1451,6 +1550,15 @@ function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void 
                   <TriangleAlert size={12} /> Possibly abandoned
                 </span>{' '}
                 — {summary.abandoned.signals.join('; ')}
+              </div>
+            )}
+
+            {summary.trim?.trimmed && (
+              <div className="flex items-center gap-1 rounded border border-sky-300 bg-sky-50 p-2 text-xs text-sky-800">
+                <Scissors size={12} />
+                <span className="font-semibold">Trimmed</span> — showing the retained{' '}
+                {fmt(summary.time.totalMs)} of {fmt(summary.trim.fullDurationMs)}. All figures below
+                reflect the retained window only.
               </div>
             )}
 

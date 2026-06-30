@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bot, Check, Download, Pencil, TriangleAlert, X } from 'lucide-react';
+import { ArrowLeft, Bot, Check, Download, Pencil, Scissors, TriangleAlert, X } from 'lucide-react';
 import { api } from '../lib/api';
 
 /** PR1 of the Research Analysis Studio: pick a cohort, see per-session summary
@@ -230,6 +230,14 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
       <div className="mb-2 flex items-center justify-between">
         <span className="font-medium">{new Date(s.startedAt).toLocaleString()}</span>
         <span className="text-slate-400">
+          {s.trimmed ? (
+            <span
+              className="mr-1 inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 text-sky-700"
+              title={`trimmed — retained ${fmtDur(s.durationSecs)} of ${fmtDur(s.fullDurationSecs ?? s.durationSecs)}`}
+            >
+              <Scissors size={10} /> trimmed
+            </span>
+          ) : null}
           {fmtDur(s.durationSecs)} · {s.courseTitle ?? 'no course'}
         </span>
       </div>
