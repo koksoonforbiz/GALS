@@ -49,7 +49,9 @@ export type ActivityAction =
   // py-feat (Feature 03)
   | 'PYFEAT_JOB_ENQUEUED'
   | 'PYFEAT_JOB_COMPLETED'
-  | 'PYFEAT_JOB_FAILED';
+  | 'PYFEAT_JOB_FAILED'
+  // Self-report emotion survey
+  | 'EMOTION_SELF_REPORT';
 
 export interface ActivityEvent {
   action: ActivityAction;

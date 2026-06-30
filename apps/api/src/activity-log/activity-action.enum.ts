@@ -63,4 +63,7 @@ export enum ActivityAction {
   PYFEAT_JOB_ENQUEUED = 'PYFEAT_JOB_ENQUEUED',
   PYFEAT_JOB_COMPLETED = 'PYFEAT_JOB_COMPLETED',
   PYFEAT_JOB_FAILED = 'PYFEAT_JOB_FAILED',
+
+  // Self-report emotion survey (shown every 15 minutes)
+  EMOTION_SELF_REPORT = 'EMOTION_SELF_REPORT',
 }
