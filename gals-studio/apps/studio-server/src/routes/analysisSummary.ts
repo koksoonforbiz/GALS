@@ -528,8 +528,12 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         Math.round((wallMs - (meta.get(sid)?.base ?? 0)) / 1000);
       const user = (sid: string) => meta.get(sid)?.user ?? '';
 
-      // chat-utterances.csv (chatbot + dialogue, distinguished by source)
-      const chatRows = [
+      const bySessThenTime = (a: unknown[], b: unknown[]) =>
+        String(a[1]).localeCompare(String(b[1])) || Number(a[3]) - Number(b[3]);
+
+      // free-dialogue.csv — the open chatbot (+ legacy dialogue), NOT tied to a
+      // learning strategy: the student freely asks the AI anything.
+      const freeRows = [
         ...chat.map((m) => [
           user(m.sessionId),
           m.sessionId,
@@ -550,22 +554,29 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           '',
           '',
         ]),
-        // interrogative-elaboration conversation (chatbot dialogue stored inside
-        // the intervention, not the ChatbotMessage table)
-        ...elab.map((m) => [
+      ].sort(bySessThenTime);
+      const freeDialogueCsv = toCsv(
+        ['user', 'sessionId', 'source', 'relSec', 'role', 'content', 'model', 'selectedText'],
+        freeRows,
+      );
+
+      // learning-strategy-utterances.csv — conversational utterances that occur
+      // INSIDE a learning strategy (currently interrogative-elaboration), stored
+      // in Intervention.sessionData rather than the ChatbotMessage table.
+      const strategyRows = elab
+        .map((m) => [
           user(m.sessionId),
           m.sessionId,
-          'elaboration',
+          'INTERROGATIVE_ELABORATION',
           relSec(m.sessionId, m.wallMs),
           m.role,
           m.content,
-          '',
           m.selectedText,
-        ]),
-      ].sort((a, b) => String(a[1]).localeCompare(String(b[1])) || Number(a[3]) - Number(b[3]));
-      const chatCsv = toCsv(
-        ['user', 'sessionId', 'source', 'relSec', 'role', 'content', 'model', 'selectedText'],
-        chatRows,
+        ])
+        .sort(bySessThenTime);
+      const strategyCsv = toCsv(
+        ['user', 'sessionId', 'strategy', 'relSec', 'role', 'content', 'selectedText'],
+        strategyRows,
       );
 
       // intervention-responses.csv (the student's typed answers + AI feedback —
@@ -677,7 +688,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       );
 
       const zip = new AdmZip();
-      zip.addFile('chat-utterances.csv', Buffer.from(chatCsv, 'utf8'));
+      zip.addFile('free-dialogue.csv', Buffer.from(freeDialogueCsv, 'utf8'));
+      zip.addFile('learning-strategy-utterances.csv', Buffer.from(strategyCsv, 'utf8'));
       zip.addFile('intervention-responses.csv', Buffer.from(ivRespCsv, 'utf8'));
       zip.addFile('ef-text-mining.csv', Buffer.from(efCsv, 'utf8'));
       zip.addFile('summary.csv', Buffer.from(summaryCsv, 'utf8'));
