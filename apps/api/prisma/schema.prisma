@@ -238,6 +238,9 @@ enum ActivityAction {
   PYFEAT_JOB_ENQUEUED
   PYFEAT_JOB_COMPLETED
   PYFEAT_JOB_FAILED
+
+  // Emotion self-report survey (shown every 15 minutes)
+  EMOTION_SELF_REPORT
 }
 
 // ─── Models ──────────────────────────────────────────────

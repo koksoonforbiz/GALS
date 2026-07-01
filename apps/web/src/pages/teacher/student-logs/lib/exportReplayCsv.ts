@@ -43,8 +43,24 @@ import type {
 } from '../hooks/useSessionReplay';
 
 const AU_KEYS = [
-  'au01', 'au02', 'au04', 'au05', 'au06', 'au07', 'au09', 'au10',
-  'au12', 'au14', 'au15', 'au17', 'au20', 'au23', 'au24', 'au25', 'au26', 'au28',
+  'au01',
+  'au02',
+  'au04',
+  'au05',
+  'au06',
+  'au07',
+  'au09',
+  'au10',
+  'au12',
+  'au14',
+  'au15',
+  'au17',
+  'au20',
+  'au23',
+  'au24',
+  'au25',
+  'au26',
+  'au28',
 ] as const;
 type AuKey = (typeof AU_KEYS)[number];
 
@@ -110,6 +126,7 @@ const ACTIVITY_ACTIONS = [
   'DIALOGUE_SESSION_ENDED',
   'SPACED_REP_CARD_VIEWED',
   'SPACED_REP_CARD_RATED',
+  'EMOTION_SELF_REPORT',
 ];
 
 export interface CsvExportData {
@@ -392,11 +409,11 @@ export function exportReplayCsv(
   });
   addSampledRow('score_engagement', '0-1', (_i, c) => {
     const f = nearestWithinWindow(emotionFrames, (x) => x.frameWallMs, c, windowMs);
-    return f ? numRound(predictAffectiveState(f, thresholds).engagement) ?? '' : '';
+    return f ? (numRound(predictAffectiveState(f, thresholds).engagement) ?? '') : '';
   });
   addSampledRow('score_boredom', '0-1', (_i, c) => {
     const f = nearestWithinWindow(emotionFrames, (x) => x.frameWallMs, c, windowMs);
-    return f ? numRound(predictAffectiveState(f, thresholds).boredom) ?? '' : '';
+    return f ? (numRound(predictAffectiveState(f, thresholds).boredom) ?? '') : '';
   });
   addSampledRow('flag_confusion', '0 or 1', (_i, c) => {
     const f = nearestWithinWindow(emotionFrames, (x) => x.frameWallMs, c, windowMs);
@@ -420,21 +437,21 @@ export function exportReplayCsv(
   // ─── Gaze (x, y, confidence) ────────────────────────
   addSampledRow('gaze_x', 'viewport px', (_i, c) => {
     const g = nearestWithinWindow(gazeLogs, (x) => x._ms, c, windowMs);
-    return g ? numRound(g.gazeX, 1) ?? '' : '';
+    return g ? (numRound(g.gazeX, 1) ?? '') : '';
   });
   addSampledRow('gaze_y', 'viewport px', (_i, c) => {
     const g = nearestWithinWindow(gazeLogs, (x) => x._ms, c, windowMs);
-    return g ? numRound(g.gazeY, 1) ?? '' : '';
+    return g ? (numRound(g.gazeY, 1) ?? '') : '';
   });
   addSampledRow('gaze_confidence', '0-1', (_i, c) => {
     const g = nearestWithinWindow(gazeLogs, (x) => x._ms, c, windowMs);
-    return g ? numRound(g.confidence) ?? '' : '';
+    return g ? (numRound(g.confidence) ?? '') : '';
   });
 
   // ─── Pupil ──────────────────────────────────────────
   addSampledRow('pupil_diameter', 'px', (_i, c) => {
     const p = nearestWithinWindow(pupilLogs, (x) => x._ms, c, windowMs);
-    return p ? numRound(p.pupilDiameter, 3) ?? '' : '';
+    return p ? (numRound(p.pupilDiameter, 3) ?? '') : '';
   });
 
   // ─── Scroll Y (carry-forward — last scroll <= bin center) ──
@@ -562,7 +579,8 @@ export function exportReplayCsv(
         typeof meta.isCorrect === 'boolean' ? (meta.isCorrect ? 'correct' : 'incorrect') : '';
       const latency =
         typeof meta.latencyMs === 'number' ? `${Math.round(meta.latencyMs / 100) / 10}s` : '';
-      const detail = [itype, title, correct, latency].filter(Boolean).join(' · ');
+      const emotion = typeof meta.emotion === 'string' ? meta.emotion : '';
+      const detail = [itype, title, correct, latency, emotion].filter(Boolean).join(' · ');
       const cell = detail || '1';
       const existing = values[b];
       values[b] = existing ? `${existing} | ${cell}` : cell;
@@ -596,17 +614,11 @@ export function exportReplayCsv(
       if (b < 0 || b >= numBins) continue;
       const meta = (log.metadata ?? {}) as Record<string, unknown>;
       if (typeof meta.mcqCount === 'number') append(mcq, b, meta.mcqCount);
-      if (typeof meta.shortAnswerCount === 'number')
-        append(sa, b, meta.shortAnswerCount);
-      const m =
-        typeof meta.coverageMode === 'string' ? meta.coverageMode : 'all';
+      if (typeof meta.shortAnswerCount === 'number') append(sa, b, meta.shortAnswerCount);
+      const m = typeof meta.coverageMode === 'string' ? meta.coverageMode : 'all';
       append(mode, b, m);
       let detailStr = '';
-      if (
-        m === 'pages' &&
-        typeof meta.pageStart === 'number' &&
-        typeof meta.pageEnd === 'number'
-      ) {
+      if (m === 'pages' && typeof meta.pageStart === 'number' && typeof meta.pageEnd === 'number') {
         detailStr = `${meta.pageStart}-${meta.pageEnd}`;
       } else if (m === 'subtopic' && typeof meta.subtopic === 'string') {
         detailStr = meta.subtopic;
@@ -707,9 +719,7 @@ export function exportReplayCsv(
   // the AOI scoring result onto the same time grid. Only emitted when
   // `options.aoiScoring` is passed; otherwise these rows are skipped.
   if (options.aoiScoring) {
-    const aoiEpochs = [...options.aoiScoring.epochs].sort(
-      (a, b) => a.startMs - b.startMs,
-    );
+    const aoiEpochs = [...options.aoiScoring.epochs].sort((a, b) => a.startMs - b.startMs);
     const AOI_BUCKETS = ['sidebar', 'lesson+pdf', 'chatbot', 'header'] as const;
     const epochTypes: Cell[] = new Array(numBins).fill('');
     const alignments: Cell[] = new Array(numBins).fill('');
@@ -722,10 +732,7 @@ export function exportReplayCsv(
     let aoiIdx = 0;
     for (let i = 0; i < numBins; i++) {
       const t = rangeBaseWallMs + i * binMs;
-      while (
-        aoiIdx + 1 < aoiEpochs.length &&
-        aoiEpochs[aoiIdx + 1]!.startMs <= t
-      ) {
+      while (aoiIdx + 1 < aoiEpochs.length && aoiEpochs[aoiIdx + 1]!.startMs <= t) {
         aoiIdx += 1;
       }
       const ep = aoiEpochs[aoiIdx];
@@ -733,8 +740,7 @@ export function exportReplayCsv(
       // Only fill rows when the bin sits inside this epoch's span.
       if (t < ep.startMs || t > ep.endMs) continue;
       epochTypes[i] = ep.type;
-      alignments[i] =
-        ep.alignment != null ? numRound(ep.alignment, 4) ?? '' : '';
+      alignments[i] = ep.alignment != null ? (numRound(ep.alignment, 4) ?? '') : '';
       for (const b of AOI_BUCKETS) {
         observedRows[b]![i] = numRound(ep.observed[b] ?? 0, 4) ?? '';
         expectedRows[b]![i] = numRound(ep.expected[b] ?? 0, 4) ?? '';
@@ -769,9 +775,7 @@ export function exportReplayCsv(
     const widths: Cell[] = new Array(numBins).fill(null);
     const heights: Cell[] = new Array(numBins).fill(null);
     const orientations: Cell[] = new Array(numBins).fill(null);
-    const viewportLogs = [...(data.viewportLogs ?? [])].sort(
-      (a, b) => a.timestamp - b.timestamp,
-    );
+    const viewportLogs = [...(data.viewportLogs ?? [])].sort((a, b) => a.timestamp - b.timestamp);
     let curW: number | null = null;
     let curH: number | null = null;
     let curO: string | null = null;
@@ -1166,7 +1170,7 @@ export function exportReplayCsv(
     rows.push({
       metric: 'aoi_epoch_alignment',
       unit: '0-1 (TV-distance; null = idle/nav/empty)',
-      values: epochAt.map((e) => (e?.alignment != null ? numRound(e.alignment) ?? '' : null)),
+      values: epochAt.map((e) => (e?.alignment != null ? (numRound(e.alignment) ?? '') : null)),
     });
     // Per-AOI observed / expected shares. Stick to the four scored
     // buckets plus the rolled-up combo and the "outside" residual.
@@ -1204,9 +1208,7 @@ export function exportReplayCsv(
     // Session-level allocation score — constant across the export,
     // but useful as a one-line readout in pandas (`.iloc[0]`).
     const sessionAlignmentStr =
-      aoiScoring.sessionAlignment != null
-        ? numRound(aoiScoring.sessionAlignment) ?? ''
-        : '';
+      aoiScoring.sessionAlignment != null ? (numRound(aoiScoring.sessionAlignment) ?? '') : '';
     rows.push({
       metric: 'aoi_session_allocation_score',
       unit: '0-1 (duration-weighted mean of epoch alignments)',
