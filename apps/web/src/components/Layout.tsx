@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -11,11 +11,13 @@ import { usePageViewTracker, useActivityLog } from '../lib/activity-log';
 const SURVEY_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 export function Layout() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const { track, flush } = useActivityLog();
   usePageViewTracker();
 
   const [showSurvey, setShowSurvey] = useState(false);
+  const [pendingLogout, setPendingLogout] = useState(false);
   // Each time the student answers, update this timestamp to restart the 15-min clock.
   const [lastAnsweredAt, setLastAnsweredAt] = useState(() => Date.now());
 
@@ -30,15 +32,26 @@ export function Layout() {
       track('EMOTION_SELF_REPORT', { metadata: { emotion } });
       void flush();
       setShowSurvey(false);
-      setLastAnsweredAt(Date.now());
+      if (pendingLogout) {
+        setPendingLogout(false);
+        logout();
+        navigate('/login');
+      } else {
+        setLastAnsweredAt(Date.now());
+      }
     },
-    [track, flush],
+    [track, flush, pendingLogout, logout, navigate],
   );
+
+  const handleLogoutRequest = useCallback(() => {
+    setPendingLogout(true);
+    setShowSurvey(true);
+  }, []);
 
   return (
     <PageContextProvider>
       <div className="min-h-screen bg-gray-100">
-        <Header />
+        <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
         <div className="flex">
           <Sidebar />
           <main className="flex-1 p-6">
