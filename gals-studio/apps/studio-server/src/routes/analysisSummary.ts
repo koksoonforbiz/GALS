@@ -78,13 +78,18 @@ async function summariseSession(
   base: number,
   range: RetainRange = FULL_RANGE,
 ): Promise<unknown> {
-  const [allInterventions, allUtterCodings, allAnns, allEfs, dataHealth] = await Promise.all([
-    prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-    prisma.utteranceCoding.findMany({ where: { sessionId, source: 'intervention' } }),
-    prisma.annotation.findMany({ where: { sessionId, codingPass: { in: CODER_PASSES } } }),
-    prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-    sessionDataHealth(sessionId),
-  ]);
+  const [allInterventions, allUtterCodings, allAnns, allEfs, ivEventsAll, dataHealth] =
+    await Promise.all([
+      prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+      prisma.utteranceCoding.findMany({ where: { sessionId, source: 'intervention' } }),
+      prisma.annotation.findMany({ where: { sessionId, codingPass: { in: CODER_PASSES } } }),
+      prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+      prisma.activityEvent.findMany({
+        where: { sessionId, interventionId: { not: null } },
+        select: { interventionId: true, wallMs: true },
+      }),
+      sessionDataHealth(sessionId),
+    ]);
 
   // Keep only what falls inside the retained window. Reliability-pass marks with
   // no wall-clock time (window-coded) are kept regardless.
@@ -111,6 +116,29 @@ async function summariseSession(
   }
   const systemTotal = interventions.length;
   const coderTotal = utterCodings.length;
+
+  // 1b(iv) — time-spent per learning intervention, from its ActivityEvent span
+  // (externalId = interventionId). Totalled per session and per type.
+  const ivSpan = new Map<string, { min: number; max: number }>();
+  for (const e of ivEventsAll) {
+    const id = e.interventionId as string;
+    const sp = ivSpan.get(id);
+    if (!sp) ivSpan.set(id, { min: e.wallMs, max: e.wallMs });
+    else {
+      sp.min = Math.min(sp.min, e.wallMs);
+      sp.max = Math.max(sp.max, e.wallMs);
+    }
+  }
+  const ivTimeByType: Record<string, number> = {};
+  for (const t of INTERVENTION_TYPES) ivTimeByType[t] = 0;
+  let ivTimeTotalSec = 0;
+  for (const iv of interventions) {
+    const sp = iv.externalId ? ivSpan.get(iv.externalId) : undefined;
+    const dur = sp ? Math.max(0, Math.round((sp.max - sp.min) / 1000)) : 0;
+    ivTimeTotalSec += dur;
+    const t = iv.type ?? 'UNKNOWN';
+    ivTimeByType[t] = (ivTimeByType[t] ?? 0) + dur;
+  }
 
   // 1c — practice testing
   const practiceTesting = interventions
@@ -183,6 +211,7 @@ async function summariseSession(
       coder: { byType: coderByType, total: coderTotal },
       disagreement: Math.abs(systemTotal - coderTotal),
     },
+    interventionTime: { totalSec: ivTimeTotalSec, byType: ivTimeByType },
     practiceTesting,
     efDetections,
     coderCoding,

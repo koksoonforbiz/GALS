@@ -810,6 +810,10 @@ function buildCohortCsv(sessions: any[], affectFor: (s: any) => any): string {
     add(`  coder: ${t}`, (s) => s.interventions.coder.byType?.[t] ?? 0);
   add('Interventions — disagreement |sys−coder|', (s) => s.interventions.disagreement);
 
+  // time-spent per learning intervention (from ActivityEvent spans)
+  add('Intervention time (s) — total', (s) => s.interventionTime?.totalSec ?? 0);
+  for (const t of IV_TYPES) add(`  time (s): ${t}`, (s) => s.interventionTime?.byType?.[t] ?? 0);
+
   // activity (1b)
   for (const k of ACTIVITY_BUCKETS)
     add(`Activity % — ${k}`, (s) => pct1(s.activity?.pctByActivity?.[k]));
