@@ -542,10 +542,14 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const efs = efsAll.filter(keepRow);
       const elab = elabMsgs.filter(keepRow);
       const ivResp = ivResponses.filter(keepRow);
-      const survey = surveyAll.filter(keepRow).map((e) => ({
+      // Self-reports are deliberate ground-truth student actions — always export
+      // ALL of them (independent of trim), but flag whether each falls inside the
+      // researcher's retained window so trimmed ones are transparent, not silent.
+      const survey = surveyAll.map((e) => ({
         sessionId: e.sessionId,
         wallMs: e.wallMs,
         emotion: parse<{ emotion?: string }>(e.metadata, {}).emotion ?? '',
+        retained: keepRow(e) ? 'yes' : 'no',
       }));
 
       const esc = (v: unknown) => {
@@ -677,15 +681,20 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         ivRows,
       );
 
-      // self-report-survey.csv (the student's in-session emotion self-reports)
+      // self-report-survey.csv (every in-session emotion self-report, per session
+      // per user; `retained` = whether it falls inside the researcher's trim)
       const surveyCsv = toCsv(
-        ['user', 'sessionId', 'relSec', 'emotion'],
-        survey.map((r) => [
-          user(r.sessionId),
-          r.sessionId,
-          relSec(r.sessionId, r.wallMs),
-          r.emotion,
-        ]),
+        ['user', 'sessionId', 'relSec', 'emotion', 'retained'],
+        survey
+          .slice()
+          .sort((a, b) => a.sessionId.localeCompare(b.sessionId) || a.wallMs - b.wallMs)
+          .map((r) => [
+            user(r.sessionId),
+            r.sessionId,
+            relSec(r.sessionId, r.wallMs),
+            r.emotion,
+            r.retained,
+          ]),
       );
 
       // ef-text-mining.csv (raw LLM EF detections)
@@ -728,6 +737,18 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const elabN = countBy(elab);
       const ivRespN = countBy(ivResp);
       const surveyN = countBy(survey);
+      // per-session emotion breakdown, e.g. "engaged×3 | neutral×2 | frustrated×1"
+      const surveyEmotions = new Map<string, Record<string, number>>();
+      for (const r of survey) {
+        const m = surveyEmotions.get(r.sessionId) ?? {};
+        m[r.emotion || 'unknown'] = (m[r.emotion || 'unknown'] ?? 0) + 1;
+        surveyEmotions.set(r.sessionId, m);
+      }
+      const surveyBreakdown = (sid: string) =>
+        Object.entries(surveyEmotions.get(sid) ?? {})
+          .sort((a, b) => b[1] - a[1])
+          .map(([emo, n]) => `${emo}×${n}`)
+          .join(' | ');
       // total intervention time-spent per session (from the ActivityEvent spans)
       const ivTimeSec = new Map<string, number>();
       for (const iv of interventionsAll) {
@@ -755,6 +776,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           'interventionResponses',
           'interventionTimeSec',
           'selfReports',
+          'selfReportEmotions',
           'efDetections',
           'efConstructs',
         ],
@@ -773,6 +795,7 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
             ivRespN[s.id] ?? 0,
             ivTimeSec.get(s.id) ?? 0,
             surveyN[s.id] ?? 0,
+            surveyBreakdown(s.id),
             efN[s.id] ?? 0,
             [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
           ];
