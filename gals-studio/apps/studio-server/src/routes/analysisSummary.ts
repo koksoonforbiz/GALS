@@ -436,6 +436,31 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         getTrims(sessionIds),
       ]);
 
+      // Intervention active spans: an intervention's time-spent is the min..max
+      // wall-clock of the ActivityEvents tagged with its id (externalId).
+      const ivEvents = await prisma.activityEvent.findMany({
+        where: { sessionId: { in: sessionIds }, interventionId: { not: null } },
+        select: { interventionId: true, wallMs: true },
+      });
+      const ivSpan = new Map<string, { min: number; max: number }>();
+      for (const e of ivEvents) {
+        const id = e.interventionId as string;
+        const s = ivSpan.get(id);
+        if (!s) ivSpan.set(id, { min: e.wallMs, max: e.wallMs });
+        else {
+          s.min = Math.min(s.min, e.wallMs);
+          s.max = Math.max(s.max, e.wallMs);
+        }
+      }
+
+      // In-session emotion self-report survey (logged as an EMOTION_SELF_REPORT
+      // activity event with metadata.emotion). Filtered to the retained window below.
+      const surveyAll = await prisma.activityEvent.findMany({
+        where: { sessionId: { in: sessionIds }, action: 'EMOTION_SELF_REPORT' },
+        select: { sessionId: true, wallMs: true, metadata: true },
+        orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+      });
+
       // Some students never use the standalone chatbot — their conversation lives
       // inside interrogative-elaboration interventions, and their typed reasoning
       // inside stepwise / practice answers. Mine those out of sessionData so the
@@ -517,6 +542,11 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const efs = efsAll.filter(keepRow);
       const elab = elabMsgs.filter(keepRow);
       const ivResp = ivResponses.filter(keepRow);
+      const survey = surveyAll.filter(keepRow).map((e) => ({
+        sessionId: e.sessionId,
+        wallMs: e.wallMs,
+        emotion: parse<{ emotion?: string }>(e.metadata, {}).emotion ?? '',
+      }));
 
       const esc = (v: unknown) => {
         const s = v == null ? '' : String(v);
@@ -609,6 +639,55 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           ]),
       );
 
+      // interventions.csv (one row per learning intervention, with time-spent
+      // derived from its ActivityEvent span; kept if the trigger is in-window)
+      const ivRows = interventionsAll
+        .filter((iv) => keepRow({ sessionId: iv.sessionId, wallMs: iv.wallMs }))
+        .map((iv) => {
+          const span = iv.externalId ? ivSpan.get(iv.externalId) : undefined;
+          const startMs = span ? span.min : iv.wallMs;
+          const endMs = span ? span.max : iv.wallMs;
+          const d = parse<{ score?: number }>(iv.sessionData, {});
+          return [
+            user(iv.sessionId),
+            iv.sessionId,
+            iv.externalId ?? '',
+            iv.type ?? '',
+            iv.status ?? '',
+            relSec(iv.sessionId, iv.wallMs),
+            relSec(iv.sessionId, startMs),
+            relSec(iv.sessionId, endMs),
+            Math.max(0, Math.round((endMs - startMs) / 1000)),
+            typeof d.score === 'number' ? d.score : '',
+          ];
+        });
+      const interventionsCsv = toCsv(
+        [
+          'user',
+          'sessionId',
+          'interventionId',
+          'type',
+          'status',
+          'triggerRelSec',
+          'startRelSec',
+          'endRelSec',
+          'durationSec',
+          'score',
+        ],
+        ivRows,
+      );
+
+      // self-report-survey.csv (the student's in-session emotion self-reports)
+      const surveyCsv = toCsv(
+        ['user', 'sessionId', 'relSec', 'emotion'],
+        survey.map((r) => [
+          user(r.sessionId),
+          r.sessionId,
+          relSec(r.sessionId, r.wallMs),
+          r.emotion,
+        ]),
+      );
+
       // ef-text-mining.csv (raw LLM EF detections)
       const efCsv = toCsv(
         [
@@ -648,6 +727,15 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       const efN = countBy(efs);
       const elabN = countBy(elab);
       const ivRespN = countBy(ivResp);
+      const surveyN = countBy(survey);
+      // total intervention time-spent per session (from the ActivityEvent spans)
+      const ivTimeSec = new Map<string, number>();
+      for (const iv of interventionsAll) {
+        if (!keepRow({ sessionId: iv.sessionId, wallMs: iv.wallMs })) continue;
+        const span = iv.externalId ? ivSpan.get(iv.externalId) : undefined;
+        const dur = span ? Math.max(0, Math.round((span.max - span.min) / 1000)) : 0;
+        ivTimeSec.set(iv.sessionId, (ivTimeSec.get(iv.sessionId) ?? 0) + dur);
+      }
       const efConstructs = new Map<string, Set<string>>();
       for (const d of efs) {
         if (!efConstructs.has(d.sessionId)) efConstructs.set(d.sessionId, new Set());
@@ -665,6 +753,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
           'dialogueMessages',
           'elaborationMessages',
           'interventionResponses',
+          'interventionTimeSec',
+          'selfReports',
           'efDetections',
           'efConstructs',
         ],
@@ -681,6 +771,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
             dialN[s.id] ?? 0,
             elabN[s.id] ?? 0,
             ivRespN[s.id] ?? 0,
+            ivTimeSec.get(s.id) ?? 0,
+            surveyN[s.id] ?? 0,
             efN[s.id] ?? 0,
             [...(efConstructs.get(s.id) ?? [])].sort().join(' | '),
           ];
@@ -691,6 +783,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       zip.addFile('free-dialogue.csv', Buffer.from(freeDialogueCsv, 'utf8'));
       zip.addFile('learning-strategy-utterances.csv', Buffer.from(strategyCsv, 'utf8'));
       zip.addFile('intervention-responses.csv', Buffer.from(ivRespCsv, 'utf8'));
+      zip.addFile('interventions.csv', Buffer.from(interventionsCsv, 'utf8'));
+      zip.addFile('self-report-survey.csv', Buffer.from(surveyCsv, 'utf8'));
       zip.addFile('ef-text-mining.csv', Buffer.from(efCsv, 'utf8'));
       zip.addFile('summary.csv', Buffer.from(summaryCsv, 'utf8'));
       return reply

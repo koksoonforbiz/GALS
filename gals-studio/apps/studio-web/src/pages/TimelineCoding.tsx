@@ -123,6 +123,7 @@ type DataRow =
   | { id: string; kind: 'au' | 'emotion'; key: string; color: string; domain: [number, number] }
   | { id: string; kind: 'pupil'; key: 'pupil'; color: string; domain?: undefined }
   | { id: string; kind: 'ef'; key: 'ef'; color: string; domain?: undefined }
+  | { id: string; kind: 'survey'; key: 'survey'; color: string; domain?: undefined }
   | {
       id: string;
       kind: 'chat' | 'dialogue';
@@ -130,6 +131,15 @@ type DataRow =
       color: string;
       domain?: undefined;
     };
+
+// Student in-session emotion self-report → colour (mirrors the affect palette).
+const SURVEY_COLOR: Record<string, string> = {
+  engaged: '#16a34a',
+  bored: '#f59e0b',
+  confused: '#8b5cf6',
+  frustrated: '#dc2626',
+  neutral: '#94a3b8',
+};
 
 // Coding vocabularies for per-utterance coding.
 const EF_CONSTRUCTS = [
@@ -1480,6 +1490,7 @@ export function TimelineCoding() {
                         row={row}
                         streams={streams}
                         ef={sparse?.efDetections ?? []}
+                        survey={sparse?.emotionSurvey ?? []}
                         efCodings={efCodingByKey}
                         activeEfKey={codingEf ? `${codingEf.wallMs}::${codingEf.construct}` : null}
                         onPickEf={openEf}
@@ -1500,6 +1511,7 @@ export function TimelineCoding() {
                 hasEf={(sparse?.efDetections ?? []).length > 0}
                 hasChat={chatMsgs.length > 0}
                 hasDialogue={dialogueMsgs.length > 0}
+                hasSurvey={(sparse?.emotionSurvey ?? []).length > 0}
                 onAdd={addDataRow}
               />
             </div>
@@ -1790,6 +1802,7 @@ function DataTrack({
   row,
   streams,
   ef,
+  survey,
   efCodings,
   activeEfKey,
   onPickEf,
@@ -1800,6 +1813,7 @@ function DataTrack({
   row: DataRow;
   streams: Streams | null;
   ef: any[];
+  survey?: { wallMs: number; emotion: string }[];
   efCodings?: Record<string, { code: string; machineGuess?: string | null }>;
   activeEfKey?: string | null;
   onPickEf?: (d: { wallMs: number; construct: string; label: string; severity?: string }) => void;
@@ -1807,6 +1821,30 @@ function DataTrack({
   offToX: (o: number) => number;
   fullW: number;
 }) {
+  if (row.kind === 'survey') {
+    const items = survey ?? [];
+    if (!items.length)
+      return (
+        <span className="absolute left-1 top-1.5 text-[10px] text-slate-300">no self-reports</span>
+      );
+    return (
+      <>
+        {items.map((s, i) => (
+          <div
+            key={i}
+            className="absolute top-1 flex h-5 -translate-x-1/2 items-center gap-1 rounded px-1 text-[9px] font-medium text-white"
+            style={{
+              left: offToX(s.wallMs - base),
+              background: SURVEY_COLOR[s.emotion] ?? '#475569',
+            }}
+            title={`student self-report: ${s.emotion} @ ${fmtRel(s.wallMs - base)}`}
+          >
+            {s.emotion}
+          </div>
+        ))}
+      </>
+    );
+  }
   if (row.kind === 'ef') {
     const inj = ef as { wallMs: number; construct: string; label: string; severity?: string }[];
     return (
@@ -1880,12 +1918,14 @@ function AddRowMenu({
   hasEf,
   hasChat,
   hasDialogue,
+  hasSurvey,
   onAdd,
 }: {
   streams: Streams | null;
   hasEf: boolean;
   hasChat: boolean;
   hasDialogue: boolean;
+  hasSurvey: boolean;
   onAdd: (r: DataRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1917,6 +1957,17 @@ function AddRowMenu({
           className="rounded bg-cyan-100 px-1.5 py-0.5 text-cyan-700"
         >
           pupil
+        </button>
+      )}
+      {hasSurvey && (
+        <button
+          onClick={() => {
+            onAdd({ id: newRowId(), kind: 'survey', key: 'survey', color: '#0d9488' });
+            setOpen(false);
+          }}
+          className="rounded bg-teal-100 px-1.5 py-0.5 text-teal-700"
+        >
+          Self-report survey
         </button>
       )}
       {hasEf && (
@@ -2588,6 +2639,7 @@ function labelFor(code: string): string {
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';
   if (row.kind === 'ef') return 'Text-mining (EF)';
+  if (row.kind === 'survey') return 'Self-report survey';
   if (row.kind === 'chat') return 'Chat utterances';
   if (row.kind === 'dialogue') return 'Dialogue (interrog. elab.)';
   return `${row.kind === 'au' ? 'AU' : 'emotion'}: ${row.key}`;

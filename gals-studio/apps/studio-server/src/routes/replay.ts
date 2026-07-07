@@ -12,7 +12,10 @@ const parse = <T>(v: string | null, fallback: T): T => {
 };
 
 /** Bucket-average decimation: never hand the client more than maxPoints. */
-function decimate(points: { t: number; v: number }[], maxPoints: number): { t: number; v: number }[] {
+function decimate(
+  points: { t: number; v: number }[],
+  maxPoints: number,
+): { t: number; v: number }[] {
   if (points.length <= maxPoints) return points;
   const bucket = points.length / maxPoints;
   const out: { t: number; v: number }[] = [];
@@ -32,26 +35,40 @@ function decimate(points: { t: number; v: number }[], maxPoints: number): { t: n
   return out;
 }
 
-const EMOTIONS = ['pHappiness', 'pSadness', 'pSurprise', 'pFear', 'pAnger', 'pDisgust', 'pContempt', 'pNeutral'] as const;
+const EMOTIONS = [
+  'pHappiness',
+  'pSadness',
+  'pSurprise',
+  'pFear',
+  'pAnger',
+  'pDisgust',
+  'pContempt',
+  'pNeutral',
+] as const;
 
 export async function replayRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { sessionId: string } }>('/api/replay/:sessionId/meta', async (req, reply) => {
     const { sessionId } = req.params;
     const session = await prisma.session.findUnique({ where: { id: sessionId } });
     if (!session) return reply.code(404).send({ error: 'session not found' });
-    const [snapshots, gaze, emotion, au, pupil, clicks, webcam, messages, ef, interventions] = await Promise.all([
-      prisma.snapshot.count({ where: { sessionId } }),
-      prisma.gazeSample.count({ where: { sessionId } }),
-      prisma.emotionFrame.count({ where: { sessionId } }),
-      prisma.auResult.count({ where: { sessionId } }),
-      prisma.pupilSample.count({ where: { sessionId } }),
-      prisma.click.count({ where: { sessionId } }),
-      prisma.webcamSegment.count({ where: { sessionId, status: 'ok' } }),
-      prisma.chatbotMessage.count({ where: { sessionId } }),
-      prisma.efDetection.count({ where: { sessionId } }),
-      prisma.intervention.count({ where: { sessionId } }),
-    ]);
-    const sample = await prisma.snapshot.findMany({ where: { sessionId }, take: 50, select: { aois: true } });
+    const [snapshots, gaze, emotion, au, pupil, clicks, webcam, messages, ef, interventions] =
+      await Promise.all([
+        prisma.snapshot.count({ where: { sessionId } }),
+        prisma.gazeSample.count({ where: { sessionId } }),
+        prisma.emotionFrame.count({ where: { sessionId } }),
+        prisma.auResult.count({ where: { sessionId } }),
+        prisma.pupilSample.count({ where: { sessionId } }),
+        prisma.click.count({ where: { sessionId } }),
+        prisma.webcamSegment.count({ where: { sessionId, status: 'ok' } }),
+        prisma.chatbotMessage.count({ where: { sessionId } }),
+        prisma.efDetection.count({ where: { sessionId } }),
+        prisma.intervention.count({ where: { sessionId } }),
+      ]);
+    const sample = await prisma.snapshot.findMany({
+      where: { sessionId },
+      take: 50,
+      select: { aois: true },
+    });
     const regions = new Set<string>();
     for (const s of sample) for (const a of parse<Aoi[]>(s.aois, [])) regions.add(a.region);
     return {
@@ -72,89 +89,112 @@ export async function replayRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
-  app.get<{ Params: { sessionId: string }; Querystring: { signals?: string; from?: string; to?: string; maxPoints?: string } }>(
-    '/api/replay/:sessionId/streams',
-    async (req, reply) => {
+  app.get<{
+    Params: { sessionId: string };
+    Querystring: { signals?: string; from?: string; to?: string; maxPoints?: string };
+  }>('/api/replay/:sessionId/streams', async (req, reply) => {
+    const { sessionId } = req.params;
+    const session = await prisma.session.findUnique({ where: { id: sessionId } });
+    if (!session) return reply.code(404).send({ error: 'session not found' });
+    const base = session.baseWallClockMs;
+    const maxPoints = Math.min(Number(req.query.maxPoints ?? 2000), 5000);
+    const from = req.query.from != null ? Number(req.query.from) + base : undefined;
+    const to = req.query.to != null ? Number(req.query.to) + base : undefined;
+    const wallFilter = from != null || to != null ? { gte: from, lte: to } : undefined;
+    const requested = (req.query.signals ?? 'emotions,aus,pupil').split(',');
+
+    const result: Record<string, unknown> = {};
+
+    if (requested.includes('emotions')) {
+      const frames = await prisma.emotionFrame.findMany({
+        where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
+        orderBy: { wallMs: 'asc' },
+      });
+      const emo: Record<string, { t: number; v: number }[]> = {};
+      for (const key of EMOTIONS) emo[key] = [];
+      for (const f of frames) {
+        const t = f.wallMs - base;
+        for (const key of EMOTIONS) {
+          const v = (f as Record<string, unknown>)[key];
+          if (typeof v === 'number') emo[key].push({ t, v });
+        }
+      }
+      result.emotions = Object.fromEntries(
+        Object.entries(emo).map(([k, pts]) => [
+          k.replace(/^p/, '').toLowerCase(),
+          decimate(pts, maxPoints),
+        ]),
+      );
+    }
+
+    if (requested.includes('aus')) {
+      const rows = await prisma.auResult.findMany({
+        where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
+        orderBy: { wallMs: 'asc' },
+      });
+      const auSeries: Record<string, { t: number; v: number }[]> = {};
+      for (const r of rows) {
+        const t = r.wallMs - base;
+        const aus = parse<Record<string, number>>(r.aus, {});
+        for (const [k, v] of Object.entries(aus)) (auSeries[k] ??= []).push({ t, v });
+      }
+      result.aus = Object.fromEntries(
+        Object.entries(auSeries).map(([k, pts]) => [k, decimate(pts, maxPoints)]),
+      );
+    }
+
+    if (requested.includes('pupil')) {
+      const rows = await prisma.pupilSample.findMany({
+        where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
+        orderBy: { wallMs: 'asc' },
+      });
+      result.pupil = decimate(
+        rows.map((r) => ({ t: r.wallMs - base, v: r.diameter })),
+        maxPoints,
+      );
+    }
+
+    return result;
+  });
+
+  app.get<{ Params: { sessionId: string } }>(
+    '/api/replay/:sessionId/snapshots/index',
+    async (req) => {
       const { sessionId } = req.params;
-      const session = await prisma.session.findUnique({ where: { id: sessionId } });
-      if (!session) return reply.code(404).send({ error: 'session not found' });
-      const base = session.baseWallClockMs;
-      const maxPoints = Math.min(Number(req.query.maxPoints ?? 2000), 5000);
-      const from = req.query.from != null ? Number(req.query.from) + base : undefined;
-      const to = req.query.to != null ? Number(req.query.to) + base : undefined;
-      const wallFilter = from != null || to != null ? { gte: from, lte: to } : undefined;
-      const requested = (req.query.signals ?? 'emotions,aus,pupil').split(',');
-
-      const result: Record<string, unknown> = {};
-
-      if (requested.includes('emotions')) {
-        const frames = await prisma.emotionFrame.findMany({
-          where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
-          orderBy: { wallMs: 'asc' },
-        });
-        const emo: Record<string, { t: number; v: number }[]> = {};
-        for (const key of EMOTIONS) emo[key] = [];
-        for (const f of frames) {
-          const t = f.wallMs - base;
-          for (const key of EMOTIONS) {
-            const v = (f as Record<string, unknown>)[key];
-            if (typeof v === 'number') emo[key].push({ t, v });
-          }
-        }
-        result.emotions = Object.fromEntries(
-          Object.entries(emo).map(([k, pts]) => [k.replace(/^p/, '').toLowerCase(), decimate(pts, maxPoints)]),
-        );
-      }
-
-      if (requested.includes('aus')) {
-        const rows = await prisma.auResult.findMany({
-          where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
-          orderBy: { wallMs: 'asc' },
-        });
-        const auSeries: Record<string, { t: number; v: number }[]> = {};
-        for (const r of rows) {
-          const t = r.wallMs - base;
-          const aus = parse<Record<string, number>>(r.aus, {});
-          for (const [k, v] of Object.entries(aus)) (auSeries[k] ??= []).push({ t, v });
-        }
-        result.aus = Object.fromEntries(Object.entries(auSeries).map(([k, pts]) => [k, decimate(pts, maxPoints)]));
-      }
-
-      if (requested.includes('pupil')) {
-        const rows = await prisma.pupilSample.findMany({
-          where: { sessionId, ...(wallFilter ? { wallMs: wallFilter } : {}) },
-          orderBy: { wallMs: 'asc' },
-        });
-        result.pupil = decimate(rows.map((r) => ({ t: r.wallMs - base, v: r.diameter })), maxPoints);
-      }
-
-      return result;
+      const rows = await prisma.snapshot.findMany({
+        where: { sessionId },
+        orderBy: { wallMs: 'asc' },
+        select: {
+          id: true,
+          wallMs: true,
+          trigger: true,
+          pageUrl: true,
+          width: true,
+          height: true,
+          pdfCurrentPage: true,
+          pdfTotalPages: true,
+          aois: true,
+          scrollHosts: true,
+          screenshotPath: true,
+        },
+      });
+      return {
+        snapshots: rows.map((r) => ({
+          id: r.id,
+          wallMs: r.wallMs,
+          trigger: r.trigger,
+          pageUrl: r.pageUrl,
+          width: r.width,
+          height: r.height,
+          pdfCurrentPage: r.pdfCurrentPage,
+          pdfTotalPages: r.pdfTotalPages,
+          aois: parse<Aoi[]>(r.aois, []),
+          scrollHosts: parse<unknown[]>(r.scrollHosts, []),
+          hasScreenshot: !!r.screenshotPath,
+        })),
+      };
     },
   );
-
-  app.get<{ Params: { sessionId: string } }>('/api/replay/:sessionId/snapshots/index', async (req) => {
-    const { sessionId } = req.params;
-    const rows = await prisma.snapshot.findMany({
-      where: { sessionId },
-      orderBy: { wallMs: 'asc' },
-      select: { id: true, wallMs: true, trigger: true, pageUrl: true, width: true, height: true, pdfCurrentPage: true, pdfTotalPages: true, aois: true, scrollHosts: true, screenshotPath: true },
-    });
-    return {
-      snapshots: rows.map((r) => ({
-        id: r.id,
-        wallMs: r.wallMs,
-        trigger: r.trigger,
-        pageUrl: r.pageUrl,
-        width: r.width,
-        height: r.height,
-        pdfCurrentPage: r.pdfCurrentPage,
-        pdfTotalPages: r.pdfTotalPages,
-        aois: parse<Aoi[]>(r.aois, []),
-        scrollHosts: parse<unknown[]>(r.scrollHosts, []),
-        hasScreenshot: !!r.screenshotPath,
-      })),
-    };
-  });
 
   app.get<{ Params: { sessionId: string; snapshotId: string } }>(
     '/api/replay/:sessionId/snapshots/:snapshotId',
@@ -166,7 +206,9 @@ export async function replayRoutes(app: FastifyInstance): Promise<void> {
         id: snap.id,
         wallMs: snap.wallMs,
         htmlUrl: `/api/media/snapshot/${sessionId}/${snapshotId}.html`,
-        screenshotUrl: snap.screenshotPath ? `/api/media/snapshot/${sessionId}/${snapshotId}.jpg` : null,
+        screenshotUrl: snap.screenshotPath
+          ? `/api/media/snapshot/${sessionId}/${snapshotId}.jpg`
+          : null,
         width: snap.width,
         height: snap.height,
         aois: parse<Aoi[]>(snap.aois, []),
@@ -179,25 +221,55 @@ export async function replayRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { sessionId: string } }>('/api/replay/:sessionId/sparse', async (req) => {
     const { sessionId } = req.params;
-    const [clicks, chatbot, dialogue, interventions, ef, visibility, probes, webcam, gaze] = await Promise.all([
-      prisma.click.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.chatbotMessage.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.dialogueMessage.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.probeResponse.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-      prisma.webcamSegment.findMany({ where: { sessionId }, orderBy: { startWallMs: 'asc' } }),
-      prisma.gazeSample.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
-    ]);
+    const [clicks, chatbot, dialogue, interventions, ef, visibility, probes, webcam, gaze, survey] =
+      await Promise.all([
+        prisma.click.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.chatbotMessage.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.dialogueMessage.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.intervention.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.efDetection.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.visibility.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.probeResponse.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.webcamSegment.findMany({ where: { sessionId }, orderBy: { startWallMs: 'asc' } }),
+        prisma.gazeSample.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' } }),
+        prisma.activityEvent.findMany({
+          where: { sessionId, action: 'EMOTION_SELF_REPORT' },
+          orderBy: { wallMs: 'asc' },
+        }),
+      ]);
+    const emotionOf = (metadata: string | null): string => {
+      try {
+        return (JSON.parse(metadata ?? '{}')?.emotion as string) ?? '';
+      } catch {
+        return '';
+      }
+    };
     return {
       clicks: clicks.map((c) => ({ wallMs: c.wallMs, x: c.x, y: c.y, target: c.target })),
       chatbot: chatbot.map((m) => ({ wallMs: m.wallMs, role: m.role, content: m.content })),
       dialogue: dialogue.map((m) => ({ wallMs: m.wallMs, role: m.role, content: m.content })),
-      interventions: interventions.map((iv) => ({ wallMs: iv.wallMs, type: iv.type, status: iv.status })),
-      efDetections: ef.map((d) => ({ wallMs: d.wallMs, construct: d.construct, label: d.label, severity: d.severity, confidence: d.confidence })),
-      visibility: visibility.map((v) => ({ wallMs: v.wallMs, visibleState: v.visibleState, hiddenDurationMs: v.hiddenDurationMs })),
-      probes: probes.map((p) => ({ wallMs: p.wallMs, probeType: p.probeType, shownWallMs: p.shownWallMs })),
+      interventions: interventions.map((iv) => ({
+        wallMs: iv.wallMs,
+        type: iv.type,
+        status: iv.status,
+      })),
+      efDetections: ef.map((d) => ({
+        wallMs: d.wallMs,
+        construct: d.construct,
+        label: d.label,
+        severity: d.severity,
+        confidence: d.confidence,
+      })),
+      visibility: visibility.map((v) => ({
+        wallMs: v.wallMs,
+        visibleState: v.visibleState,
+        hiddenDurationMs: v.hiddenDurationMs,
+      })),
+      probes: probes.map((p) => ({
+        wallMs: p.wallMs,
+        probeType: p.probeType,
+        shownWallMs: p.shownWallMs,
+      })),
       webcam: webcam.map((w) => ({
         segmentId: w.id,
         startWallMs: w.startWallMs,
@@ -206,16 +278,28 @@ export async function replayRoutes(app: FastifyInstance): Promise<void> {
         url: w.mp4Path ? `/api/media/webcam/${sessionId}/${w.mp4Path.split(/[\\/]/).pop()}` : null,
       })),
       gaze: gaze.map((g) => ({ wallMs: g.wallMs, x: g.x, y: g.y, confidence: g.confidence })),
+      emotionSurvey: survey.map((e) => ({ wallMs: e.wallMs, emotion: emotionOf(e.metadata) })),
     };
   });
 
   app.get<{ Params: { sessionId: string } }>('/api/replay/:sessionId/coverage', async (req) => {
     const { sessionId } = req.params;
     const [gaze, snaps] = await Promise.all([
-      prisma.gazeSample.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' }, select: { wallMs: true, x: true, y: true, confidence: true } }),
-      prisma.snapshot.findMany({ where: { sessionId }, orderBy: { wallMs: 'asc' }, select: { wallMs: true, aois: true } }),
+      prisma.gazeSample.findMany({
+        where: { sessionId },
+        orderBy: { wallMs: 'asc' },
+        select: { wallMs: true, x: true, y: true, confidence: true },
+      }),
+      prisma.snapshot.findMany({
+        where: { sessionId },
+        orderBy: { wallMs: 'asc' },
+        select: { wallMs: true, aois: true },
+      }),
     ]);
-    const snapshots: SnapshotAoiState[] = snaps.map((s) => ({ wallMs: s.wallMs, aois: parse<Aoi[]>(s.aois, []) }));
+    const snapshots: SnapshotAoiState[] = snaps.map((s) => ({
+      wallMs: s.wallMs,
+      aois: parse<Aoi[]>(s.aois, []),
+    }));
     return computePdt(gaze, snapshots);
   });
 }
