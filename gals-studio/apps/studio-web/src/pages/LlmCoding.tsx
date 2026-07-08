@@ -100,6 +100,11 @@ export function LlmCoding() {
   }>({ template: '', definitions: {} });
   const [showPrompt, setShowPrompt] = useState(false);
 
+  // binary-suitability assessment
+  const [assessment, setAssessment] = useState<Record<string, any> | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessError, setAssessError] = useState('');
+
   const [utterances, setUtterances] = useState<any[]>([]);
   const [codings, setCodings] = useState<Record<string, any>>({});
   const [running, setRunning] = useState(false);
@@ -158,6 +163,7 @@ export function LlmCoding() {
       return n;
     });
 
+  // each dimension is followed immediately by its justification column
   const columns = useMemo(
     () => [
       'userId',
@@ -165,8 +171,7 @@ export function LlmCoding() {
       'utterance',
       'selectedText',
       'source',
-      ...dimensions,
-      'rationale',
+      ...dimensions.flatMap((d) => [d, `${d}_justification`]),
     ],
     [dimensions],
   );
@@ -224,13 +229,66 @@ export function LlmCoding() {
     }
   };
 
+  const assessScales = async () => {
+    setAssessError('');
+    if (!apiKey.trim())
+      return setAssessError(`Enter your ${provider === 'openai' ? 'OpenAI' : 'Gemini'} API key.`);
+    LS.set(`gals.llm.key.${provider}`, apiKey.trim());
+    setAssessing(true);
+    try {
+      const r = await api.llmAssessScales({
+        provider,
+        model: model.trim(),
+        apiKey: apiKey.trim(),
+        definitions: defs,
+      });
+      setAssessment(r.assessment ?? {});
+    } catch (e) {
+      setAssessError((e as Error).message);
+    } finally {
+      setAssessing(false);
+    }
+  };
+
+  const download = (name: string, csv: string) => {
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const exportAssessment = () => {
+    if (!assessment) return;
+    const cols = ['dimension', 'binary_suitable', 'suggested_scale', 'justification'];
+    const rows = dimensions.map((d) => {
+      const a = assessment[d] ?? {};
+      return [
+        d,
+        a.binary_suitable === false ? 'no' : 'yes',
+        a.suggested_scale ?? '',
+        a.justification ?? '',
+      ];
+    });
+    download(
+      `llm-scale-assessment-${new Date().toISOString().slice(0, 10)}.csv`,
+      [cols, ...rows].map((r) => r.map(csvEsc).join(',')).join('\r\n'),
+    );
+  };
+
   const exportCsv = () => {
     if (utterances.length === 0) return;
     const rows = utterances.map((u) => {
       const c = codings[u.id]?.coding ?? {};
       const base = [u.userId, u.sessionId, u.utterance, u.selectedText, u.source];
-      const dims = dimensions.map((d) => (c[d] == null ? '' : c[d]));
-      return [...base, ...dims, c.rationale ?? ''];
+      const dims = dimensions.flatMap((d) => [
+        c[d] == null ? '' : c[d],
+        c[`${d}_justification`] ?? '',
+      ]);
+      return [...base, ...dims];
     });
     const csv = '﻿' + [columns, ...rows].map((r) => r.map(csvEsc).join(',')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -421,9 +479,75 @@ export function LlmCoding() {
                   );
                 })}
                 <div className="text-[11px] text-slate-400">
-                  Every dimension is coded 1 (present) / 0 (absent) in one JSON call per utterance;
-                  edits apply to the next run and are remembered in this browser.
+                  Every dimension is coded 1 (present) / 0 (absent) with a per-dimension
+                  justification in one JSON call per utterance; edits apply to the next run and are
+                  remembered in this browser.
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* response-scale check (binary suitability) */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-slate-600">Response-scale check</span>
+              <span className="text-[11px] text-slate-400">
+                ask the model whether binary (0/1) is the right scale for each dimension — and what
+                to use instead
+              </span>
+              <button
+                onClick={assessScales}
+                disabled={assessing}
+                className="ml-auto inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 disabled:opacity-50"
+              >
+                {assessing ? 'Assessing…' : 'Assess binary suitability'}
+              </button>
+              {assessment && (
+                <button
+                  onClick={exportAssessment}
+                  className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+                >
+                  <Download size={12} /> CSV
+                </button>
+              )}
+            </div>
+            {assessError && (
+              <div className="mt-1 flex items-center gap-1 text-rose-600">
+                <TriangleAlert size={13} /> {assessError}
+              </div>
+            )}
+            {assessment && (
+              <div className="mt-2 max-h-[50vh] overflow-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead className="sticky top-0 bg-white text-left text-[10px] text-slate-400">
+                    <tr>
+                      <th className="px-1 py-0.5">dimension</th>
+                      <th className="px-1 py-0.5">binary?</th>
+                      <th className="px-1 py-0.5">suggested scale</th>
+                      <th className="px-1 py-0.5">justification</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dimensions.map((d) => {
+                      const a = assessment[d] ?? {};
+                      const ok = a.binary_suitable !== false;
+                      return (
+                        <tr key={d} className="border-t border-slate-100 align-top">
+                          <td className="px-1 py-0.5 font-mono text-slate-500">{d}</td>
+                          <td className="px-1 py-0.5">
+                            {ok ? (
+                              <span className="text-emerald-600">yes</span>
+                            ) : (
+                              <span className="font-semibold text-amber-600">no</span>
+                            )}
+                          </td>
+                          <td className="px-1 py-0.5">{a.suggested_scale}</td>
+                          <td className="px-1 py-0.5 text-slate-500">{a.justification}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

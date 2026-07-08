@@ -119,6 +119,7 @@ export const api = {
   llmUtterances: (userIds: string[]) =>
     jget<any>(`/api/llm-coding/utterances?userIds=${encodeURIComponent(userIds.join(','))}`),
   llmCode: (body: unknown) => jsend<any>('/api/llm-coding/code', 'POST', body),
+  llmAssessScales: (body: unknown) => jsend<any>('/api/llm-coding/assess-scales', 'POST', body),
   analysisExportZipUrl: (userIds: string[]) =>
     `/api/analysis/export.zip?userIds=${encodeURIComponent(userIds.join(','))}`,
   efCodings: (id: string, coderId: string) =>

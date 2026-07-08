@@ -102,8 +102,9 @@ Code each dimension 1 (present/evidenced in the utterance) or 0 (not). For the l
 
 {{DEFINITIONS}}
 
-Return STRICT JSON only, no prose, with EXACTLY these keys — each 0 or 1 — plus a short "rationale" (<= 25 words):
+Output STRICT JSON only (no prose). Return an object whose keys are EXACTLY these dimensions:
 {{DIMENSION_KEYS}}
+and whose value for EACH key is an object {"value": 0 or 1, "justification": "<= 30 words, specific to THIS dimension and THIS utterance, citing the textual evidence"}.
 
 Learner utterance:
 """{{UTTERANCE}}"""
@@ -115,6 +116,20 @@ function definitionsBlock(defs: Record<string, string>): string {
   return CODED_DIMENSIONS.map((k) => `- ${k}: ${defs[k] ?? DEFAULT_DEFINITIONS[k] ?? ''}`).join(
     '\n',
   );
+}
+
+function buildAssessPrompt(defs: Record<string, string>): string {
+  return `You are a measurement/psychometrics expert reviewing a text-based coding scheme for short learner utterances (chatbot + elaborative-interrogation). For EACH dimension below, judge whether a BINARY (0/1 present/absent) code is the appropriate response format when coding from short text, or whether a different scale would capture it better.
+
+Consider: is the construct inherently graded / intensity-based (e.g. working-memory load, frustration severity), multi-category, or a count? Would binary be lossy or risk low inter-rater reliability? Is the construct even reliably recoverable from text (e.g. attention regulation has a published text ceiling of kappa ~0.21)?
+
+Dimensions and definitions:
+${definitionsBlock(defs)}
+
+Output STRICT JSON only (no prose). Return an object whose keys are EXACTLY these dimensions:
+${JSON.stringify(CODED_DIMENSIONS)}
+and whose value for EACH key is an object:
+{"binary_suitable": true or false, "suggested_scale": "<short, e.g. 'binary (0/1)', 'ordinal 0-3 intensity', '3-level load: low/med/high', 'categorical', 'count', 'confidence 0-1'>", "justification": "<= 40 words>"}.`;
 }
 
 function buildPrompt(
@@ -182,14 +197,28 @@ async function callGemini(
   return JSON.parse(text);
 }
 
-/** Normalise the LLM's raw JSON into {dimension: 0|1} + rationale. */
+const truthy = (v: unknown) =>
+  v === 1 || v === '1' || v === true || String(v).toLowerCase() === 'yes' ? 1 : 0;
+
+/** Normalise the LLM's raw JSON into {dimension: 0|1, dimension_justification: text}.
+ * Accepts either nested {value, justification} per key or flat value + <key>_justification. */
 function normalise(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of CODED_DIMENSIONS) {
-    const v = raw[k];
-    out[k] = v === 1 || v === '1' || v === true || String(v).toLowerCase() === 'yes' ? 1 : 0;
+    const cell = raw[k];
+    let v: unknown;
+    let j: unknown;
+    if (cell && typeof cell === 'object' && !Array.isArray(cell)) {
+      const o = cell as Record<string, unknown>;
+      v = o.value ?? o.v ?? o.code;
+      j = o.justification ?? o.j ?? o.rationale ?? o.reason;
+    } else {
+      v = cell;
+      j = raw[`${k}_justification`] ?? raw[`${k}_rationale`];
+    }
+    out[k] = truthy(v);
+    out[`${k}_justification`] = typeof j === 'string' ? j : '';
   }
-  out.rationale = typeof raw.rationale === 'string' ? raw.rationale : '';
   return out;
 }
 
@@ -336,5 +365,40 @@ export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
       }
     });
     return { results };
+  });
+
+  // One-off: ask the LLM whether a binary code fits each dimension, and if not,
+  // suggest a better scale with justification.
+  app.post<{
+    Body: {
+      provider?: 'openai' | 'gemini';
+      model?: string;
+      apiKey?: string;
+      definitions?: Record<string, string>;
+    };
+  }>('/api/llm-coding/assess-scales', async (req, reply) => {
+    const { provider, model, apiKey } = req.body;
+    if (!provider || !model || !apiKey)
+      return reply.code(400).send({ error: 'provider, model, apiKey required' });
+    const definitions = { ...DEFAULT_DEFINITIONS, ...(req.body.definitions ?? {}) };
+    const call = provider === 'gemini' ? callGemini : callOpenAI;
+    try {
+      const raw = await call(buildAssessPrompt(definitions), model, apiKey);
+      const assessment: Record<string, unknown> = {};
+      for (const k of CODED_DIMENSIONS) {
+        const cell = (raw[k] ?? {}) as Record<string, unknown>;
+        assessment[k] = {
+          binary_suitable:
+            cell.binary_suitable === false || String(cell.binary_suitable).toLowerCase() === 'false'
+              ? false
+              : true,
+          suggested_scale: typeof cell.suggested_scale === 'string' ? cell.suggested_scale : '',
+          justification: typeof cell.justification === 'string' ? cell.justification : '',
+        };
+      }
+      return { assessment };
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
   });
 }
