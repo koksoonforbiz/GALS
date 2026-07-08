@@ -1,0 +1,313 @@
+% ============================================================
+% Chapter 3 — Scope Evolution: Proposal to Delivered System
+% ============================================================
+\chapter{Scope Evolution: From Proposal to Delivered System}
+\label{ch:scope}
+
+\roadmap{This chapter reconciles the eighteen deliverables promised in the
+project proposal with the system actually delivered. It presents the full
+proposed-versus-delivered accounting with a rationale for every departure,
+details the five items whose status requires the most careful reporting,
+lists the substantial capabilities that were built without having been
+proposed, and closes with the revised scope statement. The framing
+throughout is \emph{scope evolution, not scope drift}: each departure was a
+research-driven decision, and none of the statuses below has been upgraded
+beyond what the codebase supports.}
+
+\section{How the scope evolved}
+\label{sec:scope-how}
+
+The proposal described an intelligent tutoring system in which content
+authoring, tutoring, and a modest sensing deliverable (``WebGazer tracing
+eye gaze and facial expressions,'' item~12) would culminate in a user
+study with statistical comparison of system-detected and self-reported
+states. During development, a sequence of empirical realizations shifted
+the project's center of gravity from \emph{content generation} to
+\emph{learning-process measurement}. Three realizations were decisive.
+First, for any claim about affect or attention to survive examination, the
+raw signals would need to be time-aligned, inspectable, and re-codable
+after the fact---which forced the construction of the sync-anchor time
+base, the session-replay engine, and the retrospective coding surface
+(\cref{ch:sensing}), none of which the proposal anticipated. Second,
+single-channel facial sensing proved scientifically insufficient on its
+own terms: the literature's insistence on multimodality and on validation
+against an independent criterion (\cref{sec:bg-webcam}) motivated the
+separate AU pipeline, the AOI attention layer, and the emotion self-report
+probe. Third, the arrival of capable LLM APIs mid-project made
+retrieval-grounded tutoring and strategy interventions far more powerful
+than the proposal's ``chatbot linked to LLM'' had envisioned, and the
+project invested accordingly. The cost of these investments was paid by
+four proposal items (5, 8, 10, 13) that were delivered in reframed or
+partial form; the accounting below reports them as such.
+
+\section{Proposed versus delivered: the eighteen items}
+\label{sec:scope-table}
+
+\Cref{tab:scope-18} gives the verdict for every proposal item. Verdicts
+follow the codebase audit exactly\footnote{\code{docs/capstone-evidence/02_scope_and_deliverables.md}}:
+\emph{Delivered} (built as promised), \emph{Exceeded} (built beyond the
+proposal), \emph{Partial} (core exists, promised scope incomplete),
+\emph{Reframed} (built differently for stated reasons), and
+\emph{Unverifiable from code} (a study-conduct item that source code
+cannot attest). No status has been upgraded.
+
+\begin{small}
+\begin{longtable}{@{}p{0.05\linewidth}p{0.27\linewidth}p{0.17\linewidth}p{0.42\linewidth}@{}}
+\caption{Proposal items: proposed scope, delivered status, and rationale.}
+\label{tab:scope-18}\\
+\toprule
+\# & Proposed & Delivered status & Rationale / evidence \\
+\midrule
+\endfirsthead
+\multicolumn{4}{l}{\small\emph{\tablename~\thetable{} (continued)}}\\
+\toprule
+\# & Proposed & Delivered status & Rationale / evidence \\
+\midrule
+\endhead
+\bottomrule
+\endlastfoot
+1 & Login pages for instructor and learners via email authentication &
+Delivered & Email-or-login-ID authentication with JWT, role guards, and
+rate limiting.\footnote{\code{apps/api/src/auth}} \\
+2 & RAG pipeline to upload course materials & Exceeded & Hybrid
+dense--sparse retrieval with reciprocal rank fusion, optional reranking,
+contextual chunk blurbs, and multimodal page-image embedding
+(\cref{sec:modes-rag}). \\
+3 & LLM course generation with RAG embeddings & Delivered & Course-outline
+and per-page generation jobs grounded in retrieved
+chunks.\footnote{\code{apps/api/src/course-structure}, \code{apps/api/src/page-content}} \\
+4 & Human safeguard edits & Delivered & Draft approve/reject workflow,
+page version history with rollback, and a justification-gated publish
+override.\footnote{\code{ContentDraft}, \code{PageContentVersion}, \code{apps/api/src/publish-gate}} \\
+5 & Learning-path generation with knowledge components using knowledge
+graph theory & \textbf{Partial / Reframed} & Genuine KC graph with
+prerequisite edges, topological ordering, and cycle detection exists for
+the \emph{teacher}; no runtime student-facing adaptive router. Two KC
+systems remain unwired (\cref{sec:scope-item5}). \\
+6 & LLM evaluation of course content (formatting, accuracy, pedagogy) &
+Delivered (nuanced) & Rubric scores for formatting, equations, pedagogy,
+and rigor, plus deterministic math checks and auto-fix; ``accuracy'' is
+rubric-based quality evaluation, not external fact-checking
+(\cref{sec:scope-item6}). \\
+7 & Curation of question banks and assessment & Exceeded & Question CRUD
+and bulk import, assessment assembly, and an AI
+generate--review--approve pipeline with Hattie-model
+grading.\footnote{\code{apps/api/src/questions}, \code{apps/api/src/question-generation}} \\
+8 & LMS monitoring: enrolment, progress, performance & \textbf{Partial /
+Reframed} & Enrollment policy, mastery views, and deep per-session
+analytics exist; the at-a-glance cohort dashboard is a stub
+(\cref{sec:scope-item8}). \\
+9 & Lesson content page (modular lesson pages) & Delivered & Module/item
+structure with block-based pages and PDF lessons rendered in the student
+course view.\footnote{\code{ModuleItem}; \code{apps/web/src/pages/student/StudentCourseViewPage.tsx}} \\
+10 & Assessment page with adaptive feedback & \textbf{Reframed} &
+Adaptivity delivered as feedback \emph{depth} (four Hattie levels,
+per-course configuration), not adaptive \emph{item selection}; BKT columns
+exist but BKT is not implemented (\cref{sec:scope-item10}). \\
+11 & Chatbot linked to LLM for dialogue-based learning & Exceeded & Two
+grounded surfaces: the dialogue workspace over learner-uploaded sources
+and the docked/floating course chatbot, sharing one grounding contract
+(\cref{ch:modes}). \\
+12 & WebGazer tracing eye gaze and facial expressions & Exceeded &
+WebGazer gaze at 10\,Hz plus two server-side facial pipelines
+(OpenFace~3.0 emotions; Py-Feat action units), time-aligned and
+replayable (\cref{ch:sensing}). \\
+13 & Learners' progress report & \textbf{Partial / Reframed} &
+Session summaries, results pages, and mastery views exist; no
+consolidated longitudinal per-student report artifact
+(\cref{sec:scope-item13}). \\
+14 & User study with $\geq$30 participants & Unverifiable from code &
+Study conduct is not attestable from source; the codebase references 54
+recorded sessions predating the self-report probe. Participant counts are
+reported in \cref{ch:results}. \todo{Confirm final N.} \\
+15 & Validation of system-detected vs.\ self-reported states & Partial &
+Both sides of the comparison exist in the data (self-report probe;
+windowed state estimates); the agreement analysis itself is performed in
+\cref{ch:results}, not in-platform. \\
+16 & T-test and one-way ANOVA (phase 1 vs.\ phase 2) & Partial &
+Dependent variables are exportable; \emph{no phase marker exists in the
+database}, so grouping must be defined externally
+(\cref{sec:methodology-stats}). \\
+17 & Mann--Whitney test if normality fails & Partial & Same data basis
+and same grouping gap as item 16; normality screening is an analysis-side
+step. \\
+18 & Report of effect sizes & Partial & All raw quantities exist; no
+effect-size or normalized-gain fields are stored, so effect sizes are
+computed in analysis (\cref{ch:results}). \\
+\end{longtable}
+\end{small}
+
+\section{The five items requiring careful reporting}
+\label{sec:scope-five}
+
+\subsection{Item 5: knowledge-component learning paths}
+\label{sec:scope-item5}
+
+The knowledge-graph deliverable is substantially, but asymmetrically,
+built. On the teacher side there is a complete knowledge-component (KC)
+studio: AI-proposed KCs, prerequisite/related edges, Kahn topological
+ordering and depth-first cycle detection over the graph, KC-to-page
+mappings, versioned snapshots, and a learning-path
+panel.\footnote{\code{apps/api/src/kc} (proposed-kcs, kc-graph,
+kc-mappings); \code{apps/web/src/components/LearningPathPanel.tsx}}
+``Knowledge graph theory'' is therefore genuinely implemented. What does
+not exist is the student-facing consequence the proposal implied: a
+runtime router that selects each learner's next content from mastery over
+the prerequisite graph. The structural reason is an architectural seam:
+the platform contains \emph{two} KC systems---the curated graph
+(\dbtable{ProposedKC}/\dbtable{KcEdge}) and the mastery tracker
+(\dbtable{KnowledgeComponent}/\dbtable{UserMastery}, an exponential
+moving average with $\alpha=0.3$)---that are not connected. Until mastery
+is computed over the graph's nodes, an adaptive path cannot be driven by
+it. The report accordingly classifies item 5 as partial/reframed and
+identifies the unification as future work.
+
+\subsection{Item 6: LLM evaluation of content}
+\label{sec:scope-item6}
+
+Content evaluation is delivered: evaluation runs score each page on
+formatting, equations, pedagogy, and rigor, attach located issues with
+suggested fixes, combine an LLM rubric pass with a deterministic
+mathematical-notation normalizer, and can apply fixes back into the page
+under version control.\footnote{\code{apps/api/src/evaluation};
+\dbtable{PageEvalResult}} The nuance the report preserves is semantic:
+the proposal's word ``accuracy'' is implemented as \emph{rubric-scored
+rigor}, i.e., internal quality review, not verification against an
+external ground-truth corpus. The report therefore uses
+``content-quality evaluation'' and never claims factual verification.
+
+\subsection{Item 8: LMS monitoring}
+\label{sec:scope-item8}
+
+Monitoring was reframed from breadth to depth. The delivered system has
+enrollment management with per-course policy flags, per-topic mastery
+views for students and teachers, per-session behavioral summaries, and
+the review hub whose replay, conversation, intervention, and biometrics
+tabs constitute an unusually deep per-learner microscope
+(\cref{ch:sensing}). What it lacks is the conventional wide-angle lens:
+the teacher landing dashboard renders placeholder statistics with no data
+fetch,\footnote{\code{apps/web/src/pages/teacher/TeacherDashboard.tsx};
+four stat cards hardcoded to ``--''.} and there is no cohort-level
+``who is falling behind'' roster. For a research deployment with a small
+cohort the depth-first trade was correct; for the proposal's LMS wording
+it is a partial delivery, and the report says so.
+
+\subsection{Item 10: adaptive feedback}
+\label{sec:scope-item10}
+
+The assessment surface delivers rich feedback---automatic MCQ grading,
+LLM grading of short answers, and structured feedback at up to four
+levels (task, process, self-regulation, self) following
+\citet{hattie2007}, with teachers configuring which levels are enabled
+per course. What was \emph{not} built is adaptivity in the
+item-selection sense: no computerized-adaptive testing, no difficulty
+branching. The mastery model's schema carries Bayesian Knowledge Tracing
+parameter columns \citep{corbett1995}, but they are unpopulated; mastery
+is an EMA. The closest delivered analogue to adaptive selection is the
+revision-worksheet generator, which selects questions in the learner's
+zone-of-proximal-development band. The honest formulation, used
+throughout this report: adaptivity was delivered in feedback
+\emph{depth}, not item \emph{selection}.
+
+\subsection{Item 13: learners' progress report}
+\label{sec:scope-item13}
+
+Progress information exists in several partial surfaces---per-session
+summaries with mastery deltas, a student results page, dashboard mastery
+bars, and exhaustive researcher-facing exports---but no consolidated,
+longitudinal ``progress report'' document per learner. The capability
+was effectively reframed into the research exports (per-session and
+cohort CSV bundles, \cref{sec:sensing-export}); a student- or
+parent-facing report generator remains future work.
+
+\section{Deliverables built beyond the proposal}
+\label{sec:scope-new}
+
+\Cref{tab:scope-new} lists capabilities present in the delivered system
+that the proposal did not anticipate. They are not incidental: the first
+five constitute the platform's research instrumentation and are the basis
+of contributions 2--6 in \cref{sec:intro-contributions}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Substantial capabilities delivered beyond the proposal's scope.}
+\label{tab:scope-new}
+\begin{tabular}{@{}p{0.3\linewidth}p{0.62\linewidth}@{}}
+\toprule
+Capability & Summary \\
+\midrule
+Session replay engine & Time-aligned replay of screen state, webcam
+video, gaze, affect estimates, and events; three-stage loading for long
+sessions (\cref{sec:sensing-replay}). \\
+AOI/SEEV attention layer & Interface-region gaze bucketing, epoch
+segmentation, and the observed-vs-expected \allocscore{}
+(\cref{sec:sensing-aoi}). \\
+Retrospective coding & Researcher-private code books and time-anchored
+annotations over replays (\cref{sec:sensing-coding}). \\
+EF text-mining pipeline & Nine construct detectors over learner
+utterances with calibration metadata (\cref{sec:methodology-ef}). \\
+Emotion self-report probe & Mandatory five-option affect report every 15
+minutes; the study's self-report criterion
+(\cref{sec:methodology-selfreport}). \\
+Affective-mapping engine & Teacher-configurable, versioned rules mapping
+emotion probabilities to four learning-centered states
+(\cref{sec:sensing-affect}). \\
+Sync-anchor time alignment & Wall/monotonic/server clock anchor unifying
+all modalities on one time base (\cref{sec:sensing-logging}). \\
+Dialogue mode (Mode A) & Source-grounded dialogue workspace with studio
+outputs (briefings, flashcards, comparisons, FAQs)
+(\cref{sec:modes-a}). \\
+Four interventions & Practice testing, interrogative elaboration,
+stepwise learning, distributed practice (\cref{ch:interventions}). \\
+Teacher prompt configuration & Per-course system prompts for
+interventions, feedback levels, and text-mining constructs
+(\cref{sec:interventions-teacher}). \\
+CSV/ZIP research exporters & Wide-format replay CSV, full-session media
+bundle, and a seven-file cohort export (\cref{sec:sensing-export}). \\
+Supporting infrastructure & Publish gate, curriculum-coverage analysis,
+knowledge versioning, pre-generated exercises, LLM cost accounting,
+bulk user provisioning, VLM slide description. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Revised scope statement}
+\label{sec:scope-statement}
+
+The delivered system is best described as a \emph{multimodal
+learning-analytics platform with an intelligent-tutoring front end}. The
+authoring side meets, and in places exceeds, the proposal: multimodal RAG
+with hybrid retrieval, LLM course and question generation under
+human-in-the-loop review, a knowledge-component graph with prerequisite
+reasoning, and automated content-quality evaluation. The learning side
+adds four theory-grounded, learner-initiated strategy interventions and
+two grounded conversational surfaces. Crucially, the sensing side is
+decoupled from the pedagogy: interventions are never triggered by
+affective signals, so the affect measurements form a clean observational
+layer rather than a confound inside the learning loop. On top sits the
+instrumentation---synchronized interaction, gaze, pupil-proxy, emotion,
+and action-unit streams on a single wall-clock anchor---and the research
+toolset (replay, AOI attention scoring, executive-function text mining,
+qualitative coding, and exporters) that turns each session into an
+analyzable multimodal record.
+
+Several proposal deliverables were reframed rather than dropped, and this
+report treats them as such: knowledge-graph ``learning paths'' exist as
+teacher-facing prerequisite graphs rather than a runtime adaptive router;
+``adaptive feedback'' was delivered as adaptive feedback depth rather
+than adaptive item selection; LMS ``monitoring'' and the ``progress
+report'' were reframed into fine-grained per-session analytics rather
+than a conventional dashboard. The statistical program (validation
+against self-report; parametric or non-parametric group comparison;
+effect sizes) is supported by the collected data but executed in
+analysis rather than in-platform, with two acknowledged gaps---no stored
+phase marker and no stored gain fields---handled explicitly in
+\cref{ch:methodology}. Framed this way, the platform's evolution is
+itself the contribution: a working demonstration that a RAG-based tutor
+can be instrumented, end to end and privacy-first, to make learners'
+attention, affect, and strategy use measurable.
+
+\medskip
+\noindent The next chapter documents the architecture that carries this
+scope.

@@ -1,0 +1,363 @@
+% ============================================================
+% Chapter 7 — Sensing, Logging, Replay, and Coding
+% ============================================================
+\chapter{Sensing, Logging, Replay, and Retrospective Coding}
+\label{ch:sensing}
+
+\roadmap{This chapter documents the platform's instrumentation: the
+webcam facial pipelines and the exact model-to-signal attribution; the
+eye-gaze and pupil channels; the two affective-state derivations; the
+area-of-interest attention layer and its \allocscore{}; the logging
+inventory and its privacy posture; the time-alignment anchor; and the
+session-replay and retrospective-coding surfaces. It states each signal's
+validity plainly---distinguishing measured, derived, and exploratory
+channels---and closes with the known data-quality caveats that constrain
+interpretation.}
+
+\section{Overview and validity tiers}
+\label{sec:sensing-overview}
+
+The sensing layer captures, per learning session, five families of
+signal: webcam facial analysis (emotions and action units), webcam eye
+gaze, an exploratory pupil-size proxy, dense interaction telemetry, and
+screen-state snapshots for replay. It is useful to state up front the
+\emph{validity tier} of each, because the report's claims are calibrated
+to them: the facial and interaction channels are measured signals from
+established tools; the affective-state and AOI layers are \emph{derived}
+interpretations with documented assumptions; and the pupil channel is an
+\emph{exploratory proxy} of low validity. \Cref{fig:sensing-pipeline}
+shows the facial pipeline, whose model attribution is specified next
+because project documentation historically confused it.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=6mm and 10mm,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=8mm,
+              inner sep=4pt, font=\small},
+  store/.style={box, fill=blockgreen},
+  proc/.style={box, fill=blockblue},
+  wrk/.style={box, fill=blockamber},
+  arr/.style={-{Stealth[length=2.2mm]}, semithick}
+]
+  \node[proc] (cam) {Webcam segment\\\scriptsize 640$\times$480, 15\,fps, no audio};
+  \node[store, right=of cam] (minio) {MinIO};
+  \node[proc, right=of minio] (redis) {Redis queues};
+  \node[wrk, above right=4mm and 12mm of redis] (of3) {OpenFace 3.0 worker};
+  \node[wrk, below right=4mm and 12mm of redis] (pyf) {Py-Feat worker};
+  \node[store, right=14mm of of3] (emo) {\dbtable{emotion\_frames}\\\scriptsize 8-class probs};
+  \node[store, right=14mm of pyf] (au) {\dbtable{pyfeat\_au\_results}\\\scriptsize 18 AU intensities};
+  \draw[arr] (cam) -- (minio);
+  \draw[arr] (minio) -- (redis);
+  \draw[arr] (redis) -- (of3);
+  \draw[arr] (redis) -- (pyf);
+  \draw[arr] (of3) -- node[above,font=\scriptsize]{5\,fps} (emo);
+  \draw[arr] (pyf) -- node[below,font=\scriptsize]{1\,fps} (au);
+\end{tikzpicture}
+\caption[Facial sensing pipeline]{The facial sensing pipeline. Two
+independent workers consume the same webcam segment: OpenFace~3.0 produces
+eight-class emotion probabilities into \dbtable{emotion_frames} at 5\,fps;
+Py-Feat produces eighteen action-unit intensities into
+\dbtable{pyfeat_au_results} at 1\,fps.}
+\label{fig:sensing-pipeline}
+\end{figure}
+
+\section{Facial analysis: definitive model attribution}
+\label{sec:sensing-facial}
+
+The attribution below was audited directly against the two workers'
+inference code, and the report states it without hedging because a CSV
+header in the export code mislabels one signal (\cref{sec:sensing-caveats}).
+
+\begin{itemize}
+  \item \textbf{Eight-class emotion probabilities come from OpenFace~3.0,
+  not Py-Feat.} The OpenFace~3.0 worker runs genuine multitask inference
+  (RetinaFace alignment \citep{deng2020retinaface} plus a multitask head) and writes per-frame
+  AffectNet-ordered probabilities---neutral, happiness, sadness,
+  surprise, fear, disgust, anger, contempt---together with the dominant
+  class into \dbtable{emotion_frames} at 5\,fps.\footnote{\code{apps/openface3-worker/inference.py};
+  \code{apps/openface3-worker/main.py}}
+  \item \textbf{Eighteen action-unit intensities come from Py-Feat.} The
+  Py-Feat worker runs its detector with the \code{xgb} AU model and writes
+  eighteen AU intensities (AU01, 02, 04, 05, 06, 07, 09, 10, 12, 14, 15,
+  17, 20, 23, 24, 25, 26, 28) into \dbtable{pyfeat_au_results} at
+  1\,fps.\footnote{\code{apps/pyfeat-worker/processor.py};
+  \code{apps/pyfeat-worker/db.py}} Py-Feat's own emotion model is loaded
+  but never read or persisted, so Py-Feat contributes nothing to
+  \dbtable{emotion_frames}.
+  \item \textbf{Head pose is never computed.} \dbtable{emotion_frames} has
+  yaw/pitch/roll columns, but the worker hard-codes them null and discards
+  the model's gaze tensor. The report makes no head-pose
+  claim.\footnote{\code{apps/openface3-worker/main.py:176};
+  \code{inference.py:104}}
+\end{itemize}
+
+Both workers perform real inference and are inert only if deployed without
+their model weights---an operational, not scientific, limitation.
+
+\section{Eye gaze}
+\label{sec:sensing-gaze}
+
+Gaze is estimated in the browser by WebGazer
+\citep{papoutsaki2016webgazer} using a weighted-ridge regression over
+facial-landmark features, sampled at 10\,Hz and buffered for batched
+upload.\footnote{\code{apps/web/src/lib/webgazer/useWebgazer.ts}} Each
+\dbtable{WebgazerLog} row stores viewport coordinates, an optional
+confidence, the page path, and a timestamp; confidence is carried through
+untouched and later used as a quality filter in AOI scoring. Calibration
+runs on new sessions and can be re-prompted after inactivity. The channel
+is region-level: it is adequate to say which \emph{panel} a learner looks
+at, not which \emph{word}, and all gaze-based claims respect that bound.
+
+\section{Pupil size: an exploratory proxy}
+\label{sec:sensing-pupil}
+
+The pupil channel is presented as \emph{exploratory} because it is not
+pupillometry. It borrows the WebGazer camera stream, samples at 2\,Hz, and
+estimates a ``diameter'' by a dark-pixel-area heuristic over a fixed
+central crop of the
+frame:\footnote{\code{apps/web/src/lib/pupil-size/usePupilSize.ts}}
+\begin{equation}
+  d = 2\sqrt{\dfrac{n_{\text{dark}}}{\pi}},
+\end{equation}
+where $n_{\text{dark}}$ is the count of sub-threshold (dark) pixels in the
+crop. Because the crop is a fixed rectangle rather than a localized iris,
+$d$ conflates pupil, eyelash, brow, shadow, and nostril. The signal
+derives from real webcam pixels and is not random, but its construct
+validity as pupil diameter is low; the report treats any pupil-derived
+quantity as an exploratory proxy and excludes it from primary claims.
+
+\section{Affective-state derivation: two unwired pipelines}
+\label{sec:sensing-affect}
+
+The platform derives four learning-centered states---engagement, boredom,
+confusion, frustration---from emotion probabilities in \emph{two}
+independent places that are not unified, and the report describes both.
+
+\subsection{Server-side windowed pipeline}
+The persisted pipeline slides a window (default 30\,s, 10\,s stride,
+minimum five faces per window) over \dbtable{emotion_frames},
+mean-pools the eight probabilities across face-bearing frames, and applies
+a configurable, versioned rule set to produce the four state scores and a
+dominant state, stored in
+\dbtable{AffectiveStateWindow}.\footnote{\code{apps/api/src/affective-mapping};
+\code{packages/shared/src/affective-mapping.ts}} The default rules are
+Wickens-informed weightings---for example, engagement as a weighted sum
+favoring neutral, happiness, and surprise; boredom as a weighted sum over
+neutral, sadness, and disgust attenuated by an arousal modifier;
+frustration as a max over disgust/anger/(sadness,contempt); confusion as a
+conjunction of anger, disgust, and (surprise,fear). Teachers may edit
+these rules, and edits are version-tracked.
+
+\subsection{Client-side per-frame classifier}
+Independently, the replay tab and CSV exporter classify each emotion frame
+with a \emph{different}, hard-coded threshold scheme---continuous
+engagement and boredom scores and binary confusion/frustration flags---
+whose weights differ from the server's (e.g., engagement
+$0.4\,\text{happy}+0.4\,\text{neutral}+0.2\,\text{surprise}$ versus the
+server's $0.45/0.35/0.20$).\footnote{\code{.../tabs/ReplayTab.tsx};
+\code{.../lib/exportReplayCsv.ts}} The replay tab's threshold sliders
+re-label \emph{this} client-side timeline only; they never recompute the
+server windows. The report flags this divergence explicitly: any figure
+must state which pipeline produced it, and the two are not to be pooled.
+
+\section{Area-of-interest attention layer}
+\label{sec:sensing-aoi}
+
+The AOI layer answers a SEEV-style question (\cref{sec:bg-seev}): does the
+learner look where the task expects? Interface panels carry a
+\code{data-replay-region} label; on each replay snapshot their bounding
+rectangles are captured in viewport pixels into
+\dbtable{SessionReplaySnapshot.aois}.\footnote{\code{apps/web/src/lib/interaction-log/useSessionReplayRecorder.ts}}
+The scoring kernel walks gaze samples against snapshots.\footnote{\code{apps/web/src/pages/teacher/student-logs/lib/aoiScoring.ts}}
+
+A gaze sample is admitted only if it passes a validity mask: confidence at
+least $0.5$, not during a tab-hidden interval, not within a
+$750\,\text{ms}$ post-navigation settle, and not inside an idle epoch.
+Admitted samples are bucketed to the smallest containing panel (the
+lesson and PDF panels roll up to a single \code{lesson+pdf} bucket).
+The session is segmented into epochs by inferred activity, of which three
+are scored: reading, intervention-active, and chatbot-dialogue. Each
+scored epoch carries an \emph{expected} allocation over the four
+buckets---ordinal SEEV/expectancy--value weights supplied as
+placeholders---normalized to sum to one.
+
+Per epoch, the \emph{observed} allocation is the fraction of admitted
+gaze samples in each bucket, and the alignment between observed and
+expected is one minus half their total-variation distance:
+\begin{equation}
+  \text{alignment}_{e}
+  = 1 - \tfrac{1}{2}\sum_{b \in \mathcal{B}}
+    \bigl| o_{e,b} - x_{e,b} \bigr|,
+  \qquad \mathcal{B} = \{\text{sidebar, lesson+pdf, chatbot, header}\},
+  \label{eq:alignment}
+\end{equation}
+where $o_{e,b}$ and $x_{e,b}$ are the observed and expected shares for
+bucket $b$ in epoch $e$; the score lies in $[0,1]$, with $1$ perfect
+alignment, and is undefined for idle, navigation, empty, or zero-weight
+epochs. The session-level \allocscore{} is the duration-weighted mean of
+the defined epoch alignments:
+\begin{equation}
+  \text{allocation\_score}
+  = \frac{\sum_{e} \text{alignment}_{e}\,\Delta t_{e}}
+         {\sum_{e} \Delta t_{e}},
+  \label{eq:allocscore}
+\end{equation}
+over epochs $e$ with a defined alignment and duration $\Delta t_{e}$.
+Because the expected weights are placeholders rather than fitted SEEV
+parameters, \allocscore{} is reported as a relative attention-alignment
+index, not a validated SEEV measure---a scope caution carried into
+\cref{ch:limitations}.
+
+\section{Logging inventory and privacy posture}
+\label{sec:sensing-logging}
+
+Client logging mounts an interaction logger (eight raw streams) and a
+replay recorder (snapshots).\footnote{\code{apps/web/src/components/LoggingProvider.tsx};
+\code{apps/web/src/lib/interaction-log/useInteractionLogger.ts}}
+\Cref{tab:logging} inventories the streams with their cadence. Buffered
+streams flush every 30\,s (and on page hide); snapshots are taken every
+3\,s plus on navigation/visibility events and flushed every 10\,s.
+Structured domain events are recorded to \dbtable{ActivityLog} under a
+43-value action enum (reproduced in \cref{app:activityenum}), fire-and-forget
+so that instrumentation cannot break the learning flow.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Raw interaction-logging streams and cadence.}
+\label{tab:logging}
+\begin{tabular}{@{}p{0.2\linewidth}p{0.45\linewidth}p{0.28\linewidth}@{}}
+\toprule
+Stream & Captured & Cadence \\
+\midrule
+\dbtable{cursor_logs} & pointer x/y, coarse target & 100\,ms throttle \\
+\dbtable{click_logs} & x/y, selector, text ($\leq$50 chars) & per click \\
+\dbtable{scroll_logs} & scroll position and percent & 200\,ms throttle \\
+\dbtable{keystroke_logs} & \emph{counts}, pause, words/min & per field, on blur \\
+\dbtable{clipboard_logs} & action and text \emph{length} & per event \\
+\dbtable{visibility_logs} & visible/hidden, hidden duration & per event \\
+\dbtable{viewport_logs} & size, orientation & init + resize \\
+\dbtable{performance_logs} & load and API timings & per navigation \\
+\dbtable{error_logs} & message, truncated stack & on error \\
+\dbtable{session_replay_snapshots} & screenshot/DOM, geometry, AOIs & 3\,s + events \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The privacy posture is a design commitment verified in code: keystrokes
+are stored as \emph{counts and typing speed, never key contents}; the
+clipboard stores \emph{lengths, never contents}; password fields are
+redacted in any DOM snapshot; element identifiers are coarse (tag, id, or
+first class) and captured click text is capped; and webcam capture
+records \emph{no audio}. What is deliberately not captured is as much a
+result of the design as what is.
+
+\subsection{Time alignment}
+All streams are unified on one time base. At session start the client
+records a \dbtable{session_sync_anchors} row tying wall-clock,
+monotonic-clock, and (server-stamped) receive time together; the replay
+and every export express time relative to this anchor's
+wall-clock.\footnote{\code{useInteractionLogger.ts}; \code{logs.service.ts}}
+Because facial, gaze, and pupil rows all carry wall-clock timestamps, the
+modalities align without per-stream offset estimation (a
+\dbtable{modality_offsets} table exists but is unused).
+
+\section{Session replay}
+\label{sec:sensing-replay}
+
+The replay tab reconstructs a session as a scrubber-driven playback of
+screen state, synchronized webcam video, and signal
+overlays.\footnote{\code{apps/web/src/pages/teacher/student-logs/tabs/ReplayTab.tsx}}
+To remain responsive on long sessions it loads in three stages: session
+metadata with all interaction and biometric streams; then paginated
+snapshot metadata (geometry and AOIs, no heavy content); then, on demand,
+the full HTML and screenshot for the current snapshot, cached with
+bounded size. Screen state is rendered in a sandboxed double-buffered
+iframe with multi-pass scroll restoration, including a PDF-page fallback
+for canvases still decoding. With DOM capture off---the study default---
+the pixel screenshot is the primary view. Overlaid on the playback are the
+gaze point, click pulses, the pupil proxy, the AOI rectangles, and a
+timeline of the eight emotions, four learning states, and eighteen action
+units.
+
+\section{Retrospective coding}
+\label{sec:sensing-coding}
+
+Layered over replay is a qualitative coding
+surface.\footnote{\code{apps/api/src/replay-annotations};
+\code{.../components/AnnotationsPanel.tsx}} A researcher defines a private
+code book (\dbtable{ReplayCode}: label and color) and attaches
+time-anchored annotations (\dbtable{ReplayAnnotation}: a start, an optional
+end, an optional code, and a note) expressed in the same anchor-relative
+time as the replay. Annotations are additive---they never mutate captured
+data---and per researcher, so several coders can annotate the same session
+independently. This surface is the platform's provision for human-coded
+ground truth; using it to obtain BROMP-style labels
+\citep{ocumpaugh2015} is designed-but-future work (\cref{ch:future}), and
+the report is careful to call the current validation \emph{convergent},
+not criterion.
+
+Deletion semantics are deliberate and matter for data retention: purging a
+session cascades to its snapshots, activity log, recording segments, and
+CV frames, and to any researcher annotations on it; but chatbot
+conversation rows survive with a nulled session key. There is no scheduled
+purge job---deletion is cascade-driven from session or user removal.
+
+\section{Research exporters}
+\label{sec:sensing-export}
+
+Three export surfaces serve analysis. A wide-format replay CSV emits one
+row per metric across a per-bin time grid (default 1\,s bins), with three
+sampling regimes---nearest-sample for time-aligned signals (emotions,
+action units, gaze, pupil, affective labels), carry-forward for continuous
+state (scroll, viewport, AOI geometry), and bin-drop for sparse events
+(clicks, keystrokes, utterances, EF detections)---and a catch-all row so
+no activity action is silently lost. A full-session ZIP bundles a JSON
+record, the webcam segments, and screenshot frames. A separate cohort
+exporter in the studio server emits seven CSVs, including a split of
+free-dialogue versus learning-strategy utterances, per-intervention
+time-on-task, self-report rows, and EF detections, all honoring the
+researcher's session-trim window. The column dictionary is given in
+\cref{app:csvdict}.
+
+\section{Known data-quality caveats}
+\label{sec:sensing-caveats}
+
+Five caveats constrain interpretation and are disclosed here so the
+results can be read correctly.
+
+\begin{enumerate}
+  \item \textbf{Emotion source mislabeled in the CSV.} The replay CSV
+  labels the emotion rows ``py-feat,'' but the data are OpenFace~3.0
+  (\cref{sec:sensing-facial}). The values are correct; only the header
+  string is wrong.\footnote{\code{exportReplayCsv.ts:392}}
+  \item \textbf{Docked-layout scroll signal.} Before the scroll-host
+  capture was added (mid-2026), window scroll was a dead signal in the
+  docked course layout, so sessions recorded earlier cannot have their
+  inner reading position reconstructed; the affected columns are null for
+  those sessions. \todo{State the cutoff date and list affected session
+  ranges once the deployment log is consulted.}
+  \item \textbf{Biometric frame truncation.} A replay query once capped
+  emotion and action-unit frames at 5{,}000 rows ($\approx$17 minutes at
+  5\,fps); the cap was raised to 50{,}000 on 2026-05-21. Sessions longer
+  than $\sim$17 minutes recorded before that date were silently truncated
+  to their earliest frames. \todo{Identify affected sessions by date and
+  duration.}
+  \item \textbf{Hex-escape batch drops.} Malformed byte-escape fragments
+  in browser-generated selectors can be rejected by the database's JSON
+  parser; the ingest defensively drops the whole batch and returns success
+  to avoid a stuck client buffer, so affected batches are lost silently
+  (only a server warning records them) and downstream CSV bins have
+  gaps.\footnote{\code{apps/api/src/logs/logs.service.ts}}
+  \item \textbf{No automatic CV retry.} The Py-Feat job has no retry
+  mechanism and no retry column; the OpenFace job's retry count increments
+  only on manual re-runs. A failed job appears as missing biometric rows
+  for that segment, with no automatic recovery; there is no observable
+  automatic failure/retry rate to report.
+\end{enumerate}
+
+\medskip
+\noindent These caveats are engineering realities, not fatal flaws, but
+they bound what the data can support---which is exactly the subject of the
+next chapter.

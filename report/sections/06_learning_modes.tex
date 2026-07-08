@@ -1,0 +1,187 @@
+% ============================================================
+% Chapter 5 — Learning Modes and the RAG Pipeline
+% ============================================================
+\chapter{Learning Modes and the Retrieval Pipeline}
+\label{ch:modes}
+
+\roadmap{This chapter documents the two ways a learner encounters content
+and tutoring: Mode A, a free-form dialogue workspace over learner-uploaded
+sources; and Mode B, structured lessons with a docked course chatbot. Both
+are grounded by a single retrieval-augmented-generation (RAG) pipeline,
+which the chapter specifies end to end---chunking, embedding, hybrid
+retrieval with rank fusion, optional reranking, and prompt assembly---with
+exact constants. It closes with the context-resolution logic that decides
+what a tutoring turn is grounded on, including a disclosed inconsistency
+between two code paths.}
+
+\section{The two modes}
+\label{sec:modes-overview}
+
+The platform exposes a course-level \code{learningMode} of either
+\code{STANDARD} or \code{DIALOGUE}.\footnote{\code{Course.learningMode};
+\code{apps/api/prisma/schema.prisma}} These correspond to Mode B and Mode
+A respectively, and they ground tutoring on different corpora.
+
+\subsection{Mode A: free-form dialogue over learner sources}
+\label{sec:modes-a}
+
+Mode A is a NotebookLM-style workspace in which a learner uploads their own
+documents and converses with a tutor grounded strictly in those sources.
+It comprises a sources panel, a citation-bearing chat panel, a
+``studio'' panel that generates study artifacts, and a PDF reader with
+highlighting and notes.\footnote{\code{apps/web/src/pages/student/DialogueLearning.tsx}}
+Tutoring runs through \code{DialogueService.sendMessage}, which retrieves
+from the learner's own chunk corpus (\dbtable{StudentRagChunk}, hard-scoped
+to the learner) and persists each turn to
+\dbtable{DialogueMessage}.\footnote{\code{apps/api/src/dialogue/dialogue.service.ts}}
+The studio generates six artifact types in principle
+(\dbtable{StudioOutputType}); five are implemented (briefing document,
+flashcard set, table comparison, mind map, FAQ), and the sixth,
+\code{TIMELINE}, is a dead enum value with no prompt or schema---disclosed
+here and in \cref{ch:limitations}.
+
+\subsection{Mode B: structured lessons with a docked chatbot}
+\label{sec:modes-b}
+
+Mode B is the conventional course experience: a teacher authors modules of
+items---block-based \code{PAGE}s, \code{PDF} lessons, links, and
+assessments---and the learner reads them beside a docked ``Learning
+Assistant'' chatbot. The chatbot is the intervention service's
+\code{chat()} method; it grounds on the teacher material the learner is
+currently viewing---the chunks of the PDF matched by filename, or the text
+extracted from a page's block document---and persists to
+\dbtable{ChatbotMessage}.\footnote{\code{apps/api/src/learning-interventions/learning-interventions.service.ts}}
+Because chatbot conversation is anchored to the learning session but must
+outlive it for later review, \dbtable{ChatbotMessage} rows survive a
+session purge with a nulled session key (\cref{sec:sensing-coding}).
+
+The distinction that matters analytically is the grounding corpus: Mode A
+grounds on \emph{learner-owned} chunks scoped to the individual, Mode B on
+the \emph{teacher-owned} course corpus. There is no cross-contamination
+between the two.
+
+\section{The retrieval pipeline}
+\label{sec:modes-rag}
+
+Both modes share one ingestion-and-retrieval pipeline
+(\cref{fig:rag-pipeline}), an instance of the retrieval-augmented-generation
+pattern \citep{lewis2020rag}, specified here with the constants taken from
+the code.
+
+\begin{figure}[htbp]
+\centering
+\figplaceholder{RAG pipeline}{Upload $\rightarrow$ chunk (512-token /
+100-overlap) $\rightarrow$ embed (per-provider models) $\rightarrow$
+hybrid dense+sparse retrieval $\rightarrow$ reciprocal rank fusion
+($k=60$) $\rightarrow$ optional Cohere rerank $\rightarrow$ grounded
+prompt assembly}
+\caption[RAG pipeline]{The shared retrieval-augmented-generation pipeline.
+Constants as in \cref{sec:modes-rag}.}
+\label{fig:rag-pipeline}
+\end{figure}
+
+\subsection{Chunking}
+\label{sec:modes-chunking}
+
+A single shared chunker serves both
+corpora.\footnote{\code{apps/api/src/rag/shared/chunking.service.ts}} Its
+constants are a maximum of 512 tokens per chunk, 100 tokens of overlap, a
+four-characters-per-token approximation (so $\approx 2048$ characters per
+chunk with $\approx 400$ characters of overlap), and a 50-character
+minimum below which a chunk is discarded. The runtime strategy is one of
+\code{markdown}, \code{code}, \code{paragraph} (the default), or
+\code{auto}, resolved from MIME type or filename. The paragraph strategy
+splits on blank lines and re-splits oversize paragraphs by sentence.
+
+A documentation-versus-code discrepancy is disclosed here: the Prisma
+enum \code{ChunkingStrategy} still lists \code{FIXED_SIZE},
+\code{PARAGRAPH}, and \code{SEMANTIC}, but this enum is vestigial---ingest
+no longer consults it, and \emph{no semantic chunking is
+implemented}.\footnote{\code{apps/api/src/rag/rag.service.ts:535}}
+The report therefore never claims semantic chunking.
+
+\subsection{Embedding}
+\label{sec:modes-embedding}
+
+Embedding model and dimensionality are pinned per chunk so that a corpus
+can be queried consistently.\footnote{\code{apps/api/src/student-rag/embedding.service.ts};
+\code{apps/api/src/llm/model-registry.ts}} The defaults per provider are
+OpenAI \code{text-embedding-3-small} (1536 dimensions), Google
+\code{gemini-embedding-001} (768), and Cohere \code{embed-v4.0} (1536).
+Two optional, off-by-default enrichments exist: \emph{contextual
+retrieval}, which prepends a 50--100-token situating blurb to each chunk
+before embedding (stored separately and never shown to the generator),
+and \emph{multimodal} ingestion, which embeds rendered PDF page images as
+Cohere Embed-4 image vectors. A SHA-256 pseudo-embedding fallback exists
+for development and is blocked in production.
+
+\subsection{Hybrid retrieval and rank fusion}
+\label{sec:modes-retrieval}
+
+Retrieval fuses a dense and a sparse
+retriever.\footnote{\code{apps/api/src/student-rag/student-rag-retrieval.service.ts}}
+The dense retriever computes cosine similarity in memory over the stored
+JSON vectors, grouping chunks by their pinned model/dimension tuple and
+re-embedding the query once per group. The sparse retriever is a
+lexical/ILIKE scan with a BM25-like score over chunk content, contextual
+blurb, and image caption. The two ranked lists are combined by reciprocal
+rank fusion with the constant $k=60$ \citep{cormack2009rrf}: for a chunk
+at rank $r$ in a list, its fused contribution is
+\begin{equation}
+  \text{score} = w \cdot \frac{1}{k + r + 1}, \qquad k = 60,
+\end{equation}
+with $w$ a modality weight (unity by default). Near-duplicate chunks
+(word-level Jaccard overlap above $0.9$) are dropped.
+
+An optional Cohere reranking stage (model \code{rerank-english-v3.5}) can
+reorder the fused candidates; it is \emph{off by default}, and its no-op
+fallback preserves the fusion order whenever the reranker is disabled,
+unkeyed, or times out. A documented inconsistency is disclosed: schema
+fields named \code{rerankTopK} exist on both the course and the dialogue
+settings but are \emph{not read anywhere}; the effective top-$k$ is a
+literal at each call site (10 for teacher retrieval, 5 for interventions,
+8 for dialogue).\footnote{Verified by tree-wide search;
+\code{apps/api/src/rag/rag.service.ts}, \code{dialogue.service.ts}.}
+
+\subsection{Prompt assembly and persistence}
+\label{sec:modes-prompt}
+
+A single grounding contract assembles every tutoring
+prompt.\footnote{\code{apps/api/src/rag/shared/grounded-prompt.ts}} The
+system message pairs a persona with fixed grounding rules---answer only
+from supplied sources, cite each claim with a source label in a fixed
+format, and state explicitly when the sources do not contain the
+answer---and the context is a labeled block of retrieved chunks, with
+image chunks attached as data URLs where multimodal is enabled.
+Dialogue turns persist to \dbtable{DialogueMessage} within a transaction
+(carrying parsed citations and token usage); chatbot turns persist to
+\dbtable{ChatbotMessage} fire-and-forget (carrying the context source,
+selected text, current page, and any suggested strategy).
+
+\section{Context resolution and a disclosed inconsistency}
+\label{sec:modes-context}
+
+What a tutoring turn is grounded on is decided by a precedence chain.
+For the interventions, \code{resolveInterventionContext()} resolves in the
+order \emph{selection} $\rightarrow$ \emph{PDF source} $\rightarrow$
+\emph{student RAG}, and throws if nothing
+resolves.\footnote{\code{learning-interventions.service.ts:760}} A text
+selection is accepted as the grounding source only when it is at least 20
+characters after boilerplate stripping---the \emph{$\geq$20-character
+selection rule} referenced throughout this report.
+
+The docked chatbot's \code{chat()} method uses the \emph{same}
+20-character rule but a \emph{different} precedence: \emph{PDF source}
+(when a content id is present) $\rightarrow$ \emph{selection} $\rightarrow$
+\emph{student RAG}, recording a context source of \code{none} rather than
+throwing when nothing
+resolves.\footnote{\code{learning-interventions.service.ts:4027,4178}}
+The consequence, disclosed plainly: when a learner has both an active
+selection and an open PDF, an intervention grounds on the \emph{selection}
+while the chatbot grounds on the \emph{PDF}. This divergence is recorded
+in the per-turn \code{contextSource} field, so its effect on any analysis
+of grounding is itself measurable.
+
+\medskip
+\noindent The retrieval substrate in place, the next chapter turns to the
+four strategy interventions that sit on top of it.

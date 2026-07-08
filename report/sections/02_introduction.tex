@@ -1,0 +1,205 @@
+% ============================================================
+% Chapter 1 — Introduction
+% ============================================================
+\chapter{Introduction}
+\label{ch:introduction}
+
+\roadmap{This chapter motivates the project, states the research questions,
+and enumerates its contributions. It begins with the affect-dynamics account
+of why learners' emotional states matter for learning, argues that
+browser-based multimodal sensing is the right instrument for studying those
+states at ecological scale, defines the terminology used throughout the
+report, and closes with the document's structure.}
+
+\section{Motivation: affect dynamics in complex learning}
+\label{sec:intro-motivation}
+
+Learning difficult material is not affectively neutral. A substantial body
+of work in the learning sciences shows that learners cycle through a small
+set of \emph{learning-centered} affective states---engagement/flow,
+confusion, frustration, and boredom---and that the transitions among these
+states, not merely their incidence, predict learning outcomes
+\citep{dmello2012dynamics, craig2004, baker2010better}. In the model of
+\citet{dmello2012dynamics}, a learner in equilibrium (engaged) who
+encounters an impasse enters \emph{confusion}; confusion resolved through
+effortful sense-making returns the learner to engagement and can be
+beneficial for learning \citep{dmello2014confusion}, but confusion that
+persists hardens into \emph{frustration}, and chronic frustration decays
+into \emph{boredom} and disengagement---the state found most damaging to
+learning across multiple environments \citep{baker2010better}. The
+practical implication is that an instructor (human or machine) who could
+observe where a learner sits in this cascade would know both \emph{when}
+support is needed and \emph{what kind}: confusion calls for scaffolding
+before it curdles; boredom calls for re-engagement, not more explanation.
+
+In the physical classroom, experienced teachers read these states from
+faces, posture, and behavior. In online learning the channel is severed:
+the instructor sees, at best, submission timestamps and quiz scores. The
+long-standing response in the intelligent tutoring systems (ITS) community
+has been to build \emph{affect-aware} tutors that sense learner states and
+adapt \citep{picard1997, dmello2012affective, dmello2012gazetutor}. Those
+systems, however, were predominantly laboratory instruments: they relied on
+research-grade sensors, bespoke content, and session lengths measured in
+minutes. What has been missing is a platform in which affect and attention
+sensing is embedded in a \emph{complete, authentic} learning environment---
+one with real course materials, real study sessions, and modern LLM-based
+tutoring---using only the hardware every student already has: a laptop with
+a webcam and a browser.
+
+\section{Why browser-based multimodal sensing}
+\label{sec:intro-browser}
+
+Three developments make consumer-hardware sensing viable. First,
+webcam-based facial expression analysis has matured: convolutional
+pipelines can estimate categorical emotion probabilities and facial
+action-unit (AU) intensities from ordinary video
+\citep{mollahosseini2019affectnet, cheong2023pyfeat,
+baltrusaitis2018openface}, and detectors trained on learning data
+generalize to noisy, ``in-the-wild'' classroom conditions
+\citep{bosch2015, bosch2016}. Second, webcam eye tracking in JavaScript
+\citep{papoutsaki2016webgazer} yields gaze estimates that---while far
+coarser than infrared trackers---are sufficient to distinguish which
+\emph{region} of a learning interface holds the learner's attention.
+Third, no single channel is reliable alone: the meta-analytic finding that
+multimodal affect detectors outperform unimodal ones by a modest but
+consistent margin \citep{dmello2015review} argues for fusing face, gaze,
+and interaction telemetry, and for validating channels against one
+another rather than trusting any one of them.
+
+A browser-based approach also imposes a useful discipline: everything the
+system captures must be justified, because capture happens in the
+learner's own environment. The platform built for this capstone therefore
+adopts a privacy-first posture---keystroke \emph{counts} rather than keys,
+clipboard \emph{lengths} rather than contents, no audio---documented and
+verified against the implementation in \cref{ch:sensing}.
+
+\section{Research questions}
+\label{sec:intro-rqs}
+
+The project set out to answer two research questions.
+
+\todo{Replace RQ1 and RQ2 below with the verbatim wording from the approved
+proposal. The formulations here are provisional reconstructions consistent
+with the proposal's deliverables (items 12 and 15--18 for RQ1; items 2--11
+for RQ2) and must not be submitted without checking against the original
+text.}
+
+\begin{description}
+  \item[RQ1.] To what extent can browser-based multimodal sensing---webcam
+  facial analysis, webcam eye gaze, and interaction telemetry---detect
+  learners' affective and cognitive states during online learning, as
+  validated against learners' self-reported states?
+  \item[RQ2.] To what extent does an LLM-grounded tutoring platform that
+  delivers evidence-based learning-strategy interventions support
+  learning, as measured by pre/post learning gain and learner engagement
+  with the interventions?
+\end{description}
+
+RQ1 is a \emph{measurement} question: it asks whether the states that
+matter in the affect-dynamics account can be estimated from consumer
+hardware with enough fidelity to be scientifically useful. RQ2 is a
+\emph{pedagogy} question: it asks whether strategy interventions with
+strong laboratory evidence \citep{dunlosky2013} retain value when
+delivered, learner-initiated, inside an LLM tutoring environment. The two
+questions are deliberately kept independent in the implementation: as
+\cref{ch:interventions} documents, interventions are never triggered by
+affective signals, so RQ1's measurements are observational with respect to
+RQ2's pedagogy. Closing that loop---affect-triggered intervention---is the
+principal item of future work (\cref{ch:future}).
+
+\section{Contributions}
+\label{sec:intro-contributions}
+
+The capstone makes six contributions. Each is documented against the
+codebase in the chapters indicated, with maturity ratings and known
+limitations stated rather than smoothed over.
+
+\begin{enumerate}
+  \item \textbf{The platform itself}: a full-stack, deployable intelligent
+  tutoring system---course authoring with retrieval-augmented generation,
+  a knowledge-component layer, two learner-facing modes, assessments with
+  multi-level feedback, and role-based administration---comprising
+  approximately 46 backend modules and 90 database models
+  (\cref{ch:architecture,ch:modes}).
+  \item \textbf{An AOI/SEEV attention layer}: a method and implementation
+  for scoring how a learner's webcam-estimated gaze allocation across
+  interface regions aligns with task-expected allocation, yielding an
+  interpretable per-session \allocscore{} (\cref{ch:sensing}).
+  \item \textbf{A session-replay and retrospective-coding instrument}: a
+  time-aligned replay of the learner's screen state, webcam video, gaze,
+  affect estimates, and interaction events, with a qualitative coding
+  layer for researcher annotation---turning every session into an
+  inspectable multimodal record (\cref{ch:sensing}).
+  \item \textbf{Four theory-mapped, learner-initiated interventions}:
+  practice testing, interrogative elaboration, stepwise scaffolding, and
+  SM-2 spaced repetition, each traced from its evidence base through its
+  prompt engineering to its persistence and grading logic
+  (\cref{ch:interventions}).
+  \item \textbf{An executive-function text-mining pipeline}: nine
+  psychologically motivated constructs detected in learner utterances by
+  an LLM, with per-detection confidence, severity, rationale, and prompt
+  versioning to support calibration analysis (\cref{ch:methodology}).
+  \item \textbf{A validation methodology}: a cross-modal convergent
+  validation design relating facial-expression-derived engagement
+  estimates to gaze-on-AOI dwell, anchored by periodic emotion
+  self-reports, together with an honest statistics-readiness analysis of
+  what the collected data can and cannot support
+  (\cref{ch:methodology,ch:results}).
+\end{enumerate}
+
+\section{Terminology}
+\label{sec:intro-terminology}
+
+The report uses one term per concept, defined here and held constant.
+
+\begin{description}
+  \item[Intervention] One of the four learner-initiated strategy
+  activities (practice testing, interrogative elaboration, stepwise
+  learning, distributed practice). The report does not use ``nudge'' or
+  ``scaffold'' as synonyms; \emph{scaffolding} refers only to the
+  theoretical construct underlying the stepwise intervention.
+  \item[Learning session] A platform session bounded by login/logout
+  (database entity \dbtable{StudentSession}); the unit of replay,
+  time alignment, and most analyses.
+  \item[Engagement estimate] Any machine-derived engagement value
+  (facial, interactional, or fused). The report never asserts that the
+  system ``knows'' a learner's state; all such values are estimates of
+  latent constructs.
+  \item[Behavioral reference criterion] The gaze-on-AOI dwell signal used
+  as the comparison standard in cross-modal validation. It is not ground
+  truth; agreement with it establishes \emph{convergent} validity in the
+  sense of \citet{campbell1959}.
+  \item[AOI (area of interest)] A named rectangular interface region
+  (sidebar, lesson/PDF, chatbot, header) captured per replay snapshot and
+  used to bucket gaze samples.
+  \item[Epoch] A contiguous span of a session labeled by inferred
+  activity (reading, intervention active, chatbot dialogue, navigating,
+  idle); the unit over which attention alignment is scored.
+  \item[Construct] A psychologically defined target of detection (e.g.,
+  metacognitive monitoring, confusion) in the text-mining pipeline; a
+  \emph{detection} is one LLM judgment of one construct on one utterance.
+  \item[Mode A / Mode B] The free-form dialogue workspace over
+  learner-uploaded sources (Mode A) and the structured lesson mode with
+  teacher-authored content and a docked chatbot (Mode B), as defined in
+  \cref{ch:modes}.
+\end{description}
+
+\section{Report structure}
+\label{sec:intro-structure}
+
+\Cref{ch:background} situates the work in the literature on affect-aware
+tutoring, webcam-based detection, learning strategies, attention
+allocation, and self-regulated learning. \Cref{ch:scope} accounts for the
+evolution from the proposal's eighteen deliverables to the delivered
+system. \Cref{ch:architecture} documents the architecture and data model.
+\Cref{ch:modes,ch:interventions} present the pedagogy layer,
+\cref{ch:sensing} the sensing and logging layer, and \cref{ch:methodology}
+the measurement methodology. \Cref{ch:results} reports the user study;
+\cref{ch:discussion} interprets the findings against the research
+questions; \cref{ch:limitations} states limitations;
+\cref{ch:future} outlines future work; \cref{ch:conclusion} concludes.
+
+\medskip
+\noindent In summary, this project treats the measurement of learning as a
+first-class engineering problem. The next chapter grounds that stance in
+five strands of prior work.

@@ -1,0 +1,256 @@
+% ============================================================
+% Appendices
+% ============================================================
+
+\chapter{Core Research-Table Schema}
+\label{app:schema}
+
+The following excerpts reproduce the Prisma models most relevant to the
+research instrumentation, abbreviated to their analytically meaningful
+fields. The full schema (approximately ninety models) lives in
+\code{apps/api/prisma/schema.prisma}.
+
+\begin{lstlisting}[caption={Facial-analysis result tables.}]
+model EmotionFrame {              // @@map("emotion_frames") -- OpenFace 3.0
+  jobId               String
+  sessionId, userId, courseId  String
+  frameWallMs         BigInt
+  frameIndex          Int
+  faceDetected        Boolean
+  pHappiness, pSadness, pSurprise, pFear,
+  pAnger, pDisgust, pContempt, pNeutral   Float?   // 8-class AffectNet
+  dominantEmotion     String?
+  dominantProbability Float?
+  headPoseYaw, headPosePitch, headPoseRoll Float?  // NEVER populated (NULL)
+}
+
+model PyfeatAuResult {           // @@map("pyfeat_au_results") -- Py-Feat
+  jobId       String
+  frameIndex  Int
+  timestamp   Float
+  wallTime    DateTime
+  au01, au02, au04, au05, au06, au07, au09, au10, au12,
+  au14, au15, au17, au20, au23, au24, au25, au26, au28  Float?  // 18 AUs
+  faceConf    Float?
+  faceBox     Json?
+}
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Affective-state windows and self-report basis.}]
+model AffectiveStateWindow {      // @@map("affective_state_windows")
+  sessionId, userId, courseId  String
+  configId, configVersion      // which rule set produced this row
+  windowStartWallMs, windowEndWallMs  BigInt
+  framesInWindow, framesWithFace      Int
+  engagement, boredom, confusion, frustration  Float
+  dominantState  String
+  meanHappiness ... meanNeutral       Float?     // mean-pooled inputs
+}
+
+// Self-report is stored on the activity log:
+//   ActivityLog.action == EMOTION_SELF_REPORT
+//   ActivityLog.metadata -> { emotion: "engaged|bored|confused|frustrated|neutral" }
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Interventions, spaced repetition, and text-mining.}]
+model LearningIntervention {      // @@map("learning_interventions")
+  userId, courseId  String
+  type    InterventionType        // PRACTICE_TESTING | INTERROGATIVE_ELABORATION
+                                  // | STEPWISE_LEARNING | DISTRIBUTED_PRACTICE
+  status  InterventionStatus      // IN_PROGRESS | COMPLETED | ABANDONED
+  selectedText  String
+  sessionData   Json?             // activity-specific state
+}
+
+model SpacedRepetitionCard {      // @@map("spaced_repetition_cards") -- SM-2
+  front, back   String
+  ease          Float   @default(2.5)
+  interval      Int     @default(0)
+  repetitions   Int     @default(0)
+  nextReviewAt  DateTime
+}
+
+model EfDetection {               // @@map("ef_detections")
+  messageId, sessionId, studentId  String
+  constructKey  String            // one of nine constructs
+  label         String            // 'pending'/'error' rows also occur
+  confidence    Float?
+  severity      Int?              // populated for confusion only
+  rationale, warning  String?
+  provider, model  String
+  promptVersion Int
+  latencyMs     Int?
+}
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Replay snapshots, sync anchor, and coding.}]
+model SessionReplaySnapshot {     // @@map("session_replay_snapshots")
+  sessionId, userId  String
+  pageUrl            String
+  html               String?      // null when DOM capture off (study default)
+  screenshotDataUrl  String?
+  width, height, scrollX, scrollY  Int
+  capturedAt         BigInt
+  aois               Json?        // [{ region, x, y, width, height }]
+  scrollHosts        Json?        // inner-container scroll (added mid-2026)
+  pdfCurrentPage, pdfTotalPages  Int?
+}
+
+model session_sync_anchors {
+  sessionId  String  @unique
+  wallClockMs, monotonicMs, serverReceiveMs  BigInt
+  timezone, userAgent  String
+}
+
+model ReplayAnnotation {          // @@map("replay_annotations")
+  sessionId, researcherId  String
+  codeId   String?               // -> ReplayCode, SET NULL on code delete
+  startMs  BigInt
+  endMs    BigInt?               // null => point annotation
+  note     String?
+}
+\end{lstlisting}
+
+\chapter{Default Intervention Prompt Templates}
+\label{app:prompts}
+
+Each intervention pairs a teacher-editable \emph{system prompt} with a
+hard-coded \emph{user-prompt template} (\cref{sec:interventions-teacher}).
+The following are the default system prompts, summarized from
+\code{apps/api/src/learning-interventions/prompts/default-prompts.ts}.
+Placeholders such as \code{{{mcqCount}}} are substituted at generation
+time.
+
+\begin{description}
+  \item[Practice testing.] Generate exactly \code{{{mcqCount}}}
+  multiple-choice and \code{{{shortAnswerCount}}} short-answer questions
+  over the supplied material; each MCQ has exactly four options; short
+  answers include two to four expected keywords; questions target content,
+  not slide design; output strict JSON.
+  \item[Interrogative elaboration.] Suggest three to five insightful
+  ``why'' and ``how'' questions that probe cause--effect relationships and
+  mechanisms (roughly balanced), plus the key concepts; the accompanying
+  answer prompt explains rather than quizzes; output strict JSON.
+  \item[Stepwise learning.] Decompose the material into three to six
+  progressive steps, each with a comprehension check (question, hint,
+  sample answer); the check prompt grades generously on core-concept
+  understanding; output strict JSON.
+  \item[Distributed practice.] Create exactly \code{{{cardCount}}}
+  flashcards, each testing one atomic concept with a concise back; output
+  strict JSON.
+\end{description}
+
+\todo{If the report is to reproduce the prompt templates verbatim, paste
+the exact strings from \code{default-prompts.ts} here; they are summarized
+above to avoid transcription error.}
+
+\chapter{Replay CSV Column Dictionary}
+\label{app:csvdict}
+
+The wide-format replay export (\cref{sec:sensing-export}) emits one row per
+metric across a per-bin time grid; the first two rows are
+\code{wall_clock_iso} and \code{relative_s}. \Cref{tab:csvdict} groups the
+metric rows by sampling regime.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Replay CSV metric rows by sampling regime.}
+\label{tab:csvdict}
+\begin{tabular}{@{}p{0.24\linewidth}p{0.68\linewidth}@{}}
+\toprule
+Regime & Metric rows \\
+\midrule
+Nearest-sample (time-aligned) & \code{emotion_dominant_label}; eight
+emotion probabilities; \code{affective_state_label},
+\code{score_engagement}, \code{score_boredom}, \code{flag_confusion},
+\code{flag_frustration}; eighteen action units \code{au01}--\code{au28};
+\code{gaze_x}, \code{gaze_y}, \code{gaze_confidence}; \code{pupil_diameter} \\
+Carry-forward (continuous) & \code{scroll_y}; \code{viewport_width/height/orientation};
+\code{snapshot_trigger}, \code{snapshot_page_url};
+\code{pdf_current_page}, \code{pdf_total_pages}; per-panel AOI geometry;
+per-host scroll positions; \code{aoi_active_regions} \\
+Bin-drop (sparse events) & \code{cursor_x/y}; keystroke count/pause/wpm/field;
+clipboard action/length; visibility state/duration; click x/y/target;
+curated activity actions; practice-test config; chatbot and dialogue
+utterances; \code{ef_detection_label}, \code{ef_detection_confidence};
+catch-all \code{activity_other} \\
+AOI scoring (optional) & \code{aoi_epoch_type}, \code{aoi_epoch_alignment},
+observed/expected PDT per bucket, \code{aoi_session_allocation_score} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\chapter{Activity Action Enumeration}
+\label{app:activityenum}
+
+The complete \code{ActivityAction} enumeration recorded to
+\dbtable{ActivityLog} (\cref{sec:sensing-logging}):
+
+\begin{quote}\small
+Session: \code{SESSION_START}, \code{SESSION_END},
+\code{SESSION_HEARTBEAT}. \\
+Navigation: \code{MODULE_OPENED}, \code{MODULE_ITEM_VIEWED},
+\code{KC_GRAPH_VIEWED}. \\
+Assessment: \code{ASSESSMENT_STARTED}, \code{QUESTION_VIEWED},
+\code{QUESTION_ANSWERED}, \code{ASSESSMENT_SUBMITTED},
+\code{ASSESSMENT_GRADED}. \\
+Dialogue/chatbot: \code{DIALOGUE_SESSION_STARTED},
+\code{DIALOGUE_MESSAGE_SENT}, \code{DIALOGUE_MESSAGE_RECEIVED},
+\code{DIALOGUE_SESSION_ENDED}, \code{CHATBOT_MESSAGE_SENT},
+\code{CHATBOT_MESSAGE_RECEIVED}. \\
+Interventions: \code{INTERVENTION_TRIGGERED}, \code{INTERVENTION_VIEWED},
+\code{INTERVENTION_COMPLETED}, \code{INTERVENTION_DISMISSED},
+\code{PRACTICE_TEST_CONFIGURED}. \\
+Spaced repetition: \code{SPACED_REP_CARD_VIEWED},
+\code{SPACED_REP_CARD_RATED}. \\
+Materials/studio: \code{STUDY_MATERIAL_UPLOADED},
+\code{STUDY_GUIDE_GENERATED}, \code{STUDIO_OUTPUT_REQUESTED},
+\code{STUDIO_OUTPUT_VIEWED}. \\
+Learning state: \code{MASTERY_UPDATED}, \code{FEEDBACK_RECEIVED}. \\
+Recording: \code{RECORDING_STARTED}, \code{RECORDING_STOPPED},
+\code{RECORDING_SEGMENT_UPLOADED}, \code{RECORDING_UPLOAD_FAILED},
+\code{RECORDING_RESUMED}. \\
+Pupil: \code{PUPIL_SIZE_TRACKING_STARTED},
+\code{PUPIL_SIZE_TRACKING_STOPPED}, \code{PUPIL_SIZE_BATCH_SUBMITTED}. \\
+Gaze: \code{WEBGAZER_TRACKING_STARTED}, \code{WEBGAZER_TRACKING_STOPPED},
+\code{WEBGAZER_CALIBRATION_STARTED}, \code{WEBGAZER_CALIBRATION_COMPLETED},
+\code{WEBGAZER_CALIBRATION_SKIPPED}, \code{WEBGAZER_BATCH_SUBMITTED},
+\code{WEBGAZER_RECALIBRATION_PROMPTED}. \\
+Facial jobs: \code{PYFEAT_JOB_ENQUEUED}, \code{PYFEAT_JOB_COMPLETED},
+\code{PYFEAT_JOB_FAILED}. \\
+Self-report: \code{EMOTION_SELF_REPORT}.
+\end{quote}
+
+\chapter{Intervention Endpoint Reference}
+\label{app:endpoints}
+
+All endpoints are under \code{/learning-interventions}
+(\cref{ch:interventions}).
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Intervention API endpoints.}
+\label{tab:endpoints}
+\begin{tabular}{@{}p{0.16\linewidth}p{0.5\linewidth}p{0.28\linewidth}@{}}
+\toprule
+Intervention & Endpoint (method + path) & Purpose \\
+\midrule
+Practice testing & \code{POST /practice-testing/generate} & generate item set \\
+ & \code{POST /practice-testing/:id/submit} & grade submission \\
+ & \code{GET /practice-testing/:id} & retrieve \\
+Interrogative elaboration & \code{POST /interrogative-elaboration/generate} & suggest questions \\
+ & \code{POST /interrogative-elaboration/:id/ask} & ask a turn \\
+ & \code{POST /interrogative-elaboration/:id/complete} & summarize depth \\
+Stepwise learning & \code{POST /stepwise-learning/generate} & generate steps \\
+ & \code{POST /stepwise-learning/:id/check} & check a step \\
+ & \code{PATCH /stepwise-learning/:id/advance} & advance \\
+Distributed practice & \code{POST /distributed-practice/generate} & generate cards \\
+ & \code{GET /distributed-practice/due} & due cards \\
+ & \code{PATCH /distributed-practice/cards/:id/review} & SM-2 review \\
+Chatbot & \code{POST /chat} & grounded chat + strategy suggestion \\
+Configuration & \code{PUT /prompt-config/:courseId/:type} & set system prompt \\
+\bottomrule
+\end{tabular}
+\end{table}

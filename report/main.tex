@@ -1,0 +1,49 @@
+% ============================================================
+% main.tex — MSc capstone final report
+% Compile: pdflatex main && bibtex main && pdflatex main && pdflatex main
+% (biber is NOT required; the bibliography uses natbib + bibtex.)
+% ============================================================
+\documentclass[12pt,a4paper]{report}
+
+\input{preamble}
+
+\begin{document}
+
+% ---------- Front matter ----------
+\input{sections/00_titlepage}
+
+\pagenumbering{roman}
+\input{sections/01_abstract}
+
+\tableofcontents
+\clearpage
+\listoffigures
+\listoftables
+\clearpage
+
+% ---------- Main matter ----------
+\pagenumbering{arabic}
+
+\input{sections/02_introduction}
+\input{sections/03_background}
+\input{sections/04_scope_evolution}
+\input{sections/05_system_architecture}
+\input{sections/06_learning_modes}
+\input{sections/07_interventions}
+\input{sections/08_sensing_and_logging}
+\input{sections/09_measurement_methodology}
+\input{sections/10_results}
+\input{sections/11_discussion}
+\input{sections/12_limitations}
+\input{sections/13_future_work}
+\input{sections/14_conclusion}
+
+% ---------- Bibliography ----------
+\clearpage
+\bibliography{references}
+
+% ---------- Appendices ----------
+\appendix
+\input{sections/appendices}
+
+\end{document}

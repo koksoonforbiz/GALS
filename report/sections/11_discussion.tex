@@ -1,0 +1,129 @@
+% ============================================================
+% Chapter 10 — Discussion
+% ============================================================
+\chapter{Discussion}
+\label{ch:discussion}
+
+\roadmap{This chapter interprets the results against the two research
+questions, situates them in the literature of \cref{ch:background}, and
+examines the threats to validity that condition the interpretation. It is
+written to be filled in alongside \cref{ch:results}: where a claim depends
+on a study value, it is phrased so that the direction and magnitude come
+from the results rather than being asserted here.}
+
+\section{Answering RQ1: can browser sensing detect learner states?}
+\label{sec:discussion-rq1}
+
+RQ1 asked whether browser-based multimodal sensing can detect learner
+affective and cognitive states with useful fidelity, validated against
+self-report. The cross-modal analysis (\cref{sec:results-validation}) and
+the self-report agreement (\cref{fig:validation-confusion}) bear on this
+directly. \todo{Interpret the observed $r$ and $\kappa$: if agreement is
+moderate, argue that facial and gaze channels converge on engagement at
+the region level, consistent with the modest multimodal gains reported by
+\citet{dmello2015review}; if agreement is weak, attribute it to the shared
+webcam bottleneck and region-level gaze, and to face-loss rates
+(\cref{tab:results-yield}) of the kind \citet{bosch2015} documented in the
+wild.} Three interpretive commitments hold regardless of the numbers.
+
+First, the validation is \emph{convergent}, not criterion
+\citep{campbell1959}: agreement between the facial and gaze channels
+raises confidence that both track a common engagement construct, but
+neither is ground truth, and correlated error (poor lighting degrading
+both) inflates apparent agreement. The self-report probe partially breaks
+this dependence---it is a different method---but is sparse and, for the
+legacy sessions, absent.
+
+Second, the state space is not uniformly detectable. The affect-dynamics
+account \citep{dmello2012dynamics} and the wild-detection literature
+\citep{bosch2016} both predict that engagement and boredom are more
+separable from faces than confusion and frustration, which share
+action-unit signatures (brow lowering, lid tightening). \todo{Report which
+states showed the strongest and weakest agreement and relate them to this
+prediction.}
+
+Third, the linguistic channel is complementary. Where facial signals are
+ambiguous, the EF text-mining detections (\cref{sec:results-ef}) provide
+an independent read on confusion, frustration, and metacognitive
+monitoring \citep{winne1998}, and the report treats convergence between
+the facial and linguistic channels as additional---if still
+non-criterion---evidence.
+
+\section{Answering RQ2: does the platform support learning?}
+\label{sec:discussion-rq2}
+
+RQ2 asked whether the LLM-grounded platform with learner-initiated
+strategy interventions supports learning. The pre/post gain
+(\cref{sec:results-gain}) and the intervention-engagement data
+(\cref{sec:results-interventions}) bear on this. \todo{Interpret the
+normalized gain and its effect size: relate the magnitude to the
+laboratory effects for retrieval and spaced practice \citep{roediger2006,
+cepeda2006, dunlosky2013}, noting that learner-initiated, in-the-wild use
+should be expected to yield smaller and more variable effects than
+experimenter-controlled administration.}
+
+The learner-initiated design reframes the pedagogical question as a
+self-regulation one. Whether learners \emph{elect} to use effective
+strategies, and whether elected use associates with gain, speaks to
+autonomy-supportive engagement \citep{ryan2000} more than to the
+strategies' intrinsic efficacy, which the cited literature already
+establishes. \todo{Report suggestion-uptake and completion-versus-dismissal
+patterns and interpret them as evidence about learner self-regulation and
+the acceptability of the interventions.}
+
+Because interventions are never affect-triggered
+(\cref{sec:interventions-autotrigger}), RQ2's result is uncontaminated by
+detection error---a deliberate methodological gain that also caps the
+achievable effect, since the platform cannot yet direct support to the
+moments of confusion where it would help most. That capping is the bridge
+to \cref{ch:future}.
+
+\section{The measurement instrument as contribution}
+\label{sec:discussion-instrument}
+
+Independent of the two questions' quantitative answers, the platform
+demonstrates that a complete LLM tutoring environment can be instrumented,
+on consumer hardware, to a depth that supports replay, retrospective
+coding, and multi-channel validation. The AOI attention layer contributes
+a task-referenced attention measure that raw gaze heatmaps lack
+(\cref{sec:sensing-aoi}), and the decoupling of sensing from pedagogy
+gives a clean observational base for detection research. This
+instrument---not any single detection accuracy---is the project's most
+durable output.
+
+\section{Threats to validity}
+\label{sec:discussion-threats}
+
+\paragraph{Construct validity.} Engagement is measured as a facial and
+behavioral estimate, not as the latent state itself; the report's
+consistent ``estimate/proxy/reference criterion'' language is a guard
+against reifying it. The pupil channel's construct validity is low by
+construction (\cref{sec:sensing-pupil}) and is excluded from primary
+claims. The two low-feasibility EF constructs are flagged in the data and
+in reporting.
+
+\paragraph{Internal validity.} The absence of a phase marker
+(\cref{sec:methodology-stats}) means any group comparison rests on an
+externally defined grouping; the pre/post operationalization is defensible
+but is not a randomized manipulation, so gain cannot be attributed to any
+single platform feature. The data-quality caveats
+(\cref{sec:sensing-caveats})---frame truncation, silent batch drops,
+docked-scroll gaps---introduce missingness that is plausibly not at random
+(longer or more interactive sessions are differentially affected), and the
+analysis must report how affected sessions were handled.
+
+\paragraph{External validity.} A single-cohort study on specific course
+material with \todo{N} participants limits generalization; webcam quality,
+lighting, and demographics differ from any target population, and
+WebGazer's accuracy is device-dependent.
+
+\paragraph{Statistical-conclusion validity.} Small $n$ limits power for
+the group comparisons and for per-state agreement; the report accompanies
+every test with an effect size and confidence interval
+\citep{cohen1988} rather than relying on significance alone, and treats
+non-significant results as inconclusive rather than null.
+
+\medskip
+\noindent These threats motivate the explicit limitations catalogue of the
+next chapter, which states each constraint as a bounded scientific claim
+rather than an apology.

@@ -1,0 +1,228 @@
+% ============================================================
+% Chapter 2 — Background and Related Work
+% ============================================================
+\chapter{Background and Related Work}
+\label{ch:background}
+
+\roadmap{This chapter reviews the five strands of literature on which the
+platform rests: the lineage of affect-aware intelligent tutoring systems;
+the state of the art in webcam-based engagement and affect detection; the
+evidence base for the four learning-strategy interventions; the SEEV
+tradition of attention-allocation modeling that motivates the AOI layer;
+and the executive-function, self-regulated-learning, and motivation
+frameworks that ground the text-mining constructs. Each section closes by
+stating what the present system takes from that strand and where it
+deliberately departs.}
+
+\section{Affect-aware intelligent tutoring systems}
+\label{sec:bg-its}
+
+The proposition that tutoring systems should perceive and respond to
+learner emotion dates to \citet{picard1997}, who argued that affect is not
+noise around cognition but part of its machinery, and to
+\citet{kort2001}, who proposed a cyclical model in which learners orbit
+through affective quadrants as understanding is constructed and repaired.
+The empirical program that followed was anchored by AutoTutor
+\citep{graesser2004autotutor}, a natural-language tutor whose dialogues
+provided the corpus in which the learning-centered states---engagement,
+confusion, frustration, boredom---were first systematically observed
+\citep{craig2004}. Two descendants matter here. \emph{Affective AutoTutor}
+\citep{dmello2012affective} closed the loop: it detected affect from
+dialogue, posture, and facial features and altered its pedagogical and
+motivational moves in response, producing learning benefits for
+low-domain-knowledge students. \emph{GazeTutor} \citep{dmello2012gazetutor}
+did the same with gaze alone, redirecting attention when the eyes wandered
+from the display, and demonstrated that even coarse gaze signals can carry
+pedagogically actionable information. In parallel, MetaTutor
+\citep{azevedo2010metatutor} instrumented self-regulated learning
+processes---goal setting, monitoring, strategy use---with multichannel
+trace data, establishing the paradigm of the tutoring system as a
+\emph{measurement instrument} as much as an instructional agent.
+\todo{The proposal's literature review also cited MITERS; add the full
+citation from the proposal's reference list and one sentence on its
+relevance---the reference could not be reconstructed from the evidence
+pack with confidence, and no entry has been fabricated.}
+
+Two lessons from this lineage shaped the present design. First, the
+transition structure among affective states is diagnostic: confusion is
+productive when resolved and corrosive when it persists
+\citep{dmello2012dynamics, dmello2014confusion}, and boredom is the state
+most reliably associated with poor outcomes \citep{baker2010better}. A
+platform should therefore capture state \emph{sequences} at a temporal
+resolution fine enough to observe transitions, not merely aggregate
+incidence. Second, closed-loop adaptation is powerful but methodologically
+expensive: once the tutor responds to detected affect, the detector's
+errors contaminate the pedagogy and the pedagogy contaminates the
+measurement. The present system departs from Affective AutoTutor precisely
+here: sensing is decoupled from intervention by design
+(\cref{sec:interventions-autotrigger}), so that detection validity can be
+established observationally before any closed loop is attempted.
+
+\section{Webcam-based engagement and affect detection}
+\label{sec:bg-webcam}
+
+The feasibility of estimating learning-centered states from consumer
+video is now well established, with equally well-established ceilings.
+\citet{whitehill2014} showed that engagement judgments made from faces
+alone are reliable across human labelers and learnable by machine
+classifiers, framing engagement as something faces \emph{express} rather
+than something only behavior reveals. \citet{grafsgaard2013} tied specific
+facial action units from automated FACS coding \citep{ekman1978} to
+engagement and frustration in tutoring dialogues, licensing the use of AU
+intensities---rather than raw pixels or categorical emotions alone---as
+interpretable features. \citet{bosch2015, bosch2016} moved detection
+``into the wild'' of real classrooms with off-the-shelf webcams,
+demonstrating above-chance detection of boredom, confusion, and engaged
+concentration under uncontrolled lighting, pose, and occlusion, while
+reporting the honest costs: substantial fractions of frames without a
+usable face, and accuracies far below laboratory figures.
+\citet{monkaresi2017} added video-estimated heart rate to facial features
+for engagement detection, and the meta-analysis of
+\citet{dmello2015review} quantified the general pattern: multimodal
+detectors outperform their best unimodal component by roughly ten percent
+on average---a real but modest gain that argues for multimodality as
+robustness rather than as a silver bullet. On the attention side,
+\citet{bixler2016} detected mind wandering from gaze during reading, and
+the BROMP observational protocol \citep{ocumpaugh2015} standardized the
+human-coded on-task/off-task and affect labels against which such
+detectors are conventionally validated.
+
+The present platform positions itself in this tradition with three
+specific commitments. Its facial channel separates \emph{categorical
+emotion probabilities} (eight AffectNet classes
+\citep{mollahosseini2019affectnet}, produced by OpenFace~3.0
+\citep{openface3}, a successor to the OpenFace toolkits
+\citep{baltrusaitis2018openface}) from \emph{AU intensities} (eighteen
+units produced by Py-Feat \citep{cheong2023pyfeat}), because the two
+feature families support different analyses and have different validity
+arguments. Its gaze channel uses WebGazer
+\citep{papoutsaki2016webgazer}, accepting region-level rather than
+fixation-level precision. And, lacking the human BROMP-style live coding
+that \citet{bosch2015} used as ground truth, it substitutes two weaker but
+attainable standards: periodic learner self-report, and cross-modal
+convergent validation between the facial and gaze channels
+\citep{campbell1959}---with the retrospective coding surface built so
+that human labeling remains possible in future work
+(\cref{ch:sensing,ch:future}).
+
+\section{Evidence for the four learning-strategy interventions}
+\label{sec:bg-strategies}
+
+The platform's pedagogy layer operationalizes four strategies chosen from
+the effectiveness review of \citet{dunlosky2013}, which graded ten
+learning techniques by the breadth and robustness of their evidence.
+
+\textbf{Practice testing.} Retrieval practice is one of the two techniques
+\citet{dunlosky2013} rated of high utility. The canonical demonstration is
+\citet{roediger2006}: tested learners retained prose passages better at a
+week's delay than learners who restudied, despite restudy ``feeling''
+more effective---an instance of desirable difficulty
+\citep{bjork1994}. The platform's practice-testing intervention generates
+mixed multiple-choice and short-answer items over the learner's current
+material (\cref{sec:interventions-pt}).
+
+\textbf{Distributed practice.} The second high-utility technique.
+The meta-analysis of \citet{cepeda2006} across 254 studies found spaced
+practice reliably superior to massed practice for verbal recall. The
+platform implements spacing through the SM-2 scheduling algorithm of
+\citet{wozniak1994}, whose ease-factor update and expanding-interval rules
+are quoted verbatim from the implementation in
+\cref{sec:interventions-dp}.
+
+\textbf{Interrogative elaboration.} Elaborative interrogation---prompting
+learners to generate explanations for \emph{why} stated facts hold---has
+moderate-utility evidence \citep{dunlosky2013}, with the generation effect
+demonstrated by \citet{pressley1987}: self-generated elaborations aid
+memory more than provided ones, and precision of elaboration matters. The
+platform's implementation generates ``why/how'' question suggestions and
+hosts an explanatory dialogue rather than a quiz
+(\cref{sec:interventions-ie}).
+
+\textbf{Stepwise learning (scaffolding).} The stepwise intervention
+descends from the scaffolding construct of \citet{wood1976} and its
+Vygotskian grounding in the zone of proximal development
+\citep{vygotsky1978}: complex material is decomposed into a graded
+sequence of steps, each with a comprehension check, with support faded as
+competence is demonstrated \citep{vandepol2010}. Decomposition also has a
+cognitive-load rationale \citep{sweller1988}: sequencing bounds the
+intrinsic load presented at any moment.
+
+Two framing points matter for the evaluation. First, the evidence base for
+these strategies comes overwhelmingly from experimenter-controlled
+administration; the platform instead makes them \emph{learner-initiated},
+which converts the research question from ``does the strategy work?'' to
+``do learners elect to use it, and does elected use associate with
+learning?''---a self-regulation question as much as a cognitive one.
+Second, feedback within the interventions follows the model of
+\citet{hattie2007}, whose task/process/self-regulation/self levels
+structure the platform's assessment feedback (\cref{ch:modes}).
+
+\section{Attention allocation: SEEV and its proper scope}
+\label{sec:bg-seev}
+
+The AOI layer borrows from the SEEV model of visual attention allocation
+\citep{wickens2003, wickens2008}, developed to predict where skilled
+operators (originally pilots) direct gaze across displays. SEEV holds that
+the probability of attending to an area is increased by bottom-up
+\emph{salience} and decreased by the \emph{effort} of moving attention,
+while top-down \emph{expectancy} (event rate) and \emph{value} (task
+importance) pull gaze toward task-relevant regions; well-calibrated
+operators allocate attention nearly optimally with respect to expectancy
+and value. The model's natural output is a comparison between
+\emph{observed} dwell distributions over areas of interest and
+\emph{expected} distributions derived from the task.
+
+The platform adopts exactly this observed-versus-expected schema at the
+granularity its gaze channel can support: interface panels as AOIs,
+task epochs (reading, intervention, dialogue) defining expected
+allocations, and a total-variation alignment score per epoch
+(\cref{sec:sensing-aoi}). Two scope cautions are inherited deliberately.
+SEEV describes \emph{skilled, steady-state} scanning, and its parameters
+are normally fitted to expert task analyses; the platform's expected
+weights are instead ordinal placeholders supplied by the researcher, so
+the resulting \allocscore{} is presented as a relative alignment index,
+not a fitted SEEV model. And webcam gaze cannot resolve within-panel
+fixations, so all claims are at the panel level. Within those bounds, the
+SEEV framing supplies what raw gaze heatmaps do not: a principled,
+task-referenced definition of ``attention where it should be.''
+
+\section{Executive function, self-regulated learning, and motivation}
+\label{sec:bg-ef}
+
+The text-mining pipeline's nine constructs (\cref{sec:methodology-ef})
+are drawn from three adjacent literatures. From the executive-function
+tradition, the unity/diversity model of \citet{miyake2000, miyake2012}
+identifies updating (working memory), shifting (cognitive flexibility),
+and inhibition as separable-but-related control processes; the pipeline's
+\emph{working memory} and \emph{cognitive flexibility} constructs are
+verbal-marker proxies for the first two, and are flagged in the
+implementation itself as low-feasibility, unvalidated-as-EF signals---a
+candor this report preserves. From the self-regulated-learning tradition,
+the COPES model of \citet{winne1998} and the cyclical-phase account of
+\citet{zimmerman2002} treat metacognitive monitoring---the learner's
+online evaluation of their own understanding---as the hinge of effective
+study; the pipeline's \emph{metacognition} and \emph{metacognitive
+monitoring} constructs detect its verbal expressions (``wait, that's
+wrong,'' ``I don't understand \emph{this} part''). From the motivation
+and emotion tradition, the control-value theory of \citet{pekrun2006}
+predicts which achievement emotions (boredom, frustration, anxiety,
+enjoyment) arise from which appraisals of control and value, and
+self-determination theory \citep{ryan2000} explains why
+learner-initiated---autonomy-preserving---interventions may sustain
+engagement where system-imposed ones provoke reactance. The pipeline's
+\emph{confusion}, \emph{frustration}, \emph{boredom}, and
+\emph{engagement/off-task} constructs give these states a linguistic
+detection channel that runs in parallel to the facial one, enabling the
+cross-channel comparisons described in \cref{ch:methodology}.
+
+\section{Summary}
+
+Prior work establishes that learning-centered affective states are
+consequential and detectable from consumer hardware, but the detectors
+are noisy, the validation standards are expensive, and the canonical
+systems separated sensing research from authentic coursework. The
+platform documented in the following chapters responds by embedding a
+multimodal, privacy-conscious sensing layer inside a complete LLM
+tutoring environment, keeping that layer observational, and building the
+replay and coding instruments needed to validate it. The next chapter
+accounts for how this shape emerged from the original proposal.

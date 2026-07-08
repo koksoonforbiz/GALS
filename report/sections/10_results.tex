@@ -1,0 +1,223 @@
+% ============================================================
+% Chapter 9 — Results
+% ============================================================
+\chapter{Results}
+\label{ch:results}
+
+\roadmap{This chapter reports the user-study results. It is written as
+complete scaffolding: every empirical value is a \todo{} placeholder to be
+filled once the study data are frozen, but the section structure, table
+skeletons, and figure placeholders are final, and each is tied to the
+method that produces it in \cref{ch:methodology}. Where a result depends on
+an externally defined grouping (notably the phase contrast of item 16),
+the operationalization is restated at the point of use.}
+
+\section{Participants and data yield}
+\label{sec:results-participants}
+
+The study enrolled \todo{N} participants
+(\todo{demographic summary: age range, prior experience, recruitment}).
+Data collection yielded \todo{S} learning sessions totaling \todo{H} hours
+of instrumented interaction. Of these, \todo{S_sr} sessions post-date the
+self-report probe (2026-07-01) and are usable for the item-15 validation;
+the remaining sessions predate it (\cref{sec:methodology-selfreport}).
+\Cref{tab:results-yield} summarizes per-channel data yield, including the
+fraction of frames with a detected face, which bounds the facial analyses
+\citep{bosch2015}.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Per-channel data yield.}
+\label{tab:results-yield}
+\begin{tabular}{@{}p{0.36\linewidth}p{0.24\linewidth}p{0.32\linewidth}@{}}
+\toprule
+Channel & Volume & Coverage / quality \\
+\midrule
+Learning sessions & \todo{S} & \todo{mean duration} \\
+Webcam emotion frames & \todo{rows} & \todo{\% frames with face} \\
+Action-unit frames & \todo{rows} & \todo{\% frames with face} \\
+Gaze samples & \todo{rows} & \todo{mean confidence; \% above 0.5} \\
+Self-report responses & \todo{rows} & \todo{responses per session} \\
+Chat / dialogue utterances & \todo{rows} & \todo{EF detections} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Platform quality attainment}
+\label{sec:results-quality}
+
+Against the eighteen-item accounting of \cref{sec:scope-table}, the
+delivered platform attains \todo{count} items as delivered or exceeded,
+\todo{count} as partial or reframed, and \todo{count} as unverifiable from
+code, exactly as \cref{tab:scope-18} records; no status is upgraded here.
+\todo{If a rubric-based quality score was collected (e.g., a usability or
+system-quality questionnaire), report it here with its instrument and
+scale.}
+
+\section{Cross-modal validation (RQ1)}
+\label{sec:results-validation}
+
+Following \cref{sec:methodology-validation}, engagement estimates were
+compared with gaze-on-AOI on-task labels over \todo{window length} windows.
+The continuous association was $r = \todo{value}$ (\todo{95\% CI};
+$p = \todo{value}$; $n = \todo{windows}$ windows across \todo{participants}
+participants). Binarized agreement was $\kappa = \todo{value}$
+(\todo{interpretation band}). \Cref{fig:validation-confusion} shows the
+self-report-by-detected-state confusion matrix, and
+\cref{tab:results-validation} reports sensitivity and specificity per
+state.
+
+\begin{figure}[htbp]
+\centering
+\figplaceholder{Validation confusion matrix}{Rows: five self-reported
+states; columns: four detected states (plus unresolved). Cells: normalized
+frequency}
+\caption[Self-report vs.\ detected-state confusion matrix]{Agreement
+between five-option self-report and system-detected states. See
+\cref{sec:methodology-validation}.}
+\label{fig:validation-confusion}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Detection agreement per state.}
+\label{tab:results-validation}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+State & Sensitivity & Specificity & Base rate \\
+\midrule
+Engagement & \todo{} & \todo{} & \todo{} \\
+Boredom & \todo{} & \todo{} & \todo{} \\
+Confusion & \todo{} & \todo{} & \todo{} \\
+Frustration & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\todo{State whether the facial engagement estimate or the AU-feature
+variant was used as primary, and report the other as a robustness check.}
+
+\section{Executive-function detection distributions}
+\label{sec:results-ef}
+
+After excluding error rows, \todo{count} EF detections were analyzed.
+\Cref{fig:ef-distribution} shows detection rates per construct; mean
+confidence per construct is reported in \cref{tab:results-ef}, with the two
+low-feasibility constructs (cognitive flexibility, working memory) flagged
+as the implementation flags them.
+
+\begin{figure}[htbp]
+\centering
+\figplaceholder{EF detection distribution}{Bar chart of detection
+count/rate for each of the nine constructs, error rows excluded}
+\caption[EF detection distribution]{Detection distribution across the nine
+constructs.}
+\label{fig:ef-distribution}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{EF detections by construct (error rows excluded).}
+\label{tab:results-ef}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Construct & Detections & Mean confidence \\
+\midrule
+\todo{one row per construct} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Learning gain (RQ2)}
+\label{sec:results-gain}
+
+Using the pre/post design of \cref{sec:methodology-gain} with a
+\todo{first/best/last} attempt policy, \todo{n} learners completed both
+assessments. Mean pre score was \todo{value}, mean post score
+\todo{value}; the paired comparison gave \todo{$t$ or $W$} $= \todo{}$,
+$p = \todo{}$, with effect size \todo{$d$ or rank-biserial} $= \todo{}$.
+Mean normalized gain was $\langle g \rangle = \todo{}$.
+\Cref{fig:gain-slopegraph} shows per-learner pre$\rightarrow$post
+trajectories, and \cref{tab:results-gain} reports per-knowledge-component
+gains.
+
+\begin{figure}[htbp]
+\centering
+\figplaceholder{Learning-gain slopegraph}{Per-learner pre$\rightarrow$post
+lines with the normalized-gain distribution alongside}
+\caption[Learning gain]{Per-learner pre/post trajectories and normalized
+gain.}
+\label{fig:gain-slopegraph}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Learning gain by knowledge component.}
+\label{tab:results-gain}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Knowledge component & Pre & Post & $\langle g \rangle$ \\
+\midrule
+\todo{one row per KC} & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Intervention engagement}
+\label{sec:results-interventions}
+
+\Cref{tab:results-interventions} reports, per strategy, how often
+interventions were initiated, completed, and dismissed
+(\cref{sec:methodology-analyses}, analysis 1), and the association between
+chatbot strategy suggestions and subsequent learner-initiated use
+(\cref{sec:interventions-suggest}).
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Intervention initiation and completion by strategy.}
+\label{tab:results-interventions}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Strategy & Initiated & Completed & Dismissed \\
+\midrule
+Practice testing & \todo{} & \todo{} & \todo{} \\
+Interrogative elaboration & \todo{} & \todo{} & \todo{} \\
+Stepwise learning & \todo{} & \todo{} & \todo{} \\
+Distributed practice & \todo{} & \todo{} & \todo{} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Group comparison for proposal items 16--17}
+\label{sec:results-groupcompare}
+
+\emph{Operationalization.} Because the database encodes no phase marker
+(\cref{sec:methodology-stats}), the two ``phases'' are operationalized as
+the pre-study and post-study conditions. Under this definition, the
+dependent variable \todo{name the DV} was compared between conditions.
+A Shapiro--Wilk test \citep{shapiro1965} \todo{did/did not} indicate a
+departure from normality (\todo{$W$, $p$}); accordingly a
+\todo{paired $t$-test / Wilcoxon signed-rank / one-way ANOVA /
+Mann--Whitney} was used, giving \todo{statistic} $= \todo{}$,
+$p = \todo{}$, effect size $= \todo{}$
+\citep{mann1947, cohen1988}. \todo{If a between-subjects factor other than
+pre/post is used (e.g., high vs.\ low engagement), define it explicitly
+here and justify the grouping.}
+
+\section{Secondary analyses}
+\label{sec:results-secondary}
+
+\todo{Report whichever of the analyses in \cref{tab:analyses} were run,
+each with its figure/table. At minimum, analyses 1 (intervention
+completion) and 6 (self-report vs.\ detected affect) are expected given
+the primary questions; analyses 2, 3, and 7 are high-value if time
+permits.}
+
+\medskip
+\noindent The next chapter interprets these results against the two
+research questions and the threats to their validity.

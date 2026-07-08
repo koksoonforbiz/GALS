@@ -1,0 +1,111 @@
+% ============================================================
+% preamble.tex — packages, macros, and setup
+% Toolchain: pdflatex -> bibtex -> pdflatex -> pdflatex
+% ============================================================
+
+% ---------- Encoding & fonts ----------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+% ---------- Layout ----------
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+
+% ---------- Math & symbols ----------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ---------- Tables & figures ----------
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,calc}
+
+% ---------- Color ----------
+\usepackage{xcolor}
+\definecolor{todoorange}{RGB}{204,102,0}
+\definecolor{codegray}{RGB}{88,88,88}
+\definecolor{blockblue}{RGB}{224,236,247}
+\definecolor{blockgreen}{RGB}{226,240,227}
+\definecolor{blockamber}{RGB}{250,238,215}
+
+% ---------- Code listings (no minted; pdflatex-safe) ----------
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  breakatwhitespace=false,
+  columns=fullflexible,
+  keepspaces=true,
+  frame=single,
+  framerule=0.3pt,
+  rulecolor=\color{codegray},
+  numbers=none,
+  showstringspaces=false,
+  aboveskip=0.8em,
+  belowskip=0.8em
+}
+
+% ---------- Bibliography: natbib author-year ----------
+\usepackage[round,authoryear]{natbib}
+\bibliographystyle{plainnat}
+
+% ---------- Hyperlinks & cross-references (load order matters) ----------
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+% Register the listings environment so \cref names code listings correctly.
+\crefname{lstlisting}{Listing}{Listings}
+\Crefname{lstlisting}{Listing}{Listings}
+
+% ============================================================
+% Macros
+% ============================================================
+
+% Visible TODO marker: every empirical value to be filled in later
+% is wrapped in \todo{...}. grep for "TODO:" in the PDF or \todo in
+% the sources; REPORT_STATUS.md lists them all.
+\newcommand{\todo}[1]{\textcolor{todoorange}{\textbf{[TODO: #1]}}}
+
+% Inline code / file paths (detokenize survives underscores)
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+% Footnote citing a code location — the report's convention for
+% grounding claims in the codebase.
+\newcommand{\codefn}[1]{\footnote{\code{#1}}}
+
+% Database table / Prisma model names
+\newcommand{\dbtable}[1]{\texttt{\detokenize{#1}}}
+
+% Named constructs (typeset consistently)
+\newcommand{\allocscore}{\code{allocation_score}}
+
+% Figure placeholder box for figures not yet produced
+% (see figures/FIGURES_NEEDED.md)
+\newcommand{\figplaceholder}[2]{%
+  \begin{center}
+    \fbox{\parbox{0.92\linewidth}{\centering\vspace{2.2em}%
+      \textbf{Figure placeholder: #1}\\[0.4em]
+      {\small #2 --- see \code{figures/FIGURES_NEEDED.md}}%
+      \vspace{2.2em}}}
+  \end{center}}
+
+% Chapter roadmap paragraph styling
+\newcommand{\roadmap}[1]{\noindent\emph{#1}\par\medskip}
+
+% ============================================================
+% Metadata
+% ============================================================
+\newcommand{\reporttitle}{An Instrumented Intelligent Tutoring System for Multimodal Measurement of Learner Affect, Attention, and Cognition}
+\newcommand{\reportauthor}{\todo{Candidate name}}
+\newcommand{\reportdegree}{Master of Science}
+\newcommand{\reportprogram}{\todo{Program name}}
+\newcommand{\reportinstitution}{\todo{Institution}}
+\newcommand{\reportsupervisor}{\todo{Supervisor name}}
+\newcommand{\reportdate}{\todo{Submission month, year}}

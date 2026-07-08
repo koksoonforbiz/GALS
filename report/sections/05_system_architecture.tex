@@ -1,0 +1,246 @@
+% ============================================================
+% Chapter 4 — System Architecture and Data Model
+% ============================================================
+\chapter{System Architecture and Data Model}
+\label{ch:architecture}
+
+\roadmap{This chapter documents the delivered system as software: the
+monorepo layout, the backend and frontend stacks, the out-of-process
+computer-vision workers, the storage and job-orchestration fabric, the
+authentication and role model, and the database schema of roughly ninety
+models. It closes with the platform's engineering-maturity profile,
+including the known weak points, so that later chapters can cite rather
+than restate them.}
+
+\section{Overview and monorepo layout}
+\label{sec:arch-overview}
+
+The platform is a TypeScript monorepo with two Python workers. Its parts
+are:
+
+\begin{itemize}
+  \item \code{apps/api} --- the backend: a NestJS application organized
+  into 46 feature modules over Prisma/PostgreSQL, with Redis for queues
+  and rate limiting and MinIO (S3-compatible) for binary storage.
+  \item \code{apps/web} --- the frontend: a React/Vite single-page
+  application with role-gated routes for students, teachers, and
+  administrators.
+  \item \code{apps/pyfeat-worker} and \code{apps/openface3-worker} ---
+  Python computer-vision workers consuming Redis job queues and writing
+  results to PostgreSQL (\cref{ch:sensing}).
+  \item \code{packages/shared} and \code{packages/config} --- shared
+  types and defaults, including the affective-mapping rule defaults used
+  by both backend and frontend.
+  \item \code{gals-studio} --- a separate researcher-facing studio server
+  hosting cohort-level export and coding tools referenced in
+  \cref{sec:sensing-export}.
+  \item \code{analysis} --- offline Python export scripts invoked by the
+  API's job endpoints.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=7mm and 9mm,
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=9mm,
+              inner sep=5pt, font=\small},
+  store/.style={box, fill=blockgreen},
+  svc/.style={box, fill=blockblue},
+  wrk/.style={box, fill=blockamber},
+  arr/.style={-{Stealth[length=2.4mm]}, semithick}
+]
+  \node[svc] (web) {React/Vite web app\\\scriptsize student, teacher, admin surfaces};
+  \node[svc, below=of web] (api) {NestJS API (\code{apps/api})\\\scriptsize 46 modules, Prisma ORM};
+  \node[store, below left=9mm and 2mm of api] (pg) {PostgreSQL\\\scriptsize $\sim$90 models};
+  \node[store, below=9mm of api] (redis) {Redis\\\scriptsize queues, throttling};
+  \node[store, below right=9mm and 2mm of api] (minio) {MinIO (S3)\\\scriptsize video, PDFs, exports};
+  \node[wrk, right=14mm of redis] (of3) {OpenFace3 worker\\\scriptsize 8-class emotion};
+  \node[wrk, below=5mm of of3] (pyf) {Py-Feat worker\\\scriptsize 18 AU intensities};
+  \node[svc, left=12mm of pg] (studio) {Studio server\\\scriptsize cohort exports, coding};
+
+  \draw[arr] (web) -- node[right, font=\scriptsize]{REST + WebSocket} (api);
+  \draw[arr] (api) -- (pg);
+  \draw[arr] (api) -- (redis);
+  \draw[arr] (api) -- (minio);
+  \draw[arr] (redis) -- node[above, font=\scriptsize]{job queues} (of3);
+  \draw[arr] (redis.east) to[out=-15,in=180] (pyf.west);
+  \draw[arr] (of3.south west) to[out=200,in=-20] node[below, font=\scriptsize]{results} (pg.south east);
+  \draw[arr] (pyf.west) to[out=190,in=-40] (pg.south);
+  \draw[arr] (minio.south) to[out=-60,in=-60, looseness=1.4] node[below, font=\scriptsize]{video segments} (pyf.south east);
+  \draw[arr] (studio) -- (pg);
+\end{tikzpicture}
+\caption[Full-stack architecture]{Full-stack architecture. The web client
+speaks REST and WebSocket to the NestJS API; PostgreSQL holds all
+relational and JSON data; MinIO holds binaries (webcam segments, PDFs,
+export bundles); Redis carries the computer-vision job queues consumed by
+the two Python workers, which write frame-level results back to
+PostgreSQL. The studio server reads the same database for cohort-level
+research exports.}
+\label{fig:architecture}
+\end{figure}
+
+\section{Backend}
+\label{sec:arch-backend}
+
+The API's 46 modules fall into five functional groups, inventoried
+exhaustively in the project's evidence
+pack:\footnote{\code{docs/capstone-evidence/01_functionality_inventory.md}}
+instructor-side authoring and curation (courses, modules, questions,
+assessments, generation, knowledge components, evaluation, coverage,
+publish gate, RAG, user management); student-side learning (attempts,
+interventions, dialogue, notes, chat history, mastery, student RAG);
+sensing and logging ingest (logs, recording, webgazer, pupil-size,
+activity-log); analysis and replay (analytics, affective-mapping,
+text-mining, replay-annotations); and infrastructure (auth, blob,
+event-bus, jobs, health, LLM registry, pre-generation, and the CV-job
+orchestrators). Cross-cutting conventions include a global exception
+filter normalizing Zod and Prisma errors, Zod validation pipes on the
+newer modules, Redis-backed rate limiting, and per-call LLM cost
+accounting into \dbtable{LlmUsageLog} against a
+\dbtable{LlmModelPricing} table.
+
+Asynchronous work uses two mechanisms. A PostgreSQL transactional outbox
+(\dbtable{EventQueue}, claimed with \code{FOR UPDATE SKIP LOCKED}) carries
+domain events such as grading requests; in-process pollers fan results
+out over WebSocket. Heavier computer-vision work is queued to Redis lists
+consumed by the Python workers. Two engineering caveats are recorded here
+once and assumed thereafter: the outbox has no retry or dead-letter
+mechanism (failed events are marked and left), and several in-process
+schedulers (pre-generation, pollers) assume a single API
+instance.\footnote{\code{apps/api/src/event-bus/event-bus.service.ts};
+\code{apps/api/src/pre-generation}}
+
+\section{Frontend}
+\label{sec:arch-frontend}
+
+The web client organizes routes under role guards: teacher/admin surfaces
+(course builder, studio, question tools, review hub) and student surfaces
+(dashboard, course views, dialogue workspace, assessments, review queue),
+with all student learning routes wrapped in a biometrics provider that
+gates rendering on capture permissions. Two component families matter for
+later chapters: the \emph{FloatingChatbot} family (floating and docked
+variants sharing one chat panel and the four intervention views), and the
+\emph{student-logs} family (the session list, the tabbed session viewer,
+and the replay engine with its AOI scoring and export libraries). The
+teacher landing dashboard is a placeholder (\cref{sec:scope-item8});
+every other routed surface is functional.
+
+\section{The computer-vision workers}
+\label{sec:arch-workers}
+
+Facial analysis is deliberately out-of-process. When a webcam segment
+upload completes, the recording service enqueues one job per enabled
+pipeline; each worker \code{blpop}s its Redis list, fetches the segment
+from MinIO, samples frames at its configured rate, runs genuine model
+inference, and bulk-inserts frame rows. The OpenFace~3.0 worker loads the
+RetinaFace alignment and multitask weights at boot and fails fast if they
+are absent; the Py-Feat worker instantiates the library's detector with
+the \code{xgb} AU model. Neither returns placeholder data; both are inert
+unless deployed with their weights, which is an operational rather than
+scientific caveat. \Cref{ch:sensing} specifies exactly which worker
+produces which signal, since this attribution was historically confused
+in project documentation.
+
+\section{Storage and job orchestration}
+\label{sec:arch-storage}
+
+PostgreSQL is the single source of truth for relational data, JSON
+payloads (intervention session state, snapshot AOIs, rule sets), and all
+frame-level sensing results. MinIO holds webcam segments, uploaded PDFs,
+page images for multimodal retrieval, and generated export bundles, with
+presigned URLs brokered by the API. Redis carries the CV job queues and
+the rate limiter. Embeddings are stored as JSON arrays on chunk rows and
+compared in memory---adequate at study scale, and flagged as a
+scalability limit in \cref{ch:limitations}.
+
+\section{Authentication and roles}
+\label{sec:arch-auth}
+
+Users hold one of three roles (student, teacher, admin). Authentication
+accepts email or a teacher-assigned login identifier and issues a 24-hour
+JWT; registration and login are rate-limited; teachers provision students
+in bulk with temporary passwords. Authorization is enforced by role
+guards at the route level and ownership checks in services (e.g.,
+researchers may only read their own annotation codes). Consent for webcam
+recording is stored per student per course and checked before capture
+(\cref{ch:sensing}).
+
+\section{Data model}
+\label{sec:arch-datamodel}
+
+The Prisma schema defines approximately ninety models in eight domains;
+\cref{tab:arch-domains} summarizes them, and
+\cref{app:schema} reproduces the core research tables verbatim. Three
+schema-level facts recur in later chapters. First, all sensing streams
+anchor on \dbtable{StudentSession}, and one
+\dbtable{session_sync_anchors} row per session ties wall-clock,
+monotonic, and server-receive time together---the platform's single time
+base. Second, deletion semantics are deliberate: purging a session
+cascades to its logs, snapshots, and frames, but chatbot conversation
+rows survive with a nulled session key, and researcher annotations
+cascade with the session (\cref{sec:sensing-coding}). Third, two fields
+document intent rather than behavior---the BKT parameter columns on
+\dbtable{UserMastery} and the head-pose columns on
+\dbtable{EmotionFrame} are present but never populated---and this report
+cites them only as such.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Data-model domains (Prisma schema, $\sim$90 models).}
+\label{tab:arch-domains}
+\begin{tabular}{@{}p{0.3\linewidth}p{0.62\linewidth}@{}}
+\toprule
+Domain & Representative models \\
+\midrule
+Identity \& courses & \dbtable{User}, \dbtable{Course},
+\dbtable{Enrollment}, \dbtable{CourseModule}, \dbtable{ModuleItem},
+\dbtable{PageContentVersion} \\
+Assessment & \dbtable{Question}, \dbtable{Assessment},
+\dbtable{Attempt}, \dbtable{GradingResult}, \dbtable{KcEvidence} \\
+RAG corpora & \dbtable{SourceDocument}, \dbtable{DocumentChunk},
+\dbtable{StudentSourceDocument}, \dbtable{StudentRagChunk} \\
+Dialogue \& chatbot & \dbtable{DialogueSession},
+\dbtable{DialogueMessage}, \dbtable{ChatbotMessage},
+\dbtable{StudioOutput}, \dbtable{DialogueNote} \\
+Knowledge components & \dbtable{ProposedKC}, \dbtable{KcEdge},
+\dbtable{KcContentMapping}, \dbtable{KnowledgeVersion};
+\dbtable{KnowledgeComponent}, \dbtable{UserMastery} \\
+Interventions & \dbtable{LearningIntervention},
+\dbtable{SpacedRepetitionCard}, \dbtable{InterventionPromptConfig},
+\dbtable{SavedInterventionReview}, \dbtable{PreGeneratedExercise} \\
+Sensing \& logging & \dbtable{StudentSession}, \dbtable{ActivityLog},
+nine raw interaction tables, \dbtable{SessionReplaySnapshot},
+\dbtable{session_sync_anchors}, \dbtable{RecordingSegment},
+\dbtable{WebgazerLog}, \dbtable{PupilSizeLog},
+\dbtable{PyfeatAuResult}, \dbtable{EmotionFrame} \\
+Analysis \& coding & \dbtable{AffectiveMappingConfig},
+\dbtable{AffectiveStateWindow}, \code{derived\_*} tables,
+\dbtable{aligned_frames}, \dbtable{EfDetection},
+\dbtable{EfConstructPrompt}, \dbtable{ReplayCode},
+\dbtable{ReplayAnnotation} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Engineering-maturity profile}
+\label{sec:arch-maturity}
+
+The evidence-pack audit rated every module and surface. The headline
+profile: the intervention service, sensing ingest, replay engine, and
+authoring suite are production-grade; exactly one endpoint is a declared
+stub (text-mining session
+reprocessing\footnote{\code{apps/api/src/text-mining/text-mining.controller.ts:255}});
+the AI-grading path for structured questions writes a placeholder score
+awaiting an external grader; the teacher dashboard is a placeholder; and
+one security flaw---an unvalidated session identifier interpolated into a
+shell command in the export-jobs
+controller\footnote{\code{apps/api/src/jobs/jobs.controller.ts:18}}---is
+acceptable only because the endpoint is role-restricted, and is listed
+for remediation in \cref{ch:future}. These facts are carried into
+\cref{ch:limitations} rather than repeated per chapter.
+
+\medskip
+\noindent With the machinery established, the next two chapters present
+what learners actually experience: the two learning modes and the four
+interventions.

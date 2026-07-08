@@ -1,0 +1,235 @@
+% ============================================================
+% Chapter 8 — Measurement Methodology
+% ============================================================
+\chapter{Measurement Methodology}
+\label{ch:methodology}
+
+\roadmap{This chapter specifies how the platform's data support the
+project's measurement claims. It presents the cross-modal convergent
+validation design relating facial-expression engagement estimates to
+gaze-on-AOI dwell; the nine-construct executive-function text-mining
+pipeline and its calibration metadata; the self-report probe that anchors
+validation; the pre/post learning-gain method; a catalogue of analyses
+the collected data can support; and a candid statistics-readiness
+assessment for the proposal's required tests. Throughout it names the
+limits of each design rather than deferring them to
+\cref{ch:limitations}.}
+
+\section{Cross-modal convergent validation}
+\label{sec:methodology-validation}
+
+RQ1 asks whether browser-based sensing can detect learner states with
+useful fidelity. Absent live human coding, the design validates one
+machine channel against another: facial-expression-derived engagement
+against gaze-on-AOI dwell as a \emph{behavioral reference criterion}. This
+is convergent validation in the sense of \citet{campbell1959}---agreement
+between two methods targeting the same construct---and explicitly
+\emph{not} criterion validity against ground truth. Both channels can err,
+and their errors may correlate; the design establishes convergence, and
+the report never overstates it.
+
+\paragraph{Windowing.} Analyses use fixed windows aligned to the
+sync-anchor time base---either the server's 30\,s window (10\,s stride)
+for comparison with \dbtable{AffectiveStateWindow}, or a finer 10\,s
+window for resolution---joined to the CSV time grid
+(\cref{sec:sensing-export}).
+
+\paragraph{Facial features.} The engagement estimate is taken either as
+the server-derived engagement score or as a function of the eighteen
+action units aggregated per window (mean intensity), with AU06/AU12
+(positive affect), AU04 (concentration or negative affect), and AU01/AU02
+(surprise/attention) as the interpretable candidates
+\citep{grafsgaard2013}.
+
+\paragraph{On-task definition.} Per epoch type, on-task is defined as gaze
+dwelling in the epoch's expected AOI bucket: the lesson/PDF bucket during
+reading, the chatbot bucket during dialogue, and the active panel during
+an intervention. The continuous per-epoch alignment of
+\cref{eq:alignment} provides a graded on-task index; a median split yields
+a binary on-task label.
+
+\paragraph{Agreement statistics.} With engagement and on-task computed per
+window, the design supports (i) a point-biserial or Pearson correlation
+between continuous engagement and continuous alignment, (ii) Cohen's
+$\kappa$ \citep{cohen1960} between the two binarized signals across
+windows, and (iii) a confusion matrix with sensitivity and specificity.
+These are reported per participant and pooled in \cref{ch:results}.
+
+\paragraph{Threats.} Webcam gaze is region-level and noisy; the AOI
+expected weights are placeholders; and both channels share the webcam, so
+face-loss and poor lighting degrade them together. The design therefore
+measures convergence under shared conditions, and the discussion
+(\cref{ch:discussion}) treats disagreement as informative about channel
+limits, not merely as error.
+
+\section{Executive-function text mining}
+\label{sec:methodology-ef}
+
+In parallel to the facial channel, an LLM text-mining pipeline detects
+psychologically motivated constructs in learner utterances, giving affect
+and cognition a linguistic detection channel
+(\cref{sec:bg-ef}).\footnote{\code{apps/api/src/text-mining}} Nine
+constructs are configured, seeded from code into versioned prompt records
+and overridable per course; \cref{tab:ef-constructs} lists them with their
+label type and the implementation's own feasibility rating.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The nine text-mining constructs, with label type and the
+implementation's feasibility rating (5 = most feasible).}
+\label{tab:ef-constructs}
+\begin{tabular}{@{}p{0.34\linewidth}p{0.28\linewidth}c@{}}
+\toprule
+Construct & Label type & Feasibility \\
+\midrule
+Metacognition (general) & binary & 5 \\
+Metacognitive monitoring & binary & 5 \\
+Attention / mind-wandering & binary & 2 \\
+Working memory load & ordinal (low/med/high) & 2 \\
+Cognitive flexibility & binary & 1 \\
+Confusion & binary (+severity 1--5) & 5 \\
+Frustration & binary & 4 \\
+Engagement / off-task & on-task/off-task & 4 \\
+Boredom & binary & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Flow.} Detection fires per learner utterance, fire-and-forget,
+from both dialogue and chatbot turns. Each enabled construct is one LLM
+call under a bounded-concurrency scheduler; results are written to
+\dbtable{EfDetection}. The provider and model default to the learner's
+configured LLM (typically a small GPT-class model) and can be overridden
+by teacher settings.
+
+\paragraph{Calibration metadata.} Every detection stores the fields needed
+for calibration and audit: a confidence, an optional severity (populated
+for confusion), a free-text rationale, an optional warning (for the two
+low-feasibility EF constructs, which the prompts themselves flag as
+unvalidated), the prompt version, provider, model, and latency. This lets
+later analysis condition on confidence, exclude low-feasibility constructs,
+and track prompt drift. One caveat: failed detections are retained as
+error rows and must be filtered before analysis.
+
+\section{Self-report instrument}
+\label{sec:methodology-selfreport}
+
+The study's affect criterion is a mandatory self-report
+probe.\footnote{\code{apps/web/src/components/EmotionSurveyModal.tsx};
+\code{ActivityAction.EMOTION_SELF_REPORT}} Every fifteen minutes a student
+is shown a non-dismissable modal offering five options---engaged, bored,
+confused, frustrated, neutral---and the choice is written to
+\dbtable{ActivityLog} metadata. The five options were chosen to match the
+machine-detected state space almost exactly, which is what makes the
+validation of item 15 possible. Two caveats are stated up front: the probe
+is sparse (one report per fifteen minutes) relative to the dense state
+windows, so each report maps to many windows; and it was added on
+2026-07-01, so approximately 54 earlier sessions carry no self-report and
+are unusable for item-15 validation. \todo{Confirm the count of
+post-2026-07-01 sessions with self-report data.}
+
+\section{Learning gain}
+\label{sec:methodology-gain}
+
+RQ2's learning outcome is measured by a pre/post design. Two parallel-form
+assessments were seeded on the same course---a pre-study assessment and a
+post-study assessment with identical topic coverage, structure, point
+weights, and difficulty tags but entirely new
+items.\footnote{\code{apps/api/prisma/scripts/seed-cs601-assessment.ts};
+\code{seed-cs601-post-assessment.ts}} A learner's pre and post scores are
+obtained by summing \dbtable{GradingResult.score} over the attempts linked
+to each assessment; per-knowledge-component scores are additionally
+available through \dbtable{KcEvidence}. From the paired scores the analysis
+computes raw gain, Hake's normalized gain
+$\langle g \rangle = (\text{post}-\text{pre})/(\text{max}-\text{pre})$
+\citep{hake1998}, and an effect size (Cohen's $d$ for paired samples, or a
+rank-biserial correlation under the non-parametric route)
+\citep{cohen1988}.
+
+Four data limitations shape the method and are handled explicitly. There
+is no ``pre''/``post'' marker in the database---the two assessments are
+distinguished only by title---so the analysis resolves them by title.
+There is no enforced attempt-to-assessment relation, so the join is
+by a nullable identifier and must be validated. Both assessments are
+practice-mode, permitting multiple attempts, so the analysis must fix a
+policy (first, best, or last attempt) and state it. And no maximum-score
+or normalized-gain field is stored, so the maximum is summed from item
+points and the gain is computed in analysis.
+
+\section{Analyses the data support}
+\label{sec:methodology-analyses}
+
+Beyond the two primary questions, the collected signals support a range of
+secondary analyses; \cref{tab:analyses} lists ten, ordered roughly by
+ascending effort, each with its data basis. They are proposed here and
+scaffolded for results in \cref{ch:results}; the report does not report
+outcomes for them beyond what the study data yield.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Analyses supported by the collected data.}
+\label{tab:analyses}
+\begin{tabular}{@{}p{0.04\linewidth}p{0.5\linewidth}p{0.38\linewidth}@{}}
+\toprule
+\# & Analysis & Data basis \\
+\midrule
+1 & Intervention completion vs.\ dismissal per strategy & \dbtable{LearningIntervention} status by type \\
+2 & Confusion$\rightarrow$frustration transition frequency & \dbtable{AffectiveStateWindow} sequences; \dbtable{EfDetection} \\
+3 & SM-2 rating calibration vs.\ subsequent recall & \dbtable{SpacedRepetitionCard} $\bowtie$ rating events \\
+4 & Pre$\rightarrow$post learning gain per student and KC & \dbtable{Attempt}/\dbtable{GradingResult}/\dbtable{KcEvidence} \\
+5 & Cognitive-load index vs.\ assessment performance & \code{derived\_cognitive\_load} $\bowtie$ scores \\
+6 & Self-report vs.\ detected affect (validation) & \dbtable{ActivityLog} self-report $\bowtie$ \dbtable{AffectiveStateWindow} \\
+7 & Attention-allocation decay over session time & gaze/AOI by session minute \\
+8 & Question depth (Bloom's revised taxonomy \citep{anderson2001}) vs.\ performance & \dbtable{Question} tags $\bowtie$ scores \\
+9 & At-risk precursors (multimodal) & \code{derived\_at\_risk\_flags} $\bowtie$ preceding-window features \\
+10 & Learning velocity vs.\ affective/EF load & \code{derived\_learning\_velocity} $\bowtie$ window aggregates \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Statistics readiness}
+\label{sec:methodology-stats}
+
+The proposal specified validation (item 15), a $t$-test and one-way ANOVA
+across phases (item 16), a Mann--Whitney fallback under non-normality
+(item 17), and effect sizes (item 18). \Cref{tab:stats-readiness} states,
+for each, what the data support and what is missing---the honest core of
+the report's statistics story.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Statistics readiness for proposal items 15--18.}
+\label{tab:stats-readiness}
+\begin{tabular}{@{}p{0.06\linewidth}p{0.44\linewidth}p{0.42\linewidth}@{}}
+\toprule
+Item & Data present & Missing / caveat \\
+\midrule
+15 & Five-option self-report and windowed machine states with matching
+label spaces & Self-report sparse and only post-2026-07-01; no agreement
+metric stored---computed in analysis \\
+16 & Continuous dependent variables (scores, velocity, cognitive-load
+index, detection confidence) & \textbf{No phase/condition marker in the
+database}; grouping must be defined externally \\
+17 & Same dependent variables, exportable & Same grouping gap; small $n$
+threatens power; normality screening is analysis-side \\
+18 & All raw quantities for Cohen's $d$, $\eta^2$, rank-biserial & No
+stored effect-size or normalized-gain field \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The single most consequential gap is item 16's: \emph{the database
+contains no phase, condition, arm, or group field.} Any phase-1-versus-2
+comparison must therefore be defined externally to the data. The report's
+position, defended in \cref{ch:results,ch:discussion}, is to operationalize
+the two ``phases'' as the pre-study and post-study conditions---the only
+principled before/after contrast the data support---and to state that
+choice explicitly wherever a grouped test is reported, rather than to
+imply a phase design the schema does not encode.
+
+\medskip
+\noindent With the methodology fixed, the next chapter presents the study
+results within the scaffolding these designs define.

@@ -1,0 +1,97 @@
+% ============================================================
+% Chapter 12 — Future Work
+% ============================================================
+\chapter{Future Work}
+\label{ch:future}
+
+\roadmap{This chapter turns the limitations of \cref{ch:limitations} into a
+prioritized research and engineering program. It proceeds from the
+scientifically most consequential extension---closing the affect-to-support
+loop---through measurement upgrades, study-design improvements,
+infrastructure hardening, and sensing enhancements.}
+
+\section{Closing the loop: affect-contingent intervention}
+\label{sec:future-loop}
+
+The platform's central methodological choice---keeping sensing decoupled
+from pedagogy (\cref{sec:interventions-autotrigger})---was correct for
+establishing detection validity but leaves RQ2's ultimate question
+unanswered: does support delivered \emph{at} moments of detected confusion
+improve learning more than learner-initiated support? The natural next
+study adds an affect-contingent trigger---offering the stepwise or
+elaboration intervention when the windowed pipeline reports sustained
+confusion---under a randomized design that compares contingent, yoked, and
+learner-initiated delivery. Doing so responsibly requires the validation
+of this project first, so that the trigger acts on a detector of known
+fidelity, and requires a confusion-persistence threshold informed by the
+transition dynamics of \citet{dmello2012dynamics}: intervene when confusion
+fails to resolve, not at its onset, since early confusion can be
+productive \citep{dmello2014confusion}.
+
+\section{Human-coded ground truth}
+\label{sec:future-groundtruth}
+
+The retrospective-coding surface (\cref{sec:sensing-coding}) was built to
+support, but has not yet been used for, human labeling of on-task and
+affective states in the BROMP tradition \citep{ocumpaugh2015}. Recruiting
+trained coders to label a sample of replays would convert this project's
+convergent validation into criterion validation and yield the
+inter-rater-reliable labels needed to train and benchmark
+participant-independent detectors \citep{whitehill2014, bosch2015}.
+
+\section{Study-design and analysis improvements}
+\label{sec:future-study}
+
+Three changes would strengthen the statistical program. First, add an
+explicit phase/condition field to the session record so that grouped
+comparisons need no external grouping (\cref{sec:methodology-stats}).
+Second, formalize the pre/post design in the schema---an assessment role
+field and an enforced attempt-to-assessment relation---so that gain
+computation is robust rather than title-matched
+(\cref{sec:methodology-gain}). Third, densify self-report, or add an
+experience-sampling variant, so that the item-15 sample is larger and
+better time-matched to the state windows
+(\cref{sec:methodology-selfreport}).
+
+\section{Modular learning environment and progress reporting}
+\label{sec:future-modular}
+
+Two reframed deliverables have clear completions. Wiring mastery
+(\dbtable{UserMastery}) onto the prerequisite graph
+(\dbtable{ProposedKC}/\dbtable{KcEdge}) would enable the runtime adaptive
+learning path implied by proposal item 5 (\cref{sec:scope-item5}), and
+would let the assessment surface move from adaptive feedback \emph{depth}
+toward adaptive item \emph{selection}, activating the dormant BKT columns
+\citep{corbett1995}. Separately, a longitudinal per-learner progress-report
+generator would complete proposal item 13 from the session summaries and
+mastery data already collected (\cref{sec:scope-item13}).
+
+\section{Infrastructure hardening}
+\label{sec:future-infra}
+
+For deployment beyond a single-instance study, three fixes are prerequisite
+(\cref{sec:limitations-engineering}): remediate the export-jobs
+command-injection surface; move embeddings from in-memory JSON comparison
+to a vector index for scale; and make the schedulers and event outbox
+distributed-safe with retry and dead-lettering. Adding automatic retry to
+the facial-analysis jobs would also reduce the missing-frame problem noted
+in \cref{sec:sensing-caveats}.
+
+\section{Sensing enhancements}
+\label{sec:future-sensing}
+
+Finally, the sensing layer has natural upgrades. Replacing the pupil
+heuristic with remote photoplethysmography (rPPG) would add a
+physiologically grounded arousal signal from the same webcam, of far
+higher validity than the current proxy, following the video-heart-rate
+approach of \citet{monkaresi2017}. Fitting the AOI expected weights to
+task analyses rather than using placeholders would turn \allocscore{} from
+a relative index into a calibrated SEEV measure
+(\cref{sec:sensing-aoi}). And unifying the two affect derivations
+(\cref{sec:sensing-affect}) onto the configurable server pipeline would
+remove a standing source of inconsistency.
+
+\medskip
+\noindent Taken together, these extensions describe the path from a
+validated measurement instrument to a closed-loop, affect-adaptive tutor---
+the trajectory the conclusion draws out.

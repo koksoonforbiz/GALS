@@ -1,0 +1,53 @@
+% ============================================================
+% Abstract
+% ============================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Learners' affective and cognitive states---engagement, confusion,
+frustration, and boredom---shape learning outcomes, yet in online settings
+they are largely invisible to instructors. This capstone designed, built, and
+deployed a browser-based intelligent tutoring platform that makes those
+states measurable while students learn with retrieval-grounded,
+large-language-model (LLM) tutoring. The platform combines (i) a
+course-authoring and RAG (retrieval-augmented generation) pipeline with
+hybrid dense--sparse retrieval; (ii) two learner-facing modes---structured
+lessons with a docked tutoring chatbot, and a free-form dialogue workspace
+over learner-uploaded sources; (iii) four theory-grounded, learner-initiated
+strategy interventions (practice testing, interrogative elaboration,
+stepwise scaffolding, and SM-2 spaced repetition); and (iv) a multimodal
+sensing layer that time-aligns webcam-based facial analysis (eight-class
+emotion probabilities from OpenFace~3.0 and eighteen facial action-unit
+intensities from Py-Feat), WebGazer eye gaze, an exploratory pupil-size
+proxy, and dense interaction telemetry on a single wall-clock anchor.
+An area-of-interest (AOI) attention layer derived from the SEEV tradition
+scores how gaze allocation aligns with task-expected attention, and a
+session-replay environment with retrospective qualitative coding turns each
+learning session into an inspectable multimodal record.
+
+Sensing is deliberately decoupled from pedagogy: interventions are
+exclusively learner-initiated and are never triggered by affective signals,
+so affect measurements form a clean observational layer rather than a
+confound in the learning loop. The measurement methodology comprises
+cross-modal convergent validation of facial-expression-derived engagement
+estimates against gaze-on-AOI dwell as a behavioral reference criterion;
+a nine-construct LLM text-mining pipeline for executive-function and
+affect markers in learner utterances; a mandatory five-option emotion
+self-report probe administered every fifteen minutes; and a parallel-form
+pre/post assessment design for learning gain.
+
+A user study with \todo{N} participants evaluated the platform.
+\todo{One-sentence summary of the validation result (agreement between
+system-detected and self-reported states).} \todo{One-sentence summary of
+the learning-gain result with effect size.} The report documents the
+system's architecture and data model in full, states its limitations
+candidly---including known data-quality caveats and the boundary between
+validated and exploratory signals---and argues that the platform's principal
+contribution is a working, privacy-conscious instrument for studying
+affect, attention, and strategy use in authentic online learning.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} intelligent tutoring systems; affective
+computing; multimodal learning analytics; retrieval-augmented generation;
+eye tracking; facial action units; learning strategies; spaced repetition.
+\clearpage

@@ -1,0 +1,231 @@
+% ============================================================
+% Chapter 6 — The Four Learning Interventions
+% ============================================================
+\chapter{The Four Learning Interventions}
+\label{ch:interventions}
+
+\roadmap{This chapter treats each of the four learning-strategy
+interventions in the same order---theory, mechanics, engineering---so that
+its pedagogical warrant, its learner-facing behavior, and its
+implementation are visible together. It then documents three
+cross-cutting mechanisms: how a text selection reaches the generator, how
+the chatbot suggests strategies, and how teachers configure prompts. It
+closes by establishing, against the code, that interventions are
+exclusively learner-initiated and never triggered by affect.}
+
+\section{Common structure}
+\label{sec:interventions-common}
+
+All four interventions share a lifecycle. A learner initiates one---by
+clicking a strategy button or by accepting a chatbot suggestion---
+optionally after selecting text on the page. The backend resolves the
+grounding context (\cref{sec:modes-context}), calls the LLM with a
+system prompt (teacher-configurable) and a hard-coded user-prompt
+template, and stores the generated activity as a
+\dbtable{LearningIntervention} row whose \code{sessionData} JSON holds the
+activity state.\footnote{\code{apps/api/src/learning-interventions};
+\dbtable{LearningIntervention}, \dbtable{InterventionType}} Interaction
+then proceeds through intervention-specific endpoints. A learner may save
+any activity for later review (\dbtable{SavedInterventionReview}), which
+surfaces in the review queue. \Cref{tab:interventions-summary} orients the
+four before the detailed treatment.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{The four interventions at a glance.}
+\label{tab:interventions-summary}
+\begin{tabular}{@{}p{0.19\linewidth}p{0.25\linewidth}p{0.22\linewidth}p{0.24\linewidth}@{}}
+\toprule
+Intervention & Generates & Grading & Persistence \\
+\midrule
+Practice testing & Mixed MCQ + short answer (default 3+2) & MCQ
+deterministic; short answer LLM with keyword fallback & \dbtable{LearningIntervention} \\
+Interrogative elaboration & ``Why/how'' question suggestions + dialogue &
+None (LLM depth summary) & \dbtable{LearningIntervention} \\
+Stepwise learning & 3--6 scaffolded steps with checks & LLM per step; force-pass after 2 attempts & \dbtable{LearningIntervention} \\
+Distributed practice & Flashcards on an SM-2 schedule & Learner self-rating drives SM-2 & \dbtable{LearningIntervention} + \dbtable{SpacedRepetitionCard} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Practice testing}
+\label{sec:interventions-pt}
+
+\paragraph{Theory.} Retrieval practice is a high-utility technique
+\citep{dunlosky2013}: the act of retrieving strengthens later retention
+more than restudy, even when it feels less fluent
+\citep{roediger2006, bjork1994}.
+
+\paragraph{Mechanics.} The intervention generates a mixed set of
+multiple-choice and short-answer items over the current material
+(default three MCQ and two short answer), which the learner answers and
+submits for immediate scoring.
+
+\paragraph{Engineering.} Generation and submission are served by dedicated
+endpoints (\cref{app:endpoints}); the item set and, after submission, the
+answers and score live in \code{sessionData}. Grading is
+mixed.\footnote{\code{learning-interventions.service.ts}: \code{gradeAnswer}
+(deterministic), \code{gradeShortAnswerWithLlm} (LLM).} MCQ answers are
+normalized to a single letter and compared deterministically; non-empty
+short answers are graded by an LLM under a hard-coded ``be generous''
+rubric, falling back to keyword matching (at least half the expected
+keywords) if the LLM call fails. The final score is the percentage
+correct. One consequence worth stating: because short-answer grading is
+LLM-based, identical answers may occasionally receive different scores
+across runs.
+
+\section{Interrogative elaboration}
+\label{sec:interventions-ie}
+
+\paragraph{Theory.} Elaborative interrogation---prompting learners to
+answer \emph{why} and \emph{how} rather than \emph{what}---has
+moderate-utility evidence \citep{dunlosky2013}, and self-generated
+elaboration aids memory through the generation effect
+\citep{pressley1987}.
+
+\paragraph{Mechanics.} The intervention suggests a set of why/how
+questions grounded in the material and then hosts an explanatory
+dialogue: the tutor's role is to explain, not to quiz. On completion it
+produces a descriptive depth rating (surface/moderate/deep), not a score.
+
+\paragraph{Engineering.} Suggestion, per-turn asking, and completion are
+separate endpoints; the conversation and its per-turn selection context
+accumulate in \code{sessionData}. There is no correctness grading. A
+historical bug---context frozen at the first slide---was fixed by
+re-resolving grounding on each turn, and per-turn selection and page are
+now persisted so the review surface can show what each question referred
+to.\footnote{\code{docs/BUG_REPORT_20260612.md}}
+
+\section{Stepwise learning}
+\label{sec:interventions-sl}
+
+\paragraph{Theory.} Stepwise learning operationalizes scaffolding
+\citep{wood1976, vandepol2010} within the zone of proximal development
+\citep{vygotsky1978}, decomposing material to bound cognitive load
+\citep{sweller1988} and fading support as competence is shown.
+
+\paragraph{Mechanics.} The intervention breaks the material into three to
+six progressive steps, each with a comprehension check; the learner
+advances step by step.
+
+\paragraph{Engineering.} Generation, per-step checking, and advancement
+are separate endpoints; per-step attempts and outcomes are held in
+\code{sessionData}. Checking is LLM-based with no deterministic fallback.
+A design choice is disclosed for the record: after two failed attempts on
+a step the correct answer is shown and the step is force-marked passed, so
+a learner is never trapped---at the cost that ``passed'' does not imply
+``answered correctly.''
+
+\section{Distributed practice}
+\label{sec:interventions-dp}
+
+\paragraph{Theory.} Distributed (spaced) practice is the second
+high-utility technique \citep{dunlosky2013, cepeda2006}; scheduling
+reviews at expanding intervals exploits the spacing effect
+\citep{bjork1994}.
+
+\paragraph{Mechanics.} The intervention generates flashcards, which the
+learner reviews and self-rates; ratings drive an SM-2 schedule
+\citep{wozniak1994} that sets each card's next due date.
+
+\paragraph{Engineering.} Each card is a \dbtable{SpacedRepetitionCard} row
+seeded with ease $2.5$, interval $0$, and repetitions $0$; reviews update
+these fields. The scheduler is the SM-2 algorithm, reproduced verbatim
+from the implementation in \cref{lst:sm2}.
+
+\begin{lstlisting}[caption={SM-2 update, verbatim from
+\code{utils/sm2-algorithm.ts}. Rating map: again=1, hard=2, good=3,
+easy=5.}, label={lst:sm2}]
+if (quality >= 3) {
+  if (repetitions === 0) interval = 1;
+  else if (repetitions === 1) interval = 6;
+  else interval = Math.round(interval * ease);
+  repetitions += 1;
+} else {
+  repetitions = 0;
+  interval = 1;
+}
+ease = Math.max(1.3, ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
+// nextReviewAt = today + interval days
+\end{lstlisting}
+
+The exact constants matter for reproducibility and are stated in prose:
+the ease factor is floored at $1.3$ and seeded at $2.5$; intervals expand
+$1 \rightarrow 6 \rightarrow \operatorname{round}(\text{interval} \times
+\text{ease})$; a rating below ``good'' (quality $<3$) is a full lapse,
+resetting repetitions to $0$ and interval to $1$. Two implementation
+notes distinguish this from textbook SM-2: the rating map never emits
+quality $4$ (``easy'' jumps to $5$), and ``hard'' (quality $2$) is treated
+as a full lapse rather than a shortened interval. Both are faithful to
+the code and are flagged so that any recall-calibration analysis
+(\cref{sec:methodology-analyses}) interprets the schedule correctly.
+
+\section{Text selection to generator}
+\label{sec:interventions-selection}
+
+A learner grounds an intervention on a passage by selecting it. Selection
+is captured on two surfaces: on block pages, a mouse-up selection is
+accepted only if it exceeds 20 characters and originates inside a
+selectable element; in the PDF reader, a selection above 10 characters is
+captured with its page
+number.\footnote{\code{apps/web/src/components/.../PageContext.tsx};
+\code{PdfReader.tsx}} The selection travels in the request body and is
+resolved server-side by the 20-character rule of
+\cref{sec:modes-context}, becoming the grounding text substituted into the
+prompt template. The authoritative threshold is therefore 20 characters;
+the PDF surface's 10-character gate governs capture only.
+
+\section{The strategy-suggestion engine}
+\label{sec:interventions-suggest}
+
+The docked chatbot may suggest a strategy, but the ``engine'' is a
+\emph{prompt instruction}, not a rule
+system.\footnote{\code{learning-interventions.service.ts:4214}} The
+persona instructs the model to append, on its final line, a tag
+\code{[SUGGEST:KEY]} with \code{KEY} one of the four intervention types,
+only when genuinely relevant. A deterministic regular expression parses
+the tag, strips it from the visible reply, and stores the parsed value in
+\dbtable{ChatbotMessage.suggestedStrategy}. The suggestion renders as a
+clickable card; the intervention launches only when the learner clicks it.
+Persisting the suggested strategy lets later analysis measure suggestion
+uptake against actual intervention initiation.
+
+\section{Teacher prompt configuration}
+\label{sec:interventions-teacher}
+
+Teachers customize interventions through \dbtable{InterventionPromptConfig},
+which stores a per-course \emph{system prompt} per intervention type and,
+for practice testing only, default MCQ and short-answer counts.
+Editability is deliberately bounded: the system prompt is teacher-editable
+(validated for length and warned if it omits JSON-format instructions),
+but the \emph{user-prompt template}, all grading and summary prompts, the
+chatbot persona, and structural constants (count clamps, the two-attempt
+cap, the SM-2 constants) are hard-coded. The split---editable system
+prompt, fixed templates---keeps teacher customization from breaking the
+machine-readable output contracts on which grading depends.
+
+\section{Interventions are learner-initiated, never affect-triggered}
+\label{sec:interventions-autotrigger}
+
+A claim central to this report's methodology is that the sensing layer
+does not drive the pedagogy. The codebase supports it without
+qualification. Interventions carry only two trigger reasons anywhere in
+the service, \code{student_initiated} and \code{pre_generated}; no
+affective, biometric, or automatic trigger reason exists. The
+\code{INTERVENTION_TRIGGERED} activity action is a logging event written
+\emph{after} a learner's request, not a trigger. Every generation
+endpoint is reachable only from a learner action---a strategy button or an
+accepted suggestion card. The affect and text-mining pipelines are
+consumers, not producers, of these events: the only cross-link runs the
+other way, with the chatbot feeding learner utterances into text mining.
+The closed loop---affect-triggered support, the natural endgame of
+RQ2---is therefore \emph{not} implemented, and is reserved for future
+work (\cref{ch:future}). Keeping the loop open is what allows RQ1's
+detection validity to be established observationally, free of the
+confound that would arise if the intervention were triggered by the very
+state being measured.
+
+\medskip
+\noindent The pedagogy layer complete, the next chapter documents the
+sensing and logging layer that observes learners as they use it.

@@ -1,0 +1,118 @@
+% ============================================================
+% Chapter 11 — Limitations
+% ============================================================
+\chapter{Limitations}
+\label{ch:limitations}
+
+\roadmap{This chapter consolidates the platform's limitations as mature
+scientific constraints. It groups them into measurement-validity,
+data-quality, methodological, and engineering limitations, cross-referring
+to where each is established. None is offered as an apology; each bounds a
+claim, and several define the future work of \cref{ch:future}.}
+
+\section{Measurement-validity limitations}
+\label{sec:limitations-measurement}
+
+\begin{enumerate}
+  \item \textbf{Convergent, not criterion, validation.} RQ1's validation
+  compares two machine channels and a sparse self-report; it establishes
+  convergence, not agreement with ground truth
+  (\cref{sec:methodology-validation}). Human-coded ground truth is
+  designed-but-future (\cref{sec:sensing-coding}).
+  \item \textbf{Region-level gaze.} WebGazer resolves panels, not
+  fixations \citep{papoutsaki2016webgazer}; all attention claims are at
+  the AOI-panel granularity (\cref{sec:sensing-gaze}).
+  \item \textbf{Pupil proxy.} The pupil signal is a dark-pixel-area
+  heuristic, not calibrated pupillometry, and is excluded from primary
+  claims (\cref{sec:sensing-pupil}).
+  \item \textbf{Placeholder SEEV weights.} The AOI \allocscore{} uses
+  ordinal expected weights supplied by the researcher, not fitted SEEV
+  parameters, so it is a relative alignment index rather than a validated
+  SEEV measure (\cref{sec:sensing-aoi}).
+  \item \textbf{No head pose.} Head-pose columns exist but are never
+  populated; the report makes no head-pose claim
+  (\cref{sec:sensing-facial}).
+  \item \textbf{Two unwired affect derivations.} Server-windowed and
+  client-per-frame affect classifiers use different weights and are not
+  unified; results must name which produced them
+  (\cref{sec:sensing-affect}).
+  \item \textbf{Low-feasibility EF constructs.} Cognitive flexibility and
+  working memory are verbal-marker proxies the implementation itself flags
+  as unvalidated as executive functions
+  (\cref{sec:methodology-ef}).
+\end{enumerate}
+
+\section{Data-quality limitations}
+\label{sec:limitations-data}
+
+\begin{enumerate}
+  \item \textbf{Emotion CSV mislabel.} Emotion rows are labeled
+  ``py-feat'' though produced by OpenFace~3.0; values are correct, the
+  header is not (\cref{sec:sensing-caveats}).
+  \item \textbf{Docked-scroll gap.} Sessions before the scroll-host fix
+  cannot reconstruct inner reading position. \todo{Cutoff date and
+  affected sessions.}
+  \item \textbf{Frame truncation.} Sessions over $\sim$17 minutes recorded
+  before 2026-05-21 were truncated to their earliest 5{,}000 biometric
+  frames. \todo{Affected sessions.}
+  \item \textbf{Silent batch drops.} Malformed byte-escape payloads cause
+  whole interaction batches to be dropped with only a server warning,
+  producing non-random gaps (\cref{sec:sensing-caveats}).
+  \item \textbf{No CV retry.} Failed facial-analysis jobs appear as
+  missing frames with no automatic recovery
+  (\cref{sec:sensing-caveats}).
+  \item \textbf{Sparse, late self-report.} One report per fifteen minutes,
+  and none before 2026-07-01, limits the item-15 sample
+  (\cref{sec:methodology-selfreport}).
+  \item \textbf{Retained error rows.} EF error detections persist and must
+  be filtered (\cref{sec:methodology-ef}).
+\end{enumerate}
+
+\section{Methodological limitations}
+\label{sec:limitations-method}
+
+\begin{enumerate}
+  \item \textbf{No phase marker.} The database encodes no phase,
+  condition, or group field; any grouped comparison rests on an externally
+  defined grouping, operationalized here as pre/post
+  (\cref{sec:methodology-stats}).
+  \item \textbf{No stored gain or effect-size fields.} Normalized gain and
+  effect sizes are computed in analysis, not stored
+  (\cref{sec:methodology-gain}).
+  \item \textbf{Fragile pre/post join.} Assessments are distinguished only
+  by title, the attempt-to-assessment relation is unenforced, and both are
+  practice-mode with multiple attempts, requiring an explicit
+  attempt-selection policy (\cref{sec:methodology-gain}).
+  \item \textbf{Learner-initiated confound-free but capped.} Because
+  interventions are never affect-triggered, gain cannot be attributed to
+  targeted support, and the design cannot test affect-contingent adaptation
+  (\cref{sec:interventions-autotrigger}).
+  \item \textbf{Single cohort, small $n$.} Limits power and
+  generalization (\cref{sec:discussion-threats}).
+\end{enumerate}
+
+\section{Engineering limitations}
+\label{sec:limitations-engineering}
+
+\begin{enumerate}
+  \item \textbf{Two unconnected KC systems.} The curated prerequisite
+  graph and the mastery tracker are not wired together, blocking a
+  mastery-driven adaptive path (\cref{sec:scope-item5}).
+  \item \textbf{Unused BKT columns.} Mastery is an EMA; the BKT parameter
+  columns are unpopulated (\cref{sec:scope-item10}).
+  \item \textbf{Open AI-grading path.} Structured-question AI grading
+  writes a placeholder score awaiting an external grader
+  (\cref{sec:arch-maturity}).
+  \item \textbf{Teacher dashboard stub and unimplemented TIMELINE studio
+  output} (\cref{sec:scope-item8,sec:modes-a}).
+  \item \textbf{In-memory embeddings and single-instance schedulers}
+  bound scale (\cref{sec:arch-storage,sec:arch-backend}).
+  \item \textbf{Export-jobs command-injection surface.} An unvalidated
+  session identifier is interpolated into a shell command; the endpoint is
+  role-restricted but the flaw should be fixed
+  (\cref{sec:arch-maturity}).
+\end{enumerate}
+
+\medskip
+\noindent Each limitation above names a specific extension. The next
+chapter organizes those extensions into a program of future work.
