@@ -27,6 +27,9 @@ export function App() {
             <NavLink to="/analysis-studio" className={linkCls}>
               Cohort
             </NavLink>
+            <NavLink to="/llm-coding" className={linkCls}>
+              LLM Coding
+            </NavLink>
           </nav>
         </div>
       </header>

@@ -9,6 +9,7 @@ import { Coding } from './pages/Coding';
 import { TimelineCoding } from './pages/TimelineCoding';
 import { Analysis } from './pages/Analysis';
 import { CohortAnalysis } from './pages/CohortAnalysis';
+import { LlmCoding } from './pages/LlmCoding';
 import { Codebook } from './pages/Codebook';
 
 const router = createBrowserRouter([
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: 'codebook', element: <Codebook /> },
       { path: 'analysis', element: <Analysis /> },
       { path: 'analysis-studio', element: <CohortAnalysis /> },
+      { path: 'llm-coding', element: <LlmCoding /> },
     ],
   },
 ]);
