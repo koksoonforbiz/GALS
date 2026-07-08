@@ -58,6 +58,60 @@ export const CODED_DIMENSIONS: string[] = [
   ...LEARNING_STRATEGIES.map((k) => `strategy_${k}`),
 ];
 
+// ── fixed mixed response scales (per the psychometric decision) ──────────────
+//  - learning strategies → binary presence/absence (judged with selected text)
+//  - executive functions → ordinal 0–2 (a short utterance rarely justifies finer)
+//  - affective states    → intensity 0–3 (allows co-occurring states, keeps strength)
+//  - motivation          → ordinal 0–3 (classically Likert constructs)
+export interface DimScale {
+  kind: 'binary' | 'ordinal' | 'intensity';
+  min: number;
+  max: number;
+  tag: string; // compact tag shown after each dimension, e.g. "0–2"
+  legend: string; // one-line explanation of the levels for the prompt
+}
+const EF_SCALE: DimScale = {
+  kind: 'ordinal',
+  min: 0,
+  max: 2,
+  tag: '0–2',
+  legend: '0 = no evidence, 1 = partial/implicit evidence, 2 = clear explicit evidence',
+};
+const AFFECT_SCALE: DimScale = {
+  kind: 'intensity',
+  min: 0,
+  max: 3,
+  tag: '0–3',
+  legend: '0 = absent, 1 = mild, 2 = moderate, 3 = strong',
+};
+const MOT_SCALE: DimScale = {
+  kind: 'ordinal',
+  min: 0,
+  max: 3,
+  tag: '0–3',
+  legend: '0 = none, 1 = low, 2 = moderate, 3 = high',
+};
+const STRATEGY_SCALE: DimScale = {
+  kind: 'binary',
+  min: 0,
+  max: 1,
+  tag: '0/1',
+  legend: '0 = absent, 1 = present',
+};
+export const SCALES: Record<string, DimScale> = Object.fromEntries([
+  ...EXECUTIVE_FUNCTIONS.map((k) => [`ef_${k}`, EF_SCALE] as const),
+  ...AFFECTIVE_STATES.map((k) => [`affect_${k}`, AFFECT_SCALE] as const),
+  ...MOTIVATION_DIMENSIONS.map((k) => [`mot_${k}`, MOT_SCALE] as const),
+  ...LEARNING_STRATEGIES.map((k) => [`strategy_${k}`, STRATEGY_SCALE] as const),
+]);
+
+// One-time legend the prompt shows so the model applies the right scale per group.
+const SCALES_LEGEND = `Response scales (apply the scale shown in [brackets] after each dimension — do NOT force everything to 0/1):
+- Executive functions [${EF_SCALE.tag}]: ${EF_SCALE.legend}.
+- Affective states [${AFFECT_SCALE.tag} intensity]: ${AFFECT_SCALE.legend}.
+- Motivation [${MOT_SCALE.tag}]: ${MOT_SCALE.legend}.
+- Learning strategies [${STRATEGY_SCALE.tag}]: ${STRATEGY_SCALE.legend} (judge from the utterance AND the highlighted selected text).`;
+
 // Per-dimension definitions the researcher can edit in the studio before running.
 export const DEFAULT_DEFINITIONS: Record<string, string> = {
   ef_inhibitory_control:
@@ -94,17 +148,19 @@ export const DEFAULT_DEFINITIONS: Record<string, string> = {
     'Asking/answering "why/how" elaboration questions that connect ideas.',
 };
 
-// Editable template. Placeholders: {{SOURCE}} {{DEFINITIONS}} {{DIMENSION_KEYS}}
-// {{UTTERANCE}} {{SELECTED_TEXT}}.
+// Editable template. Placeholders: {{SOURCE}} {{SCALES}} {{DEFINITIONS}}
+// {{DIMENSION_KEYS}} {{UTTERANCE}} {{SELECTED_TEXT}}.
 export const DEFAULT_TEMPLATE = `You are an expert educational-psychology coder. Code the single learner utterance below. The learner is a student interacting with a tutoring system. Context source: {{SOURCE}}.
 
-Code each dimension 1 (present/evidenced in the utterance) or 0 (not). For the learning strategies, use BOTH the utterance and the highlighted selected text.
+Each dimension uses its OWN response scale, shown in [brackets] after the dimension name. Apply that scale — do not collapse everything to 0/1.
+
+{{SCALES}}
 
 {{DEFINITIONS}}
 
 Output STRICT JSON only (no prose). Return an object whose keys are EXACTLY these dimensions:
 {{DIMENSION_KEYS}}
-and whose value for EACH key is an object {"value": 0 or 1, "justification": "<= 30 words, specific to THIS dimension and THIS utterance, citing the textual evidence"}.
+and whose value for EACH key is an object {"value": <integer within that dimension's scale range>, "justification": "<= 30 words, specific to THIS dimension and THIS utterance, citing the textual evidence"}.
 
 Learner utterance:
 """{{UTTERANCE}}"""
@@ -113,9 +169,9 @@ Selected text the learner had highlighted when sending this (may be empty):
 """{{SELECTED_TEXT}}"""`;
 
 function definitionsBlock(defs: Record<string, string>): string {
-  return CODED_DIMENSIONS.map((k) => `- ${k}: ${defs[k] ?? DEFAULT_DEFINITIONS[k] ?? ''}`).join(
-    '\n',
-  );
+  return CODED_DIMENSIONS.map(
+    (k) => `- ${k} [${SCALES[k]?.tag ?? '0/1'}]: ${defs[k] ?? DEFAULT_DEFINITIONS[k] ?? ''}`,
+  ).join('\n');
 }
 
 function buildAssessPrompt(defs: Record<string, string>): string {
@@ -139,6 +195,7 @@ function buildPrompt(
 ): string {
   return template
     .replace(/\{\{SOURCE\}\}/g, item.source)
+    .replace(/\{\{SCALES\}\}/g, SCALES_LEGEND)
     .replace(/\{\{DEFINITIONS\}\}/g, definitionsBlock(defs))
     .replace(/\{\{DIMENSION_KEYS\}\}/g, JSON.stringify(CODED_DIMENSIONS))
     .replace(/\{\{UTTERANCE\}\}/g, item.utterance || '')
@@ -197,10 +254,17 @@ async function callGemini(
   return JSON.parse(text);
 }
 
-const truthy = (v: unknown) =>
-  v === 1 || v === '1' || v === true || String(v).toLowerCase() === 'yes' ? 1 : 0;
+/** Coerce a raw value to an integer clamped to the dimension's scale range.
+ * Handles numbers, numeric strings, and the binary yes/true legacy forms. */
+function coerceScaled(v: unknown, scale: DimScale): number {
+  if (v === true || String(v).toLowerCase() === 'yes') return scale.max === 1 ? 1 : scale.max;
+  if (v === false || String(v).toLowerCase() === 'no') return 0;
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(scale.min, Math.min(scale.max, n));
+}
 
-/** Normalise the LLM's raw JSON into {dimension: 0|1, dimension_justification: text}.
+/** Normalise the LLM's raw JSON into {dimension: <int in scale>, dimension_justification: text}.
  * Accepts either nested {value, justification} per key or flat value + <key>_justification. */
 function normalise(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -216,7 +280,7 @@ function normalise(raw: Record<string, unknown>): Record<string, unknown> {
       v = cell;
       j = raw[`${k}_justification`] ?? raw[`${k}_rationale`];
     }
-    out[k] = truthy(v);
+    out[k] = coerceScaled(v, SCALES[k] ?? STRATEGY_SCALE);
     out[`${k}_justification`] = typeof j === 'string' ? j : '';
   }
   return out;
@@ -249,6 +313,7 @@ export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
     },
     template: DEFAULT_TEMPLATE,
     definitions: DEFAULT_DEFINITIONS,
+    scales: SCALES,
   }));
 
   // Gather codable USER utterances (free chat + elaborative interrogation) for

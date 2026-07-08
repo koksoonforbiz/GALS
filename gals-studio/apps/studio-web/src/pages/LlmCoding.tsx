@@ -84,6 +84,7 @@ export function LlmCoding() {
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [dimensions, setDimensions] = useState<string[]>([]);
+  const [scales, setScales] = useState<Record<string, { tag: string; legend: string }>>({});
 
   const [provider, setProvider] = useState<Provider>(
     () => LS.get('gals.llm.provider', 'openai') as Provider,
@@ -121,6 +122,7 @@ export function LlmCoding() {
       .llmDimensions()
       .then((r) => {
         setDimensions(r.dimensions ?? []);
+        setScales(r.scales ?? {});
         setDefaults({ template: r.template ?? '', definitions: r.definitions ?? {} });
         const savedT = LS.get('gals.llm.template', '');
         setTemplate(savedT || r.template || '');
@@ -441,7 +443,7 @@ export function LlmCoding() {
                     Template — placeholders:{' '}
                     <code>
                       {
-                        '{{SOURCE}} {{DEFINITIONS}} {{DIMENSION_KEYS}} {{UTTERANCE}} {{SELECTED_TEXT}}'
+                        '{{SOURCE}} {{SCALES}} {{DEFINITIONS}} {{DIMENSION_KEYS}} {{UTTERANCE}} {{SELECTED_TEXT}}'
                       }
                     </code>
                   </div>
@@ -458,14 +460,24 @@ export function LlmCoding() {
                   if (!dims.length) return null;
                   return (
                     <div key={g.prefix}>
-                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      <div className="mb-1 flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                         {g.label}
+                        {scales[dims[0]] && (
+                          <span className="font-normal normal-case text-slate-400">
+                            scale [{scales[dims[0]].tag}] — {scales[dims[0]].legend}
+                          </span>
+                        )}
                       </div>
                       <div className="space-y-1">
                         {dims.map((d) => (
                           <div key={d} className="flex items-start gap-2">
-                            <span className="mt-1 w-52 shrink-0 truncate font-mono text-[11px] text-slate-500">
-                              {d}
+                            <span className="mt-1 flex w-52 shrink-0 items-baseline gap-1 font-mono text-[11px] text-slate-500">
+                              <span className="truncate">{d}</span>
+                              {scales[d] && (
+                                <span className="shrink-0 rounded bg-slate-100 px-1 text-[9px] text-slate-500">
+                                  {scales[d].tag}
+                                </span>
+                              )}
                             </span>
                             <input
                               value={defs[d] ?? ''}
@@ -479,8 +491,9 @@ export function LlmCoding() {
                   );
                 })}
                 <div className="text-[11px] text-slate-400">
-                  Every dimension is coded 1 (present) / 0 (absent) with a per-dimension
-                  justification in one JSON call per utterance; edits apply to the next run and are
+                  Each dimension is coded on its own fixed scale — executive functions 0–2, affect
+                  0–3 intensity, motivation 0–3, learning strategies 0/1 — with a per-dimension
+                  justification in one JSON call per utterance. Edits apply to the next run and are
                   remembered in this browser.
                 </div>
               </div>
@@ -492,8 +505,8 @@ export function LlmCoding() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-slate-600">Response-scale check</span>
               <span className="text-[11px] text-slate-400">
-                ask the model whether binary (0/1) is the right scale for each dimension — and what
-                to use instead
+                independent audit — asks the model whether each dimension&apos;s scale (binary vs
+                graded) is defensible from short text, and what it would use instead
               </span>
               <button
                 onClick={assessScales}
