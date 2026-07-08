@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import { MathText } from '../../components/MathText';
 
 interface MCQOption {
   id: string;
@@ -383,7 +384,7 @@ export function AssessmentAttemptPage() {
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <p className="text-sm font-medium text-gray-800 flex-1">
                     <span className="text-gray-400 font-normal mr-2">Q{index + 1}.</span>
-                    {result.prompt}
+                    <MathText text={result.prompt} />
                   </p>
                   <span
                     className={`text-xs px-2 py-1 rounded-full font-semibold shrink-0 ${badgeClass}`}
@@ -410,7 +411,7 @@ export function AssessmentAttemptPage() {
                           <span className="shrink-0 w-3">
                             {isCorrect ? '✓' : wasSelected ? '✗' : '·'}
                           </span>
-                          {opt.text}
+                          <MathText text={opt.text} />
                         </div>
                       );
                     })}
@@ -491,7 +492,7 @@ export function AssessmentAttemptPage() {
                   >
                     <p className="text-sm font-medium text-gray-800 mb-3 leading-relaxed">
                       <span className="text-gray-400 font-normal mr-2">Q{globalIndex + 1}.</span>
-                      {q.prompt}
+                      <MathText text={q.prompt} />
                     </p>
                     {isMulti && <p className="text-xs text-blue-600 mb-2">Select all that apply</p>}
                     <div className="space-y-2">
@@ -517,7 +518,9 @@ export function AssessmentAttemptPage() {
                               }
                               className="shrink-0 accent-blue-600"
                             />
-                            <span className="text-sm">{opt.text}</span>
+                            <span className="text-sm">
+                              <MathText text={opt.text} />
+                            </span>
                           </label>
                         );
                       })}

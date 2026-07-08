@@ -1,0 +1,640 @@
+%==============================================================================
+%  CS 601 -- AI and Uncertainty Reasoning
+%  Per-topic POST-study assessment (3 questions per topic).
+%
+%  Parallel form to the pre-study assessment: identical topic list, identical
+%  per-topic structure (Q1 single-answer, Q2 select-all, Q3 two-part
+%  calculation) and identical point weights, so pre/post scores are directly
+%  comparable for learning-gain analysis.  All questions and numbers are new.
+%
+%  Item-writing corrections carried over from the pre-study review:
+%    * correct-answer positions are spread across A-D (not clustered on A);
+%    * the correct option is not systematically the longest;
+%    * the single false option in each "select all" item is scattered in
+%      position and is not systematically the shortest;
+%    * notation is glossed, acronyms are spelled out, graph load is minimised.
+%
+%  SINGLE SOURCE OF TRUTH.  The same file builds BOTH copies; the only switch
+%  is the exam-class "answers" option:
+%     Teacher's copy : pass "answers"  -> correct answers + worked solutions
+%     Student's copy : omit it         -> questions only (all MCQ)
+%
+%  Build (run each twice so "Page x of N" resolves):
+%     pdflatex -jobname=post-teacher "\PassOptionsToClass{answers}{exam}\input{post.tex}"
+%     pdflatex -jobname=post-student "\input{post.tex}"
+%==============================================================================
+
+\documentclass[answers,addpoints]{exam}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage[margin=1in]{geometry}
+
+% ---- Layout / headers --------------------------------------------------------
+\pagestyle{headandfoot}
+\firstpageheader{CS 601 -- AI and Uncertainty Reasoning}{}{Post-study Assessment}
+\runningheader{CS 601 -- Post-study Assessment}{}{%
+  \ifprintanswers TEACHER'S COPY\else STUDENT'S COPY\fi}
+\firstpagefooter{}{Page \thepage\ of \numpages}{}
+\runningfooter{}{Page \thepage\ of \numpages}{}
+
+\checkboxchar{$\Box$}
+\CorrectChoiceEmphasis{\bfseries}
+\SolutionEmphasis{\itshape}
+
+\newcommand{\topic}[2]{%
+  \vspace{1.0\baselineskip}%
+  \noindent\textbf{\large Topic #1: #2}\par
+  \noindent\rule{\linewidth}{0.4pt}\par
+  \vspace{0.4\baselineskip}}
+
+\begin{document}
+
+% ---- Cover block -------------------------------------------------------------
+\begin{center}
+  {\LARGE\bfseries CS 601 -- AI and Uncertainty Reasoning}\\[4pt]
+  {\Large Per-topic Post-study Assessment}\\[6pt]
+  {\large \ifprintanswers \textbf{TEACHER'S COPY}\\(answers, accepted ranges, and worked solutions)%
+          \else \textbf{STUDENT'S COPY}\\(select the best option for every part)\fi}
+\end{center}
+
+\vspace{0.5\baselineskip}
+\noindent
+\textbf{Instructions.} Every part is multiple choice -- just select an option;
+\emph{no written working is needed}. Each topic has three questions:
+\textbf{Q1} single-answer multiple choice (choose ONE),
+\textbf{Q2} ``select all that apply'' (choose every correct option), and
+\textbf{Q3} a calculation in two parts: part~\textbf{(a)} asks \emph{which
+expression is correct}, and part~\textbf{(b)} selects the value that expression
+gives. Each question is self-contained. This post-study paper mirrors the
+pre-study one in length and format.
+
+\ifprintanswers
+\noindent\textbf{Grading note (teacher's copy).} Each calculation part has a
+single correct option; the intended exact value is shown in the worked solution.
+\fi
+
+\vspace{0.5\baselineskip}
+
+%==============================================================================
+\topic{1}{Probabilistic Reasoning}
+%==============================================================================
+
+\begin{questions}
+
+% ---- Q1 (correct: C) ----
+\question[2] (Single answer) For two events $A$ and $B$ with $P(B)>0$, which
+equation correctly states \textbf{Bayes' rule}?
+\begin{choices}
+  \choice $P(A\mid B)=P(A)\,P(B)$
+  \choice $P(A\mid B)=P(A,B)\,P(B)$
+  \CorrectChoice $P(A\mid B)=\dfrac{P(B\mid A)\,P(A)}{P(B)}$
+  \choice $P(A\mid B)=\dfrac{P(B\mid A)}{P(A)}$
+\end{choices}
+\begin{solution}\textbf{C.} Bayes' rule inverts a conditional: $P(A\mid B)=P(B\mid A)P(A)/P(B)$.\end{solution}
+
+% ---- Q2 (false: E) ----
+\question[3] (Select all that apply) Which statements follow from the standard
+rules of probability?
+\begin{checkboxes}
+  \CorrectChoice Product rule: $P(X,Y)=P(X\mid Y)\,P(Y)$.
+  \CorrectChoice Marginalization: $P(X{=}x)=\sum_{y}P(X{=}x,Y{=}y)$.
+  \CorrectChoice Law of total probability: for a partition $\{B_i\}$,
+        $P(A)=\sum_i P(A\mid B_i)\,P(B_i)$.
+  \CorrectChoice Complement rule: $P(\lnot A)=1-P(A)$.
+  \choice If $P(A\mid B)=P(A)$, then $A$ and $B$ must be mutually exclusive.
+  \CorrectChoice For any event $A$, $0\le P(A)\le 1$.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, C, D, F.} The false option \textbf{E}: $P(A\mid B)=P(A)$
+means $A$ and $B$ are \emph{independent}, not mutually exclusive.
+\end{solution}
+
+% ---- Q3 (a: B, b: C) ----
+\question[5] (Calculation) In a factory, Machine~1 makes $60\%$ of the parts and
+$3\%$ of its parts are defective; Machine~2 makes the other $40\%$ and $5\%$ of
+its parts are defective. A part is drawn at random and found defective.
+\begin{parts}
+  \part Which expression gives the overall probability a part is defective,
+        $P(\text{def})$?
+  \begin{choices}
+    \choice $0.60+0.40$
+    \CorrectChoice $0.60(0.03)+0.40(0.05)$
+    \choice $0.03+0.05$
+    \choice $0.60(0.03)\times0.40(0.05)$
+  \end{choices}
+  \begin{solution}\textbf{Law of total probability}; value $=0.018+0.020=0.038$.\end{solution}
+
+  \part Using $P(\text{def})=0.038$, which expression gives
+        $P(\text{Machine 2}\mid\text{def})$, and its value?
+  \begin{choices}
+    \choice $\dfrac{0.038}{0.40(0.05)}\approx 1.90$
+    \choice $\dfrac{0.40}{0.038}\approx 10.5$
+    \CorrectChoice $\dfrac{0.40(0.05)}{0.038}\approx 0.53$
+    \choice $0.40(0.05)\times0.038\approx 0.0008$
+  \end{choices}
+  \begin{solution}\textbf{Bayes rule}: $0.020/0.038=0.526\approx0.53$.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{2}{Bayesian Network: Representation}
+%==============================================================================
+
+% ---- Q1 (correct: A) ----
+\question[2] (Single answer) A node is conditionally independent of all other
+nodes in the network given which set?
+\begin{choices}
+  \CorrectChoice Its Markov blanket.
+  \choice Its parents and its children only.
+  \choice Every other node, regardless of structure.
+  \choice Its ancestors together with its descendants.
+\end{choices}
+\begin{solution}\textbf{A.} A node's Markov blanket -- its parents, its children,
+and its children's other parents -- shields it from the rest of the network.\end{solution}
+
+% ---- Q2 (false: C) ----
+\question[3] (Select all that apply) Which statements about Bayesian-network
+\emph{representation} are correct?
+\begin{checkboxes}
+  \CorrectChoice The joint factorizes as a product of each node's conditional
+        given its parents.
+  \CorrectChoice A binary node with $k$ binary parents needs $2^{k}$ independent
+        parameters (one per parent configuration).
+  \choice Adding more edges to a network always lets it represent \emph{fewer}
+        joint distributions.
+  \CorrectChoice Two networks with different structures can encode the same
+        independencies (they are Markov equivalent).
+  \CorrectChoice A node is independent of its non-descendants given its parents.
+  \CorrectChoice In general, the joint over $n$ binary variables needs $2^{n}-1$
+        free parameters.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, D, E, F.} The false option \textbf{C}: more edges impose
+\emph{fewer} independence constraints, so the network can represent \emph{more}
+distributions, not fewer.
+\end{solution}
+
+% ---- Q3 (a: D, b: A) ----
+\question[5] (Calculation) Consider the three-node chain below (each arrow points
+from a cause to its effect):
+\[
+  C \longrightarrow R \longrightarrow W .
+\]
+In words: Cloudy $C$ influences Rain $R$, which influences a Wet lawn $W$, so the
+joint factorizes as $P(C,R,W)=P(C)\,P(R\mid C)\,P(W\mid R)$. The values are
+$P(C{=}1)=0.5$, $P(R{=}1\mid C{=}1)=0.8$, and $P(W{=}1\mid R{=}1)=0.9$.
+\begin{parts}
+  \part Which expression gives $P(C{=}1,R{=}1,W{=}1)$?
+  \begin{choices}
+    \choice $P(C{=}1)+P(R{=}1\mid C{=}1)+P(W{=}1\mid R{=}1)$
+    \choice $P(C{=}1)\times P(R{=}1)\times P(W{=}1)$
+    \choice $P(R{=}1\mid C{=}1)\times P(W{=}1\mid R{=}1)$
+    \CorrectChoice $P(C{=}1)\times P(R{=}1\mid C{=}1)\times P(W{=}1\mid R{=}1)$
+  \end{choices}
+  \begin{solution}\textbf{Product of the three chain factors} (chain rule along the DAG).\end{solution}
+
+  \part That product $0.5\times0.8\times0.9$ equals:
+  \begin{choices}
+    \CorrectChoice $0.36$
+    \choice $0.72$
+    \choice $0.045$
+    \choice $2.2$
+  \end{choices}
+  \begin{solution}\textbf{0.36} $=0.5\times0.8\times0.9$.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{3}{Bayesian Network: Inference}
+%==============================================================================
+
+% ---- Q1 (correct: D) ----
+\question[2] (Single answer) Variable elimination is usually far cheaper than
+enumerating the full joint because it:
+\begin{choices}
+  \choice always runs in linear time on every possible network.
+  \choice first builds the complete joint table and then deletes rows.
+  \choice works only when all variables are mutually independent.
+  \CorrectChoice sums out variables one at a time, reusing intermediate factors.
+\end{choices}
+\begin{solution}\textbf{D.} It eliminates variables sequentially and reuses factors,
+never materializing the full joint.\end{solution}
+
+% ---- Q2 (false: F) ----
+\question[3] (Select all that apply) Which statements about Bayesian-network
+\emph{inference} are correct?
+\begin{checkboxes}
+  \CorrectChoice Marginalization sums out variables that are neither queried nor
+        observed.
+  \CorrectChoice Normalizing (conditioning) divides by the probability of the
+        evidence.
+  \CorrectChoice The running time of variable elimination depends on the
+        elimination ordering.
+  \CorrectChoice Exact inference in general Bayesian networks is NP-hard.
+  \CorrectChoice Variable elimination reuses intermediate factors rather than
+        rebuilding the joint.
+  \choice An optimal elimination ordering can always be found in polynomial time.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, C, D, E.} The false option \textbf{F}: finding an optimal
+elimination ordering is itself NP-hard.
+\end{solution}
+
+% ---- Q3 (a: C, b: B) ----
+\question[5] (Calculation) A message is Spam with prior $P(\text{Spam})=0.4$. A
+particular word appears with $P(\text{word}\mid\text{Spam})=0.6$ and
+$P(\text{word}\mid\text{not Spam})=0.2$. A message contains the word.
+\begin{parts}
+  \part Which expression gives $P(\text{word})$ (marginalizing over Spam / not Spam)?
+  \begin{choices}
+    \choice $0.6+0.2$
+    \choice $0.4(0.6)\times0.6(0.2)$
+    \CorrectChoice $0.4(0.6)+0.6(0.2)$
+    \choice $0.4(0.6)$
+  \end{choices}
+  \begin{solution}\textbf{Law of total probability}; value $=0.24+0.12=0.36$.\end{solution}
+
+  \part Using $P(\text{word})=0.36$, which expression gives
+        $P(\text{Spam}\mid\text{word})$, and its value?
+  \begin{choices}
+    \choice $\dfrac{0.6(0.2)}{0.36}\approx 0.33$
+    \CorrectChoice $\dfrac{0.4(0.6)}{0.36}\approx 0.67$
+    \choice $\dfrac{0.36}{0.4(0.6)}\approx 1.5$
+    \choice $\dfrac{0.4}{0.36}\approx 1.11$
+  \end{choices}
+  \begin{solution}\textbf{Bayes rule}: $0.24/0.36=0.667\approx0.67$.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{4}{Markov Decision Processes}
+%==============================================================================
+
+% ---- Q1 (correct: B) ----
+\question[2] (Single answer) What is the role of the discount factor
+$\gamma\in[0,1)$ in an MDP?
+\begin{choices}
+  \choice It sets the probability of taking a random action.
+  \CorrectChoice It weights immediate rewards more heavily than distant future rewards.
+  \choice It is the learning rate used by value iteration.
+  \choice It guarantees every reward is positive.
+\end{choices}
+\begin{solution}\textbf{B.} $\gamma$ discounts future rewards; smaller $\gamma$ is
+more short-sighted, and $\gamma<1$ also keeps the infinite-horizon return finite.\end{solution}
+
+% ---- Q2 (false: B) ----
+\question[3] (Select all that apply) Which statements about MDPs are correct?
+\begin{checkboxes}
+  \CorrectChoice An optimal policy $\pi^{*}$ picks, in each state, an action that
+        maximizes expected return.
+  \choice A \emph{larger} discount factor $\gamma$ makes the agent more
+        short-sighted, ignoring future rewards.
+  \CorrectChoice The Bellman optimality equation relates a state's value to the
+        values of its successor states.
+  \CorrectChoice Value iteration repeatedly applies the Bellman update until the
+        values converge.
+  \CorrectChoice Policy iteration alternates policy evaluation with policy
+        improvement.
+  \CorrectChoice $V^{*}(s)=\max_a Q^{*}(s,a)$.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, C, D, E, F.} The false option \textbf{B} is backwards: a larger
+$\gamma$ makes the agent more \emph{far-sighted}.
+\end{solution}
+
+% ---- Q3 (a: A, b: D) ----
+\question[5] (Calculation) From state $s$ an agent may take Action~1 or Action~2,
+with discount $\gamma=0.5$. Action~1 gives reward $3$ and leads to a state of
+value $V=10$. Action~2 gives reward $6$ and leads to a state of value $V=2$.
+\begin{parts}
+  \part Which expression gives the value $Q(s,\text{Action 1})$?
+  \begin{choices}
+    \CorrectChoice $3+0.5(10)$
+    \choice $3\times0.5\times10$
+    \choice $3+10$
+    \choice $0.5(3)+10$
+  \end{choices}
+  \begin{solution}\textbf{$Q=r+\gamma V(s')$} $=3+0.5(10)=8$.\end{solution}
+
+  \part Since $Q(s,\text{Action 1})=8$ and $Q(s,\text{Action 2})=6+0.5(2)=7$, the
+        state value $V(s)=\max_a Q(s,a)$ and the chosen action are:
+  \begin{choices}
+    \choice $7$; choose Action 2.
+    \choice $6.5$; either action.
+    \choice $15$; choose Action 1.
+    \CorrectChoice $8$; choose Action 1.
+  \end{choices}
+  \begin{solution}\textbf{$V(s)=8$, Action 1} -- the maximum-value action ($8>7$).\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{5}{Reinforcement Learning}
+%==============================================================================
+
+% ---- Q1 (correct: C) ----
+\question[2] (Single answer) What distinguishes an \emph{off-policy} method such as
+Q-learning from an \emph{on-policy} method such as Sarsa?
+\begin{choices}
+  \choice Off-policy methods require a full model of the environment's dynamics.
+  \choice On-policy methods never explore.
+  \CorrectChoice Off-policy methods evaluate one policy while following another.
+  \choice On-policy methods do not use a value function.
+\end{choices}
+\begin{solution}\textbf{C.} Q-learning learns about the greedy (target) policy while
+acting under a different behaviour policy; Sarsa learns about the policy it follows.\end{solution}
+
+% ---- Q2 (false: D) ----
+\question[3] (Select all that apply) Which statements about reinforcement learning
+are correct?
+\begin{checkboxes}
+  \CorrectChoice RL learns from sampled experience when the transition and reward
+        models are unknown.
+  \CorrectChoice Temporal-difference methods update after each step using a
+        bootstrapped estimate.
+  \CorrectChoice Monte Carlo methods wait until an episode ends before updating.
+  \choice Raising $\epsilon$ in $\epsilon$-greedy always increases the final
+        policy's reward.
+  \CorrectChoice Q-learning is off-policy, whereas Sarsa is on-policy.
+  \CorrectChoice The exploration--exploitation trade-off governs how often the
+        agent tries new actions.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, C, E, F.} The false option \textbf{D}: too much exploration
+(large $\epsilon$) can \emph{lower} performance.
+\end{solution}
+
+% ---- Q3 (a: C, b: B) ----
+\question[5] (Calculation) An agent using \textbf{Sarsa} observes reward $r=3$,
+then in the next state takes the action whose value is $Q(s',a')=8$. Currently
+$Q(s,a)=4$, with learning rate $\alpha=0.5$ and discount $\gamma=0.5$.
+\begin{parts}
+  \part Which expression is the correct Sarsa update for $Q(s,a)$?
+  \begin{choices}
+    \choice $Q(s,a)+\alpha\bigl[r+\gamma\max_{a'}Q(s',a')-Q(s,a)\bigr]$
+    \choice $Q(s,a)+\alpha\bigl[r+\gamma\,Q(s',a')\bigr]$
+    \CorrectChoice $Q(s,a)+\alpha\bigl[r+\gamma\,Q(s',a')-Q(s,a)\bigr]$
+    \choice $r+\gamma\,Q(s',a')$
+  \end{choices}
+  \begin{solution}\textbf{C} -- Sarsa uses the value of the action actually taken
+  next, $Q(s',a')$, not the $\max$ (that would be Q-learning).\end{solution}
+
+  \part Substituting, $4+0.5\bigl[3+0.5(8)-4\bigr]$ equals:
+  \begin{choices}
+    \choice $7.0$
+    \CorrectChoice $5.5$
+    \choice $3.5$
+    \choice $4.0$
+  \end{choices}
+  \begin{solution}\textbf{5.5} (target $=3+4=7$, so $4+0.5(7-4)=5.5$).\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{6}{Heuristic Search}
+%==============================================================================
+
+% ---- Q1 (correct: A) ----
+\question[2] (Single answer) In A$^{*}$ search with $f(n)=g(n)+h(n)$, what do
+$g(n)$ and $h(n)$ denote?
+\begin{choices}
+  \CorrectChoice $g$ = cost so far (start $\to n$); $h$ = estimated cost to go ($n\to$ goal).
+  \choice $g$ = estimated cost to the goal; $h$ = the exact cost already paid from the start.
+  \choice Both are always equal to zero.
+  \choice $g$ = the goal depth; $h$ = the branching factor.
+\end{choices}
+\begin{solution}\textbf{A.} $g$ is the known cost from the start; $h$ estimates the
+remaining cost to the goal.\end{solution}
+
+% ---- Q2 (false: A) ----
+\question[3] (Select all that apply) Which statements about search algorithms are
+correct?
+\begin{checkboxes}
+  \choice Greedy best-first search always returns the least-cost path to the goal.
+  \CorrectChoice A$^{*}$ is optimal when the heuristic is admissible (and, for
+        graph search, consistent).
+  \CorrectChoice Breadth-first search is complete and finds the shallowest goal.
+  \CorrectChoice A consistent heuristic is also admissible.
+  \CorrectChoice Uniform-cost search expands nodes in order of path cost $g(n)$.
+  \CorrectChoice Setting $h(n)=0$ for all $n$ turns A$^{*}$ into uniform-cost search.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: B, C, D, E, F.} The false option \textbf{A}: greedy best-first
+search is not optimal -- it follows $h$ alone and can miss the cheapest path.
+\end{solution}
+
+% ---- Q3 (a: B, b: D) ----
+\question[5] (Calculation) During an A$^{*}$ search, three nodes sit on the
+frontier with these cost-so-far $g$ and heuristic $h$ values:
+node~$A$ has $g=2,\ h=6$; node~$B$ has $g=4,\ h=3$; node~$C$ has $g=5,\ h=5$.
+\begin{parts}
+  \part Which expression gives $f(B)$?
+  \begin{choices}
+    \choice $4\times3$
+    \CorrectChoice $4+3$
+    \choice $\max(4,3)$
+    \choice $4+3+5$
+  \end{choices}
+  \begin{solution}\textbf{$f(B)=g(B)+h(B)=4+3=7$}.\end{solution}
+
+  \part A$^{*}$ expands the frontier node with the smallest $f$. Given
+        $f(A)=8$, $f(B)=7$, $f(C)=10$, the node expanded next is:
+  \begin{choices}
+    \choice $A$, with $f=8$.
+    \choice $C$, with $f=10$.
+    \choice $A$, because it has the smallest $g$.
+    \CorrectChoice $B$, with $f=7$.
+  \end{choices}
+  \begin{solution}\textbf{$B$ ($f=7$)} -- the smallest $f$-value on the frontier.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{7}{Deep Q-learning}
+%==============================================================================
+
+% ---- Q1 (correct: D) ----
+\question[2] (Single answer) Why does DQN use a separate \textbf{target network}?
+\begin{choices}
+  \choice To eliminate the replay buffer and store nothing between updates.
+  \choice To make the network smaller and run faster.
+  \choice To turn the task into ordinary i.i.d.\ supervised learning.
+  \CorrectChoice To keep the update targets stable across steps.
+\end{choices}
+\begin{solution}\textbf{D.} Freezing the target network for several steps stops the
+target from shifting every update, which stabilizes training.\end{solution}
+
+% ---- Q2 (false: E) ----
+\question[3] (Select all that apply) Which statements about Deep Q-learning are
+correct?
+\begin{checkboxes}
+  \CorrectChoice A replay buffer stores past transitions and samples mini-batches
+        to decorrelate updates.
+  \CorrectChoice A target network holds the bootstrapped targets fixed for several
+        steps to stabilize learning.
+  \CorrectChoice DQN can learn a control policy directly from high-dimensional
+        pixel input.
+  \CorrectChoice Double DQN reduces the overestimation bias of the $\max$ operator.
+  \choice Because the targets are held fixed, DQN training is exactly ordinary
+        i.i.d.\ supervised regression.
+  \CorrectChoice The loss is a squared temporal-difference error between the target
+        and the current $Q$-value.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, C, D, F.} The false option \textbf{E}: the data are
+correlated and non-stationary, unlike an i.i.d.\ supervised dataset.
+\end{solution}
+
+% ---- Q3 (a: A, b: C) ----
+\question[5] (Calculation) A DQN transition has reward $r=2$ and discount
+$\gamma=0.9$. For the next state, the target network's best value is
+$\max_{a'}\hat Q(s',a')=10$.
+\begin{parts}
+  \part Which expression gives the temporal-difference \emph{target} $y$?
+  \begin{choices}
+    \CorrectChoice $r+\gamma\,\max_{a'}\hat Q(s',a')$
+    \choice $r+\gamma\,\hat Q(s',a)-Q(s,a)$
+    \choice $r\times\gamma\times\max_{a'}\hat Q(s',a')$
+    \choice $\max_{a'}\hat Q(s',a')-r$
+  \end{choices}
+  \begin{solution}\textbf{A} -- the DQN target bootstraps from the target network's
+  best next-state value.\end{solution}
+
+  \part Substituting, $2+0.9(10)$ equals:
+  \begin{choices}
+    \choice $9.0$
+    \choice $20$
+    \CorrectChoice $11$
+    \choice $10.8$
+  \end{choices}
+  \begin{solution}\textbf{11} $=2+9$.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{8}{Policy Learning}
+%==============================================================================
+
+% ---- Q1 (correct: B) ----
+\question[2] (Single answer) Why is a \textbf{baseline} subtracted in policy-gradient
+methods such as REINFORCE?
+\begin{choices}
+  \choice To make the learned policy fully deterministic over time.
+  \CorrectChoice To lower the gradient's variance while keeping it unbiased.
+  \choice To increase the learning rate automatically.
+  \choice To remove the need for any reward signal.
+\end{choices}
+\begin{solution}\textbf{B.} A baseline that does not depend on the action reduces
+variance without changing the gradient's expectation.\end{solution}
+
+% ---- Q2 (false: C) ----
+\question[3] (Select all that apply) Which statements about policy-gradient methods
+are correct?
+\begin{checkboxes}
+  \CorrectChoice The policy $\pi_\theta(a\mid s)$ must be differentiable with
+        respect to $\theta$.
+  \CorrectChoice A state-dependent baseline reduces variance without biasing the
+        gradient.
+  \choice A baseline that depends on the chosen \emph{action} still leaves the
+        gradient unbiased.
+  \CorrectChoice Actor-critic methods learn a value estimate (critic) alongside the
+        policy (actor).
+  \CorrectChoice The advantage $A(s,a)=Q(s,a)-V(s)$ is positive for
+        better-than-average actions.
+  \CorrectChoice REINFORCE is a Monte Carlo policy-gradient method.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, D, E, F.} The false option \textbf{C}: the baseline must
+\emph{not} depend on the action, or it biases the gradient.
+\end{solution}
+
+% ---- Q3 (a: D, b: A) ----
+\question[5] (Calculation) A plain \textbf{REINFORCE} update (no baseline) uses
+$\theta_t=1.0$, learning rate $\alpha=0.2$, return $G_t=5$, and
+$\nabla_\theta\ln\pi_\theta(A_t\mid S_t)=3$.
+\begin{parts}
+  \part Which expression is the correct REINFORCE update for $\theta_{t+1}$?
+  \begin{choices}
+    \choice $\theta_t-\alpha\,G_t\,\nabla_\theta\ln\pi_\theta(A_t\mid S_t)$
+    \choice $\theta_t+\alpha\,\nabla_\theta\ln\pi_\theta(A_t\mid S_t)$
+    \choice $\theta_t+\alpha\,G_t$
+    \CorrectChoice $\theta_t+\alpha\,G_t\,\nabla_\theta\ln\pi_\theta(A_t\mid S_t)$
+  \end{choices}
+  \begin{solution}\textbf{D} -- ascend the gradient, scaled by the return $G_t$.\end{solution}
+
+  \part Substituting, $1.0+0.2(5)(3)$ equals:
+  \begin{choices}
+    \CorrectChoice $4.0$
+    \choice $3.0$
+    \choice $1.6$
+    \choice $7.0$
+  \end{choices}
+  \begin{solution}\textbf{4.0} $=1.0+0.2\times15=1.0+3.0$.\end{solution}
+\end{parts}
+
+%==============================================================================
+\topic{9}{RL for Large Language Models}
+%==============================================================================
+
+% ---- Q1 (correct: A) ----
+\question[2] (Single answer) In reinforcement learning from human feedback (RLHF),
+what is the purpose of the \textbf{reward model}?
+\begin{choices}
+  \CorrectChoice To score how well a response matches human preferences.
+  \choice To store the entire pre-training corpus for later reuse.
+  \choice To translate text between different natural languages.
+  \choice To compress the policy network into a smaller lookup table.
+\end{choices}
+\begin{solution}\textbf{A.} The reward model predicts a human-preference score, which
+then guides the policy's optimization.\end{solution}
+
+% ---- Q2 (false: D) ----
+\question[3] (Select all that apply) The statements below concern aligning a large
+language model with human feedback. (Reminder: \emph{KL-divergence} measures how
+different two probability distributions are.) Which statements are correct?
+\begin{checkboxes}
+  \CorrectChoice Supervised fine-tuning teaches a pre-trained model to follow
+        instructions.
+  \CorrectChoice A reward model is trained from human preference comparisons and
+        then scores candidate responses.
+  \CorrectChoice Proximal Policy Optimization (PPO) uses a KL-divergence penalty to
+        keep the updated policy close to the reference model.
+  \choice Direct Preference Optimization (DPO) still requires training and querying
+        a separate reward model at every step.
+  \CorrectChoice Group Relative Policy Optimization (GRPO) replaces the learned value
+        function with a baseline from a group of sampled responses.
+  \CorrectChoice The goal of alignment is to make model outputs better match human
+        preferences.
+\end{checkboxes}
+\begin{solution}
+\textbf{Correct: A, B, C, E, F.} The false option \textbf{D}: DPO optimizes the
+preference objective \emph{directly}, with no separate reward model.
+\end{solution}
+
+% ---- Q3 (a: B, b: C) ----
+\question[5] (Calculation) During RLHF, a response's raw reward is combined with a
+penalty that discourages drifting from the reference model. Here the raw reward is
+$r=5$, the penalty weight is $\beta=0.2$, and the measured KL-divergence from the
+reference is $\mathrm{KL}=4$.
+\begin{parts}
+  \part Which expression gives the KL-penalized reward?
+  \begin{choices}
+    \choice $r+\beta\cdot\mathrm{KL}$
+    \CorrectChoice $r-\beta\cdot\mathrm{KL}$
+    \choice $\beta\cdot\mathrm{KL}-r$
+    \choice $r\times\beta\times\mathrm{KL}$
+  \end{choices}
+  \begin{solution}\textbf{$r-\beta\,\mathrm{KL}$} -- the penalty is \emph{subtracted}
+  to discourage large drift from the reference model.\end{solution}
+
+  \part Substituting, $5-0.2(4)$ equals:
+  \begin{choices}
+    \choice $5.8$
+    \choice $4.0$
+    \CorrectChoice $4.2$
+    \choice $0.8$
+  \end{choices}
+  \begin{solution}\textbf{4.2} $=5-0.8$.\end{solution}
+\end{parts}
+
+\end{questions}
+
+\vfill
+\begin{center}\small\itshape End of assessment --- 9 topics, 3 questions each; all parts multiple choice.\end{center}
+
+\end{document}
