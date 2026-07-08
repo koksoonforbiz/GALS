@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Bot, Download, Play, TriangleAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Play,
+  TriangleAlert,
+} from 'lucide-react';
 import { api } from '../lib/api';
 
 /**
@@ -10,9 +18,36 @@ import { api } from '../lib/api';
  */
 
 type Provider = 'openai' | 'gemini';
+// Suggested models (the field is typeable — enter any model id the provider serves).
 const MODELS: Record<Provider, string[]> = {
-  openai: ['gpt-4o', 'gpt-4.1', 'o3', 'o4-mini'],
-  gemini: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  openai: [
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-5-nano',
+    'gpt-4.1',
+    'gpt-4.1-mini',
+    'gpt-4.1-nano',
+    'gpt-4o',
+    'gpt-4o-mini',
+    'gpt-4-turbo',
+    'o3',
+    'o3-pro',
+    'o3-mini',
+    'o4-mini',
+    'o1',
+    'o1-mini',
+  ],
+  gemini: [
+    'gemini-2.5-pro',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-2.0-flash',
+    'gemini-2.0-flash-lite',
+    'gemini-2.0-pro',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash-8b',
+  ],
 };
 const BATCH = 10;
 
@@ -38,6 +73,13 @@ const csvEsc = (v: unknown) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+const DIM_GROUPS = [
+  { label: 'Executive functions', prefix: 'ef_' },
+  { label: 'Affective states', prefix: 'affect_' },
+  { label: 'Motivation', prefix: 'mot_' },
+  { label: 'Learning strategies', prefix: 'strategy_' },
+];
+
 export function LlmCoding() {
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -48,6 +90,15 @@ export function LlmCoding() {
   );
   const [model, setModel] = useState<string>(() => LS.get('gals.llm.model', MODELS.openai[0]));
   const [apiKey, setApiKey] = useState<string>('');
+
+  // editable prompt (template + per-dimension definitions)
+  const [template, setTemplate] = useState('');
+  const [defs, setDefs] = useState<Record<string, string>>({});
+  const [defaults, setDefaults] = useState<{
+    template: string;
+    definitions: Record<string, string>;
+  }>({ template: '', definitions: {} });
+  const [showPrompt, setShowPrompt] = useState(false);
 
   const [utterances, setUtterances] = useState<any[]>([]);
   const [codings, setCodings] = useState<Record<string, any>>({});
@@ -63,9 +114,36 @@ export function LlmCoding() {
       .catch(() => setUsers([]));
     api
       .llmDimensions()
-      .then((r) => setDimensions(r.dimensions ?? []))
+      .then((r) => {
+        setDimensions(r.dimensions ?? []);
+        setDefaults({ template: r.template ?? '', definitions: r.definitions ?? {} });
+        const savedT = LS.get('gals.llm.template', '');
+        setTemplate(savedT || r.template || '');
+        let d: Record<string, string> = { ...(r.definitions ?? {}) };
+        const savedD = LS.get('gals.llm.defs', '');
+        if (savedD) {
+          try {
+            d = { ...d, ...JSON.parse(savedD) };
+          } catch {
+            /* ignore */
+          }
+        }
+        setDefs(d);
+      })
       .catch(() => {});
   }, []);
+  useEffect(() => {
+    if (template) LS.set('gals.llm.template', template);
+  }, [template]);
+  useEffect(() => {
+    if (Object.keys(defs).length) LS.set('gals.llm.defs', JSON.stringify(defs));
+  }, [defs]);
+  const resetPrompt = () => {
+    setTemplate(defaults.template);
+    setDefs(defaults.definitions);
+    LS.set('gals.llm.template', defaults.template);
+    LS.set('gals.llm.defs', JSON.stringify(defaults.definitions));
+  };
   useEffect(() => {
     setApiKey(LS.get(`gals.llm.key.${provider}`, ''));
     if (!MODELS[provider].includes(model)) setModel(MODELS[provider][0]);
@@ -126,6 +204,8 @@ export function LlmCoding() {
           model: model.trim(),
           apiKey: apiKey.trim(),
           items: batch,
+          template,
+          definitions: defs,
         });
         for (const row of res.results ?? []) {
           acc[row.id] = row;
@@ -267,9 +347,85 @@ export function LlmCoding() {
               </button>
             </div>
             <div className="mt-2 text-[11px] text-slate-400">
-              Pick the state-of-the-art model for the provider (typeable). The key is stored only in
-              this browser (localStorage) and sent directly to the studio server for the call.
+              Pick the state-of-the-art model for the provider (typeable — enter any model id the
+              provider serves). The key is stored only in this browser (localStorage) and sent
+              directly to the studio server for the call.
             </div>
+          </div>
+
+          {/* editable prompt */}
+          <div className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowPrompt((v) => !v)}
+                className="inline-flex items-center gap-1 font-semibold text-slate-600"
+              >
+                {showPrompt ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                Prompt (editable)
+              </button>
+              <span className="text-[11px] text-slate-400">
+                the exact prompt sent to the LLM — edit the template &amp; each dimension&apos;s
+                definition
+              </span>
+              {showPrompt && (
+                <button
+                  onClick={resetPrompt}
+                  className="ml-auto rounded border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
+                >
+                  reset to default
+                </button>
+              )}
+            </div>
+            {showPrompt && (
+              <div className="mt-2 space-y-3">
+                <div>
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-400">
+                    Template — placeholders:{' '}
+                    <code>
+                      {
+                        '{{SOURCE}} {{DEFINITIONS}} {{DIMENSION_KEYS}} {{UTTERANCE}} {{SELECTED_TEXT}}'
+                      }
+                    </code>
+                  </div>
+                  <textarea
+                    value={template}
+                    onChange={(e) => setTemplate(e.target.value)}
+                    rows={9}
+                    spellCheck={false}
+                    className="w-full rounded border border-slate-300 p-2 font-mono text-[11px]"
+                  />
+                </div>
+                {DIM_GROUPS.map((g) => {
+                  const dims = dimensions.filter((d) => d.startsWith(g.prefix));
+                  if (!dims.length) return null;
+                  return (
+                    <div key={g.prefix}>
+                      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {g.label}
+                      </div>
+                      <div className="space-y-1">
+                        {dims.map((d) => (
+                          <div key={d} className="flex items-start gap-2">
+                            <span className="mt-1 w-52 shrink-0 truncate font-mono text-[11px] text-slate-500">
+                              {d}
+                            </span>
+                            <input
+                              value={defs[d] ?? ''}
+                              onChange={(e) => setDefs((m) => ({ ...m, [d]: e.target.value }))}
+                              className="flex-1 rounded border border-slate-300 px-1.5 py-0.5 text-xs"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="text-[11px] text-slate-400">
+                  Every dimension is coded 1 (present) / 0 (absent) in one JSON call per utterance;
+                  edits apply to the next run and are remembered in this browser.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* status / progress */}

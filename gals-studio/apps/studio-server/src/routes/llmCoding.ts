@@ -58,48 +58,76 @@ export const CODED_DIMENSIONS: string[] = [
   ...LEARNING_STRATEGIES.map((k) => `strategy_${k}`),
 ];
 
-const DEFS = `
-EXECUTIVE FUNCTIONS (does the utterance evidence the construct?):
-- ef_inhibitory_control: suppressing a dominant/impulsive response, resisting distraction or a prepotent wrong step.
-- ef_working_memory: holding/juggling multiple pieces of information, or signs of working-memory load (losing the thread, "what was I doing").
-- ef_cognitive_flexibility: switching strategy/approach or considering an alternative framing.
-- ef_planning: stating a plan, sequence of steps, or goal for how to proceed.
-- ef_metacognitive_monitoring: awareness/appraisal of own understanding or that something is right/wrong/incomplete.
-- ef_attention_regulation: reports of mind-wandering, refocusing, or (re)directing attention to the task.
+// Per-dimension definitions the researcher can edit in the studio before running.
+export const DEFAULT_DEFINITIONS: Record<string, string> = {
+  ef_inhibitory_control:
+    'Suppressing a dominant/impulsive response; resisting distraction or a prepotent wrong step.',
+  ef_working_memory:
+    'Holding/juggling multiple pieces of information, or signs of working-memory load ("what was I doing").',
+  ef_cognitive_flexibility: 'Switching strategy/approach or considering an alternative framing.',
+  ef_planning: 'Stating a plan, a sequence of steps, or a goal for how to proceed.',
+  ef_metacognitive_monitoring:
+    'Awareness/appraisal of own understanding, or that something is right/wrong/incomplete.',
+  ef_attention_regulation:
+    'Reports of mind-wandering, refocusing, or (re)directing attention to the task.',
+  affect_engaged_concentration: 'Focused, absorbed, on-task flow.',
+  affect_confusion: 'Uncertainty/impasse; not knowing how to proceed (may be productive).',
+  affect_frustration: 'Blocked goal, irritation, repeated failed attempts.',
+  affect_boredom: 'Disengagement, low arousal, wandering attention.',
+  affect_delight: 'Positive surprise / satisfaction / pleasure.',
+  affect_surprise: 'Brief startle / reaction to something unexpected.',
+  affect_anxiety: 'Worry, test/performance pressure, nervousness.',
+  affect_neutral: 'No clear affect.',
+  mot_self_efficacy: 'Belief about own capability to succeed at the task.',
+  mot_task_value: 'Perceived importance/usefulness/interest of the task.',
+  mot_intrinsic_motivation: 'Engagement for its own sake / curiosity / enjoyment.',
+  mot_extrinsic_motivation: 'Grades, rewards, obligation, external pressure.',
+  mot_mastery_goal_orientation: 'Aim to learn/understand/improve.',
+  mot_performance_goal_orientation:
+    'Aim to look able / outperform others / avoid looking incompetent.',
+  mot_effort_regulation: 'Managing/sustaining effort and persistence despite difficulty.',
+  strategy_practice_testing:
+    'Self-testing, retrieval practice, quizzing, answering test questions.',
+  strategy_distributed_practice: 'Spacing/revisiting material over time, review, flashcards.',
+  strategy_stepwise_learning: 'Breaking the material into ordered steps / worked steps.',
+  strategy_elaborative_interrogation:
+    'Asking/answering "why/how" elaboration questions that connect ideas.',
+};
 
-AFFECTIVE STATES (Pekrun/BROMP; may co-occur):
-- affect_engaged_concentration, affect_confusion, affect_frustration, affect_boredom, affect_delight, affect_surprise, affect_anxiety, affect_neutral.
+// Editable template. Placeholders: {{SOURCE}} {{DEFINITIONS}} {{DIMENSION_KEYS}}
+// {{UTTERANCE}} {{SELECTED_TEXT}}.
+export const DEFAULT_TEMPLATE = `You are an expert educational-psychology coder. Code the single learner utterance below. The learner is a student interacting with a tutoring system. Context source: {{SOURCE}}.
 
-MOTIVATION DIMENSIONS:
-- mot_self_efficacy: belief about own capability to succeed.
-- mot_task_value: perceived importance/usefulness/interest of the task.
-- mot_intrinsic_motivation: engagement for its own sake / curiosity / enjoyment.
-- mot_extrinsic_motivation: grades, rewards, obligation, external pressure.
-- mot_mastery_goal_orientation: aim to learn/understand/improve.
-- mot_performance_goal_orientation: aim to look able / outperform / avoid looking incompetent.
-- mot_effort_regulation: managing/sustaining effort and persistence despite difficulty.
+Code each dimension 1 (present/evidenced in the utterance) or 0 (not). For the learning strategies, use BOTH the utterance and the highlighted selected text.
 
-LEARNING STRATEGIES (binary presence — use BOTH the utterance and the selected text the learner highlighted):
-- strategy_practice_testing: self-testing, retrieval practice, quizzing, answering test questions.
-- strategy_distributed_practice: spacing/revisiting material over time, review, flashcards.
-- strategy_stepwise_learning: breaking the material into ordered steps / worked steps.
-- strategy_elaborative_interrogation: asking/answering "why/how" elaboration questions that connect ideas.
-`;
+{{DEFINITIONS}}
 
-function buildPrompt(item: { utterance: string; selectedText: string; source: string }): string {
-  return `You are an expert educational-psychology coder. Code the single learner utterance below.
-The learner is a student interacting with a tutoring system. Context source: ${item.source}.
-
-${DEFS}
-
-Return STRICT JSON only, no prose, with EXACTLY these keys, each 0 or 1 (1 = the construct is present/evidenced in the utterance, 0 = not), plus a short "rationale" (<= 25 words):
-${JSON.stringify(CODED_DIMENSIONS)}
+Return STRICT JSON only, no prose, with EXACTLY these keys — each 0 or 1 — plus a short "rationale" (<= 25 words):
+{{DIMENSION_KEYS}}
 
 Learner utterance:
-"""${item.utterance || ''}"""
+"""{{UTTERANCE}}"""
 
 Selected text the learner had highlighted when sending this (may be empty):
-"""${item.selectedText || ''}"""`;
+"""{{SELECTED_TEXT}}"""`;
+
+function definitionsBlock(defs: Record<string, string>): string {
+  return CODED_DIMENSIONS.map((k) => `- ${k}: ${defs[k] ?? DEFAULT_DEFINITIONS[k] ?? ''}`).join(
+    '\n',
+  );
+}
+
+function buildPrompt(
+  item: { utterance: string; selectedText: string; source: string },
+  template: string,
+  defs: Record<string, string>,
+): string {
+  return template
+    .replace(/\{\{SOURCE\}\}/g, item.source)
+    .replace(/\{\{DEFINITIONS\}\}/g, definitionsBlock(defs))
+    .replace(/\{\{DIMENSION_KEYS\}\}/g, JSON.stringify(CODED_DIMENSIONS))
+    .replace(/\{\{UTTERANCE\}\}/g, item.utterance || '')
+    .replace(/\{\{SELECTED_TEXT\}\}/g, item.selectedText || '');
 }
 
 interface CodeItem {
@@ -180,7 +208,8 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
-  // expose the taxonomy so the frontend/CSV stay in sync
+  // expose the taxonomy + the editable default prompt so the studio can show and
+  // let the researcher edit the per-dimension definitions before running.
   app.get('/api/llm-coding/dimensions', async () => ({
     dimensions: CODED_DIMENSIONS,
     groups: {
@@ -189,6 +218,8 @@ export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
       motivation: MOTIVATION_DIMENSIONS,
       strategies: LEARNING_STRATEGIES,
     },
+    template: DEFAULT_TEMPLATE,
+    definitions: DEFAULT_DEFINITIONS,
   }));
 
   // Gather codable USER utterances (free chat + elaborative interrogation) for
@@ -270,13 +301,16 @@ export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // Code a batch of utterances with the researcher's provider/model/key.
+  // Code a batch of utterances with the researcher's provider/model/key and
+  // (optionally edited) prompt template + per-dimension definitions.
   app.post<{
     Body: {
       provider?: 'openai' | 'gemini';
       model?: string;
       apiKey?: string;
       items?: CodeItem[];
+      template?: string;
+      definitions?: Record<string, string>;
     };
   }>('/api/llm-coding/code', async (req, reply) => {
     const { provider, model, apiKey, items } = req.body;
@@ -286,10 +320,16 @@ export async function llmCodingRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'items required' });
     if (items.length > 50) return reply.code(400).send({ error: 'max 50 items per batch' });
 
+    const template =
+      typeof req.body.template === 'string' && req.body.template.trim()
+        ? req.body.template
+        : DEFAULT_TEMPLATE;
+    const definitions = { ...DEFAULT_DEFINITIONS, ...(req.body.definitions ?? {}) };
+
     const call = provider === 'gemini' ? callGemini : callOpenAI;
     const results = await mapLimit(items, 4, async (it) => {
       try {
-        const raw = await call(buildPrompt(it), model, apiKey);
+        const raw = await call(buildPrompt(it, template, definitions), model, apiKey);
         return { id: it.id, coding: normalise(raw), error: null as string | null };
       } catch (e) {
         return { id: it.id, coding: null, error: (e as Error).message };
