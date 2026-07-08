@@ -65,6 +65,20 @@ const MIN_INTERVAL_MS = 500;
 const MIN_ZOOM = 1; // 1× = whole session fits the viewport
 const MAX_ZOOM = 512;
 
+// AOI dwell rows: gaze-based, windowed % series, resizable (unlike the fixed-
+// height discrete lanes above) since a taller chart shows finer variation.
+const AOI_ROW_MIN_H = ROW_H;
+const AOI_ROW_MAX_H = 240;
+const AOI_ROW_STEP = 20;
+const AOI_SERIES = [
+  { key: 'off', label: 'off-AOI', color: '#94a3b8' },
+  { key: 'on', label: 'on-AOI', color: '#16a34a' },
+  { key: 'reading', label: 'reading AOI', color: '#2563eb' },
+  { key: 'chat', label: 'chat AOI', color: '#0d9488' },
+  { key: 'navigating', label: 'navigation AOI', color: '#f59e0b' },
+] as const;
+type AoiKey = (typeof AOI_SERIES)[number]['key'];
+
 let rowSeq = 0;
 const newRowId = () => `row${++rowSeq}`;
 
@@ -130,6 +144,15 @@ type DataRow =
       key: 'chat' | 'dialogue';
       color: string;
       domain?: undefined;
+    }
+  | {
+      id: string;
+      kind: 'aoi';
+      key: AoiKey;
+      color: string;
+      domain: [number, number];
+      windowSec: number;
+      heightPx: number;
     };
 
 // Student in-session emotion self-report → colour (mirrors the affect palette).
@@ -552,6 +575,20 @@ export function TimelineCoding() {
     }));
   }, [aois, sparse, review, base]);
 
+  // AOI dwell %: per-window fraction of gaze samples matching a region bucket
+  // (off/on/reading/chat/navigating), mirroring WindowSignals.tsx's per-window
+  // dwell panel but generalized across the whole session, one series per row
+  // (each row can have its own region + window size).
+  const aoiSeriesByRow = useMemo(() => {
+    const out: Record<string, { t: number; v: number }[]> = {};
+    const gaze: { wallMs: number; x: number; y: number }[] = sparse?.gaze ?? [];
+    for (const row of dataRows) {
+      if (row.kind !== 'aoi') continue;
+      out[row.id] = computeAoiSeries(snaps, gaze, base, durationMs, row.windowSec * 1000, row.key);
+    }
+    return out;
+  }, [dataRows, snaps, sparse, base, durationMs]);
+
   const aoiOverlay = currentSnapshot ? (
     <AoiLayer
       width={currentSnapshot.width}
@@ -678,6 +715,8 @@ export function TimelineCoding() {
 
   const addDataRow = (row: DataRow) => setDataRows((rows) => [...rows, row]);
   const removeDataRow = (id: string) => setDataRows((rows) => rows.filter((r) => r.id !== id));
+  const updateDataRow = (id: string, patch: Partial<DataRow>) =>
+    setDataRows((rows) => rows.map((r) => (r.id === id ? ({ ...r, ...patch } as DataRow) : r)));
 
   if (!meta) return <div className="p-8 text-center text-slate-400">Loading timeline studio…</div>;
 
@@ -1458,11 +1497,19 @@ export function TimelineCoding() {
               .map((row) => (
                 <Row
                   key={row.id}
+                  height={row.kind === 'aoi' ? row.heightPx : undefined}
                   label={
                     <span className="flex w-full items-center gap-1">
                       <span className="truncate" title={dataRowName(row)}>
                         {dataRowName(row)}
                       </span>
+                      {row.kind === 'aoi' && (
+                        <AoiRowControls
+                          row={row}
+                          onChangeWindowSec={(sec) => updateDataRow(row.id, { windowSec: sec })}
+                          onChangeHeight={(px) => updateDataRow(row.id, { heightPx: px })}
+                        />
+                      )}
                       <button
                         onClick={() => removeDataRow(row.id)}
                         className="ml-auto text-slate-300 hover:text-rose-500"
@@ -1474,7 +1521,11 @@ export function TimelineCoding() {
                     </span>
                   }
                 >
-                  <Lane fullW={fullW} onClickSeekPx={(x) => store.seek(xToOff(x))}>
+                  <Lane
+                    fullW={fullW}
+                    height={row.kind === 'aoi' ? row.heightPx : undefined}
+                    onClickSeekPx={(x) => store.seek(xToOff(x))}
+                  >
                     {row.kind === 'chat' || row.kind === 'dialogue' ? (
                       <UtteranceTrack
                         items={utterItems(row.kind)}
@@ -1489,6 +1540,7 @@ export function TimelineCoding() {
                       <DataTrack
                         row={row}
                         streams={streams}
+                        aoiSeries={row.kind === 'aoi' ? aoiSeriesByRow[row.id] : undefined}
                         ef={sparse?.efDetections ?? []}
                         survey={sparse?.emotionSurvey ?? []}
                         efCodings={efCodingByKey}
@@ -1512,6 +1564,7 @@ export function TimelineCoding() {
                 hasChat={chatMsgs.length > 0}
                 hasDialogue={dialogueMsgs.length > 0}
                 hasSurvey={(sparse?.emotionSurvey ?? []).length > 0}
+                hasAoi={snaps.some((s) => s.aois.length > 0) && (sparse?.gaze?.length ?? 0) > 0}
                 onAdd={addDataRow}
               />
             </div>
@@ -1694,11 +1747,22 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 /* ── timeline primitives ────────────────────────────────────────────────── */
 
-function Row({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+  height,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+  height?: number;
+}) {
   return (
-    <div className="flex items-stretch border-b border-slate-100" style={{ minHeight: ROW_H }}>
+    <div
+      className="flex items-stretch border-b border-slate-100"
+      style={{ minHeight: height ?? ROW_H }}
+    >
       <div
-        className="flex shrink-0 items-center border-r border-slate-100 px-2 text-xs font-medium text-slate-600"
+        className="sticky left-0 z-30 flex shrink-0 items-center border-r border-slate-100 bg-white px-2 text-xs font-medium text-slate-600"
         style={{ width: LABEL_W }}
       >
         {label}
@@ -1710,11 +1774,13 @@ function Row({ label, children }: { label: React.ReactNode; children: React.Reac
 
 function Lane({
   fullW,
+  height,
   children,
   onMouseDownLane,
   onClickSeekPx,
 }: {
   fullW: number;
+  height?: number;
   children?: React.ReactNode;
   onMouseDownLane?: (e: React.MouseEvent) => void;
   onClickSeekPx?: (xContentPx: number) => void;
@@ -1722,7 +1788,7 @@ function Lane({
   return (
     <div
       className="relative h-full cursor-crosshair select-none"
-      style={{ width: fullW || '100%', minHeight: ROW_H }}
+      style={{ width: fullW || '100%', minHeight: height ?? ROW_H }}
       onMouseDown={onMouseDownLane}
       onClick={
         onClickSeekPx
@@ -1801,6 +1867,7 @@ function Ruler({
 function DataTrack({
   row,
   streams,
+  aoiSeries,
   ef,
   survey,
   efCodings,
@@ -1812,6 +1879,7 @@ function DataTrack({
 }: {
   row: DataRow;
   streams: Streams | null;
+  aoiSeries?: { t: number; v: number }[];
   ef: any[];
   survey?: { wallMs: number; emotion: string }[];
   efCodings?: Record<string, { code: string; machineGuess?: string | null }>;
@@ -1821,6 +1889,9 @@ function DataTrack({
   offToX: (o: number) => number;
   fullW: number;
 }) {
+  // hover-value readout for AOI rows; declared unconditionally (rules of hooks)
+  // even though only the 'aoi' branch below uses it.
+  const [hoverX, setHoverX] = useState<number | null>(null);
   if (row.kind === 'survey') {
     const items = survey ?? [];
     if (!items.length)
@@ -1888,13 +1959,17 @@ function DataTrack({
       </>
     );
   }
+  const isAoi = row.kind === 'aoi';
   const series =
     row.kind === 'pupil'
       ? (streams?.pupil ?? [])
-      : ((row.kind === 'au' ? streams?.aus[row.key] : streams?.emotions[row.key]) ?? []);
+      : isAoi
+        ? (aoiSeries ?? [])
+        : ((row.kind === 'au' ? streams?.aus[row.key] : streams?.emotions[row.key]) ?? []);
   if (!series.length)
     return <span className="absolute left-1 top-1.5 text-[10px] text-slate-300">no data</span>;
-  const h = ROW_H - 4;
+  const trackHeight = isAoi ? row.heightPx : ROW_H;
+  const h = trackHeight - 4;
   let ymin = row.domain ? row.domain[0] : Infinity;
   let ymax = row.domain ? row.domain[1] : -Infinity;
   if (!row.domain)
@@ -1906,10 +1981,44 @@ function DataTrack({
   const d = series
     .map((p, i) => `${i ? 'L' : 'M'}${offToX(p.t).toFixed(1)},${ny(p.v).toFixed(1)}`)
     .join(' ');
+  // nearest series point to a mouse x-position, by comparing each point's
+  // already-known screen x (offToX(p.t)) — series is small (one point per
+  // window), so a linear scan is cheap.
+  const nearestAt = (mouseX: number) => {
+    let best = series[0];
+    let bestDist = Math.abs(offToX(best.t) - mouseX);
+    for (const p of series) {
+      const dist = Math.abs(offToX(p.t) - mouseX);
+      if (dist < bestDist) {
+        best = p;
+        bestDist = dist;
+      }
+    }
+    return best;
+  };
+  const hoverPt = isAoi && hoverX != null ? nearestAt(hoverX) : null;
   return (
-    <svg className="absolute inset-0" width={fullW || '100%'} height={ROW_H}>
-      <path d={d} fill="none" stroke={row.color} strokeWidth={1} />
-    </svg>
+    <div
+      className="absolute inset-0"
+      onMouseMove={
+        isAoi
+          ? (e) => setHoverX(e.clientX - e.currentTarget.getBoundingClientRect().left)
+          : undefined
+      }
+      onMouseLeave={isAoi ? () => setHoverX(null) : undefined}
+    >
+      <svg className="absolute inset-0" width={fullW || '100%'} height={trackHeight}>
+        <path d={d} fill="none" stroke={row.color} strokeWidth={1} />
+      </svg>
+      {hoverPt && (
+        <div
+          className="pointer-events-none absolute top-0.5 z-20 -translate-x-1/2 whitespace-nowrap rounded bg-slate-900/90 px-1 py-0.5 text-[10px] text-white"
+          style={{ left: offToX(hoverPt.t) }}
+        >
+          {Math.round(hoverPt.v)}% @ {fmtRel(hoverPt.t)}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1919,6 +2028,7 @@ function AddRowMenu({
   hasChat,
   hasDialogue,
   hasSurvey,
+  hasAoi,
   onAdd,
 }: {
   streams: Streams | null;
@@ -1926,6 +2036,7 @@ function AddRowMenu({
   hasChat: boolean;
   hasDialogue: boolean;
   hasSurvey: boolean;
+  hasAoi: boolean;
   onAdd: (r: DataRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1959,6 +2070,27 @@ function AddRowMenu({
           pupil
         </button>
       )}
+      {hasAoi &&
+        AOI_SERIES.map((a) => (
+          <button
+            key={a.key}
+            onClick={() => {
+              onAdd({
+                id: newRowId(),
+                kind: 'aoi',
+                key: a.key,
+                color: a.color,
+                domain: [0, 100],
+                windowSec: 20,
+                heightPx: AOI_ROW_MIN_H,
+              });
+              setOpen(false);
+            }}
+            className="rounded bg-slate-200 px-1.5 py-0.5 text-slate-600"
+          >
+            {a.label}
+          </button>
+        ))}
       {hasSurvey && (
         <button
           onClick={() => {
@@ -2023,6 +2155,62 @@ function AddRowMenu({
         cancel
       </button>
     </div>
+  );
+}
+
+/** Per-row window-size (seconds) input for the off-AOI row. Commits on
+ * blur/Enter rather than every keystroke, since each commit recomputes the
+ * row's series. */
+/** Per-row controls for AOI rows: window size (seconds, commits on
+ * blur/Enter) and chart height (+/- buttons, clamped to
+ * [AOI_ROW_MIN_H, AOI_ROW_MAX_H]). */
+function AoiRowControls({
+  row,
+  onChangeWindowSec,
+  onChangeHeight,
+}: {
+  row: Extract<DataRow, { kind: 'aoi' }>;
+  onChangeWindowSec: (sec: number) => void;
+  onChangeHeight: (px: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(row.windowSec));
+  useEffect(() => setDraft(String(row.windowSec)), [row.windowSec]);
+  const commit = () => {
+    const n = Math.max(1, Math.round(Number(draft) || row.windowSec));
+    setDraft(String(n));
+    if (n !== row.windowSec) onChangeWindowSec(n);
+  };
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      <input
+        type="number"
+        min={1}
+        step={1}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        onClick={(e) => e.stopPropagation()}
+        className="w-8 rounded border border-slate-200 px-1 text-[10px]"
+        title="window size (seconds)"
+      />
+      <button
+        onClick={() => onChangeHeight(Math.max(AOI_ROW_MIN_H, row.heightPx - AOI_ROW_STEP))}
+        disabled={row.heightPx <= AOI_ROW_MIN_H}
+        className="rounded border border-slate-200 px-1 text-[10px] leading-none disabled:opacity-30"
+        title="shrink row"
+      >
+        −
+      </button>
+      <button
+        onClick={() => onChangeHeight(Math.min(AOI_ROW_MAX_H, row.heightPx + AOI_ROW_STEP))}
+        disabled={row.heightPx >= AOI_ROW_MAX_H}
+        className="rounded border border-slate-200 px-1 text-[10px] leading-none disabled:opacity-30"
+        title="grow row"
+      >
+        +
+      </button>
+    </span>
   );
 }
 
@@ -2160,6 +2348,54 @@ function computeDetections(
   }
   for (const aff of affects) close(aff);
   return out;
+}
+
+/** % of gaze samples per fixed-size window that missed every DOM-layout AOI
+ * (lesson/chatbot/sidebar/header) — same hit-test as WindowSignals.tsx's dwell
+ * panel (nearest-snapshot-only, no cross-snapshot carry-forward, no confidence
+ * filter), applied across every window in the session instead of just the one
+ * being coded. A window with zero gaze samples counts as 100% off-AOI. */
+/** Does a hit region belong to the requested AOI bucket? Mirrors
+ * activityInference.ts's regionToActivity grouping (lesson/pdf-viewer →
+ * reading, sidebar/header → navigating) so labels stay consistent across the
+ * app. */
+function aoiRegionMatches(regionKey: AoiKey, region: string | undefined): boolean {
+  if (regionKey === 'off') return region === undefined;
+  if (regionKey === 'on') return region !== undefined;
+  if (regionKey === 'reading') return region === 'lesson' || region === 'pdf-viewer';
+  if (regionKey === 'chat') return region === 'chatbot';
+  return region === 'sidebar' || region === 'header';
+}
+
+function computeAoiSeries(
+  snaps: SnapshotLite[],
+  gaze: { wallMs: number; x: number; y: number }[],
+  base: number,
+  durationMs: number,
+  windowMs: number,
+  regionKey: AoiKey,
+): { t: number; v: number }[] {
+  const nWin = Math.max(1, Math.ceil(durationMs / windowMs));
+  const total = new Array(nWin).fill(0);
+  const match = new Array(nWin).fill(0);
+  for (const g of gaze) {
+    const rel = g.wallMs - base;
+    if (rel < 0 || rel >= durationMs) continue;
+    const w = Math.min(nWin - 1, Math.floor(rel / windowMs));
+    const snap = snapshotAt(snaps, g.wallMs);
+    const hit = snap?.aois.find(
+      (a) => g.x >= a.x && g.x <= a.x + a.width && g.y >= a.y && g.y <= a.y + a.height,
+    );
+    total[w] += 1;
+    if (aoiRegionMatches(regionKey, hit?.region)) match[w] += 1;
+  }
+  // a window with zero valid gaze samples has no evidence of being "on" any
+  // region, so it counts as fully off-AOI (100), not on/reading/chat/nav (0).
+  const emptyWindowValue = regionKey === 'off' ? 100 : 0;
+  return Array.from({ length: nWin }, (_, w) => ({
+    t: w * windowMs + windowMs / 2,
+    v: total[w] > 0 ? (match[w] / total[w]) * 100 : emptyWindowValue,
+  }));
 }
 
 /** Draw/show researcher AOIs in snapshot-pixel space over the (locked) replay. */
@@ -2638,6 +2874,10 @@ function labelFor(code: string): string {
 }
 function dataRowName(row: DataRow): string {
   if (row.kind === 'pupil') return 'pupil size';
+  if (row.kind === 'aoi') {
+    const label = AOI_SERIES.find((a) => a.key === row.key)?.label ?? row.key;
+    return `${label} (${row.windowSec}s)`;
+  }
   if (row.kind === 'ef') return 'Text-mining (EF)';
   if (row.kind === 'survey') return 'Self-report survey';
   if (row.kind === 'chat') return 'Chat utterances';
