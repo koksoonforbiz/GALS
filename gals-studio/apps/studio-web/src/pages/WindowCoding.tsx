@@ -112,6 +112,26 @@ const csvEsc = (v: unknown) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+// filename-safe: keep letters/digits/dot/hyphen, collapse the rest to underscore
+const safeName = (s: string) => (s || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+
+/** MMDDYYYY for the session's start date, in the session's own timezone. */
+function sessionDateMMDDYYYY(startedAt: string | undefined, timezone?: string): string {
+  if (!startedAt) return '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone || undefined,
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    }).formatToParts(new Date(startedAt));
+    const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    return `${g('month')}${g('day')}${g('year')}`;
+  } catch {
+    return '';
+  }
+}
+
 /** Default neutral from the four affect constructs: neutral = 1 unless some
  * affect is present (=1). "?" or "NV" affect do NOT block neutral = 1. */
 function deriveNeutral(row: Row | undefined): CodeValue {
@@ -460,7 +480,10 @@ export function WindowCoding() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${sessionId}_${coderId}_${durationSec}s_coding.csv`;
+    // {userID}_{session date MMDDYYYY}_{coder}.csv  e.g. SMU-0001_06172026_kianyu.csv
+    const userId = meta?.session?.userDisplayName ?? meta?.session?.userId ?? 'session';
+    const dateStr = sessionDateMMDDYYYY(meta?.session?.startedAt, meta?.session?.timezone);
+    a.download = `${safeName(userId)}_${dateStr}_${safeName(coderId)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
