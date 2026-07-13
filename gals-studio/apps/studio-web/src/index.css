@@ -3,11 +3,21 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  /* The studio is a light-only theme. Without pinning this, a dark OS/browser
+     makes native form controls (inputs, textareas) render with a dark UA
+     background while text inherits the app's dark color — dark-on-dark, so you
+     can't see what you type. Force light rendering of all form controls. */
+  color-scheme: light;
 }
 
 body {
   @apply bg-slate-50 text-slate-900;
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
 }
