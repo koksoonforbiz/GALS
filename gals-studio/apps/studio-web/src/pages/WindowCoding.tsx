@@ -132,6 +132,19 @@ export function WindowCoding() {
   const [showScreenshot, setShowScreenshot] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [flashCoder, setFlashCoder] = useState(false);
+  const coderRef = useRef<HTMLInputElement>(null);
+
+  // Coding requires a coder id (codes are keyed + persisted by it). Rather than
+  // silently no-op a click/keypress, surface the coder field so it's obvious.
+  const requireCoder = useCallback(() => {
+    if (coderId.trim()) return true;
+    coderRef.current?.focus();
+    coderRef.current?.scrollIntoView({ block: 'center' });
+    setFlashCoder(true);
+    window.setTimeout(() => setFlashCoder(false), 1400);
+    return false;
+  }, [coderId]);
 
   const storeRef = useRef<PlayheadStore | null>(null);
   if (!storeRef.current)
@@ -284,7 +297,8 @@ export function WindowCoding() {
   const setValue = useCallback(
     (ci: number, val: CodeValue) => {
       const w = windows[activeIdx];
-      if (!w || !coderId) return;
+      if (!w) return;
+      if (!requireCoder()) return;
       const c = CONSTRUCTS[ci];
       const cur = rows[w.startMs] ?? {};
       const nextVal = cur[c.field] === val ? undefined : val;
@@ -298,7 +312,7 @@ export function WindowCoding() {
         setTimeout(() => gotoWindow(activeIdx + 1), 120);
       }
     },
-    [windows, activeIdx, coderId, rows, saveRow, autoAdvance, gotoWindow],
+    [windows, activeIdx, requireCoder, rows, saveRow, autoAdvance, gotoWindow],
   );
 
   const setJust = useCallback(
@@ -480,10 +494,15 @@ export function WindowCoding() {
         <label className="flex items-center gap-1">
           <span className="text-[11px] uppercase tracking-wide text-slate-400">Coder ID</span>
           <input
+            ref={coderRef}
             value={coderId}
             onChange={(e) => setCoderId(e.target.value)}
             placeholder="required"
-            className={`w-28 rounded border px-2 py-1 ${coderId ? 'border-slate-300' : 'border-rose-300 bg-rose-50'}`}
+            className={`w-28 rounded border px-2 py-1 transition-all ${
+              coderId
+                ? 'border-slate-300'
+                : `border-rose-300 bg-rose-50 ${flashCoder ? 'ring-2 ring-rose-500 animate-pulse' : ''}`
+            }`}
           />
         </label>
 
@@ -692,13 +711,24 @@ export function WindowCoding() {
         </div>
 
         {/* coding grid */}
-        <div className="max-h-[80vh] overflow-auto rounded-lg border border-slate-200 bg-white p-2">
+        <div
+          className={`max-h-[80vh] overflow-auto rounded-lg border bg-white p-2 ${
+            coderId ? 'border-slate-200' : 'border-rose-200'
+          }`}
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Window {activeWindow?.index ?? 0} · {activeWindow ? fmtHms(activeWindow.startMs) : ''}
             </span>
             <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
-              {isFull(activeRow) ? (
+              {!coderId ? (
+                <button
+                  onClick={requireCoder}
+                  className="inline-flex items-center gap-1 font-semibold text-rose-600"
+                >
+                  <TriangleAlert size={12} /> enter coder ID to code
+                </button>
+              ) : isFull(activeRow) ? (
                 <>
                   <Check size={12} className="text-emerald-600" /> complete
                 </>
@@ -710,79 +740,81 @@ export function WindowCoding() {
             </span>
           </div>
 
-          {CONSTRUCTS.map((c, ci) => {
-            const val = activeRow?.[c.field];
-            const focused = ci === focusedRow;
-            return (
-              <div
-                key={c.field}
-                onClick={() => setFocusedRow(ci)}
-                className={`mb-1.5 rounded border p-1.5 ${focused ? 'border-sky-400 bg-sky-50/60' : 'border-transparent'}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-32 shrink-0 font-mono text-[11px] text-slate-600">
-                    {c.label}
-                  </span>
-                  <div className="flex gap-1">
-                    {VALUES.map((v) => (
-                      <button
-                        key={v}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setValue(ci, v);
-                        }}
-                        className={`w-9 rounded border py-0.5 text-xs font-semibold ${
-                          val === v
-                            ? VAL_ON[v]
-                            : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-50'
-                        }`}
-                      >
-                        {v}
-                      </button>
-                    ))}
+          <div className={coderId ? '' : 'opacity-50'}>
+            {CONSTRUCTS.map((c, ci) => {
+              const val = activeRow?.[c.field];
+              const focused = ci === focusedRow;
+              return (
+                <div
+                  key={c.field}
+                  onClick={() => setFocusedRow(ci)}
+                  className={`mb-1.5 rounded border p-1.5 ${focused ? 'border-sky-400 bg-sky-50/60' : 'border-transparent'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-32 shrink-0 font-mono text-[11px] text-slate-600">
+                      {c.label}
+                    </span>
+                    <div className="flex gap-1">
+                      {VALUES.map((v) => (
+                        <button
+                          key={v}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setValue(ci, v);
+                          }}
+                          className={`w-9 rounded border py-0.5 text-xs font-semibold ${
+                            val === v
+                              ? VAL_ON[v]
+                              : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  <input
+                    value={activeRow?.[c.just] ?? ''}
+                    onChange={(e) => setJust(c.just, e.target.value)}
+                    onBlur={() => commitJust()}
+                    placeholder="justification (optional)"
+                    className="mt-1 w-44 rounded border border-slate-200 px-1.5 py-0.5 text-[11px] transition-all focus:w-full"
+                  />
                 </div>
-                <input
-                  value={activeRow?.[c.just] ?? ''}
-                  onChange={(e) => setJust(c.just, e.target.value)}
-                  onBlur={() => commitJust()}
-                  placeholder="justification (optional)"
-                  className="mt-1 w-44 rounded border border-slate-200 px-1.5 py-0.5 text-[11px] transition-all focus:w-full"
-                />
+              );
+            })}
+
+            {/* derived neutral (read-only value + justification) */}
+            <div className="mb-1.5 rounded border border-slate-200 bg-slate-50 p-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-32 shrink-0 font-mono text-[11px] text-slate-600">
+                  neutral <span className="text-[9px] text-slate-400">(derived)</span>
+                </span>
+                <span
+                  className={`w-9 rounded border border-slate-200 bg-white py-0.5 text-center text-xs font-semibold ${
+                    neutralValue ? VAL_TEXT[neutralValue] : 'text-slate-300'
+                  }`}
+                >
+                  {neutralValue || '—'}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  1 if all affect 0 · 0 if any affect 1 · ? if only ? · NV if all NV
+                </span>
               </div>
-            );
-          })}
-
-          {/* derived neutral (read-only value + justification) */}
-          <div className="mb-1.5 rounded border border-slate-200 bg-slate-50 p-1.5">
-            <div className="flex items-center gap-2">
-              <span className="w-32 shrink-0 font-mono text-[11px] text-slate-600">
-                neutral <span className="text-[9px] text-slate-400">(derived)</span>
-              </span>
-              <span
-                className={`w-9 rounded border border-slate-200 bg-white py-0.5 text-center text-xs font-semibold ${
-                  neutralValue ? VAL_TEXT[neutralValue] : 'text-slate-300'
-                }`}
-              >
-                {neutralValue || '—'}
-              </span>
-              <span className="text-[10px] text-slate-400">
-                1 if all affect 0 · 0 if any affect 1 · ? if only ? · NV if all NV
-              </span>
+              <input
+                value={activeRow?.justNeutral ?? ''}
+                onChange={(e) => setJust('justNeutral', e.target.value)}
+                onBlur={() => commitJust()}
+                placeholder="justification (optional)"
+                className="mt-1 w-44 rounded border border-slate-200 px-1.5 py-0.5 text-[11px] transition-all focus:w-full"
+              />
             </div>
-            <input
-              value={activeRow?.justNeutral ?? ''}
-              onChange={(e) => setJust('justNeutral', e.target.value)}
-              onBlur={() => commitJust()}
-              placeholder="justification (optional)"
-              className="mt-1 w-44 rounded border border-slate-200 px-1.5 py-0.5 text-[11px] transition-all focus:w-full"
-            />
-          </div>
 
-          <div className="mt-2 rounded bg-slate-50 p-1.5 text-[10px] leading-relaxed text-slate-400">
-            <span className="font-semibold text-slate-500">Keys:</span> 1 / 0 / Q(=?) / N(=NV) code
-            the focused row · Tab or ↑↓ move rows · Enter or → next window · ← prev · Space
-            play/pause
+            <div className="mt-2 rounded bg-slate-50 p-1.5 text-[10px] leading-relaxed text-slate-400">
+              <span className="font-semibold text-slate-500">Keys:</span> 1 / 0 / Q(=?) / N(=NV)
+              code the focused row · Tab or ↑↓ move rows · Enter or → next window · ← prev · Space
+              play/pause
+            </div>
           </div>
         </div>
       </div>
