@@ -126,9 +126,6 @@ export function WindowCoding() {
   const [rows, setRows] = useState<Record<number, Row>>({});
   const [active, setActive] = useState(0);
   const [focusedRow, setFocusedRow] = useState(0);
-  const [autoAdvance, setAutoAdvance] = useState<boolean>(
-    () => localStorage.getItem('gals.wc.autoadv') !== '0',
-  );
   const [showScreenshot, setShowScreenshot] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -210,9 +207,6 @@ export function WindowCoding() {
   useEffect(() => {
     localStorage.setItem('gals.wc.coder', coderId);
   }, [coderId]);
-  useEffect(() => {
-    localStorage.setItem('gals.wc.autoadv', autoAdvance ? '1' : '0');
-  }, [autoAdvance]);
 
   // ── window grid ───────────────────────────────────────────────────────────
   const windowMs = durationSec * 1000;
@@ -308,11 +302,9 @@ export function WindowCoding() {
       setRows((p) => ({ ...p, [w.startMs]: nextRow }));
       setFocusedRow(ci);
       saveRow(w.startMs, nextRow);
-      if (autoAdvance && nextVal !== undefined && isFull(nextRow)) {
-        setTimeout(() => gotoWindow(activeIdx + 1), 120);
-      }
+      // No auto-advance: the coder reviews and moves on manually (Next window / →).
     },
-    [windows, activeIdx, requireCoder, rows, saveRow, autoAdvance, gotoWindow],
+    [windows, activeIdx, requireCoder, rows, saveRow],
   );
 
   const setJust = useCallback(
@@ -541,15 +533,6 @@ export function WindowCoding() {
           />
         </div>
 
-        <label className="flex items-center gap-1 text-xs">
-          <input
-            type="checkbox"
-            checked={autoAdvance}
-            onChange={(e) => setAutoAdvance(e.target.checked)}
-          />
-          auto-advance
-        </label>
-
         <span className="ml-auto font-mono text-xs text-slate-500">
           {codedCount}/{windows.length} windows coded
         </span>
@@ -699,7 +682,7 @@ export function WindowCoding() {
               onClick={() => gotoWindow(activeIdx + 1)}
               className="rounded border border-slate-300 px-2 py-1 text-xs"
             >
-              Next →
+              Next window →
             </button>
             {activeWindow && (
               <span className="ml-auto font-mono text-xs text-slate-400">
@@ -815,6 +798,26 @@ export function WindowCoding() {
               code the focused row · Tab or ↑↓ move rows · Enter or → next window · ← prev · Space
               play/pause
             </div>
+          </div>
+
+          {/* Explicit navigation — coding never auto-advances, so the coder can
+              review before moving on. */}
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={() => gotoWindow(activeIdx - 1)}
+              disabled={activeIdx <= 0}
+              className="rounded border border-slate-300 px-2 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <button
+              onClick={() => gotoWindow(activeIdx + 1)}
+              disabled={activeIdx >= windows.length - 1}
+              className="flex flex-1 items-center justify-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40"
+              title="Move to the next window (Enter or →)"
+            >
+              Next window →
+            </button>
           </div>
         </div>
       </div>
