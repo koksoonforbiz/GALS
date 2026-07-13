@@ -263,6 +263,12 @@ export function Library() {
                       >
                         Timeline
                       </Link>
+                      <Link
+                        to={`/window-coding/${s.id}`}
+                        className="rounded bg-emerald-600 px-2 py-1 text-white hover:bg-emerald-500"
+                      >
+                        Window Code
+                      </Link>
                       <button
                         onClick={() => del(s)}
                         className="rounded border border-rose-300 px-2 py-1 text-rose-600 hover:bg-rose-50"

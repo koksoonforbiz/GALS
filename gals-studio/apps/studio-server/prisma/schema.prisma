@@ -446,6 +446,37 @@ model SessionTrim {
   updatedAt DateTime @updatedAt
 }
 
+// Per-window "perstate-binary" coding: a human coder labels each fixed-duration
+// window (split from 00:00:00 at a configurable duration) for five constructs,
+// each valued 1 | 0 | ? | NV, plus an optional per-construct justification. The
+// sixth construct (neutral) is derived from the four affect constructs and not
+// stored as a value — only its justification is kept. Durable (no FK to
+// Session), keyed by (sessionId, coderId, windowStartMs, windowDurationSec).
+model WindowCoding {
+  id                  String   @id @default(uuid())
+  sessionId           String
+  coderId             String
+  windowStartMs       Int // ms offset from session start (00:00:00); = index * durationSec * 1000
+  windowDurationSec   Int
+  codebookVersion     String // e.g. "v2.0-perstate-binary"
+  behaviourOntask     String? // "1" | "0" | "?" | "NV"
+  engagement          String?
+  confusion           String?
+  frustration         String?
+  boredom             String?
+  justBehaviourOntask String?
+  justEngagement      String?
+  justConfusion       String?
+  justFrustration     String?
+  justBoredom         String?
+  justNeutral         String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([sessionId, coderId, windowStartMs, windowDurationSec])
+  @@index([sessionId, coderId, windowDurationSec])
+}
+
 // Per-utterance coding (chat / dialogue / intervention): the researcher codes
 // each message for EF construct, affective state, and learning strategy.
 // Durable (no FK to Session), keyed by (sessionId, coderId, source, refWallMs).

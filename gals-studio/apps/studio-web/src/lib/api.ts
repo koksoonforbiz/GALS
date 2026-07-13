@@ -115,6 +115,20 @@ export const api = {
       'PUT',
       body,
     ),
+  // Per-window perstate-binary coding (codebook v2.0)
+  windowCodingLoad: (sessionId: string, coderId: string, durationSec: number) =>
+    jget<any>(
+      `/api/window-coding/${sessionId}?coderId=${encodeURIComponent(coderId)}&durationSec=${durationSec}`,
+    ),
+  windowCodingSave: (sessionId: string, body: unknown) =>
+    jsend<any>(`/api/window-coding/${sessionId}`, 'PUT', body),
+  windowCodingClear: (sessionId: string, coderId: string, durationSec?: number) =>
+    jsend<any>(
+      `/api/window-coding/${sessionId}?coderId=${encodeURIComponent(coderId)}${
+        durationSec ? `&durationSec=${durationSec}` : ''
+      }`,
+      'DELETE',
+    ),
   llmDimensions: () => jget<any>('/api/llm-coding/dimensions'),
   llmUtterances: (userIds: string[]) =>
     jget<any>(`/api/llm-coding/utterances?userIds=${encodeURIComponent(userIds.join(','))}`),

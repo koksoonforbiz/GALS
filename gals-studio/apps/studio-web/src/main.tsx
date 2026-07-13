@@ -10,6 +10,7 @@ import { TimelineCoding } from './pages/TimelineCoding';
 import { Analysis } from './pages/Analysis';
 import { CohortAnalysis } from './pages/CohortAnalysis';
 import { LlmCoding } from './pages/LlmCoding';
+import { WindowCoding } from './pages/WindowCoding';
 import { Codebook } from './pages/Codebook';
 
 const router = createBrowserRouter([
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
       { path: 'replay/:sessionId', element: <Replay /> },
       { path: 'coding/:sessionId', element: <Coding /> },
       { path: 'timeline/:sessionId', element: <TimelineCoding /> },
+      { path: 'window-coding/:sessionId', element: <WindowCoding /> },
       { path: 'codebook', element: <Codebook /> },
       { path: 'analysis', element: <Analysis /> },
       { path: 'analysis-studio', element: <CohortAnalysis /> },

@@ -11,6 +11,7 @@ import { codingRoutes } from './routes/coding.js';
 import { analysisRoutes } from './routes/analysis.js';
 import { analysisSummaryRoutes } from './routes/analysisSummary.js';
 import { llmCodingRoutes } from './routes/llmCoding.js';
+import { windowCodingRoutes } from './routes/windowCoding.js';
 import { backupRoutes } from './routes/backup.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -36,6 +37,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(analysisRoutes);
   await app.register(analysisSummaryRoutes);
   await app.register(llmCodingRoutes);
+  await app.register(windowCodingRoutes);
   await app.register(backupRoutes);
 
   // Serve the built web app for the packaged single-process / desktop launch.
