@@ -29,7 +29,10 @@ import { WebcamPanel } from '../replay/WebcamPanel';
 const CODEBOOK_VERSION = 'v2.0-perstate-binary';
 const VALUES = ['1', '0', '?', 'NV'] as const;
 type CodeValue = (typeof VALUES)[number];
-type Field = 'behaviourOntask' | 'engagement' | 'confusion' | 'frustration' | 'boredom';
+// Number-key shortcuts: 1/2/3/4 → 1/0/?/NV (in this order).
+const KEY_TO_VALUE: Record<string, CodeValue> = { '1': '1', '2': '0', '3': '?', '4': 'NV' };
+const VALUE_TO_KEY: Record<CodeValue, string> = { '1': '1', '0': '2', '?': '3', NV: '4' };
+type Field = 'behaviourOntask' | 'engagement' | 'confusion' | 'frustration' | 'boredom' | 'neutral';
 type JustField =
   | 'justBehaviourOntask'
   | 'justEngagement'
@@ -73,6 +76,13 @@ const CONSTRUCTS: Construct[] = [
 ];
 const AFFECT_FIELDS = CONSTRUCTS.filter((c) => c.affect).map((c) => c.field);
 
+// The 5 constructs plus the (now editable) neutral row — used for row focus and
+// number-key coding. neutral has a derived default the coder may overwrite.
+const EDIT_ROWS: { field: Field; just: JustField; label: string }[] = [
+  ...CONSTRUCTS.map((c) => ({ field: c.field, just: c.just, label: c.label })),
+  { field: 'neutral', just: 'justNeutral', label: 'neutral' },
+];
+
 // Fixed value colors: 1=green, 0=gray, ?=amber, NV=red.
 const VAL_ON: Record<CodeValue, string> = {
   '1': 'bg-emerald-600 text-white border-emerald-600',
@@ -102,16 +112,17 @@ const csvEsc = (v: unknown) => {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-/** neutral derived from the four affect constructs (see spec). '' until all four coded. */
-function deriveNeutral(row: Row | undefined): CodeValue | '' {
-  const vals = AFFECT_FIELDS.map((f) => row?.[f]);
-  if (vals.some((v) => v == null)) return '';
-  if (vals.every((v) => v === 'NV')) return 'NV';
-  if (vals.some((v) => v === '1')) return '0';
-  if (vals.every((v) => v === '0')) return '1';
-  return '?';
+/** Default neutral from the four affect constructs: neutral = 1 unless some
+ * affect is present (=1). "?" or "NV" affect do NOT block neutral = 1. */
+function deriveNeutral(row: Row | undefined): CodeValue {
+  return AFFECT_FIELDS.some((f) => row?.[f] === '1') ? '0' : '1';
 }
-const isCoded = (row: Row | undefined) => !!row && CONSTRUCTS.some((c) => row[c.field] != null);
+/** Effective neutral shown/exported: the coder's override if set, else the default. */
+function neutralOf(row: Row | undefined): CodeValue {
+  return row?.neutral ?? deriveNeutral(row);
+}
+const isCoded = (row: Row | undefined) =>
+  !!row && (CONSTRUCTS.some((c) => row[c.field] != null) || row.neutral != null);
 const isFull = (row: Row | undefined) => !!row && CONSTRUCTS.every((c) => row[c.field] != null);
 
 export function WindowCoding() {
@@ -121,7 +132,7 @@ export function WindowCoding() {
   const [sparse, setSparse] = useState<any>(null);
 
   const [coderId, setCoderId] = useState<string>(() => localStorage.getItem('gals.wc.coder') ?? '');
-  const [durationSec, setDurationSec] = useState<number>(20);
+  const [durationSec, setDurationSec] = useState<number>(10);
   const [customDur, setCustomDur] = useState<string>('');
   const [rows, setRows] = useState<Record<number, Row>>({});
   const [active, setActive] = useState(0);
@@ -164,11 +175,11 @@ export function WindowCoding() {
     })();
   }, [sessionId]);
 
-  // remember chosen duration per (session, coder); default 20s
+  // remember chosen duration per (session, coder); default 10s
   const durKey = useMemo(() => `gals.wc.dur.${sessionId}.${coderId}`, [sessionId, coderId]);
   useEffect(() => {
     const saved = Number(localStorage.getItem(durKey));
-    setDurationSec(saved && saved > 0 ? saved : 20);
+    setDurationSec(saved && saved > 0 ? saved : 10);
   }, [durKey]);
 
   // ── load stored codes for coder + duration ────────────────────────────────
@@ -184,6 +195,7 @@ export function WindowCoding() {
       for (const row of r.rows ?? []) {
         const clean: Row = {};
         for (const c of CONSTRUCTS) if (row[c.field]) (clean as any)[c.field] = row[c.field];
+        if (row.neutral) (clean as any).neutral = row.neutral;
         for (const j of [
           'justBehaviourOntask',
           'justEngagement',
@@ -274,6 +286,7 @@ export function WindowCoding() {
           confusion: row.confusion ?? null,
           frustration: row.frustration ?? null,
           boredom: row.boredom ?? null,
+          neutral: row.neutral ?? null,
         },
         justifications: {
           justBehaviourOntask: row.justBehaviourOntask ?? null,
@@ -293,12 +306,12 @@ export function WindowCoding() {
       const w = windows[activeIdx];
       if (!w) return;
       if (!requireCoder()) return;
-      const c = CONSTRUCTS[ci];
+      const field = EDIT_ROWS[ci].field;
       const cur = rows[w.startMs] ?? {};
-      const nextVal = cur[c.field] === val ? undefined : val;
+      const nextVal = cur[field] === val ? undefined : val;
       const nextRow: Row = { ...cur };
-      if (nextVal === undefined) delete nextRow[c.field];
-      else nextRow[c.field] = nextVal;
+      if (nextVal === undefined) delete nextRow[field];
+      else nextRow[field] = nextVal;
       setRows((p) => ({ ...p, [w.startMs]: nextRow }));
       setFocusedRow(ci);
       saveRow(w.startMs, nextRow);
@@ -354,38 +367,24 @@ export function WindowCoding() {
         if (e.key === 'Escape') t.blur();
         return;
       }
+      if (KEY_TO_VALUE[e.key]) {
+        e.preventDefault();
+        h.setValue(h.focusedRow, KEY_TO_VALUE[e.key]);
+        return;
+      }
+      const N = EDIT_ROWS.length;
       switch (e.key) {
-        case '1':
-          e.preventDefault();
-          h.setValue(h.focusedRow, '1');
-          break;
-        case '0':
-          e.preventDefault();
-          h.setValue(h.focusedRow, '0');
-          break;
-        case 'q':
-        case 'Q':
-          e.preventDefault();
-          h.setValue(h.focusedRow, '?');
-          break;
-        case 'n':
-        case 'N':
-          e.preventDefault();
-          h.setValue(h.focusedRow, 'NV');
-          break;
         case 'Tab':
           e.preventDefault();
-          h.setFocusedRow(
-            (h.focusedRow + (e.shiftKey ? CONSTRUCTS.length - 1 : 1)) % CONSTRUCTS.length,
-          );
+          h.setFocusedRow((h.focusedRow + (e.shiftKey ? N - 1 : 1)) % N);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          h.setFocusedRow((h.focusedRow + 1) % CONSTRUCTS.length);
+          h.setFocusedRow((h.focusedRow + 1) % N);
           break;
         case 'ArrowUp':
           e.preventDefault();
-          h.setFocusedRow((h.focusedRow + CONSTRUCTS.length - 1) % CONSTRUCTS.length);
+          h.setFocusedRow((h.focusedRow + N - 1) % N);
           break;
         case 'Enter':
         case 'ArrowRight':
@@ -438,7 +437,9 @@ export function WindowCoding() {
     for (let i = first; i <= last; i++) {
       const w = windows[i];
       const row = rows[w.startMs];
-      const neutral = deriveNeutral(row);
+      // gap windows inside the coded range stay blank; coded windows show the
+      // coder's neutral override if any, else the derived default.
+      const neutral = isCoded(row) ? neutralOf(row) : '';
       lines.push([
         fmtHms(w.startMs),
         row?.behaviourOntask ?? '',
@@ -470,7 +471,8 @@ export function WindowCoding() {
     return <div className="p-8 text-center text-slate-400">Loading window-coding studio…</div>;
   }
 
-  const neutralValue = deriveNeutral(activeRow);
+  const neutralValue = neutralOf(activeRow);
+  const neutralOverridden = activeRow?.neutral != null;
 
   return (
     <div className="space-y-2">
@@ -745,13 +747,17 @@ export function WindowCoding() {
                             e.stopPropagation();
                             setValue(ci, v);
                           }}
-                          className={`w-9 rounded border py-0.5 text-xs font-semibold ${
+                          title={`shortcut: ${VALUE_TO_KEY[v]}`}
+                          className={`w-10 rounded border py-0.5 text-xs font-semibold ${
                             val === v
                               ? VAL_ON[v]
                               : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-50'
                           }`}
                         >
                           {v}
+                          <span className="ml-0.5 align-super text-[8px] opacity-50">
+                            {VALUE_TO_KEY[v]}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -767,21 +773,54 @@ export function WindowCoding() {
               );
             })}
 
-            {/* derived neutral (read-only value + justification) */}
-            <div className="mb-1.5 rounded border border-slate-200 bg-slate-50 p-1.5">
+            {/* neutral: derived default (1 unless an affect = 1), coder-overridable */}
+            <div
+              onClick={() => setFocusedRow(CONSTRUCTS.length)}
+              className={`mb-1.5 rounded border p-1.5 ${
+                focusedRow === CONSTRUCTS.length
+                  ? 'border-sky-400 bg-sky-50/60'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <span className="w-32 shrink-0 font-mono text-[11px] text-slate-600">
-                  neutral <span className="text-[9px] text-slate-400">(derived)</span>
+                  neutral{' '}
+                  <span className="text-[9px] text-slate-400">
+                    {neutralOverridden ? '(override)' : '(auto)'}
+                  </span>
                 </span>
-                <span
-                  className={`w-9 rounded border border-slate-200 bg-white py-0.5 text-center text-xs font-semibold ${
-                    neutralValue ? VAL_TEXT[neutralValue] : 'text-slate-300'
-                  }`}
-                >
-                  {neutralValue || '—'}
-                </span>
+                <div className="flex gap-1">
+                  {VALUES.map((v) => {
+                    const override = activeRow?.neutral === v;
+                    const isDefault = !neutralOverridden && neutralValue === v;
+                    return (
+                      <button
+                        key={v}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setValue(CONSTRUCTS.length, v);
+                        }}
+                        title={`shortcut: ${VALUE_TO_KEY[v]}${isDefault ? ' · current auto value' : ''}`}
+                        className={`w-10 rounded border py-0.5 text-xs font-semibold ${
+                          override
+                            ? VAL_ON[v]
+                            : isDefault
+                              ? `border-dashed border-slate-400 bg-white ${VAL_TEXT[v]}`
+                              : 'border-slate-300 bg-white text-slate-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        {v}
+                        <span className="ml-0.5 align-super text-[8px] opacity-50">
+                          {VALUE_TO_KEY[v]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
                 <span className="text-[10px] text-slate-400">
-                  1 if all affect 0 · 0 if any affect 1 · ? if only ? · NV if all NV
+                  {neutralOverridden
+                    ? 'coder override — click again to clear'
+                    : `auto = ${neutralValue} · 1 unless an affect = 1 (? / NV still allow 1)`}
                 </span>
               </div>
               <input
@@ -794,9 +833,9 @@ export function WindowCoding() {
             </div>
 
             <div className="mt-2 rounded bg-slate-50 p-1.5 text-[10px] leading-relaxed text-slate-400">
-              <span className="font-semibold text-slate-500">Keys:</span> 1 / 0 / Q(=?) / N(=NV)
-              code the focused row · Tab or ↑↓ move rows · Enter or → next window · ← prev · Space
-              play/pause
+              <span className="font-semibold text-slate-500">Keys:</span> 1 / 2 / 3 / 4 → 1 / 0 / ?
+              / NV on the focused row · Tab or ↑↓ move rows · Enter or → next window · ← prev ·
+              Space play/pause
             </div>
           </div>
 
@@ -834,11 +873,11 @@ export function WindowCoding() {
             <h2 className="mb-3 text-lg font-bold">Window coding — shortcuts</h2>
             <ul className="space-y-1 text-slate-600">
               <li>
-                <kbd>1</kbd> <kbd>0</kbd> <kbd>Q</kbd> <kbd>N</kbd> — set 1 / 0 / ? / NV on the
-                focused construct row
+                <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> — set 1 / 0 / ? / NV on the
+                focused row
               </li>
               <li>
-                <kbd>Tab</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> — move between construct rows
+                <kbd>Tab</kbd> / <kbd>↑</kbd> <kbd>↓</kbd> — move between rows (incl. neutral)
               </li>
               <li>
                 <kbd>Enter</kbd> / <kbd>→</kbd> — next window · <kbd>←</kbd> — previous window
@@ -849,8 +888,9 @@ export function WindowCoding() {
               </li>
             </ul>
             <p className="mt-3 text-xs text-slate-400">
-              neutral is auto-derived from engagement/confusion/frustration/boredom. Codes auto-save
-              per coder ({CODEBOOK_VERSION}).
+              neutral defaults to 1 unless one of the affect states is coded 1 (a “?” or “NV” affect
+              still allows neutral = 1); the coder can overwrite it. Codes auto-save per coder (
+              {CODEBOOK_VERSION}).
             </p>
             <button
               onClick={() => setShowHelp(false)}

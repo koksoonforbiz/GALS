@@ -23,6 +23,7 @@ const VALUE_FIELDS = [
   'confusion',
   'frustration',
   'boredom',
+  'neutral',
 ] as const;
 const JUST_FIELDS = [
   'justBehaviourOntask',
@@ -96,6 +97,7 @@ export async function windowCodingRoutes(app: FastifyInstance): Promise<void> {
       confusion: cleanValue(values.confusion),
       frustration: cleanValue(values.frustration),
       boredom: cleanValue(values.boredom),
+      neutral: cleanValue(values.neutral),
       justBehaviourOntask: cleanText(justifications.justBehaviourOntask),
       justEngagement: cleanText(justifications.justEngagement),
       justConfusion: cleanText(justifications.justConfusion),
