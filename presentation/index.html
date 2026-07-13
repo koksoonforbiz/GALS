@@ -1,0 +1,936 @@
+<title>GALS — Capstone Final Presentation</title>
+<style>
+  /* ── tokens ─────────────────────────────────────────────── */
+  :root{
+    --ink:#0F1216; --panel:#171C23; --panel2:#1D242E; --line:#2A3240;
+    --text:#E8ECF1; --muted:#8C97A6; --faint:#5A6472;
+    --accent:#E9B44C; --accent-dim:#8f7434;
+    --eng:#53C48E; --conf:#E9B44C; --frus:#E06A50; --bore:#8A93A5;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  html,body{margin:0;padding:0;background:var(--ink);}
+  body{font-family:var(--sans);color:var(--text);overflow:hidden;}
+  *{box-sizing:border-box;}
+
+  /* ── deck chrome ────────────────────────────────────────── */
+  #deck{position:fixed;inset:0;background:var(--ink);}
+  .slide{position:absolute;inset:0;padding:5.5vh 7vw 12vh 7vw;display:none;
+    flex-direction:column;overflow-y:auto;}
+  .slide.active{display:flex;animation:slidein .45s ease both;}
+  @keyframes slidein{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){
+    .slide.active{animation:none;}
+    #trace{display:none;}
+  }
+
+  .eyebrow{font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 1.1rem 0;}
+  .eyebrow .sec{color:var(--faint);}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(2rem,4.6vw,3.4rem);
+    line-height:1.08;margin:0 0 1.2rem 0;text-wrap:balance;max-width:24ch;}
+  h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.5rem,3.2vw,2.4rem);
+    line-height:1.12;margin:0 0 1.4rem 0;text-wrap:balance;max-width:30ch;}
+  h3{font-size:1.02rem;margin:0 0 .5rem 0;font-weight:650;}
+  p,li{font-size:clamp(.95rem,1.35vw,1.12rem);line-height:1.55;color:var(--text);}
+  p{max-width:62ch;}
+  .muted{color:var(--muted);}
+  .small{font-size:.85rem;}
+  .tiny{font-family:var(--mono);font-size:.7rem;color:var(--faint);letter-spacing:.04em;}
+  ul.clean{padding-left:1.15em;margin:.4rem 0;}
+  ul.clean li{margin:.42em 0;}
+  strong{color:var(--accent);font-weight:650;}
+  .w{color:#fff;font-weight:600;}
+  code,.mono{font-family:var(--mono);font-size:.86em;color:#CFE3D8;background:var(--panel2);
+    padding:.1em .35em;border-radius:3px;}
+  .formula{font-family:var(--serif);font-size:1.25rem;background:var(--panel);
+    border:1px solid var(--line);border-left:3px solid var(--accent);
+    padding:.9rem 1.2rem;border-radius:4px;display:inline-block;margin:.6rem 0;}
+
+  /* two/three column helpers */
+  .cols{display:flex;gap:2.6rem;align-items:flex-start;flex-wrap:wrap;}
+  .col{flex:1 1 320px;min-width:280px;}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:1rem 1.1rem;}
+  .chip{display:inline-block;font-family:var(--mono);font-size:.72rem;
+    padding:.18em .55em;border-radius:99px;border:1px solid var(--line);
+    color:var(--muted);letter-spacing:.03em;}
+  .chip.on{border-color:var(--accent);color:var(--accent);}
+
+  button{font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;
+    background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:4px;padding:.5em 1em;cursor:pointer;}
+  button:hover{border-color:var(--accent);color:var(--accent);}
+  button:focus-visible,.lane:focus-visible,.ivcard:focus-visible,.stnode:focus-visible,
+  .win:focus-visible,.codebtn:focus-visible,.dim:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;}
+  button.primary{background:var(--accent);color:#141008;border-color:var(--accent);font-weight:700;}
+  button.primary:hover{color:#000;}
+
+  /* ── bottom rail: timeline progress ─────────────────────── */
+  #rail{position:fixed;left:0;right:0;bottom:0;height:66px;background:linear-gradient(transparent,rgba(15,18,22,.94) 30%);
+    display:flex;align-items:flex-end;padding:0 7vw 14px 7vw;gap:0;z-index:50;}
+  #ticks{flex:1;display:flex;gap:6px;align-items:flex-end;height:34px;}
+  .tick{flex:1;height:5px;background:var(--line);border-radius:2px;cursor:pointer;
+    position:relative;transition:height .15s,background .15s;border:0;padding:0;min-width:8px;}
+  .tick:hover{height:12px;background:var(--muted);}
+  .tick.done{background:var(--accent-dim);}
+  .tick.cur{background:var(--accent);height:16px;}
+  .tick .lbl{position:absolute;bottom:20px;left:0;font-family:var(--mono);font-size:.6rem;
+    color:var(--faint);letter-spacing:.1em;white-space:nowrap;display:none;}
+  .tick.seclead .lbl{display:block;}
+  #tc{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-left:1.6rem;
+    font-variant-numeric:tabular-nums;white-space:nowrap;}
+  #tc b{color:var(--accent);font-weight:600;}
+  #navbtns{margin-left:1rem;display:flex;gap:6px;}
+  #navbtns button{padding:.35em .7em;}
+
+  /* ── title slide ────────────────────────────────────────── */
+  #trace{position:absolute;inset:auto 0 0 0;height:38vh;width:100%;opacity:.5;pointer-events:none;}
+  .titlewrap{margin-top:auto;margin-bottom:auto;position:relative;z-index:2;}
+  .kicker{font-family:var(--mono);color:var(--muted);font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;}
+
+  /* ── cascade (slide: why) ───────────────────────────────── */
+  .cascade{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:1.2rem 0;}
+  .stnode{border:1.5px solid var(--line);border-radius:6px;padding:.7rem 1rem;cursor:pointer;
+    background:var(--panel);min-width:130px;text-align:center;transition:all .2s;}
+  .stnode .nm{font-weight:650;font-size:1rem;}
+  .stnode .ds{font-size:.72rem;color:var(--muted);margin-top:.2rem;}
+  .stnode.lit{transform:translateY(-3px);}
+  .stnode[data-s="eq"].lit{border-color:var(--eng);box-shadow:0 0 0 1px var(--eng);}
+  .stnode[data-s="cf"].lit{border-color:var(--conf);box-shadow:0 0 0 1px var(--conf);}
+  .stnode[data-s="fr"].lit{border-color:var(--frus);box-shadow:0 0 0 1px var(--frus);}
+  .stnode[data-s="bo"].lit{border-color:var(--bore);box-shadow:0 0 0 1px var(--bore);}
+  .arr{color:var(--faint);font-size:1.3rem;}
+  #cascnote{min-height:3.2em;}
+
+  /* ── intervention cards ─────────────────────────────────── */
+  .ivgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.9rem;margin:.4rem 0 1rem 0;}
+  .ivcard{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--line);
+    border-radius:6px;padding:.9rem 1rem;cursor:pointer;transition:all .18s;}
+  .ivcard:hover{transform:translateY(-2px);}
+  .ivcard.sel{border-color:var(--accent);border-top-color:var(--accent);background:var(--panel2);}
+  .ivcard h3{font-family:var(--serif);font-size:1.08rem;}
+  .ivcard .ev{font-family:var(--mono);font-size:.66rem;color:var(--muted);letter-spacing:.05em;}
+  #ivdetail{border-left:3px solid var(--accent);}
+  #ivdetail .sect{margin:.5rem 0;}
+  #ivdetail .sect b{font-family:var(--mono);font-size:.7rem;letter-spacing:.12em;color:var(--accent);
+    text-transform:uppercase;font-weight:600;display:block;margin-bottom:.15rem;}
+
+  /* ── platform build-up ──────────────────────────────────── */
+  .stack{display:flex;flex-direction:column-reverse;gap:.55rem;max-width:660px;margin:1rem 0;}
+  .layer{border:1px solid var(--line);border-radius:6px;padding:.75rem 1rem;
+    background:var(--panel);opacity:.13;transform:translateY(6px);transition:all .4s;}
+  .layer.show{opacity:1;transform:none;}
+  .layer .lt{font-weight:650;}
+  .layer .ld{font-size:.82rem;color:var(--muted);}
+  .layer.l1.show{border-left:4px solid #6D9FD8;}
+  .layer.l2.show{border-left:4px solid #9A8FD8;}
+  .layer.l3.show{border-left:4px solid var(--eng);}
+  .layer.l4.show{border-left:4px solid var(--frus);}
+  .layer.l5.show{border-left:4px solid var(--accent);}
+
+  /* ── signal explorer ────────────────────────────────────── */
+  .explorer{display:flex;gap:1.4rem;align-items:stretch;flex-wrap:wrap;}
+  .lanelist{flex:0 0 300px;display:flex;flex-direction:column;gap:2px;max-height:56vh;overflow-y:auto;padding-right:4px;}
+  .lgroup{font-family:var(--mono);font-size:.64rem;letter-spacing:.15em;color:var(--faint);
+    text-transform:uppercase;margin:.55rem 0 .15rem 0;}
+  .lane{display:flex;align-items:center;gap:.55rem;padding:.32rem .55rem;border-radius:4px;
+    cursor:pointer;border:1px solid transparent;background:none;color:var(--text);
+    font-family:var(--sans);font-size:.85rem;text-align:left;width:100%;}
+  .lane:hover{background:var(--panel);}
+  .lane.sel{border-color:var(--accent);background:var(--panel);}
+  .lane .sw{width:10px;height:10px;border-radius:2px;flex:0 0 auto;opacity:.25;}
+  .lane.on .sw{opacity:1;}
+  .lane .nm{flex:1;}
+  .lane.on .nm{color:#fff;}
+  .lane:not(.on) .nm{color:var(--faint);text-decoration:line-through;text-decoration-color:var(--line);}
+  .lane .cad{font-family:var(--mono);font-size:.62rem;color:var(--faint);}
+  .expright{flex:1;min-width:340px;display:flex;flex-direction:column;gap:.8rem;}
+  #lanescanvas{width:100%;height:38vh;background:var(--panel);border:1px solid var(--line);border-radius:6px;}
+  #sigdetail{min-height:7.5em;}
+
+  /* ── coding exercise ────────────────────────────────────── */
+  .winstrip{display:flex;gap:6px;margin:.8rem 0;}
+  .win{flex:1;border:1.5px solid var(--line);border-radius:5px;padding:.5rem .3rem;
+    text-align:center;cursor:pointer;background:var(--panel);transition:all .15s;position:relative;}
+  .win .t{font-family:var(--mono);font-size:.62rem;color:var(--faint);}
+  .win .g{font-size:.72rem;color:var(--muted);margin-top:.2rem;}
+  .win.sel{border-color:#fff;}
+  .win.coded::after{content:"";position:absolute;top:5px;right:5px;width:7px;height:7px;
+    border-radius:50%;background:var(--accent);}
+  .codebtns{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0;}
+  .codebtn{border:1.5px solid var(--line);border-radius:99px;padding:.4em 1em;cursor:pointer;
+    background:var(--panel);font-size:.85rem;color:var(--text);font-family:var(--sans);}
+  .codebtn:hover{border-color:#fff;}
+  .codebtn.pick{color:#0F1216;font-weight:700;}
+  .agree{display:flex;gap:1.6rem;flex-wrap:wrap;margin-top:.6rem;}
+  .stat .v{font-family:var(--mono);font-size:1.5rem;color:var(--accent);font-variant-numeric:tabular-nums;}
+  .stat .k{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;color:var(--faint);text-transform:uppercase;}
+
+  /* ── LLM coding dims ────────────────────────────────────── */
+  .dimgroups{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.9rem;margin:.6rem 0;}
+  .dimg h3{font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .dimg .scale{font-family:var(--mono);font-size:.62rem;color:var(--accent);}
+  .dim{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);
+    border-radius:4px;padding:.3rem .6rem;margin:.25rem 0;font-size:.8rem;cursor:pointer;
+    color:var(--text);font-family:var(--sans);}
+  .dim:hover,.dim.sel{border-color:var(--accent);}
+  #dimdef{border-left:3px solid var(--accent);min-height:4.5em;}
+
+  table{border-collapse:collapse;font-size:.85rem;}
+  td,th{padding:.35rem .8rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:top;}
+  th{font-family:var(--mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .tablewrap{overflow-x:auto;}
+
+  .statecol{display:inline-block;width:.72em;height:.72em;border-radius:2px;margin-right:.35em;vertical-align:baseline;}
+  .footnote{margin-top:auto;padding-top:1.2rem;}
+  .demo-badge{display:inline-block;font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;
+    color:#141008;background:var(--accent);border-radius:3px;padding:.25em .7em;font-weight:700;}
+</style>
+
+<div id="deck" role="application" aria-label="Capstone presentation deck">
+
+<!-- ═══ 0 · TITLE ═══════════════════════════════════════════ -->
+<section class="slide" data-sec="OPENING">
+  <canvas id="trace" aria-hidden="true"></canvas>
+  <div class="titlewrap">
+    <div class="kicker">MSc Capstone · Final Presentation</div>
+    <h1 style="max-width:30ch;margin-top:1rem;">Seeing the invisible learner</h1>
+    <p class="muted" style="font-size:1.15rem;max-width:52ch;">An instrumented intelligent tutoring
+      system for multimodal measurement of learner <span style="color:var(--eng)">affect</span>,
+      <span style="color:var(--conf)">attention</span>, and cognition — built for the browser,
+      validated against itself, honest about its limits.</p>
+    <p class="tiny" style="margin-top:2.2rem;">GALS platform + GALS Studio &nbsp;·&nbsp; navigate with ← → or click the timeline below &nbsp;·&nbsp; F = fullscreen</p>
+  </div>
+</section>
+
+<!-- ═══ 1 · WHY ═════════════════════════════════════════════ -->
+<section class="slide" data-sec="OPENING">
+  <p class="eyebrow"><span class="sec">01 ·</span> Why this project</p>
+  <h2>Learning has a weather system — and online, nobody can see it</h2>
+  <div class="cols">
+    <div class="col">
+      <ul class="clean">
+        <li>Learners cycle through a small set of <span class="w">learning-centered states</span>; the <em>transitions</em>, not just the amounts, predict outcomes <span class="tiny">(D'Mello &amp; Graesser 2012)</span>.</li>
+        <li>Confusion that <span style="color:var(--eng)">resolves</span> is productive. Confusion that <span style="color:var(--frus)">persists</span> hardens into frustration — then decays into boredom, the state most damaging to learning <span class="tiny">(Baker et al. 2010)</span>.</li>
+        <li>A classroom teacher reads this from faces and posture. <span class="w">Online, the channel is severed</span> — the instructor sees timestamps and quiz scores.</li>
+      </ul>
+      <p class="muted small">This project asks: can we restore that channel with nothing but a laptop, a webcam, and a browser?</p>
+    </div>
+    <div class="col">
+      <p class="tiny" style="margin-bottom:.4rem;">THE AFFECT-DYNAMICS CASCADE — click to step through ↓</p>
+      <div class="cascade">
+        <div class="stnode lit" data-s="eq" tabindex="0"><div class="nm" style="color:var(--eng)">Engagement</div><div class="ds">equilibrium / flow</div></div>
+        <span class="arr">→</span>
+        <div class="stnode" data-s="cf" tabindex="0"><div class="nm" style="color:var(--conf)">Confusion</div><div class="ds">impasse hit</div></div>
+        <span class="arr">→</span>
+        <div class="stnode" data-s="fr" tabindex="0"><div class="nm" style="color:var(--frus)">Frustration</div><div class="ds">impasse persists</div></div>
+        <span class="arr">→</span>
+        <div class="stnode" data-s="bo" tabindex="0"><div class="nm" style="color:var(--bore)">Boredom</div><div class="ds">disengagement</div></div>
+      </div>
+      <p id="cascnote" class="small muted">A learner in flow hits an impasse… <em>(click any state, or keep clicking to advance)</em></p>
+      <button id="cascstep">Step the cascade →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2 · WHY NOW ═════════════════════════════════════════ -->
+<section class="slide" data-sec="OPENING">
+  <p class="eyebrow"><span class="sec">02 ·</span> Why now — and why the browser</p>
+  <h2>Three doors opened at the same time</h2>
+  <div class="grid2">
+    <div class="card"><h3>1 · Webcam facial analysis matured</h3>
+      <p class="small muted">Emotion probabilities and facial action-unit intensities from ordinary video
+      now survive "in the wild" — noisy light, real classrooms (Bosch 2015/16; Py-Feat; OpenFace 3.0).</p></div>
+    <div class="card"><h3>2 · Eye tracking went JavaScript</h3>
+      <p class="small muted">WebGazer gives region-level gaze from a laptop camera — enough to know
+      <em>which panel</em> holds attention, with no lab hardware.</p></div>
+    <div class="card"><h3>3 · LLMs made tutoring real</h3>
+      <p class="small muted">Retrieval-grounded LLM tutoring makes the learning environment authentic —
+      so measurement happens during <em>real studying</em>, not a 10-minute lab task.</p></div>
+  </div>
+  <p style="margin-top:1.2rem;">And one discipline came free: <strong>capture happens on the learner's own machine</strong> —
+  so everything captured must be justified. Privacy-first isn't a feature here; it's the entry fee.</p>
+  <p class="small muted">Multimodal beats unimodal by a modest, consistent margin (D'Mello &amp; Kory 2015) —
+  so we fuse face + gaze + interaction, and validate channels <em>against each other</em>.</p>
+</section>
+
+<!-- ═══ 3 · RQs ═════════════════════════════════════════════ -->
+<section class="slide" data-sec="OPENING">
+  <p class="eyebrow"><span class="sec">03 ·</span> Research questions</p>
+  <h2>One measurement question, one pedagogy question</h2>
+  <div class="cols">
+    <div class="col card" style="border-left:3px solid var(--conf);">
+      <p class="tiny">RQ1 — MEASUREMENT</p>
+      <p style="font-family:var(--serif);font-size:1.15rem;">To what extent can browser-based multimodal
+      sensing — webcam facial analysis, eye gaze, interaction telemetry — <span class="w">detect learners'
+      affective and cognitive states</span>, validated against self-reported states?</p>
+    </div>
+    <div class="col card" style="border-left:3px solid var(--eng);">
+      <p class="tiny">RQ2 — PEDAGOGY</p>
+      <p style="font-family:var(--serif);font-size:1.15rem;">To what extent does an LLM-grounded platform
+      delivering <span class="w">evidence-based learning-strategy interventions</span> support learning —
+      by learning gain, and by whether learners actually adopt the strategies?</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:1.3rem;border-left:3px solid var(--accent);">
+    <p style="margin:0;"><strong>Design principle: the two questions never touch.</strong>
+    Interventions are <span class="w">only ever learner-initiated — never fired by an affect signal</span>.
+    So RQ1's measurements stay a clean observational layer, and RQ2's outcomes aren't confounded by
+    detection errors. Closing that loop is the future work, not the study.</p>
+  </div>
+</section>
+
+<!-- ═══ 4 · INTERVENTIONS ═══════════════════════════════════ -->
+<section class="slide" data-sec="PEDAGOGY">
+  <p class="eyebrow"><span class="sec">04 ·</span> The learning interventions</p>
+  <h2>Four strategies with real evidence behind them</h2>
+  <p class="small muted" style="margin-top:-.6rem;">Chosen from Dunlosky et al. (2013). Click a card — each is traced theory → what the learner sees → engineering.</p>
+  <div class="ivgrid" id="ivgrid"></div>
+  <div class="card" id="ivdetail"><p class="muted small" style="margin:.2rem 0;">← Select an intervention.</p></div>
+</section>
+
+<!-- ═══ 5 · LEARNER-INITIATED ═══════════════════════════════ -->
+<section class="slide" data-sec="PEDAGOGY">
+  <p class="eyebrow"><span class="sec">05 ·</span> How an intervention starts</p>
+  <h2>Always the learner's hand on the switch</h2>
+  <div class="cols">
+    <div class="col">
+      <ul class="clean">
+        <li><span class="w">Highlight → generate.</span> The learner selects a passage
+          (the backend accepts it as grounding only at <code>≥ 20 chars</code>) and picks a strategy —
+          or uses the whole current page/slide.</li>
+        <li><span class="w">Or accept a suggestion.</span> The tutor chatbot may append a
+          <code>[SUGGEST:STRATEGY]</code> tag when relevant; it renders as a clickable card.
+          <span class="muted">Nothing launches until the learner clicks.</span></li>
+        <li>Suggestion + click are both logged — so <span class="w">suggestion uptake is itself measurable</span>.</li>
+      </ul>
+    </div>
+    <div class="col card">
+      <p class="tiny">VERIFIED AGAINST THE CODE</p>
+      <ul class="clean small">
+        <li>Only two trigger reasons exist anywhere: <code>student_initiated</code>, <code>pre_generated</code>.</li>
+        <li>No affective, biometric, or timer trigger path — the affect pipeline is a
+          <em>consumer</em> of learning events, never a producer.</li>
+        <li><code>INTERVENTION_TRIGGERED</code> is a log entry written <em>after</em> the learner's request — not a trigger.</li>
+      </ul>
+      <p class="small muted" style="margin-bottom:0;">This is the decoupling that keeps RQ1 clean.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 6 · PLATFORM ════════════════════════════════════════ -->
+<section class="slide" data-sec="PLATFORM">
+  <p class="eyebrow"><span class="sec">06 ·</span> The platform — GALS</p>
+  <h2>A complete tutoring environment, not a lab task</h2>
+  <div class="cols">
+    <div class="col">
+      <h3 style="color:#6D9FD8;">Mode B · Structured lessons</h3>
+      <p class="small">Teacher-authored courses: block pages, PDF lessons, assessments with
+      Hattie-level feedback — read beside a <span class="w">docked tutor chatbot</span> grounded on the
+      teacher's material via RAG.</p>
+      <h3 style="color:#9A8FD8;margin-top:1rem;">Mode A · Open dialogue</h3>
+      <p class="small">A NotebookLM-style workspace over the <span class="w">learner's own uploads</span> —
+      cited chat, study-artifact studio (briefings, flashcards, comparisons, FAQs), notes.</p>
+      <p class="small muted">One retrieval pipeline under both: 512-token chunks · hybrid dense+sparse
+      retrieval · reciprocal rank fusion (k=60) · every answer cites its source.</p>
+    </div>
+    <div class="col">
+      <div class="card">
+        <p class="tiny">STACK — 46 API MODULES · ~90 DB MODELS</p>
+        <p class="small" style="margin:.4rem 0;">React/Vite &nbsp;·&nbsp; NestJS + Prisma/PostgreSQL &nbsp;·&nbsp;
+        Redis queues &nbsp;·&nbsp; MinIO media store &nbsp;·&nbsp; two Python CV workers &nbsp;·&nbsp; GALS&nbsp;Studio (researcher server)</p>
+      </div>
+      <div style="margin-top:1rem;">
+        <span class="demo-badge">LIVE DEMO №1</span>
+        <p class="small muted">Switch to the real platform here: enroll → open a PDF lesson → ask the
+        chatbot → highlight a passage → run Practice Testing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7 · BUILD-UP ════════════════════════════════════════ -->
+<section class="slide" data-sec="PLATFORM">
+  <p class="eyebrow"><span class="sec">07 ·</span> How it grew</p>
+  <h2>The build-up: five layers, in the order we built them</h2>
+  <div class="stack" id="stack">
+    <div class="layer l1"><span class="lt">1 · Courseware core</span><span class="ld"> — auth &amp; roles, course builder, lessons, question bank, assessments, mastery</span></div>
+    <div class="layer l2"><span class="lt">2 · RAG + LLM tutoring</span><span class="ld"> — document ingest, hybrid retrieval, grounded chatbot + dialogue mode, content generation with human review</span></div>
+    <div class="layer l3"><span class="lt">3 · The four interventions</span><span class="ld"> — practice testing, elaboration, stepwise, SM-2 spaced repetition + teacher prompt config</span></div>
+    <div class="layer l4"><span class="lt">4 · Multimodal sensing</span><span class="ld"> — webcam recording → OpenFace 3.0 + Py-Feat, WebGazer, interaction telemetry, self-report probe, sync-anchor time base</span></div>
+    <div class="layer l5"><span class="lt">5 · The research instrument</span><span class="ld"> — session replay, AOI attention scoring, EF text-mining, retrospective coding, exporters — GALS Studio</span></div>
+  </div>
+  <button id="stackbtn" class="primary">Build layer 1 →</button>
+  <p class="small muted" style="margin-top: .9rem;">The pivot of the project: layers 4–5 weren't in the proposal.
+  Making claims about affect <em>forced</em> us to build the instrument — <span class="w">scope evolution, not scope drift</span>.</p>
+</section>
+
+<!-- ═══ 8 · GALS STUDIO ═════════════════════════════════════ -->
+<section class="slide" data-sec="PLATFORM">
+  <p class="eyebrow"><span class="sec">08 ·</span> GALS Studio</p>
+  <h2>The researcher's side of the glass</h2>
+  <div class="grid2">
+    <div class="card"><h3>Session replay</h3><p class="small muted">Scrub any session: screen state +
+      webcam + gaze dot + click pulses + AOI boxes + a lane chart of 8 emotions, 4 derived states, 18 AUs —
+      all on one wall-clock anchor.</p></div>
+    <div class="card"><h3>Timeline &amp; trim</h3><p class="small muted">Zoomable multi-lane timeline; crop
+      dead head/tail per session — every summary and export honors the retained window.</p></div>
+    <div class="card"><h3>Coding workbench</h3><p class="small muted">Versioned codebooks, window-by-window
+      human coding with machine-guess pre-fill, disagreement queues, agreement metrics (κ, PABAK, α).</p></div>
+    <div class="card"><h3>Exports</h3><p class="small muted">Wide-format replay CSV (1 s bins), full-session
+      media bundle, 7-file cohort ZIP: utterances split free-dialogue vs in-strategy, interventions with
+      time-on-task, self-reports, EF detections.</p></div>
+  </div>
+  <p style="margin-top:1rem;"><span class="demo-badge">LIVE DEMO №2</span>
+  <span class="small muted">&nbsp; Open Studio on a recorded session → replay with overlays → show the timeline → export.</span></p>
+</section>
+
+<!-- ═══ 9 · SIGNAL EXPLORER ═════════════════════════════════ -->
+<section class="slide" data-sec="MEASUREMENT">
+  <p class="eyebrow"><span class="sec">09 ·</span> What we capture</p>
+  <h2 style="margin-bottom:.6rem;">Every session becomes a multimodal record</h2>
+  <p class="small muted" style="margin-top:0;">Toggle lanes with the swatch · click a name for the details. Rendering is an illustrative mock, not study data.</p>
+  <div class="explorer">
+    <div class="lanelist" id="lanelist"></div>
+    <div class="expright">
+      <canvas id="lanescanvas"></canvas>
+      <div class="card" id="sigdetail"><p class="small muted" style="margin:.2rem 0;">← Click a signal name.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 10 · HONESTY ════════════════════════════════════════ -->
+<section class="slide" data-sec="MEASUREMENT">
+  <p class="eyebrow"><span class="sec">10 ·</span> Captured honestly</p>
+  <h2>Who produces what — and what we refuse to capture</h2>
+  <div class="cols">
+    <div class="col">
+      <h3>Model attribution, audited in the worker code</h3>
+      <div class="tablewrap"><table>
+        <tr><th>Signal</th><th>Producer</th><th>Rate</th></tr>
+        <tr><td>8-class emotion probabilities</td><td class="w">OpenFace 3.0</td><td class="mono">5 fps</td></tr>
+        <tr><td>18 action-unit intensities</td><td class="w">Py-Feat</td><td class="mono">1 fps</td></tr>
+        <tr><td>Head pose</td><td class="muted">nobody — columns exist, always NULL</td><td class="mono">—</td></tr>
+      </table></div>
+      <p class="small muted">Our own export CSV once mislabeled the emotions "py-feat" — we found it,
+      we disclose it, the data were always OpenFace. <span class="w">Pupil "diameter"</span> is a
+      dark-pixel-area heuristic — reported as an exploratory proxy, excluded from claims.</p>
+    </div>
+    <div class="col">
+      <h3>Deliberately not captured</h3>
+      <ul class="clean small">
+        <li>Keystrokes → <span class="w">counts + speed only</span>, never key contents</li>
+        <li>Clipboard → <span class="w">length only</span>, never text</li>
+        <li>Webcam → <span class="w">no audio</span>, per-course consent, 640×480</li>
+        <li>Passwords → redacted in any DOM snapshot</li>
+        <li>Element identity → coarse selectors, click text capped at 50 chars</li>
+      </ul>
+      <p class="small muted">Self-report probe: a mandatory 5-option check-in every 15 minutes —
+      <span style="color:var(--eng)">engaged</span> · <span style="color:var(--bore)">bored</span> ·
+      <span style="color:var(--conf)">confused</span> · <span style="color:var(--frus)">frustrated</span> ·
+      neutral — the study's anchor for RQ1.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 11 · AOI ════════════════════════════════════════════ -->
+<section class="slide" data-sec="MEASUREMENT">
+  <p class="eyebrow"><span class="sec">11 ·</span> The attention layer</p>
+  <h2>Does the learner look where the task expects?</h2>
+  <div class="cols">
+    <div class="col">
+      <ul class="clean">
+        <li>Interface panels are labeled <span class="w">areas of interest</span> — sidebar, lesson/PDF, chatbot, header — captured with every snapshot.</li>
+        <li>Gaze samples are admitted through a validity mask (confidence ≥ 0.5, tab visible, not mid-navigation, not idle), then bucketed per panel.</li>
+        <li>Sessions segment into <span class="w">epochs</span> — reading, intervention, dialogue — each with an <em>expected</em> allocation (SEEV-style expectancy–value weights).</li>
+      </ul>
+      <p class="small muted">Weights are researcher-set placeholders, so this is a <em>relative</em> alignment index — stated as such.</p>
+    </div>
+    <div class="col">
+      <p class="tiny">PER-EPOCH ALIGNMENT (TOTAL-VARIATION SIMILARITY)</p>
+      <div class="formula">alignment = 1 − ½ Σ<sub>b</sub> | observed<sub>b</sub> − expected<sub>b</sub> |</div>
+      <p class="tiny" style="margin-top:.8rem;">SESSION SCORE — DURATION-WEIGHTED MEAN</p>
+      <div class="formula">allocation_score = Σ (alignment<sub>e</sub> · Δt<sub>e</sub>) / Σ Δt<sub>e</sub></div>
+      <p class="small muted">One number per session in [0, 1]: how well attention followed the task.
+      This is the behavioral <span class="w">reference criterion</span> we validate facial engagement against —
+      convergent validation, never "ground truth".</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 12 · CODING WINDOW EXERCISE ═════════════════════════ -->
+<section class="slide" data-sec="CODING">
+  <p class="eyebrow"><span class="sec">12 ·</span> The latest work — the coding window exercise</p>
+  <h2 style="margin-bottom:.4rem;">Human coders over the same windows the machine sees</h2>
+  <p class="small muted" style="margin-top:0;">Try it — pick a window, read the evidence, assign a code. The machine's guess pre-fills; your override flows back. <em>(Illustrative mock.)</em></p>
+  <div class="winstrip" id="winstrip"></div>
+  <div class="cols">
+    <div class="col card" id="winctx"><p class="small muted" style="margin:.2rem 0;">← Select a window above.</p></div>
+    <div class="col">
+      <p class="tiny">YOUR CODE FOR THIS WINDOW</p>
+      <div class="codebtns" id="codebtns"></div>
+      <div class="agree">
+        <div class="stat"><div class="v" id="agN">0/6</div><div class="k">windows coded</div></div>
+        <div class="stat"><div class="v" id="agP">—</div><div class="k">agree w/ machine</div></div>
+        <div class="stat"><div class="v" id="agT">—</div><div class="k">median s/window</div></div>
+      </div>
+      <p class="small muted" style="margin-top:.7rem;">In Studio this runs at scale: versioned codebooks,
+      per-code timing, a <span class="w">disagreement queue</span>, and reliability panels —
+      Cohen's κ, PABAK, Krippendorff's α between coders and against the model.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 13 · LLM CODING ═════════════════════════════════════ -->
+<section class="slide" data-sec="CODING">
+  <p class="eyebrow"><span class="sec">13 ·</span> LLM-assisted coding</p>
+  <h2 style="margin-bottom:.4rem;">25 dimensions per utterance, each on its own scale</h2>
+  <p class="small muted" style="margin-top:0;">Every learner utterance can be coded by GPT/Gemini across four groups — mixed response scales were a deliberate psychometric decision. Click any dimension.</p>
+  <div class="dimgroups" id="dimgroups"></div>
+  <div class="card" id="dimdef"><p class="small muted" style="margin:.2rem 0;">← Click a dimension for its definition and scale.</p></div>
+  <p class="small muted">Each code returns a <span class="w">value + ≤30-word justification citing the text</span>;
+  a separate pass audits whether binary is even the right scale per dimension. Nothing persists server-side —
+  codings export to CSV beside the human codes, so <span class="w">coder-vs-model agreement</span> is one join away.</p>
+</section>
+
+<!-- ═══ 14 · CLOSING ════════════════════════════════════════ -->
+<section class="slide" data-sec="CLOSE">
+  <p class="eyebrow"><span class="sec">14 ·</span> Where this goes</p>
+  <h2>From a validated instrument to a closed loop</h2>
+  <div class="grid2">
+    <div class="card"><h3>What stands today</h3><p class="small muted">A deployable tutoring platform whose
+      every session is a time-aligned, replayable, codable multimodal record — with sensing deliberately
+      decoupled from pedagogy.</p></div>
+    <div class="card"><h3>Being validated</h3><p class="small muted">Facial engagement vs gaze-on-AOI
+      (convergent), anchored by 15-minute self-reports; human coding windows vs model codes (κ, PABAK, α);
+      pre/post parallel-form learning gain.</p></div>
+    <div class="card"><h3>Next</h3><p class="small muted">Close the loop responsibly: offer scaffolding when
+      <em>validated</em> detection sees confusion persist — intervene at persistence, not onset, because early
+      confusion is productive.</p></div>
+  </div>
+  <p style="margin-top:1.4rem;font-family:var(--serif);font-size:1.3rem;max-width:46ch;">The contribution
+  isn't one detection accuracy — it's an honest instrument that makes learning measurable.</p>
+</section>
+
+<!-- ═══ 15 · THANKS ═════════════════════════════════════════ -->
+<section class="slide" data-sec="CLOSE">
+  <div class="titlewrap">
+    <div class="kicker">— end of session record —</div>
+    <h1 style="margin-top:1rem;">Thank you.</h1>
+    <p class="muted" style="font-size:1.1rem;">Questions welcome — the replay is ready if you'd like to
+    scrub through a real session.</p>
+    <p class="tiny" style="margin-top:2rem;">GALS · MSc Capstone · full technical detail in the final report (14 chapters + appendices)</p>
+  </div>
+</section>
+
+</div>
+
+<!-- rail -->
+<div id="rail">
+  <div id="ticks" role="tablist" aria-label="Slides"></div>
+  <div id="tc"><b id="tcur">01</b> / <span id="ttot">16</span></div>
+  <div id="navbtns">
+    <button id="prev" aria-label="Previous slide">←</button>
+    <button id="next" aria-label="Next slide">→</button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ═══ deck navigation ═══ */
+var slides=[].slice.call(document.querySelectorAll('.slide'));
+var ticks=document.getElementById('ticks');
+var cur=0;
+var seenSec={};
+slides.forEach(function(s,i){
+  var t=document.createElement('button');
+  t.className='tick';t.setAttribute('role','tab');t.setAttribute('aria-label','Slide '+(i+1));
+  var sec=s.getAttribute('data-sec')||'';
+  if(sec&&!seenSec[sec]){seenSec[sec]=1;t.classList.add('seclead');
+    var l=document.createElement('span');l.className='lbl';l.textContent=sec;t.appendChild(l);}
+  t.addEventListener('click',function(){go(i);});
+  ticks.appendChild(t);
+});
+var tickEls=[].slice.call(ticks.children);
+document.getElementById('ttot').textContent=String(slides.length).padStart(2,'0');
+function go(i){
+  if(i<0||i>=slides.length)return;
+  slides[cur].classList.remove('active');
+  cur=i;
+  slides[cur].classList.add('active');
+  tickEls.forEach(function(t,j){
+    t.classList.toggle('cur',j===cur);
+    t.classList.toggle('done',j<cur);
+  });
+  document.getElementById('tcur').textContent=String(cur+1).padStart(2,'0');
+  if(cur===0)startTrace();else stopTrace();
+}
+document.getElementById('prev').addEventListener('click',function(){go(cur-1);});
+document.getElementById('next').addEventListener('click',function(){go(cur+1);});
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowRight'||e.key==='PageDown'||(e.key===' '&&e.target===document.body)){e.preventDefault();go(cur+1);}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(cur-1);}
+  else if(e.key==='Home'){go(0);}
+  else if(e.key==='End'){go(slides.length-1);}
+  else if(e.key==='f'||e.key==='F'){
+    if(document.fullscreenElement)document.exitFullscreen();
+    else document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen();
+  }
+});
+
+/* ═══ title trace (ambient signal) ═══ */
+var traceRAF=null;
+var reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function startTrace(){
+  var c=document.getElementById('trace');if(!c||reduced)return;
+  var ctx=c.getContext('2d');var t0=performance.now();
+  function size(){c.width=c.clientWidth*devicePixelRatio;c.height=c.clientHeight*devicePixelRatio;}
+  size();
+  var lanes=[
+    {col:'#53C48E',f:0.9,a:0.45,ph:0},
+    {col:'#E9B44C',f:1.7,a:0.3,ph:2},
+    {col:'#E06A50',f:0.5,a:0.25,ph:4},
+    {col:'#6D9FD8',f:2.6,a:0.2,ph:1}
+  ];
+  function frame(now){
+    var w=c.width,h=c.height,t=(now-t0)/1000;
+    ctx.clearRect(0,0,w,h);
+    ctx.lineWidth=1.4*devicePixelRatio;
+    lanes.forEach(function(L,li){
+      var base=h*(0.25+li*0.18);
+      ctx.strokeStyle=L.col;ctx.globalAlpha=0.8;
+      ctx.beginPath();
+      for(var x=0;x<=w;x+=4*devicePixelRatio){
+        var u=x/w;
+        var y=base + Math.sin(u*9*L.f + t*L.f + L.ph)*h*0.05*L.a
+                   + Math.sin(u*23*L.f + t*1.7*L.f)*h*0.02*L.a;
+        if(x===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    });
+    ctx.globalAlpha=1;
+    traceRAF=requestAnimationFrame(frame);
+  }
+  stopTrace();
+  traceRAF=requestAnimationFrame(frame);
+  window.addEventListener('resize',size);
+}
+function stopTrace(){if(traceRAF){cancelAnimationFrame(traceRAF);traceRAF=null;}}
+
+/* ═══ slide 1: cascade ═══ */
+var cascSteps=[
+  {s:'eq',note:'A learner in flow — goals and understanding in equilibrium.'},
+  {s:'cf',note:'An impasse: confusion. Resolved through effort, it returns to engagement — and helps learning (D’Mello et al. 2014).'},
+  {s:'fr',note:'Unresolved, confusion hardens into frustration — the moment support is most valuable.'},
+  {s:'bo',note:'Chronic frustration decays into boredom — the state most damaging to learning. The cascade is why timing matters.'}
+];
+var cascI=0;
+var cascNodes=[].slice.call(document.querySelectorAll('.stnode'));
+var cascNote=document.getElementById('cascnote');
+function lightState(key,note){
+  cascNodes.forEach(function(n){n.classList.toggle('lit',n.getAttribute('data-s')===key);});
+  cascNote.textContent=note;
+}
+document.getElementById('cascstep').addEventListener('click',function(){
+  cascI=(cascI+1)%cascSteps.length;
+  lightState(cascSteps[cascI].s,cascSteps[cascI].note);
+});
+cascNodes.forEach(function(n,i){
+  function pick(){cascI=i;lightState(cascSteps[i].s,cascSteps[i].note);}
+  n.addEventListener('click',pick);
+  n.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
+});
+
+/* ═══ slide 4: interventions ═══ */
+var IV=[
+  {name:'Practice Testing',ev:'HIGH UTILITY · Roediger & Karpicke 2006',
+   theory:'Retrieval practice: the act of recalling strengthens retention more than restudy — a desirable difficulty.',
+   learner:'Highlight (or take the whole page) → get a mixed set: 3 MCQ + 2 short-answer by default → answer → instant score.',
+   eng:'MCQ graded deterministically; short answers graded by LLM under a "be generous" rubric with a keyword fallback. Teachers set default counts per course.'},
+  {name:'Interrogative Elaboration',ev:'MODERATE UTILITY · Pressley et al. 1987',
+   theory:'Generating explanations for WHY and HOW facts hold aids memory more than being told — the generation effect.',
+   learner:'Get suggested why/how questions on the passage → ask them in an explanatory dialogue. The tutor explains — it never quizzes here.',
+   eng:'No grading; completion yields a depth rating (surface / moderate / deep). Context re-resolves every turn — each question is grounded on the slide the learner is actually on.'},
+  {name:'Stepwise Learning',ev:'SCAFFOLDING · Wood, Bruner & Ross 1976',
+   theory:'Decompose complex material into a graded sequence within the zone of proximal development; fade support as competence shows.',
+   learner:'The passage becomes 3–6 progressive steps, each with a comprehension check and a hint.',
+   eng:'LLM-checked answers; after 2 failed attempts the answer is shown and the step force-passes — a learner is never trapped (and we disclose that "passed" ≠ "correct").'},
+  {name:'Distributed Practice',ev:'HIGH UTILITY · Cepeda et al. 2006 · SM-2',
+   theory:'Spaced review beats massed review — expanding intervals exploit the spacing effect.',
+   learner:'The passage becomes flashcards; rate each again / hard / good / easy and the schedule adapts.',
+   eng:'Verbatim SM-2: ease seeded 2.5, floored 1.3; intervals 1 → 6 → round(interval × ease); a rating below "good" is a full lapse (reps → 0, interval → 1).'}
+];
+var ivgrid=document.getElementById('ivgrid');
+var ivdetail=document.getElementById('ivdetail');
+IV.forEach(function(iv,i){
+  var d=document.createElement('div');
+  d.className='ivcard';d.tabIndex=0;d.setAttribute('role','button');
+  d.innerHTML='<h3>'+iv.name+'</h3><div class="ev">'+iv.ev+'</div>';
+  function sel(){
+    [].slice.call(ivgrid.children).forEach(function(x){x.classList.remove('sel');});
+    d.classList.add('sel');
+    ivdetail.innerHTML=
+      '<div class="sect"><b>Theory</b><span class="small">'+iv.theory+'</span></div>'+
+      '<div class="sect"><b>What the learner sees</b><span class="small">'+iv.learner+'</span></div>'+
+      '<div class="sect"><b>Engineering</b><span class="small">'+iv.eng+'</span></div>';
+  }
+  d.addEventListener('click',sel);
+  d.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();sel();}});
+  ivgrid.appendChild(d);
+});
+
+/* ═══ slide 7: stack build ═══ */
+var stackLayers=[].slice.call(document.querySelectorAll('#stack .layer'));
+var stackBtn=document.getElementById('stackbtn');
+var stackI=0;
+stackBtn.addEventListener('click',function(){
+  if(stackI<stackLayers.length){
+    stackLayers[stackI].classList.add('show');
+    stackI++;
+    stackBtn.textContent=stackI<stackLayers.length?('Build layer '+(stackI+1)+' →'):'Reset';
+    stackBtn.classList.toggle('primary',stackI<stackLayers.length);
+  }else{
+    stackLayers.forEach(function(l){l.classList.remove('show');});
+    stackI=0;stackBtn.textContent='Build layer 1 →';stackBtn.classList.add('primary');
+  }
+});
+
+/* ═══ slide 9: signal explorer ═══ */
+var SIG=[
+ {g:'FACE (WEBCAM → WORKERS)',items:[
+  {id:'emo',name:'Emotion probabilities',col:'#53C48E',cad:'5 fps',kind:'line',
+   d:'OpenFace 3.0 multitask inference on webcam segments. 8 AffectNet classes per frame + dominant class. Table: emotion_frames.',
+   n:'Real model inference — and the CSV header that said "py-feat" was a mislabel we found and disclose.'},
+  {id:'au',name:'Action units (18)',col:'#7FB8A4',cad:'1 fps',kind:'line',
+   d:'Py-Feat with the xgb AU model: AU01–AU28 intensities per frame + face confidence. Table: pyfeat_au_results.',
+   n:'Interpretable FACS features — AU04 brow-lower, AU06+12 smile — the raw material for engagement estimates.'},
+  {id:'aff',name:'Derived affect (4 states)',col:'#E9B44C',cad:'30 s window / 10 s stride',kind:'blocks',
+   d:'Teacher-configurable rules mean-pool the 8 emotions per window into engagement / boredom / confusion / frustration + a dominant state. Table: affective_state_windows.',
+   n:'Versioned rule sets. A second, client-side classifier exists for replay — different weights, disclosed, never pooled.'}]},
+ {g:'EYES',items:[
+  {id:'gaze',name:'Gaze position',col:'#6D9FD8',cad:'10 Hz',kind:'scatter',
+   d:'WebGazer (weighted-ridge, in-browser): viewport x/y + confidence. Batched 300 samples / 30 s. Table: webgazer_logs.',
+   n:'Region-level, not fixation-level — good enough to know WHICH PANEL holds attention.'},
+  {id:'aoi',name:'AOI dwell',col:'#8FB4E3',cad:'per snapshot + gaze',kind:'blocks',
+   d:'Panel rectangles (sidebar / lesson+pdf / chatbot / header) captured per snapshot; gaze bucketed per panel through a validity mask.',
+   n:'Feeds the per-epoch alignment and the session allocation_score.'},
+  {id:'pupil',name:'Pupil proxy',col:'#5A7E9E',cad:'2 Hz',kind:'line',
+   d:'Dark-pixel-area heuristic on a fixed center crop: d = 2·√(darkPixels/π). Table: pupil_size_logs.',
+   n:'EXPLORATORY — not calibrated pupillometry; excluded from primary claims.'}]},
+ {g:'HANDS & CONTEXT',items:[
+  {id:'clicks',name:'Clicks / cursor / scroll',col:'#C8A2E0',cad:'100–200 ms throttle',kind:'ticks',
+   d:'Pointer position, clicks with coarse selectors (text ≤ 50 chars), scroll position + percent. Flushed every 30 s.',
+   n:'Coarse element identity by design.'},
+  {id:'keys',name:'Keystroke aggregates',col:'#A98FC6',cad:'per field, on blur',kind:'ticks',
+   d:'Count, longest pause, words/min — computed client-side per input field.',
+   n:'NEVER raw keys. The platform cannot reconstruct what was typed.'},
+  {id:'vis',name:'Visibility / viewport',col:'#7E6E9E',cad:'on change',kind:'blocks',
+   d:'Tab visible/hidden with hidden duration; window size and orientation.',
+   n:'Hidden intervals also gate the AOI validity mask.'},
+  {id:'snap',name:'Replay snapshots',col:'#9E8E6E',cad:'every 3 s + events',kind:'ticks',
+   d:'Pixel screenshot + geometry + AOI rects + inner-scroll state + PDF page. Table: session_replay_snapshots.',
+   n:'DOM capture off by default for the study; screenshots carry the replay.'}]},
+ {g:'VOICE OF THE LEARNER',items:[
+  {id:'sr',name:'Self-report probe',col:'#E06A50',cad:'every 15 min',kind:'marks',
+   d:'Mandatory 5-option modal: engaged / bored / confused / frustrated / neutral → activity log metadata.',
+   n:'The anchor for RQ1 validation. Added 2026-07-01 — earlier sessions have none (disclosed).'},
+  {id:'utt',name:'Utterances → EF mining',col:'#D88C6D',cad:'per message',kind:'marks',
+   d:'Every chat/dialogue turn is mined by an LLM for 9 constructs (metacognition, monitoring, confusion, frustration, engagement…) with confidence + rationale. Table: ef_detections.',
+   n:'Each detection stores prompt version, model, latency — calibration-ready.'}]}
+];
+var laneOn={};var laneSel=null;
+var lanelist=document.getElementById('lanelist');
+SIG.forEach(function(grp){
+  var h=document.createElement('div');h.className='lgroup';h.textContent=grp.g;lanelist.appendChild(h);
+  grp.items.forEach(function(s){
+    laneOn[s.id]=true;
+    var b=document.createElement('button');b.className='lane on';b.id='lane_'+s.id;
+    b.innerHTML='<span class="sw" style="background:'+s.col+'"></span><span class="nm">'+s.name+'</span><span class="cad">'+s.cad+'</span>';
+    b.addEventListener('click',function(e){
+      var r=b.getBoundingClientRect();
+      if(e.clientX-r.left<30){ /* swatch zone toggles */
+        laneOn[s.id]=!laneOn[s.id];b.classList.toggle('on',laneOn[s.id]);
+      }else{
+        laneSel=s;
+        [].slice.call(lanelist.querySelectorAll('.lane')).forEach(function(x){x.classList.remove('sel');});
+        b.classList.add('sel');
+        document.getElementById('sigdetail').innerHTML=
+          '<h3 style="color:'+s.col+';margin-bottom:.2rem;">'+s.name+' <span class="tiny" style="color:var(--faint)">· '+s.cad+'</span></h3>'+
+          '<p class="small" style="margin:.3rem 0;">'+s.d+'</p>'+
+          '<p class="small muted" style="margin:.3rem 0;">'+s.n+'</p>';
+      }
+      drawLanes();
+    });
+    lanelist.appendChild(b);
+  });
+});
+/* deterministic-ish mock series */
+function mulberry(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function drawLanes(){
+  var c=document.getElementById('lanescanvas');if(!c)return;
+  var W=c.clientWidth*devicePixelRatio,H=c.clientHeight*devicePixelRatio;
+  if(c.width!==W)c.width=W;if(c.height!==H)c.height=H;
+  var ctx=c.getContext('2d');ctx.clearRect(0,0,W,H);
+  var vis=[];SIG.forEach(function(g){g.items.forEach(function(s){if(laneOn[s.id])vis.push(s);});});
+  if(!vis.length){ctx.fillStyle='#5A6472';ctx.font=(12*devicePixelRatio)+'px monospace';ctx.fillText('all lanes hidden',20,30);return;}
+  var pad=8*devicePixelRatio,rowH=(H-pad*2)/vis.length;
+  /* time grid: 40 min, tick each 5 min */
+  ctx.strokeStyle='#232B36';ctx.lineWidth=1;
+  for(var m=0;m<=40;m+=5){var x=pad+(W-2*pad)*m/40;ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,H-pad);ctx.stroke();}
+  vis.forEach(function(s,i){
+    var y0=pad+rowH*i, mid=y0+rowH*0.55, amp=rowH*0.3;
+    var rnd=mulberry(s.id.length*991+7);
+    ctx.strokeStyle=s.col;ctx.fillStyle=s.col;ctx.lineWidth=1.3*devicePixelRatio;ctx.globalAlpha=.9;
+    if(s.kind==='line'){
+      ctx.beginPath();var ph=rnd()*6;
+      for(var x=pad;x<=W-pad;x+=3*devicePixelRatio){
+        var u=(x-pad)/(W-2*pad);
+        var y=mid+Math.sin(u*14+ph)*amp*.5+Math.sin(u*47+ph*2)*amp*.3+(rnd()-.5)*amp*.25;
+        if(x===pad)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }else if(s.kind==='scatter'){
+      for(var k=0;k<160;k++){var xx=pad+rnd()*(W-2*pad),yy=mid+(rnd()-.5)*amp*1.6;
+        ctx.globalAlpha=.55;ctx.fillRect(xx,yy,2*devicePixelRatio,2*devicePixelRatio);}
+    }else if(s.kind==='blocks'){
+      var xcur=pad;
+      while(xcur<W-pad){var wblk=(20+rnd()*90)*devicePixelRatio;
+        ctx.globalAlpha=.28+rnd()*.5;
+        ctx.fillRect(xcur,y0+rowH*.28,Math.min(wblk,W-pad-xcur),rowH*.5);
+        xcur+=wblk+6*devicePixelRatio;}
+    }else if(s.kind==='ticks'){
+      for(var k2=0;k2<90;k2++){if(rnd()<.6){var xt=pad+rnd()*(W-2*pad);
+        ctx.globalAlpha=.7;ctx.fillRect(xt,y0+rowH*.3,1.4*devicePixelRatio,rowH*.45);}}
+    }else if(s.kind==='marks'){
+      var n=s.id==='sr'?3:14;
+      for(var k3=0;k3<n;k3++){var xm=pad+((k3+0.6+rnd()*0.4)/n)*(W-2*pad);
+        ctx.globalAlpha=.95;ctx.beginPath();ctx.arc(xm,mid,3.4*devicePixelRatio,0,7);ctx.fill();}
+    }
+    ctx.globalAlpha=.9;
+    ctx.font=(10*devicePixelRatio)+'px monospace';
+    ctx.fillStyle=s.col;ctx.fillText(s.name.toLowerCase(),pad+4,y0+11*devicePixelRatio);
+  });
+  ctx.globalAlpha=1;ctx.fillStyle='#5A6472';ctx.font=(9*devicePixelRatio)+'px monospace';
+  ctx.fillText('0 min',pad,H-2);ctx.fillText('40 min (mock session)',W-pad-110*devicePixelRatio,H-2);
+}
+window.addEventListener('resize',drawLanes);
+
+/* ═══ slide 12: coding windows ═══ */
+var WINS=[
+ {t:'00:00–05:00',guess:'engaged',ev:'Steady reading; gaze in lesson panel 82%; AU06+12 mild; utterance: "ok this makes sense so far".'},
+ {t:'05:00–10:00',guess:'engaged',ev:'Practice test started; quick answers; clicks regular; face neutral-positive.'},
+ {t:'10:00–15:00',guess:'confused',ev:'Re-reads same slide 3×; scroll oscillates; AU04 rising; asks chatbot "why is the prior multiplied here?"'},
+ {t:'15:00–20:00',guess:'confused',ev:'Elaboration session opened on the highlighted theorem; gaze dwell on PDF 91%; self-report at 15:00 = confused.'},
+ {t:'20:00–25:00',guess:'frustrated',ev:'Utterance: "this still doesn’t work"; AU04+AU07 sustained; rapid clipboard copies (lengths only).'},
+ {t:'25:00–30:00',guess:'bored',ev:'Tab hidden 2×; gaze drifts off-AOI 47%; cursor idle stretches >30 s; face neutral-low.'}
+];
+var CODES=[
+  {k:'engaged',col:'#53C48E'},{k:'confused',col:'#E9B44C'},
+  {k:'frustrated',col:'#E06A50'},{k:'bored',col:'#8A93A5'},{k:'neutral',col:'#C7CDD6'}
+];
+var winSel=-1;var winCodes={};var winTimes=[];var winOpenT=0;
+var winstrip=document.getElementById('winstrip');
+WINS.forEach(function(w,i){
+  var d=document.createElement('div');d.className='win';d.tabIndex=0;d.setAttribute('role','button');
+  d.innerHTML='<div class="t">'+w.t+'</div><div class="g">guess: <span style="color:'+colOf(w.guess)+'">'+w.guess+'</span></div>';
+  function pick(){
+    winSel=i;winOpenT=performance.now();
+    [].slice.call(winstrip.children).forEach(function(x){x.classList.remove('sel');});
+    d.classList.add('sel');
+    document.getElementById('winctx').innerHTML=
+      '<p class="tiny">WINDOW '+(i+1)+' · '+w.t+' · MACHINE GUESS: <span style="color:'+colOf(w.guess)+'">'+w.guess.toUpperCase()+'</span></p>'+
+      '<p class="small" style="margin:.4rem 0;">'+w.ev+'</p>'+
+      '<p class="small muted" style="margin:.2rem 0;">'+(winCodes[i]?('Your code: <b style="color:'+colOf(winCodes[i])+'">'+winCodes[i]+'</b>'):'Not coded yet — pick on the right.')+'</p>';
+    renderCodeBtns();
+  }
+  d.addEventListener('click',pick);
+  d.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
+  winstrip.appendChild(d);
+});
+function colOf(k){var f=null;CODES.forEach(function(c){if(c.k===k)f=c.col;});return f||'#fff';}
+function renderCodeBtns(){
+  var box=document.getElementById('codebtns');box.innerHTML='';
+  CODES.forEach(function(cdef){
+    var b=document.createElement('button');b.className='codebtn';b.textContent=cdef.k;
+    b.style.borderColor=winSel>=0&&winCodes[winSel]===cdef.k?cdef.col:'';
+    if(winSel>=0&&winCodes[winSel]===cdef.k){b.classList.add('pick');b.style.background=cdef.col;}
+    b.addEventListener('click',function(){
+      if(winSel<0)return;
+      if(winCodes[winSel]===undefined)winTimes.push((performance.now()-winOpenT)/1000);
+      winCodes[winSel]=cdef.k;
+      winstrip.children[winSel].classList.add('coded');
+      updateAgree();renderCodeBtns();
+      document.getElementById('winctx').querySelectorAll('p')[2].innerHTML=
+        'Your code: <b style="color:'+cdef.col+'">'+cdef.k+'</b>'+(cdef.k===WINS[winSel].guess?' — agrees with machine':' — <span style="color:var(--frus)">overrides machine</span> (flows back to the disagreement queue)');
+    });
+    box.appendChild(b);
+  });
+}
+function updateAgree(){
+  var n=Object.keys(winCodes).length;
+  document.getElementById('agN').textContent=n+'/6';
+  if(n){
+    var ag=0;Object.keys(winCodes).forEach(function(i){if(winCodes[i]===WINS[i].guess)ag++;});
+    document.getElementById('agP').textContent=Math.round(100*ag/n)+'%';
+    var ts=winTimes.slice().sort(function(a,b){return a-b;});
+    var med=ts.length?ts[Math.floor(ts.length/2)]:0;
+    document.getElementById('agT').textContent=med.toFixed(1)+'s';
+  }
+}
+renderCodeBtns();
+
+/* ═══ slide 13: LLM coding dims ═══ */
+var DIMS=[
+ {g:'Executive functions',scale:'ordinal 0–2 · 0 none / 1 partial / 2 clear evidence',items:[
+   ['inhibitory_control','Suppressing an impulsive response; resisting distraction or a prepotent wrong step.'],
+   ['working_memory','Holding/juggling multiple pieces of information; signs of load ("what was I doing").'],
+   ['cognitive_flexibility','Switching strategy or representation; abandoning an approach and restarting.'],
+   ['planning','Sequencing steps toward a goal; stating an intended approach before acting.'],
+   ['metacognitive_monitoring','Evaluating one’s own understanding or work ("wait, that’s wrong").'],
+   ['attention_regulation','Managing focus; noticing and correcting drift from the task.']]},
+ {g:'Affective states',scale:'intensity 0–3 · absent / mild / moderate / strong (states may co-occur)',items:[
+   ['engaged_concentration','Absorbed, on-task effort.'],['confusion','Expressed non-understanding or conflict.'],
+   ['frustration','Sustained blockage, exasperation.'],['boredom','Monotony, restlessness, disengagement.'],
+   ['delight','Positive surprise, satisfaction.'],['surprise','Expectation violation.'],
+   ['anxiety','Worry about performance or evaluation.'],['neutral','No detectable affective coloring.']]},
+ {g:'Motivation',scale:'ordinal 0–3 · none / low / moderate / high',items:[
+   ['self_efficacy','Belief in one’s own capability on this task.'],['task_value','Perceived usefulness or importance.'],
+   ['intrinsic_motivation','Interest or enjoyment in the activity itself.'],['extrinsic_motivation','Grades, requirements, external reward.'],
+   ['mastery_goal_orientation','Wanting to understand deeply.'],['performance_goal_orientation','Wanting to look competent / outperform.'],
+   ['effort_regulation','Persisting despite difficulty or tedium.']]},
+ {g:'Learning strategies',scale:'binary 0/1 · judged from utterance + highlighted selection',items:[
+   ['practice_testing','Self-testing / retrieval attempt present.'],['distributed_practice','Spacing or review scheduling present.'],
+   ['stepwise_learning','Decomposition into steps present.'],['elaborative_interrogation','Why/how self-explanation present.']]}
+];
+var dimgroups=document.getElementById('dimgroups');
+DIMS.forEach(function(g){
+  var col=document.createElement('div');col.className='dimg';
+  col.innerHTML='<h3>'+g.g+' <span class="scale">['+g.scale.split(' · ')[0]+']</span></h3>';
+  g.items.forEach(function(it){
+    var b=document.createElement('button');b.className='dim';b.textContent=it[0];
+    b.addEventListener('click',function(){
+      [].slice.call(dimgroups.querySelectorAll('.dim')).forEach(function(x){x.classList.remove('sel');});
+      b.classList.add('sel');
+      document.getElementById('dimdef').innerHTML=
+        '<p class="tiny">'+g.g.toUpperCase()+' · SCALE: '+g.scale+'</p>'+
+        '<p class="small" style="margin:.35rem 0;"><b class="mono">'+it[0]+'</b> — '+it[1]+'</p>'+
+        '<p class="small muted" style="margin:.2rem 0;">Model returns {"value": n, "justification": "≤ 30 words citing this utterance’s text"}.</p>';
+    });
+    col.appendChild(b);
+  });
+  dimgroups.appendChild(col);
+});
+
+/* init */
+go(0);
+drawLanes();
+var ro=new ResizeObserver(function(){drawLanes();});
+ro.observe(document.getElementById('lanescanvas'));
+})();
+</script>
