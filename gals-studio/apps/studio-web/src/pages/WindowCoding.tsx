@@ -817,11 +817,11 @@ export function WindowCoding() {
                     );
                   })}
                 </div>
-                <span className="text-[10px] text-slate-400">
-                  {neutralOverridden
-                    ? 'coder override — click again to clear'
-                    : `auto = ${neutralValue} · 1 unless an affect = 1 (? / NV still allow 1)`}
-                </span>
+              </div>
+              <div className="mt-1 text-[10px] leading-snug text-slate-400">
+                {neutralOverridden
+                  ? 'coder override — click the selected value again to clear'
+                  : `auto = ${neutralValue} · neutral is 1 unless an affect is coded 1 (a “?” or “NV” affect still allows 1)`}
               </div>
               <input
                 value={activeRow?.justNeutral ?? ''}
