@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { Brain, Download, Loader2, CheckCircle, XCircle, Clock, Cog } from 'lucide-react';
+import { formatDateTimeSGT } from '../../../lib/formatDateTime';
 
 interface PyfeatJob {
   id: string;
@@ -153,7 +154,7 @@ export function PyfeatLogViewer({ studentId, courseId }: { studentId: string; co
             return (
               <tr key={job.id} className="border-b border-gray-50 hover:bg-gray-50">
                 <td className="py-1.5 pr-3 font-mono">{job.sessionId.slice(0, 8)}...</td>
-                <td className="py-1.5 pr-3">{new Date(job.createdAt).toLocaleString()}</td>
+                <td className="py-1.5 pr-3">{formatDateTimeSGT(job.createdAt)}</td>
                 <td className="py-1.5 pr-3">
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${JOB_STATUS_CONFIG[job.status].bg} ${JOB_STATUS_CONFIG[job.status].color}`}

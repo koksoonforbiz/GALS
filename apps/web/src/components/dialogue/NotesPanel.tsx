@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../Toast';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 interface DialogueNote {
   id: string;
@@ -449,7 +450,7 @@ export function NotesPanel({
                 {!isEditing && (
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-xs text-gray-400">
-                      {new Date(note.createdAt).toLocaleString()}
+                      {formatDateTimeSGT(note.createdAt)}
                     </span>
                     <div className="flex items-center gap-1">
                       <button

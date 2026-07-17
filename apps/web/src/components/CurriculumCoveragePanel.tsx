@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { InfoTooltip } from './InfoTooltip';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -431,7 +432,7 @@ export default function CurriculumCoveragePanel({ courseId }: { courseId: string
                     {r.status}
                   </span>
                   <span className="ml-2 text-sm text-gray-600">
-                    {new Date(r.createdAt).toLocaleString()}
+                    {formatDateTimeSGT(r.createdAt)}
                   </span>
                 </div>
                 <span className="text-xs text-gray-400">View</span>

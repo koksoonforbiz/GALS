@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import { RagDebugDrawer, RagDebugData } from '../../components/RagDebugDrawer';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -344,9 +345,7 @@ export function CourseStudioPage() {
         <div className="max-w-3xl">
           <form onSubmit={handleGenerate} className="space-y-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Content Title
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Content Title</label>
               <input
                 type="text"
                 value={genTitle}
@@ -383,9 +382,7 @@ export function CourseStudioPage() {
             <div className="border border-gray-200 rounded-lg">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-gray-900">
-                    {generatedDraft.title}
-                  </h4>
+                  <h4 className="text-sm font-semibold text-gray-900">{generatedDraft.title}</h4>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       generatedDraft.status === 'APPROVED'
@@ -402,9 +399,7 @@ export function CourseStudioPage() {
                   {generatedDraft.status === 'DRAFT' && (
                     <>
                       <button
-                        onClick={() =>
-                          handleApproveDraft(generatedDraft.id, editedContent)
-                        }
+                        onClick={() => handleApproveDraft(generatedDraft.id, editedContent)}
                         className="px-3 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700"
                       >
                         Approve
@@ -524,10 +519,9 @@ export function CourseStudioPage() {
                       <span className="text-xs text-gray-400">v{draft.version}</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      By {draft.createdBy.name} &middot;{' '}
-                      {new Date(draft.createdAt).toLocaleString()}
+                      By {draft.createdBy.name} &middot; {formatDateTimeSGT(draft.createdAt)}
                       {draft.reviewedAt &&
-                        ` &middot; Reviewed ${new Date(draft.reviewedAt).toLocaleString()}`}
+                        ` &middot; Reviewed ${formatDateTimeSGT(draft.reviewedAt)}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -604,14 +598,11 @@ export function CourseStudioPage() {
 
                   {selectedDraft.auditLogs.length > 0 && (
                     <div className="mt-4">
-                      <h4 className="text-xs font-semibold text-gray-600 mb-2">
-                        LLM Audit Trail
-                      </h4>
+                      <h4 className="text-xs font-semibold text-gray-600 mb-2">LLM Audit Trail</h4>
                       {selectedDraft.auditLogs.map((log) => (
                         <p key={log.id} className="text-xs text-gray-500">
                           {log.action} via {log.model} ({log.promptTokens}+{log.completionTokens}{' '}
-                          tokens, {log.durationMs}ms) &middot;{' '}
-                          {new Date(log.createdAt).toLocaleString()}
+                          tokens, {log.durationMs}ms) &middot; {formatDateTimeSGT(log.createdAt)}
                         </p>
                       ))}
                     </div>
@@ -648,21 +639,15 @@ export function CourseStudioPage() {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
                       Action
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Model
-                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Model</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
                       Tokens
                     </th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
                       Duration
                     </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Draft
-                    </th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">
-                      Time
-                    </th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Draft</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Time</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -678,11 +663,9 @@ export function CourseStudioPage() {
                         {log.promptTokens}+{log.completionTokens}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-600">{log.durationMs}ms</td>
-                      <td className="px-4 py-2 text-xs text-gray-600">
-                        {log.draft?.title || '-'}
-                      </td>
+                      <td className="px-4 py-2 text-xs text-gray-600">{log.draft?.title || '-'}</td>
                       <td className="px-4 py-2 text-xs text-gray-400">
-                        {new Date(log.createdAt).toLocaleString()}
+                        {formatDateTimeSGT(log.createdAt)}
                       </td>
                     </tr>
                   ))}

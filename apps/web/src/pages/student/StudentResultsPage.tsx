@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../lib/api';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 interface Grader {
   id: string;
@@ -107,7 +108,7 @@ export function StudentResultsPage() {
                           {latestResult.gradedBy === 'auto'
                             ? 'Auto-grader'
                             : (latestResult.grader?.name ?? 'Teacher')}{' '}
-                          | {new Date(latestResult.createdAt).toLocaleString()}
+                          | {formatDateTimeSGT(latestResult.createdAt)}
                         </p>
                       </div>
                     )}
@@ -174,7 +175,7 @@ export function StudentResultsPage() {
                                         : (result.grader?.name ?? 'Teacher')}
                                     </td>
                                     <td className="px-3 py-1.5 text-gray-500">
-                                      {new Date(result.createdAt).toLocaleString()}
+                                      {formatDateTimeSGT(result.createdAt)}
                                     </td>
                                   </tr>
                                 ))}

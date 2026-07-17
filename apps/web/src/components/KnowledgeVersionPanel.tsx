@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { InfoTooltip } from './InfoTooltip';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -149,12 +150,17 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Knowledge Version History</h3>
           <p className="text-sm text-gray-500">
-            Track changes to KCs, graph edges, and content mappings. Restore any previous version safely.
+            Track changes to KCs, graph edges, and content mappings. Restore any previous version
+            safely.
           </p>
         </div>
         {view === 'diff' && (
           <button
-            onClick={() => { setView('list'); setDiff(null); setSelectedVersion(null); }}
+            onClick={() => {
+              setView('list');
+              setDiff(null);
+              setSelectedVersion(null);
+            }}
             className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
           >
             Back to list
@@ -165,14 +171,18 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
           {error}
-          <button onClick={() => setError(null)} className="ml-2 underline">dismiss</button>
+          <button onClick={() => setError(null)} className="ml-2 underline">
+            dismiss
+          </button>
         </div>
       )}
 
       {successMsg && (
         <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-700">
           {successMsg}
-          <button onClick={() => setSuccessMsg(null)} className="ml-2 underline">dismiss</button>
+          <button onClick={() => setSuccessMsg(null)} className="ml-2 underline">
+            dismiss
+          </button>
         </div>
       )}
 
@@ -185,7 +195,8 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
               <p className="text-gray-500 mb-2">No version history yet</p>
               <p className="text-sm text-gray-400">
-                Versions are created automatically when you modify KCs, graph edges, or content mappings.
+                Versions are created automatically when you modify KCs, graph edges, or content
+                mappings.
               </p>
             </div>
           ) : (
@@ -206,21 +217,25 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
                       <span className="text-[10px] text-gray-400">
-                        {new Date(v.createdAt).toLocaleString()}
+                        {formatDateTimeSGT(v.createdAt)}
                       </span>
                       <button
                         onClick={() => viewDiff(v)}
                         className="text-xs px-2 py-1 bg-indigo-50 text-indigo-700 rounded hover:bg-indigo-100"
                       >
                         Diff
-                        <span className="ml-1 inline-flex"><InfoTooltip text="Show detailed changes between this version snapshot and the current state." /></span>
+                        <span className="ml-1 inline-flex">
+                          <InfoTooltip text="Show detailed changes between this version snapshot and the current state." />
+                        </span>
                       </button>
                       <button
                         onClick={() => handleExport(v.id)}
                         className="text-xs px-2 py-1 bg-gray-50 text-gray-600 rounded hover:bg-gray-100"
                       >
                         Export
-                        <span className="ml-1 inline-flex"><InfoTooltip text="Download this version snapshot as a JSON file." /></span>
+                        <span className="ml-1 inline-flex">
+                          <InfoTooltip text="Download this version snapshot as a JSON file." />
+                        </span>
                       </button>
                       {v.version < versions[0]!.version && (
                         <button
@@ -228,7 +243,12 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                           className="text-xs px-2 py-1 bg-amber-50 text-amber-700 rounded hover:bg-amber-100"
                         >
                           Restore
-                          <span className="ml-1 inline-flex"><InfoTooltip text="Restore course KCs, edges, and mappings to this version. Creates a new version from the restored state." warn={true} /></span>
+                          <span className="ml-1 inline-flex">
+                            <InfoTooltip
+                              text="Restore course KCs, edges, and mappings to this version. Creates a new version from the restored state."
+                              warn={true}
+                            />
+                          </span>
                         </button>
                       )}
                     </div>
@@ -253,14 +273,15 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
             <span className="text-gray-500">→</span>
             <span className="font-medium text-gray-700">Current State</span>
             <span className="text-gray-400 ml-auto">
-              {new Date(selectedVersion.createdAt).toLocaleString()}
+              {formatDateTimeSGT(selectedVersion.createdAt)}
             </span>
           </div>
 
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-            <strong>Impact warning:</strong> Restoring this version will replace all current KCs ({diff ? totalChanges(diff) : '...'} changes),
-            graph edges, and content mappings with the snapshot from v{selectedVersion.version}.
-            A new version will be created to preserve the current state.
+            <strong>Impact warning:</strong> Restoring this version will replace all current KCs (
+            {diff ? totalChanges(diff) : '...'} changes), graph edges, and content mappings with the
+            snapshot from v{selectedVersion.version}. A new version will be created to preserve the
+            current state.
           </div>
 
           {diffLoading ? (
@@ -282,7 +303,9 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
               className="text-xs px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
             >
               Export Snapshot
-              <span className="ml-1 inline-flex"><InfoTooltip text="Download the full version snapshot including KCs, edges, and mappings." /></span>
+              <span className="ml-1 inline-flex">
+                <InfoTooltip text="Download the full version snapshot including KCs, edges, and mappings." />
+              </span>
             </button>
           </div>
         </div>
@@ -294,8 +317,8 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h4 className="text-lg font-semibold text-gray-900 mb-2">Confirm Restore</h4>
             <p className="text-sm text-gray-600 mb-4">
-              This will restore the knowledge structure (KCs, graph edges, and content mappings)
-              to the selected version. The current state will be preserved as a new version.
+              This will restore the knowledge structure (KCs, graph edges, and content mappings) to
+              the selected version. The current state will be preserved as a new version.
             </p>
             <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 mb-4">
               <strong>This action will:</strong>
@@ -319,7 +342,12 @@ export default function KnowledgeVersionPanel({ courseId }: { courseId: string }
                 className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
                 {restoring ? 'Restoring...' : 'Restore Version'}
-                <span className="ml-1 inline-flex"><InfoTooltip text="This replaces all current KCs, edges, and mappings with the snapshot data. A new version is created automatically." warn={true} /></span>
+                <span className="ml-1 inline-flex">
+                  <InfoTooltip
+                    text="This replaces all current KCs, edges, and mappings with the snapshot data. A new version is created automatically."
+                    warn={true}
+                  />
+                </span>
               </button>
             </div>
           </div>
@@ -349,25 +377,38 @@ function ChangeTypeBadge({ type }: { type: string }) {
     RESTORE: 'bg-amber-100 text-amber-700',
   };
   return (
-    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${colors[type] || 'bg-gray-100 text-gray-600'}`}>
+    <span
+      className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${colors[type] || 'bg-gray-100 text-gray-600'}`}
+    >
       {type.replace(/_/g, ' ')}
     </span>
   );
 }
 
 function SourceBadge({ source }: { source: string }) {
-  if (source === 'ai') return <span className="text-[10px] px-1 py-0.5 rounded bg-violet-50 text-violet-600">AI</span>;
-  if (source === 'restore') return <span className="text-[10px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">Restore</span>;
+  if (source === 'ai')
+    return <span className="text-[10px] px-1 py-0.5 rounded bg-violet-50 text-violet-600">AI</span>;
+  if (source === 'restore')
+    return (
+      <span className="text-[10px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">Restore</span>
+    );
   return null;
 }
 
 function DiffDisplay({ diff }: { diff: VersionDiff }) {
-  const hasKcChanges = diff.kcs.added.length + diff.kcs.removed.length + diff.kcs.modified.length > 0;
-  const hasEdgeChanges = diff.edges.added.length + diff.edges.removed.length + diff.edges.modified.length > 0;
-  const hasMapChanges = diff.mappings.added.length + diff.mappings.removed.length + diff.mappings.modified.length > 0;
+  const hasKcChanges =
+    diff.kcs.added.length + diff.kcs.removed.length + diff.kcs.modified.length > 0;
+  const hasEdgeChanges =
+    diff.edges.added.length + diff.edges.removed.length + diff.edges.modified.length > 0;
+  const hasMapChanges =
+    diff.mappings.added.length + diff.mappings.removed.length + diff.mappings.modified.length > 0;
 
   if (!hasKcChanges && !hasEdgeChanges && !hasMapChanges) {
-    return <p className="text-sm text-gray-400">No differences — the current state matches this version.</p>;
+    return (
+      <p className="text-sm text-gray-400">
+        No differences — the current state matches this version.
+      </p>
+    );
   }
 
   return (
@@ -389,8 +430,12 @@ function DiffDisplay({ diff }: { diff: VersionDiff }) {
       {hasEdgeChanges && (
         <DiffSection
           title="Graph Edges"
-          added={diff.edges.added.map((e) => `${e.fromKcId?.slice(0, 8)} → ${e.toKcId?.slice(0, 8)} (${e.relationship})`)}
-          removed={diff.edges.removed.map((e) => `${e.fromKcId?.slice(0, 8)} → ${e.toKcId?.slice(0, 8)} (${e.relationship})`)}
+          added={diff.edges.added.map(
+            (e) => `${e.fromKcId?.slice(0, 8)} → ${e.toKcId?.slice(0, 8)} (${e.relationship})`,
+          )}
+          removed={diff.edges.removed.map(
+            (e) => `${e.fromKcId?.slice(0, 8)} → ${e.toKcId?.slice(0, 8)} (${e.relationship})`,
+          )}
           modified={diff.edges.modified.map((e) => ({
             label: e.id.slice(0, 8),
             changes: e.changes,
@@ -402,8 +447,12 @@ function DiffDisplay({ diff }: { diff: VersionDiff }) {
       {hasMapChanges && (
         <DiffSection
           title="Content Mappings"
-          added={diff.mappings.added.map((m) => `KC ${m.kcId?.slice(0, 8)} ↔ Page ${m.pageId?.slice(0, 8)} (${m.strength})`)}
-          removed={diff.mappings.removed.map((m) => `KC ${m.kcId?.slice(0, 8)} ↔ Page ${m.pageId?.slice(0, 8)} (${m.strength})`)}
+          added={diff.mappings.added.map(
+            (m) => `KC ${m.kcId?.slice(0, 8)} ↔ Page ${m.pageId?.slice(0, 8)} (${m.strength})`,
+          )}
+          removed={diff.mappings.removed.map(
+            (m) => `KC ${m.kcId?.slice(0, 8)} ↔ Page ${m.pageId?.slice(0, 8)} (${m.strength})`,
+          )}
           modified={diff.mappings.modified.map((m) => ({
             label: m.id.slice(0, 8),
             changes: m.changes,
@@ -429,9 +478,17 @@ function DiffSection({
     <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 flex items-center gap-2">
         {title}
-        {added.length > 0 && <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">+{added.length}</span>}
-        {removed.length > 0 && <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">-{removed.length}</span>}
-        {modified.length > 0 && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">~{modified.length}</span>}
+        {added.length > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700">+{added.length}</span>
+        )}
+        {removed.length > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700">-{removed.length}</span>
+        )}
+        {modified.length > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+            ~{modified.length}
+          </span>
+        )}
       </div>
       <div className="divide-y divide-gray-100 max-h-48 overflow-y-auto">
         {added.map((item, i) => (
@@ -473,8 +530,14 @@ function DiffSection({
 
 function totalChanges(diff: VersionDiff): number {
   return (
-    diff.kcs.added.length + diff.kcs.removed.length + diff.kcs.modified.length +
-    diff.edges.added.length + diff.edges.removed.length + diff.edges.modified.length +
-    diff.mappings.added.length + diff.mappings.removed.length + diff.mappings.modified.length
+    diff.kcs.added.length +
+    diff.kcs.removed.length +
+    diff.kcs.modified.length +
+    diff.edges.added.length +
+    diff.edges.removed.length +
+    diff.edges.modified.length +
+    diff.mappings.added.length +
+    diff.mappings.removed.length +
+    diff.mappings.modified.length
   );
 }

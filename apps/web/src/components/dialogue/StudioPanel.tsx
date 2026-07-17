@@ -16,6 +16,7 @@ import {
   NotebookPen,
 } from 'lucide-react';
 import { NotesPanel } from './NotesPanel';
+import { formatDateSGT } from '../../lib/formatDateTime';
 import { FlipCard } from './FlipCard';
 import { MindMapTree } from './MindMapTree';
 import { PracticeTestingView } from '../FloatingChatbot/interventions/PracticeTestingView';
@@ -456,8 +457,7 @@ function StudioTab({
               >
                 <div className="text-xs font-medium">{output.title}</div>
                 <div className="text-xs text-gray-400">
-                  {output.type.replace('_', ' ')} &middot;{' '}
-                  {new Date(output.createdAt).toLocaleDateString()}
+                  {output.type.replace('_', ' ')} &middot; {formatDateSGT(output.createdAt)}
                 </div>
               </button>
             ))}
@@ -993,7 +993,7 @@ function InterventionsTab({
                   <div>
                     <span className="font-medium">{intervention.type.replace('_', ' ')}</span>
                     <span className="text-gray-400 ml-2">
-                      {new Date(intervention.createdAt).toLocaleDateString()}
+                      {formatDateSGT(intervention.createdAt)}
                     </span>
                   </div>
                   <span

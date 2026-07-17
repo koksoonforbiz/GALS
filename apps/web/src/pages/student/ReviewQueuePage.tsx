@@ -11,6 +11,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { SavedDataRenderer } from '../../components/FloatingChatbot/ReviewTabView';
+import { formatDateSGT } from '../../lib/formatDateTime';
 
 type InterventionType =
   | 'PRACTICE_TESTING'
@@ -259,7 +260,7 @@ function SavedReviewsTab() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-800 truncate">{review.title}</div>
                   <div className="text-xs text-gray-400 mt-0.5">
-                    {typeInfo.label} &middot; {new Date(review.createdAt).toLocaleDateString()}
+                    {typeInfo.label} &middot; {formatDateSGT(review.createdAt)}
                   </div>
                 </div>
                 <button

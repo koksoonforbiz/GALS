@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { formatDateSGT } from '../../lib/formatDateTime';
 import GenerateStructureWizard from '../../components/GenerateStructureWizard';
 import SourceSelector from '../../components/SourceSelector';
 import PromptComposerModal, { GenerateConfig } from '../../components/PromptComposerModal';
@@ -1586,8 +1587,7 @@ export function CourseBuilderPage() {
                     )}
                     <p className="text-xs text-gray-500 mt-1">
                       {doc.filename} &middot; {Math.round(doc.sizeBytes / 1024)}KB &middot; Uploaded
-                      by {doc.uploadedBy.name} &middot;{' '}
-                      {new Date(doc.createdAt).toLocaleDateString()}
+                      by {doc.uploadedBy.name} &middot; {formatDateSGT(doc.createdAt)}
                     </p>
                     {doc.errorMessage && (
                       <p className="text-xs text-red-600 mt-1">{doc.errorMessage}</p>

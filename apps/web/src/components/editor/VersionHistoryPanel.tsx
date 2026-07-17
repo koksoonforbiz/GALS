@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../lib/api';
 import BlockRenderer from './BlockRenderer';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 interface Version {
   id: string;
@@ -104,10 +105,7 @@ export default function VersionHistoryPanel({ itemId, onClose, onRollback }: Pro
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">Version History</h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-lg"
-          >
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">
             &times;
           </button>
         </div>
@@ -129,9 +127,7 @@ export default function VersionHistoryPanel({ itemId, onClose, onRollback }: Pro
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-gray-700">
-                      v{ver.version}
-                    </span>
+                    <span className="text-xs font-medium text-gray-700">v{ver.version}</span>
                     <span
                       className={`text-[10px] px-1.5 py-0.5 rounded ${sourceBadge(ver.source)}`}
                     >
@@ -139,7 +135,7 @@ export default function VersionHistoryPanel({ itemId, onClose, onRollback }: Pro
                     </span>
                   </div>
                   <p className="text-[11px] text-gray-400 mt-0.5">
-                    {new Date(ver.createdAt).toLocaleString()}
+                    {formatDateTimeSGT(ver.createdAt)}
                   </p>
                 </button>
               ))

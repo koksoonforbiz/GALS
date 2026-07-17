@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { Download, Loader2, Video, CheckCircle, XCircle, Clock, Upload } from 'lucide-react';
+import { formatDateSGT, formatTimeSGT } from '../../../lib/formatDateTime';
 
 interface RecordingSegment {
   id: string;
@@ -132,11 +133,7 @@ export function RecordingLogViewer({ studentId, courseId }: RecordingLogViewerPr
                     {seg.sessionId.slice(0, 8)}...
                   </td>
                   <td className="py-2 pr-3">
-                    {new Date(seg.startWallTime).toLocaleDateString()}{' '}
-                    {new Date(seg.startWallTime).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {formatDateSGT(seg.startWallTime)} {formatTimeSGT(seg.startWallTime)}
                   </td>
                   <td className="py-2 pr-3">{formatDuration(seg.durationMs)}</td>
                   <td className="py-2 pr-3">{formatBytes(seg.fileSizeBytes)}</td>

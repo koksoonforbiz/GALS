@@ -34,6 +34,12 @@ interface AuthContextValue {
   login: (identifier: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
   logout: () => void;
+  // Split out of `logout` so a caller that needs to gate the auth
+  // transition behind something else (e.g. an exit survey) can stop the
+  // webcam/session immediately instead of leaving them running until the
+  // gate clears. `logout` itself just calls both back to back.
+  stopBiometrics: () => void;
+  finishLogout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -137,7 +143,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const logout = useCallback(() => {
+  // Stop the webcam/session immediately. Callable independently of
+  // finishLogout so a UI gate (e.g. the student exit survey in Layout.tsx)
+  // can't leave recording running while it waits on the user.
+  //
+  // Deliberately does NOT call clearActivitySession(): that flips
+  // ActivityLogContext's `sessionId` to null, which App.tsx's
+  // AuthenticatedLoggingWrapper uses to decide whether to wrap Layout in
+  // <LoggingProvider>. Flipping it while Layout must stay mounted (to show
+  // the survey) changes the tree shape React sees in that slot, so React
+  // unmounts and remounts Layout from scratch — wiping the very
+  // `setShowSurvey(true)` this function is called to enable. Session-id
+  // cleanup is harmless to defer a few seconds (see finishLogout), so it
+  // stays there instead.
+  const stopBiometrics = useCallback(() => {
     // Close activity session on the backend (fire-and-forget)
     const sid = sessionStorage.getItem('ats_session_id');
     const token = localStorage.getItem('token');
@@ -152,18 +171,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         keepalive: true,
       }).catch(() => {});
     }
-    clearActivitySession();
     sessionStorage.removeItem(PERMISSION_SESSION_KEY);
     clearPermittedScreenStream();
 
     // Stop all active webcam/media streams before clearing auth
     // NOTE: keep token in localStorage during cleanup so that async
     // handlers (recorder.onstop → uploadSegment → api.patch) can still
-    // read it. Remove it after a short delay.
+    // read it. Remove it after a short delay (see finishLogout).
     mediaStreamRegistry.stopAll();
     // Signal biometric hooks (e.g. WebGazer) to clean up
     window.dispatchEvent(new CustomEvent('ats:logout'));
+  }, []);
 
+  // Complete the auth transition. Assumes stopBiometrics() has already run
+  // (either just below, in logout(), or earlier by the caller).
+  const finishLogout = useCallback(() => {
+    clearActivitySession();
     // Delay token removal so in-flight biometric flushes can still authenticate
     setTimeout(() => {
       localStorage.removeItem('token');
@@ -173,8 +196,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const logout = useCallback(() => {
+    stopBiometrics();
+    finishLogout();
+  }, [stopBiometrics, finishLogout]);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, register, logout, stopBiometrics, finishLogout }}
+    >
       {children}
     </AuthContext.Provider>
   );

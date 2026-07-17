@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { formatDateSGT } from '../../lib/formatDateTime';
 
 interface DialogueSession {
   id: string;
@@ -140,10 +141,10 @@ export function DialogueSessionHistory() {
                     <span className="text-sm font-medium text-gray-900">{session.title}</span>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(session.createdAt).toLocaleDateString()}
+                    {formatDateSGT(session.createdAt)}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
-                    {new Date(session.updatedAt).toLocaleDateString()}
+                    {formatDateSGT(session.updatedAt)}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-500">
                     {session._count?.messages || 0}

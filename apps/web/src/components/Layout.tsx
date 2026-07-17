@@ -11,7 +11,7 @@ import { usePageViewTracker, useActivityLog } from '../lib/activity-log';
 const SURVEY_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 export function Layout() {
-  const { user, logout } = useAuth();
+  const { user, stopBiometrics, finishLogout } = useAuth();
   const navigate = useNavigate();
   const { track, flush } = useActivityLog();
   usePageViewTracker();
@@ -34,19 +34,24 @@ export function Layout() {
       setShowSurvey(false);
       if (pendingLogout) {
         setPendingLogout(false);
-        logout();
+        // Webcam/session were already stopped in handleLogoutRequest, at
+        // click-time — just complete the auth transition.
+        finishLogout();
         navigate('/login');
       } else {
         setLastAnsweredAt(Date.now());
       }
     },
-    [track, flush, pendingLogout, logout, navigate],
+    [track, flush, pendingLogout, finishLogout, navigate],
   );
 
   const handleLogoutRequest = useCallback(() => {
+    // Stop the webcam and close the session immediately on click, so the
+    // (unskippable) exit survey below doesn't extend the recorded session.
+    stopBiometrics();
     setPendingLogout(true);
     setShowSurvey(true);
-  }, []);
+  }, [stopBiometrics]);
 
   return (
     <PageContextProvider>

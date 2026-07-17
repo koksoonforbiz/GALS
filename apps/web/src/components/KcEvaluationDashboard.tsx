@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { useToast } from './Toast';
 import { InfoTooltip } from './InfoTooltip';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -140,20 +141,20 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
 
   const fetchPageTree = useCallback(async () => {
     try {
-      const tree = await apiFetch<PageTreeModule[]>(
-        `/courses/${courseId}/evaluation/tree`,
-      );
+      const tree = await apiFetch<PageTreeModule[]>(`/courses/${courseId}/evaluation/tree`);
       setPageTree(tree);
-    } catch { /* tree is only needed for page selection */ }
+    } catch {
+      /* tree is only needed for page selection */
+    }
   }, [courseId]);
 
   const fetchPastRuns = useCallback(async () => {
     try {
-      const runs = await apiFetch<RunListItem[]>(
-        `/courses/${courseId}/kc-evaluation/runs`,
-      );
+      const runs = await apiFetch<RunListItem[]>(`/courses/${courseId}/kc-evaluation/runs`);
       setPastRuns(runs);
-    } catch { /* non-critical */ }
+    } catch {
+      /* non-critical */
+    }
   }, [courseId]);
 
   useEffect(() => {
@@ -217,9 +218,7 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
 
   const handleViewRun = async (runId: string) => {
     try {
-      const run = await apiFetch<KcEvalRun>(
-        `/courses/${courseId}/kc-evaluation/runs/${runId}`,
-      );
+      const run = await apiFetch<KcEvalRun>(`/courses/${courseId}/kc-evaluation/runs/${runId}`);
       setActiveRun(run);
       setView('results');
     } catch (err: any) {
@@ -286,7 +285,9 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
             key={v}
             onClick={() => setView(v)}
             className={`px-3 py-1.5 text-sm rounded-t transition-colors ${
-              view === v || (view === 'kc-drill' && v === 'results') || (view === 'page-drill' && v === 'results')
+              view === v ||
+              (view === 'kc-drill' && v === 'results') ||
+              (view === 'page-drill' && v === 'results')
                 ? 'bg-indigo-600 text-white'
                 : 'text-gray-600 hover:bg-gray-100'
             }`}
@@ -313,20 +314,28 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
               <button
                 onClick={() => setScopeType('course')}
                 className={`px-4 py-2 text-sm rounded-lg border ${
-                  scopeType === 'course' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  scopeType === 'course'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 Entire Course
-                <span className="ml-1 inline-flex"><InfoTooltip text="Evaluate all pages in the course against the full KC set." /></span>
+                <span className="ml-1 inline-flex">
+                  <InfoTooltip text="Evaluate all pages in the course against the full KC set." />
+                </span>
               </button>
               <button
                 onClick={() => setScopeType('pages')}
                 className={`px-4 py-2 text-sm rounded-lg border ${
-                  scopeType === 'pages' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  scopeType === 'pages'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 Selected Pages
-                <span className="ml-1 inline-flex"><InfoTooltip text="Evaluate only manually selected course pages." /></span>
+                <span className="ml-1 inline-flex">
+                  <InfoTooltip text="Evaluate only manually selected course pages." />
+                </span>
               </button>
             </div>
           </div>
@@ -339,9 +348,14 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
               ) : (
                 pageTree.map((mod) => (
                   <div key={mod.moduleId}>
-                    <div className="text-xs font-semibold text-gray-500 mb-1">{mod.moduleTitle}</div>
+                    <div className="text-xs font-semibold text-gray-500 mb-1">
+                      {mod.moduleTitle}
+                    </div>
                     {mod.pages.map((page) => (
-                      <label key={page.id} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer hover:bg-gray-50 px-1 rounded">
+                      <label
+                        key={page.id}
+                        className="flex items-center gap-2 text-sm py-0.5 cursor-pointer hover:bg-gray-50 px-1 rounded"
+                      >
                         <input
                           type="checkbox"
                           checked={selectedPageIds.has(page.id)}
@@ -366,12 +380,20 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
                   key={d}
                   onClick={() => setDepth(d)}
                   className={`px-4 py-2 text-sm rounded-lg border ${
-                    depth === d ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    depth === d
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {d === 'quick' ? 'Quick Scan' : 'Deep Analysis'}
                   <span className="ml-1 inline-flex">
-                    <InfoTooltip text={d === 'quick' ? 'Fast evaluation with basic structural checks. Lower cost, less detail.' : 'Thorough evaluation with detailed outcome mapping. Higher cost, more comprehensive.'} />
+                    <InfoTooltip
+                      text={
+                        d === 'quick'
+                          ? 'Fast evaluation with basic structural checks. Lower cost, less detail.'
+                          : 'Thorough evaluation with detailed outcome mapping. Higher cost, more comprehensive.'
+                      }
+                    />
                   </span>
                 </button>
               ))}
@@ -390,7 +412,9 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
             className="px-6 py-2.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50"
           >
             {running ? 'Starting...' : 'Run KC Evaluation'}
-            <span className="ml-1 inline-flex"><InfoTooltip text="Execute AI-powered evaluation of your course against KC learning outcomes. Triggers an LLM call." /></span>
+            <span className="ml-1 inline-flex">
+              <InfoTooltip text="Execute AI-powered evaluation of your course against KC learning outcomes. Triggers an LLM call." />
+            </span>
           </button>
         </div>
       )}
@@ -412,7 +436,9 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
           ) : activeRun.status === 'FAILED' ? (
             <div className="text-red-600">Evaluation failed: {activeRun.errorMessage}</div>
           ) : (
-            <div className="text-gray-400">No results yet. Run an evaluation from the Setup tab.</div>
+            <div className="text-gray-400">
+              No results yet. Run an evaluation from the Setup tab.
+            </div>
           )}
         </div>
       )}
@@ -459,12 +485,14 @@ export default function KcEvaluationDashboard({ courseId }: Props) {
                   <div className="flex items-center gap-3">
                     <StatusBadge status={run.status} />
                     <span className="text-sm text-gray-700">
-                      {run.scope.type === 'course' ? 'Full Course' : `${run.scope.pageIds?.length || 0} pages`}
+                      {run.scope.type === 'course'
+                        ? 'Full Course'
+                        : `${run.scope.pageIds?.length || 0} pages`}
                       {' — '}
                       {run.depth === 'deep' ? 'Deep Analysis' : 'Quick Scan'}
                     </span>
                     <span className="ml-auto text-xs text-gray-400">
-                      {new Date(run.createdAt).toLocaleString()}
+                      {formatDateTimeSGT(run.createdAt)}
                     </span>
                   </div>
                 </button>
@@ -487,7 +515,9 @@ function StatusBadge({ status }: { status: string }) {
     FAILED: 'bg-red-100 text-red-700',
   };
   return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
+    <span
+      className={`px-2 py-0.5 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100 text-gray-600'}`}
+    >
       {status}
     </span>
   );
@@ -495,7 +525,8 @@ function StatusBadge({ status }: { status: string }) {
 
 function SeverityIcon({ severity }: { severity: string }) {
   if (severity === 'error') return <span className="text-red-500 text-lg leading-none">●</span>;
-  if (severity === 'warning') return <span className="text-yellow-500 text-lg leading-none">●</span>;
+  if (severity === 'warning')
+    return <span className="text-yellow-500 text-lg leading-none">●</span>;
   return <span className="text-blue-400 text-lg leading-none">●</span>;
 }
 
@@ -521,26 +552,62 @@ function ResultsView({
       {/* Export toolbar */}
       <div className="flex items-center gap-2">
         <h3 className="text-lg font-semibold text-gray-800 flex-1">Evaluation Results</h3>
-        <button onClick={onExportJson} className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
+        <button
+          onClick={onExportJson}
+          className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+        >
           Export JSON
-          <span className="ml-1 inline-flex"><InfoTooltip text="Download evaluation results as a JSON file for programmatic analysis." /></span>
+          <span className="ml-1 inline-flex">
+            <InfoTooltip text="Download evaluation results as a JSON file for programmatic analysis." />
+          </span>
         </button>
-        <button onClick={onExportPdf} className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200">
+        <button
+          onClick={onExportPdf}
+          className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+        >
           Export PDF
-          <span className="ml-1 inline-flex"><InfoTooltip text="Generate a printable PDF evaluation report." /></span>
+          <span className="ml-1 inline-flex">
+            <InfoTooltip text="Generate a printable PDF evaluation report." />
+          </span>
         </button>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <SummaryCard label="Total KCs" value={s.totalKCs} color="bg-blue-50 text-blue-700" />
-        <SummaryCard label="Well Supported" value={s.wellSupportedKCs} color="bg-green-50 text-green-700" />
+        <SummaryCard
+          label="Well Supported"
+          value={s.wellSupportedKCs}
+          color="bg-green-50 text-green-700"
+        />
         <SummaryCard label="Weak KCs" value={s.weakKCs} color="bg-yellow-50 text-yellow-700" />
         <SummaryCard label="Missing KCs" value={s.missingKCs} color="bg-red-50 text-red-700" />
-        <SummaryCard label="Prereq Violations" value={s.prerequisiteViolations} color={s.prerequisiteViolations > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'} />
-        <SummaryCard label="Overloaded Pages" value={s.overloadedPages} color={s.overloadedPages > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-50 text-gray-500'} />
-        <SummaryCard label="Outcome Mismatches" value={s.outcomeMismatches} color={s.outcomeMismatches > 0 ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-500'} />
-        <SummaryCard label="Recommendations" value={s.totalRecommendations} color="bg-indigo-50 text-indigo-700" />
+        <SummaryCard
+          label="Prereq Violations"
+          value={s.prerequisiteViolations}
+          color={
+            s.prerequisiteViolations > 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'
+          }
+        />
+        <SummaryCard
+          label="Overloaded Pages"
+          value={s.overloadedPages}
+          color={
+            s.overloadedPages > 0 ? 'bg-orange-50 text-orange-700' : 'bg-gray-50 text-gray-500'
+          }
+        />
+        <SummaryCard
+          label="Outcome Mismatches"
+          value={s.outcomeMismatches}
+          color={
+            s.outcomeMismatches > 0 ? 'bg-purple-50 text-purple-700' : 'bg-gray-50 text-gray-500'
+          }
+        />
+        <SummaryCard
+          label="Recommendations"
+          value={s.totalRecommendations}
+          color="bg-indigo-50 text-indigo-700"
+        />
       </div>
 
       {/* KC health overview */}
@@ -591,7 +658,9 @@ function ResultsView({
       {/* Page findings */}
       {results.pageFindings.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold text-gray-700 mb-2">Page Issues ({results.pageFindings.length})</h4>
+          <h4 className="text-sm font-semibold text-gray-700 mb-2">
+            Page Issues ({results.pageFindings.length})
+          </h4>
           <div className="space-y-2">
             {results.pageFindings.map((pf) => (
               <button
@@ -602,7 +671,9 @@ function ResultsView({
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-sm font-medium text-gray-900">{pf.pageTitle}</span>
                   <span className="text-xs text-gray-400">{pf.moduleName}</span>
-                  <span className="ml-auto text-xs text-red-600 font-medium">{pf.issues.length} issue(s)</span>
+                  <span className="ml-auto text-xs text-red-600 font-medium">
+                    {pf.issues.length} issue(s)
+                  </span>
                 </div>
                 <div className="flex gap-1 flex-wrap">
                   {pf.issues.slice(0, 3).map((iss, i) => (
@@ -646,8 +717,10 @@ function ResultsView({
 
       {/* Metadata */}
       <div className="text-xs text-gray-400 pt-2 border-t">
-        Evaluated {results.metadata.pagesEvaluated} pages, {results.metadata.totalApprovedKCs} approved KCs
-        {' — '}{results.metadata.depth} analysis at {new Date(results.metadata.evaluatedAt).toLocaleString()}
+        Evaluated {results.metadata.pagesEvaluated} pages, {results.metadata.totalApprovedKCs}{' '}
+        approved KCs
+        {' — '}
+        {results.metadata.depth} analysis at {formatDateTimeSGT(results.metadata.evaluatedAt)}
       </div>
     </div>
   );
@@ -686,9 +759,21 @@ function KcDrillView({
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
-        <SummaryCard label="Total Mappings" value={kf.evidenceCount} color="bg-blue-50 text-blue-700" />
-        <SummaryCard label="High Strength" value={kf.highStrengthCount} color="bg-green-50 text-green-700" />
-        <SummaryCard label="Medium" value={kf.mediumStrengthCount} color="bg-yellow-50 text-yellow-700" />
+        <SummaryCard
+          label="Total Mappings"
+          value={kf.evidenceCount}
+          color="bg-blue-50 text-blue-700"
+        />
+        <SummaryCard
+          label="High Strength"
+          value={kf.highStrengthCount}
+          color="bg-green-50 text-green-700"
+        />
+        <SummaryCard
+          label="Medium"
+          value={kf.mediumStrengthCount}
+          color="bg-yellow-50 text-yellow-700"
+        />
         <SummaryCard label="Low" value={kf.lowStrengthCount} color="bg-red-50 text-red-700" />
       </div>
 
@@ -701,7 +786,9 @@ function KcDrillView({
               <div key={i} className="border rounded-lg p-3 flex items-start gap-2">
                 <SeverityIcon severity={iss.severity} />
                 <div>
-                  <span className="text-xs font-medium text-gray-500">{iss.type.replace(/_/g, ' ')}</span>
+                  <span className="text-xs font-medium text-gray-500">
+                    {iss.type.replace(/_/g, ' ')}
+                  </span>
                   <p className="text-sm text-gray-700">{iss.description}</p>
                   {iss.relatedPageIds && iss.relatedPageIds.length > 0 && (
                     <div className="flex gap-1 mt-1 flex-wrap">
@@ -739,7 +826,8 @@ function KcDrillView({
               >
                 <span className="font-medium">{pf.pageTitle}</span>
                 <span className="text-gray-400 text-xs ml-2">
-                  {pf.issues.filter((i) => i.relatedKCs.some((k) => k.id === kcId)).length} issue(s) involving this KC
+                  {pf.issues.filter((i) => i.relatedKCs.some((k) => k.id === kcId)).length} issue(s)
+                  involving this KC
                 </span>
               </button>
             ))}
@@ -785,9 +873,15 @@ function PageDrillView({
               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                 {iss.type.replace(/_/g, ' ')}
               </span>
-              <span className={`text-xs font-medium ${
-                iss.severity === 'error' ? 'text-red-600' : iss.severity === 'warning' ? 'text-yellow-600' : 'text-blue-500'
-              }`}>
+              <span
+                className={`text-xs font-medium ${
+                  iss.severity === 'error'
+                    ? 'text-red-600'
+                    : iss.severity === 'warning'
+                      ? 'text-yellow-600'
+                      : 'text-blue-500'
+                }`}
+              >
                 {iss.severity}
               </span>
             </div>
@@ -836,7 +930,9 @@ function KcStatusBadge({ status }: { status: string }) {
     missing: 'Missing',
   };
   return (
-    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100'}`}>
+    <span
+      className={`px-2 py-0.5 text-xs font-medium rounded-full ${colors[status] || 'bg-gray-100'}`}
+    >
       {labels[status] || status}
     </span>
   );
@@ -920,7 +1016,7 @@ function buildPdfHtml(r: KcEvalOutput): string {
   <h1>KC-Aware Evaluation Report</h1>
   <p style="color:#6b7280; font-size:13px;">
     ${r.metadata.depth} analysis — ${r.metadata.pagesEvaluated} pages, ${r.metadata.totalApprovedKCs} KCs
-    — ${new Date(r.metadata.evaluatedAt).toLocaleString()}
+    — ${formatDateTimeSGT(r.metadata.evaluatedAt)}
   </p>
 
   <div class="stats">
@@ -942,19 +1038,27 @@ function buildPdfHtml(r: KcEvalOutput): string {
     <tbody>${kcRows}</tbody>
   </table>
 
-  ${r.pageFindings.length > 0 ? `
+  ${
+    r.pageFindings.length > 0
+      ? `
   <h2>Page Issues</h2>
   <table>
     <thead><tr><th>Page</th><th>Module</th><th>Issues</th></tr></thead>
     <tbody>${pageRows}</tbody>
-  </table>` : ''}
+  </table>`
+      : ''
+  }
 
-  ${r.recommendations.length > 0 ? `
+  ${
+    r.recommendations.length > 0
+      ? `
   <h2>Recommendations</h2>
   <table>
     <thead><tr><th>Priority</th><th>Type</th><th>Target</th><th>Rationale</th></tr></thead>
     <tbody>${recRows}</tbody>
-  </table>` : ''}
+  </table>`
+      : ''
+  }
 </body>
 </html>`;
 }

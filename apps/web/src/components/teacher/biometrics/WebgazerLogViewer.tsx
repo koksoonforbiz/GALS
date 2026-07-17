@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { ScanEye, Loader2 } from 'lucide-react';
+import { formatDateTimeSGT } from '../../../lib/formatDateTime';
 
 interface WebgazerLog {
   id: string;
@@ -119,7 +120,7 @@ export function WebgazerLogViewer({
             <tbody>
               {calibrations.map((cal) => (
                 <tr key={cal.id} className="border-b border-gray-50">
-                  <td className="py-1 pr-3">{new Date(cal.createdAt).toLocaleString()}</td>
+                  <td className="py-1 pr-3">{formatDateTimeSGT(cal.createdAt)}</td>
                   <td className="py-1 pr-3">
                     <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
                       {cal.triggeredBy}

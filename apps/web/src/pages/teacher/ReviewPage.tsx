@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 interface Grader {
   id: string;
@@ -153,7 +154,7 @@ export function ReviewPage() {
                     </div>
                     <p className="text-sm text-gray-500">
                       Submitted:{' '}
-                      {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : 'N/A'}
+                      {attempt.submittedAt ? formatDateTimeSGT(attempt.submittedAt) : 'N/A'}
                     </p>
                     <p className="text-sm text-gray-600 mt-1 truncate">
                       {attempt.question.prompt.substring(0, 100)}

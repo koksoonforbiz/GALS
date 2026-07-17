@@ -8,6 +8,7 @@ import type {
   SavedReviewDetail,
   SavedReviewsResponse,
 } from './types';
+import { formatDateSGT } from '../../lib/formatDateTime';
 
 const TYPE_LABELS: Record<InterventionType, { icon: ReactNode; label: string }> = {
   PRACTICE_TESTING: { icon: <FlaskConical size={12} />, label: 'Practice Test' },
@@ -168,7 +169,7 @@ export function ReviewTabView({ onBack }: ReviewTabViewProps) {
                         {review.title}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">
-                        {new Date(review.createdAt).toLocaleDateString()}
+                        {formatDateSGT(review.createdAt)}
                       </div>
                     </div>
                     <button
@@ -249,9 +250,7 @@ function ReviewDetailView({
         <h3 className="text-sm font-semibold text-gray-800 mb-2">{review.title}</h3>
 
         {/* Date */}
-        <div className="text-xs text-gray-400 mb-3">
-          Saved {new Date(review.createdAt).toLocaleDateString()}
-        </div>
+        <div className="text-xs text-gray-400 mb-3">Saved {formatDateSGT(review.createdAt)}</div>
 
         {/* Original text */}
         <div className="mb-3">

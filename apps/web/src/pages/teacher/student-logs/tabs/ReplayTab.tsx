@@ -8,6 +8,7 @@ import type {
 } from '../hooks/useSessionReplay';
 import { exportReplayCsv, downloadCsvFile } from '../lib/exportReplayCsv';
 import { api } from '../../../../lib/api';
+import { formatTimeSecSGT } from '../../../../lib/formatDateTime';
 import {
   computeAoiScoring,
   DEFAULT_VALID_STUDY_PARAMS,
@@ -130,11 +131,7 @@ function formatDuration(ms: number) {
 }
 
 function formatTimestamp(ms: number) {
-  return new Date(ms).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  return formatTimeSecSGT(ms);
 }
 
 // Pick a "nice" tick step for the Signal Timeline x-axis so we end up
@@ -2962,11 +2959,7 @@ function InterventionReviewPanel({
                     {formatInterventionType(iv.type)}
                   </span>
                   <span className="font-mono text-[10px] text-gray-500">
-                    {new Date(triggerMs).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
+                    {formatTimeSecSGT(triggerMs)}
                   </span>
                   <span className="truncate text-gray-500">
                     {iv.selectedText.slice(0, 80)}

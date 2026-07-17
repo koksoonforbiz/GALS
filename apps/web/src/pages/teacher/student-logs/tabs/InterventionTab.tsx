@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { formatTimeSecSGT } from '../../../../lib/formatDateTime';
 
 export function InterventionTab({ logs }: { logs: any[] }) {
   const events = logs.filter((l) => l.action.startsWith('INTERVENTION_'));
@@ -38,7 +38,7 @@ export function InterventionTab({ logs }: { logs: any[] }) {
               )}
             </div>
             <span className="text-[10px] text-gray-400 shrink-0 font-mono">
-              {format(new Date(e.occurredAt), 'HH:mm:ss')}
+              {formatTimeSecSGT(e.occurredAt)}
             </span>
           </div>
         );

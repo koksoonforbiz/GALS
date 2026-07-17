@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Sparkles, AlertTriangle, RotateCcw, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 // Mirrors apps/api/src/text-mining/detection/constructs.ts. Kept in sync
 // manually because @ats/shared doesn't currently re-export the construct
@@ -278,7 +279,7 @@ export function TextMiningPromptsTab({ courseId }: { courseId: string }) {
                   </button>
                   {info.lastEditedAt && (
                     <span className="text-xs text-gray-400 ml-2">
-                      Last edited {new Date(info.lastEditedAt).toLocaleString()}
+                      Last edited {formatDateTimeSGT(info.lastEditedAt)}
                     </span>
                   )}
                 </div>

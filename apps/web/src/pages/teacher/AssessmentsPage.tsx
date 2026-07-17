@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../lib/api';
+import { formatDateSGT } from '../../lib/formatDateTime';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -53,11 +54,7 @@ type View = 'list' | 'create' | 'builder';
 /* ------------------------------------------------------------------ */
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return formatDateSGT(iso);
 }
 
 function totalPoints(qs: AssessmentQuestion[]) {

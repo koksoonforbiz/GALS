@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, ExternalLink, Inbox, Loader2 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { TextMiningSessionScope } from '../hooks/useDashboard';
+import { formatDateTimeSGT } from '../../../lib/formatDateTime';
 
 interface TraceDrawerProps {
   sessionId: string;
@@ -54,7 +55,9 @@ export function TraceDrawer({
       params.set('limit', '50');
 
       api
-        .get<{ items: Detection[]; nextCursor: string | null }>(getDetectionsPath(scope, sessionId, params.toString()))
+        .get<{ items: Detection[]; nextCursor: string | null }>(
+          getDetectionsPath(scope, sessionId, params.toString()),
+        )
         .then((res) => {
           if (cursor) {
             setItems((prev) => [...prev, ...res.items]);
@@ -119,7 +122,7 @@ export function TraceDrawer({
           <div key={d.id} className="px-4 py-3 border-b border-gray-100 hover:bg-gray-50">
             <div className="flex items-center justify-between mb-1">
               <span className="text-xs text-gray-400" title={d.createdAt}>
-                {new Date(d.createdAt).toLocaleString()}
+                {formatDateTimeSGT(d.createdAt)}
               </span>
               <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
                 {d.label}

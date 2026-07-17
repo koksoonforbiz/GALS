@@ -13,6 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { formatDateSGT } from '../../lib/formatDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { useActivityLog } from '../../lib/activity-log';
@@ -1129,7 +1130,7 @@ function SessionPicker({
     if (h < 24) return `${h} hr ago`;
     const days = Math.floor(h / 24);
     if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
-    return d.toLocaleDateString();
+    return formatDateSGT(d);
   };
 
   if (sessions.length === 0) {

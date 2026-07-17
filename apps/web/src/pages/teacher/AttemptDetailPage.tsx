@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../../lib/api';
+import { formatDateTimeSGT } from '../../lib/formatDateTime';
 
 interface Grader {
   id: string;
@@ -227,7 +228,7 @@ export function AttemptDetailPage() {
                           : (result.grader?.name ?? 'Unknown')}
                       </td>
                       <td className="px-4 py-2 text-gray-500">
-                        {new Date(result.createdAt).toLocaleString()}
+                        {formatDateTimeSGT(result.createdAt)}
                       </td>
                     </tr>
                     {result.aiFeedbackJson &&

@@ -11,6 +11,7 @@ import {
 } from '../../lib/socket';
 import { MDXRenderer } from '../../components/MDXRenderer';
 import { useActivityLog } from '../../lib/activity-log';
+import { formatDateTimeSGT, formatTimeSGT } from '../../lib/formatDateTime';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -639,7 +640,7 @@ export function AttemptPage() {
             <p className="text-green-700">{gr.feedback}</p>
             <p className="text-sm text-green-600 mt-2">
               Graded by: {gr.gradedBy}
-              {gr.createdAt && ` on ${new Date(gr.createdAt).toLocaleString()}`}
+              {gr.createdAt && ` on ${formatDateTimeSGT(gr.createdAt)}`}
             </p>
             {gr.aiFeedbackJson && renderAiFeedback(gr.aiFeedbackJson)}
           </div>
@@ -681,7 +682,7 @@ export function AttemptPage() {
         <div className="flex items-center gap-4">
           {isEditable && lastSaved && (
             <span className="text-sm text-gray-500">
-              {saving ? 'Saving...' : `Last saved: ${lastSaved.toLocaleTimeString()}`}
+              {saving ? 'Saving...' : `Last saved: ${formatTimeSGT(lastSaved)}`}
             </span>
           )}
           <StatusBadge status={attempt.status} />

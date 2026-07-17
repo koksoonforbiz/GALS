@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
+import { formatDateSGT } from '../../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -595,10 +596,10 @@ function StudentDetailModal({
           <div>
             <h3 className="text-lg font-semibold">{student.name}</h3>
             <p className="text-sm text-gray-500">
-              {student.email} &middot; Joined {new Date(student.joinedAt).toLocaleDateString()}
+              {student.email} &middot; Joined {formatDateSGT(student.joinedAt)}
             </p>
             <p className="text-xs text-gray-400">
-              Last active: {new Date(student.lastActiveAt).toLocaleDateString()}
+              Last active: {formatDateSGT(student.lastActiveAt)}
             </p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">

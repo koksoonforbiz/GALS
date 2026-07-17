@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../../lib/api';
 import { Eye, Loader2 } from 'lucide-react';
+import { formatTimeSGT, formatDateTimeSGT } from '../../../lib/formatDateTime';
 
 interface PupilSizeLog {
   id: string;
@@ -72,7 +73,7 @@ export function PupilSizeLogViewer({
             key={log.id}
             className="bg-blue-400 rounded-t min-w-[2px] flex-1"
             style={{ height: `${Math.min((log.pupilDiameter / 30) * 100, 100)}%` }}
-            title={`${log.pupilDiameter}px at ${new Date(log.timestamp).toLocaleTimeString()}`}
+            title={`${log.pupilDiameter}px at ${formatTimeSGT(log.timestamp)}`}
           />
         ))}
       </div>
@@ -89,7 +90,7 @@ export function PupilSizeLogViewer({
           <tbody>
             {logs.slice(0, 200).map((log) => (
               <tr key={log.id} className="border-b border-gray-50">
-                <td className="py-1 pr-3">{new Date(log.timestamp).toLocaleString()}</td>
+                <td className="py-1 pr-3">{formatDateTimeSGT(log.timestamp)}</td>
                 <td className="py-1 pr-3 font-mono">{log.pupilDiameter.toFixed(2)}</td>
                 <td className="py-1 font-mono truncate max-w-[100px]">
                   {log.sessionId.slice(0, 8)}

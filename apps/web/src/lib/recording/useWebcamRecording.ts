@@ -53,7 +53,7 @@ export function useWebcamRecording(
   );
 
   const uploadSegment = useCallback(
-    async (blob: Blob, currentSegmentId: string, startTime: number) => {
+    async (blob: Blob, currentSegmentId: string, startTime: number, stoppedAt: number) => {
       const url = uploadUrlRef.current;
       if (!url || blob.size === 0) return;
 
@@ -70,8 +70,11 @@ export function useWebcamRecording(
           throw new Error(`Upload returned ${res.status}: ${res.statusText}`);
         }
 
-        const endWallTime = new Date().toISOString();
-        const durationMs = Date.now() - startTime;
+        // Stamped at actual recording-stop time (passed in from onstop), not
+        // after the upload above resolves — otherwise upload latency (which
+        // can be seconds) inflates the persisted duration.
+        const endWallTime = new Date(stoppedAt).toISOString();
+        const durationMs = stoppedAt - startTime;
 
         await api.patch(`/recording/segments/${currentSegmentId}/complete`, {
           endWallTime,
@@ -153,12 +156,13 @@ export function useWebcamRecording(
       };
 
       recorder.onstop = async () => {
+        const stoppedAt = Date.now();
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const currentSid = segmentIdRef.current;
         const startTime = segmentStartTimeRef.current;
 
         if (currentSid && blob.size > 0) {
-          await uploadSegment(blob, currentSid, startTime);
+          await uploadSegment(blob, currentSid, startTime, stoppedAt);
         }
 
         // If auto-rotated, start a new segment

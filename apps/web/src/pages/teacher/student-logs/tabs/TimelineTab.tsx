@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+import { formatTimeSecSGT } from '../../../../lib/formatDateTime';
 
 const ACTION_COLORS: Record<string, string> = {
   SESSION_START: 'bg-gray-400',
@@ -31,7 +31,7 @@ export function TimelineTab({ logs }: { logs: any[] }) {
             <li key={log.id} className="flex gap-4 items-start">
               {/* Timestamp */}
               <span className="w-20 shrink-0 text-right text-[10px] text-gray-400 font-mono pt-1">
-                {format(new Date(log.occurredAt), 'HH:mm:ss')}
+                {formatTimeSecSGT(log.occurredAt)}
               </span>
 
               {/* Dot */}

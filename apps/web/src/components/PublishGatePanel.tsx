@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../lib/api';
 import { InfoTooltip } from './InfoTooltip';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -50,7 +51,10 @@ interface PublishResult {
 
 // ─── Helpers ─────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<GateCheckStatus, { icon: string; bg: string; text: string; border: string }> = {
+const STATUS_CONFIG: Record<
+  GateCheckStatus,
+  { icon: string; bg: string; text: string; border: string }
+> = {
   pass: { icon: 'PASS', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
   warn: { icon: 'WARN', bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
   fail: { icon: 'FAIL', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
@@ -82,10 +86,9 @@ export default function PublishGatePanel({ courseId }: Props) {
     setError(null);
     setPublishResult(null);
     try {
-      const result = await apiFetch<PublishGateOutput>(
-        `/courses/${courseId}/publish-gate/check`,
-        { method: 'POST' },
-      );
+      const result = await apiFetch<PublishGateOutput>(`/courses/${courseId}/publish-gate/check`, {
+        method: 'POST',
+      });
       setGateResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to run publish checks');
@@ -96,9 +99,7 @@ export default function PublishGatePanel({ courseId }: Props) {
 
   const fetchAudit = useCallback(async () => {
     try {
-      const entries = await apiFetch<AuditEntry[]>(
-        `/courses/${courseId}/publish-gate/audit`,
-      );
+      const entries = await apiFetch<AuditEntry[]>(`/courses/${courseId}/publish-gate/audit`);
       setAuditHistory(entries);
     } catch {
       // silently fail
@@ -119,13 +120,12 @@ export default function PublishGatePanel({ courseId }: Props) {
     setPublishing(true);
     setError(null);
     try {
-      const result = await apiFetch<PublishResult>(
-        `/courses/${courseId}/publish-gate/publish`,
-        { method: 'POST' },
-      );
+      const result = await apiFetch<PublishResult>(`/courses/${courseId}/publish-gate/publish`, {
+        method: 'POST',
+      });
       setPublishResult(result);
       if (result.published) {
-        setGateResult((prev) => prev ? { ...prev, checks: result.checks } : prev);
+        setGateResult((prev) => (prev ? { ...prev, checks: result.checks } : prev));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Publish failed');
@@ -150,7 +150,7 @@ export default function PublishGatePanel({ courseId }: Props) {
       setShowOverrideModal(false);
       setOverrideReason('');
       if (result.published) {
-        setGateResult((prev) => prev ? { ...prev, checks: result.checks } : prev);
+        setGateResult((prev) => (prev ? { ...prev, checks: result.checks } : prev));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Override publish failed');
@@ -264,10 +264,7 @@ export default function PublishGatePanel({ courseId }: Props) {
               {gateResult.checks.map((check) => {
                 const cfg = STATUS_CONFIG[check.status];
                 return (
-                  <div
-                    key={check.id}
-                    className={`${cfg.bg} border ${cfg.border} rounded-lg p-4`}
-                  >
+                  <div key={check.id} className={`${cfg.bg} border ${cfg.border} rounded-lg p-4`}>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -282,9 +279,7 @@ export default function PublishGatePanel({ courseId }: Props) {
                           >
                             {cfg.icon}
                           </span>
-                          <span className="text-sm font-semibold text-gray-900">
-                            {check.label}
-                          </span>
+                          <span className="text-sm font-semibold text-gray-900">{check.label}</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-2">{check.description}</p>
                         {check.details.length > 0 && (
@@ -311,7 +306,16 @@ export default function PublishGatePanel({ courseId }: Props) {
               disabled={loading}
               className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
             >
-              {loading ? 'Checking...' : <>Re-run Checks<span className="ml-1 inline-flex"><InfoTooltip text="Re-execute all structural validation checks against the current course state." /></span></>}
+              {loading ? (
+                'Checking...'
+              ) : (
+                <>
+                  Re-run Checks
+                  <span className="ml-1 inline-flex">
+                    <InfoTooltip text="Re-execute all structural validation checks against the current course state." />
+                  </span>
+                </>
+              )}
             </button>
 
             {gateResult?.overallPass && (
@@ -320,7 +324,16 @@ export default function PublishGatePanel({ courseId }: Props) {
                 disabled={publishing || (publishResult?.published ?? false)}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                {publishing ? 'Publishing...' : <>Publish Course<span className="ml-1 inline-flex"><InfoTooltip text="Publish this course to learners. All gate checks must pass first." /></span></>}
+                {publishing ? (
+                  'Publishing...'
+                ) : (
+                  <>
+                    Publish Course
+                    <span className="ml-1 inline-flex">
+                      <InfoTooltip text="Publish this course to learners. All gate checks must pass first." />
+                    </span>
+                  </>
+                )}
               </button>
             )}
 
@@ -331,14 +344,26 @@ export default function PublishGatePanel({ courseId }: Props) {
                   title="Fix all failing checks to publish"
                   disabled
                 >
-                  Publish (blocked)<span className="ml-1 inline-flex"><InfoTooltip text="Publishing is blocked because one or more checks failed. Fix the issues or use Override." warn={true} /></span>
+                  Publish (blocked)
+                  <span className="ml-1 inline-flex">
+                    <InfoTooltip
+                      text="Publishing is blocked because one or more checks failed. Fix the issues or use Override."
+                      warn={true}
+                    />
+                  </span>
                 </button>
                 <button
                   onClick={() => setShowOverrideModal(true)}
                   disabled={publishing}
                   className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
                 >
-                  Override & Publish<span className="ml-1 inline-flex"><InfoTooltip text="Publish despite failing checks. Requires a written justification that is recorded in the audit trail." warn={true} /></span>
+                  Override & Publish
+                  <span className="ml-1 inline-flex">
+                    <InfoTooltip
+                      text="Publish despite failing checks. Requires a written justification that is recorded in the audit trail."
+                      warn={true}
+                    />
+                  </span>
                 </button>
               </>
             )}
@@ -350,16 +375,11 @@ export default function PublishGatePanel({ courseId }: Props) {
       {view === 'audit' && (
         <div>
           {auditHistory.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              No publish gate runs yet.
-            </div>
+            <div className="text-center py-8 text-gray-400">No publish gate runs yet.</div>
           ) : (
             <div className="space-y-3">
               {auditHistory.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="bg-white border border-gray-200 rounded-lg p-4"
-                >
+                <div key={entry.id} className="bg-white border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span
@@ -383,7 +403,7 @@ export default function PublishGatePanel({ courseId }: Props) {
                       )}
                     </div>
                     <span className="text-xs text-gray-400">
-                      {new Date(entry.createdAt).toLocaleString()}
+                      {formatDateTimeSGT(entry.createdAt)}
                     </span>
                   </div>
 
@@ -419,12 +439,10 @@ export default function PublishGatePanel({ courseId }: Props) {
       {showOverrideModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
-            <h4 className="text-lg font-semibold text-gray-900 mb-2">
-              Override Publish Gate
-            </h4>
+            <h4 className="text-lg font-semibold text-gray-900 mb-2">Override Publish Gate</h4>
             <p className="text-sm text-gray-500 mb-4">
-              One or more publish checks failed. Provide a justification to override and publish anyway.
-              This will be recorded in the audit trail.
+              One or more publish checks failed. Provide a justification to override and publish
+              anyway. This will be recorded in the audit trail.
             </p>
 
             <div className="mb-4">
@@ -474,7 +492,19 @@ export default function PublishGatePanel({ courseId }: Props) {
                 disabled={publishing || overrideReason.trim().length < 10}
                 className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
               >
-                {publishing ? 'Publishing...' : <>Override & Publish<span className="ml-1 inline-flex"><InfoTooltip text="Confirm override publish. Your justification will be permanently recorded." warn={true} /></span></>}
+                {publishing ? (
+                  'Publishing...'
+                ) : (
+                  <>
+                    Override & Publish
+                    <span className="ml-1 inline-flex">
+                      <InfoTooltip
+                        text="Confirm override publish. Your justification will be permanently recorded."
+                        warn={true}
+                      />
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

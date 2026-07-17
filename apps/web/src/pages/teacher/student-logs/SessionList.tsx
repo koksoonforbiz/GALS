@@ -1,8 +1,8 @@
-import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { BarChart2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
+import { formatSGT } from '../../../lib/formatDateTime';
 
 interface Session {
   id: string;
@@ -32,7 +32,14 @@ export function SessionList({ sessions, selectedId, onSelect, onDelete }: Props)
 
   async function deleteSession(e: MouseEvent, session: Session) {
     e.stopPropagation();
-    const label = format(new Date(session.startedAt), 'MMM d, yyyy HH:mm');
+    const label = formatSGT(session.startedAt, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
     if (!window.confirm(`Delete logs for session ${label}? This cannot be undone.`)) return;
 
     setDeletingId(session.id);
@@ -56,7 +63,14 @@ export function SessionList({ sessions, selectedId, onSelect, onDelete }: Props)
           >
             <button type="button" onClick={() => onSelect(s.id)} className="w-full text-left">
               <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                {format(new Date(s.startedAt), 'MMM d, yyyy \u2014 HH:mm')}
+                {formatSGT(s.startedAt, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: false,
+                })}
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {s.durationSecs ? `${Math.round(s.durationSecs / 60)} min` : 'In progress'} ·{' '}
