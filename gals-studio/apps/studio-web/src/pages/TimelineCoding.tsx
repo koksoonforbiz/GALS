@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatDateTimeSGT, formatTimeSGT } from '../lib/formatDateTime';
 import { PlayheadStore, usePlayhead, fmtRel } from '../replay/clock';
 import { snapshotAt, type SnapshotLite, type WebcamSeg } from '../replay/lookup';
 import { DomStage } from '../replay/DomStage';
@@ -1601,11 +1602,9 @@ function SummaryModal({ summary, onClose }: { summary: any; onClose: () => void 
             <div>
               <div className="font-semibold">{summary.session.userDisplayName ?? 'student'}</div>
               <div className="flex items-center gap-1 text-xs text-slate-500">
-                {new Date(summary.session.startedAt).toLocaleString()}
+                {formatDateTimeSGT(summary.session.startedAt)}
                 <ArrowRight size={11} />
-                {summary.session.endedAt
-                  ? new Date(summary.session.endedAt).toLocaleTimeString()
-                  : '— (no end)'}
+                {summary.session.endedAt ? formatTimeSGT(summary.session.endedAt) : '— (no end)'}
               </div>
             </div>
 

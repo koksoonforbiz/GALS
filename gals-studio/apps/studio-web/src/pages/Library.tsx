@@ -2,6 +2,7 @@ import { Camera, Check, Eye, MessageSquare, Smile, Swords, Video, X } from 'luci
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, fmtDuration, type ImportReport, type SessionListItem } from '../lib/api';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 export function Library() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -208,9 +209,7 @@ export function Library() {
                     {s.userDisplayName ?? s.userId.slice(0, 8)}
                   </td>
                   <td className="px-4 py-2">{s.courseTitle ?? s.courseId.slice(0, 8)}</td>
-                  <td className="px-4 py-2 text-slate-500">
-                    {new Date(s.startedAt).toLocaleString()}
-                  </td>
+                  <td className="px-4 py-2 text-slate-500">{formatDateTimeSGT(s.startedAt)}</td>
                   <td className="px-4 py-2">{fmtDuration(s.durationMs)}</td>
                   <td className="px-4 py-2 text-xs text-slate-500">
                     <span title="snapshots">

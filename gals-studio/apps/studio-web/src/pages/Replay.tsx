@@ -177,9 +177,7 @@ export function Replay() {
         <span className="font-mono text-sm tabular-nums">
           {fmtRel(ph.offsetMs)} / {fmtRel(meta.durationMs)}
         </span>
-        <span className="font-mono text-xs text-slate-400">
-          {fmtWall(absoluteMs, meta.session.timezone)}
-        </span>
+        <span className="font-mono text-xs text-slate-400">{fmtWall(absoluteMs)}</span>
         <select
           value={ph.speed}
           onChange={(e) => store.setSpeed(Number(e.target.value))}

@@ -1,17 +1,10 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { formatSGT } from '../../lib/formatDateTime';
 import { useToast } from '../../components/Toast';
 import { ChatMessageContent } from '../../components/ChatMessageContent';
-import {
-  MessageSquare,
-  Bot,
-  ArrowLeft,
-  Loader,
-  Download,
-  BookOpen,
-  Clock,
-} from 'lucide-react';
+import { MessageSquare, Bot, ArrowLeft, Loader, Download, BookOpen, Clock } from 'lucide-react';
 
 interface ConversationSummary {
   surface: 'chatbot' | 'dialogue';
@@ -71,11 +64,7 @@ const SURFACE_META: Record<'chatbot' | 'dialogue', { label: string; icon: JSX.El
 
 function formatDate(iso: string): string {
   try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-    });
+    return formatSGT(iso, { dateStyle: 'medium', timeStyle: 'short' });
   } catch {
     return iso;
   }
@@ -92,9 +81,7 @@ function buildTranscriptMarkdown(detail: ConversationDetail): string {
   lines.push(`# ${detail.title}`);
   lines.push('');
   if (detail.courseTitle) lines.push(`**Course:** ${detail.courseTitle}`);
-  lines.push(
-    `**Surface:** ${SURFACE_META[detail.surface].label}  `,
-  );
+  lines.push(`**Surface:** ${SURFACE_META[detail.surface].label}  `);
   lines.push(`**Started:** ${formatDate(detail.startedAt)}`);
   if (detail.endedAt) lines.push(`**Ended:** ${formatDate(detail.endedAt)}`);
   lines.push('');
@@ -266,9 +253,7 @@ export function ChatHistoryPage() {
                   // about page X" rather than only the LAST selection
                   // overwriting every prior question.
                   const turnSel =
-                    isUser &&
-                    typeof m.selectedText === 'string' &&
-                    m.selectedText.trim().length > 0
+                    isUser && typeof m.selectedText === 'string' && m.selectedText.trim().length > 0
                       ? m.selectedText.trim()
                       : null;
                   const turnPage =
@@ -278,16 +263,12 @@ export function ChatHistoryPage() {
                   return (
                     <div
                       key={m.id}
-                      className={`flex flex-col ${
-                        isUser ? 'items-end' : 'items-start'
-                      }`}
+                      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
                     >
                       {(turnSel || turnPage) && (
                         <div className="max-w-[85%] mb-1 text-[10px] italic text-gray-500">
                           {turnSel
-                            ? `Re: «${turnSel.slice(0, 80)}${
-                                turnSel.length > 80 ? '…' : ''
-                              }»`
+                            ? `Re: «${turnSel.slice(0, 80)}${turnSel.length > 80 ? '…' : ''}»`
                             : null}
                           {turnSel && turnPage ? ' ' : ''}
                           {turnPage ? `(page ${turnPage})` : null}
@@ -301,9 +282,7 @@ export function ChatHistoryPage() {
                         }`}
                       >
                         {isUser ? (
-                          <p className="text-sm whitespace-pre-wrap break-words">
-                            {m.content}
-                          </p>
+                          <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
                         ) : (
                           <ChatMessageContent content={m.content} className="text-sm" />
                         )}
@@ -384,16 +363,12 @@ export function ChatHistoryPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-sm font-medium text-gray-900 truncate">
-                      {it.title}
-                    </span>
+                    <span className="text-sm font-medium text-gray-900 truncate">{it.title}</span>
                     <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
                       {SURFACE_META[it.surface].label}
                     </span>
                   </div>
-                  {it.snippet && (
-                    <p className="text-xs text-gray-500 line-clamp-2">{it.snippet}</p>
-                  )}
+                  {it.snippet && <p className="text-xs text-gray-500 line-clamp-2">{it.snippet}</p>}
                   <div className="text-[10px] text-gray-400 mt-1 flex items-center gap-1.5">
                     <Clock size={10} />
                     {formatDate(it.lastMessageAt)}

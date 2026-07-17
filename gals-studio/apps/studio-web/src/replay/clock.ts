@@ -119,10 +119,10 @@ export function fmtRel(ms: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-export function fmtWall(absoluteMs: number, timezone?: string): string {
-  try {
-    return new Date(absoluteMs).toLocaleTimeString(undefined, { timeZone: timezone, hour12: false });
-  } catch {
-    return new Date(absoluteMs).toLocaleTimeString(undefined, { hour12: false });
-  }
+/** Absolute wall-clock time, always rendered in Singapore time for display. */
+export function fmtWall(absoluteMs: number): string {
+  return new Date(absoluteMs).toLocaleTimeString('en-SG', {
+    timeZone: 'Asia/Singapore',
+    hour12: false,
+  });
 }

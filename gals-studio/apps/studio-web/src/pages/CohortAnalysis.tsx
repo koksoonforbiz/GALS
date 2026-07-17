@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Bot, Check, Download, Pencil, Scissors, TriangleAlert, X } from 'lucide-react';
 import { api } from '../lib/api';
+import { formatDateTimeSGT } from '../lib/formatDateTime';
 
 /** PR1 of the Research Analysis Studio: pick a cohort, see per-session summary
  * cards (interventions / practice-testing / EF / coder coding). No inference. */
@@ -228,7 +229,7 @@ function SessionCard({ s, affect, methods }: { s: any; affect: any; methods: str
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium">{new Date(s.startedAt).toLocaleString()}</span>
+        <span className="font-medium">{formatDateTimeSGT(s.startedAt)}</span>
         <span className="text-slate-400">
           {s.trimmed ? (
             <span
@@ -784,7 +785,7 @@ const HEALTH_KEYS = ['snapshots', 'gaze', 'au', 'emotion', 'webcam', 'chatbot', 
 
 function sessionColHeader(s: any): string {
   const who = s.userDisplayName ?? s.userId?.slice(0, 8) ?? 'session';
-  const when = s.startedAt ? new Date(s.startedAt).toLocaleString() : '';
+  const when = s.startedAt ? formatDateTimeSGT(s.startedAt) : '';
   return when ? `${who} · ${when}` : who;
 }
 
@@ -798,8 +799,8 @@ function buildCohortCsv(sessions: any[], affectFor: (s: any) => any): string {
   add('User', (s) => s.userDisplayName ?? s.userId?.slice(0, 8));
   add('Session ID', (s) => s.sessionId);
   add('Course', (s) => s.courseTitle ?? '');
-  add('Started', (s) => (s.startedAt ? new Date(s.startedAt).toLocaleString() : ''));
-  add('Ended', (s) => (s.endedAt ? new Date(s.endedAt).toLocaleString() : ''));
+  add('Started', (s) => (s.startedAt ? formatDateTimeSGT(s.startedAt) : ''));
+  add('Ended', (s) => (s.endedAt ? formatDateTimeSGT(s.endedAt) : ''));
   add('Duration (s)', (s) => s.durationSecs);
 
   // interventions (1a)

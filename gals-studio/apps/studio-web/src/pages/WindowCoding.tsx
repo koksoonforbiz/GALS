@@ -115,12 +115,12 @@ const csvEsc = (v: unknown) => {
 // filename-safe: keep letters/digits/dot/hyphen, collapse the rest to underscore
 const safeName = (s: string) => (s || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
 
-/** MMDDYYYY for the session's start date, in the session's own timezone. */
-function sessionDateMMDDYYYY(startedAt: string | undefined, timezone?: string): string {
+/** MMDDYYYY for the session's start date, always in Singapore time for display. */
+function sessionDateMMDDYYYY(startedAt: string | undefined): string {
   if (!startedAt) return '';
   try {
     const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone || undefined,
+      timeZone: 'Asia/Singapore',
       month: '2-digit',
       day: '2-digit',
       year: 'numeric',
@@ -482,7 +482,7 @@ export function WindowCoding() {
     a.href = URL.createObjectURL(blob);
     // {userID}_{session date MMDDYYYY}_{coder}.csv  e.g. SMU-0001_06172026_kianyu.csv
     const userId = meta?.session?.userDisplayName ?? meta?.session?.userId ?? 'session';
-    const dateStr = sessionDateMMDDYYYY(meta?.session?.startedAt, meta?.session?.timezone);
+    const dateStr = sessionDateMMDDYYYY(meta?.session?.startedAt);
     a.download = `${safeName(userId)}_${dateStr}_${safeName(coderId)}.csv`;
     document.body.appendChild(a);
     a.click();
