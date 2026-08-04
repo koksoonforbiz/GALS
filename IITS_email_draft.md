@@ -3,25 +3,26 @@
 **To:** IITS (SMU Integrated Information Technology Services) — [IITS contact / helpdesk]
 **Cc:** [SCIS IT / lab contact], [SMU Academy programme lead], [Project supervisor]
 **From:** [Your name], [School / Centre], Singapore Management University
-**Subject:** Request to deploy the GALS learning platform in an upcoming SMU Academy workshop — architecture, data scope, and risk assessment
+**Subject:** Request to deploy the GALS learning platform on the SCIS L40 server for a selected SMU Academy workshop — architecture, data scope, and risk assessment
 
 ---
 
 Dear [IITS contact],
 
 I am writing on behalf of our research team to request IITS's support in hosting the
-**GALS (Gaze-Aware Learning System)** platform for one of the upcoming **SMU Academy
-(SMUA) workshops**. We have designed this deployment to be **deliberately
-low-risk** — minimal data collection, no video recording, and no external
-dependencies — and we would welcome your guidance on the hosting option you consider
-safest. This email lays out exactly what GALS does, what it collects, where the data
-goes, and the residual risks and how we mitigate them, so that IITS can assess it
-quickly.
+**GALS (Gaze-Aware Learning System)** platform for **research purposes**. We intend
+to have a **selected SMU Academy (SMUA) workshop adopt GALS** so that we can study how
+participants revise and consolidate their learning. We have designed this deployment
+to be **deliberately low-risk** — minimal data collection, no video recording, and no
+external dependencies — and we plan to host it on the **SCIS L40 server**. This email
+lays out exactly what GALS does, what it collects, where the data goes, and the
+residual risks and how we mitigate them, so that IITS can assess it quickly.
 
 ---
 
 ## 1. What we plan to do in the workshop
 
+We intend to have a **selected SMUA workshop adopt GALS for research purposes**.
 Towards the end of the workshop, participants will use GALS for roughly
 **[15–20] minutes** to **revise the content covered during the day** and complete a
 **short quiz** to consolidate their learning. Participation is
@@ -97,29 +98,28 @@ finish the quiz. No software is installed on participant or SMU devices.
 
 ---
 
-## 5. Hosting options — request for your recommendation
+## 5. Hosting — SCIS L40 server
 
-Because participants access GALS live during the workshop, we need it hosted on a
-reachable server. We are open to either option below and will **follow whichever IITS
-considers lower-risk and easier to support**:
+For now, we intend to host GALS **on-premise on the SCIS L40 server**, so that all
+data stays entirely within SMU infrastructure and behind the SMU network. Keeping the
+deployment on-premise means no data leaves SMU and there is no external hosting review
+to complete.
 
-| | **Option A — On-premise (SCIS L40 server)** | **Option B — Cloud instance** |
-|---|---|---|
-| **Data location** | Stays within SMU infrastructure | Cloud region **[SG / SMU-approved]** |
-| **Access control** | Behind SMU network / firewall | Security-group + firewall rules |
-| **Main advantage** | Full institutional control; no data leaves SMU | Isolated from SMU systems; easy teardown after workshop |
-| **Main consideration** | Shared research server — needs network/port and isolation review | External hosting review + approved provider |
+- **Data location:** stays within SMU infrastructure
+- **Access control:** behind the SMU network / firewall, reachable only by the
+  workshop cohort during the workshop window
+- **Teardown:** we will take the instance offline immediately after the workshop /
+  study period
 
 We will comply with any hardening, network segmentation, access-control, encryption,
-or logging requirements IITS specifies for the chosen option, and we will **take the
-instance offline immediately after the workshop**.
+port, or logging requirements IITS specifies for hosting on the L40 server.
 
 ---
 
 ## 6. What we are asking of IITS
 
-1. Your **recommendation on the hosting option** (SCIS L40 vs cloud) that best fits
-   SMU's security posture; and
+1. Your **approval / support to host GALS on the SCIS L40 server** for this workshop;
+   and
 2. Any **security / data-governance steps** we should complete beforehand (reviews,
    approvals, configuration standards).
 
