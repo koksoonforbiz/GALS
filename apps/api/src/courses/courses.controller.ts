@@ -15,12 +15,7 @@ import { CoursesService } from './courses.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { ZodValidationPipe } from '../common';
 import { CreateCourseSchema, UpdateEnrollmentPolicySchema } from '@ats/shared';
-import type {
-  CreateCourse,
-  UpdateCourse,
-  UpdateEnrollmentPolicy,
-  UserRole,
-} from '@ats/shared';
+import type { CreateCourse, UpdateCourse, UpdateEnrollmentPolicy, UserRole } from '@ats/shared';
 
 interface RequestUser {
   id: string;
@@ -96,11 +91,10 @@ export class CoursesController {
   // can update policy only for their own courses; admins for any.
   @Patch(':id/enrollment-policy')
   @Roles('teacher', 'admin')
-  @UsePipes(new ZodValidationPipe(UpdateEnrollmentPolicySchema))
   updateEnrollmentPolicy(
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body() dto: UpdateEnrollmentPolicy,
+    @Body(new ZodValidationPipe(UpdateEnrollmentPolicySchema)) dto: UpdateEnrollmentPolicy,
   ) {
     return this.coursesService.updateEnrollmentPolicy(id, req.user.id, dto);
   }
