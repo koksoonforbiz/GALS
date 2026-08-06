@@ -69,3 +69,8 @@ gals-studio/**/dist/
 gals-studio/apps/studio-web/dist/
 gals-studio/**/*.db
 gals-studio/**/*.tsbuildinfo
+
+# Pyodide runtime assets (~11MB) — copied from node_modules by
+# apps/web's postinstall script (scripts/copy-pyodide-assets.mjs),
+# regenerated on every install, never committed.
+apps/web/public/pyodide/

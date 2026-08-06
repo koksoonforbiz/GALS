@@ -3,6 +3,7 @@ import { PrismaModule } from '../prisma';
 import { RagModule } from '../rag';
 import { ActivityLogModule } from '../activity-log';
 import { TextMiningModule } from '../text-mining';
+import { CodePracticeModule } from '../code-practice/code-practice.module';
 import { LearningInterventionsController } from './learning-interventions.controller';
 import { LearningInterventionsService } from './learning-interventions.service';
 
@@ -16,7 +17,13 @@ import { LearningInterventionsService } from './learning-interventions.service';
   // Stage 02: `StudentRagRetrievalService` + `EmbeddingService` come
   // through RagModule exports — no need to import StudentRagModule
   // here (which would create a circular dep).
-  imports: [PrismaModule, RagModule, ActivityLogModule, forwardRef(() => TextMiningModule)],
+  imports: [
+    PrismaModule,
+    RagModule,
+    ActivityLogModule,
+    forwardRef(() => TextMiningModule),
+    CodePracticeModule,
+  ],
   controllers: [LearningInterventionsController],
   providers: [LearningInterventionsService],
   exports: [LearningInterventionsService],

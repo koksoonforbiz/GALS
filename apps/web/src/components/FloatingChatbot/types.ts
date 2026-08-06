@@ -6,12 +6,19 @@ export type ChatbotMode =
   | 'interrogative-elaboration'
   | 'review-tab';
 
+export interface CodeQuestion {
+  question: string;
+  starterCode: string;
+  language: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   suggestedStrategy?: string;
+  codeQuestion?: CodeQuestion;
 }
 
 export type InterventionType =

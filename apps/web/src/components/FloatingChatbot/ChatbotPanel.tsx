@@ -1,8 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePageContext } from '../../contexts/PageContext';
 import { useActivityLog } from '../../lib/activity-log';
 import { api } from '../../lib/api';
+
+const CodeQuestionMessage = lazy(() =>
+  import('../code-practice/CodeQuestionMessage').then((m) => ({
+    default: m.CodeQuestionMessage,
+  })),
+);
 
 /**
  * Strip HTML tags from a string. Keeps text content of the elements but
@@ -231,8 +237,12 @@ export function ChatbotPanel({
     selectedText,
     sourceDocumentId,
     pdfCurrentPage,
+    codeContext,
+    activeCodeQuestion,
     setSelectedText,
     clearSelectedText,
+    setCodeContext,
+    setActiveCodeQuestion,
   } = usePageContext();
   const { track, sessionId, flush: flushActivityLog } = useActivityLog();
 
@@ -384,33 +394,43 @@ export function ChatbotPanel({
     }
 
     try {
+      // The visible bubble for a code-question reply is deliberately a
+      // short acknowledgement (the widget carries the real content — see
+      // the codePracticeInstruction on the backend), but the LLM still
+      // needs to know what the exercise actually was for follow-ups like
+      // "what's the answer?". Expand it here, in the history sent to the
+      // backend only — never in what's rendered on screen.
       const conversationHistory = messages.map((m) => ({
         role: m.role as 'user' | 'assistant',
-        content: m.content,
+        content:
+          m.role === 'assistant' && m.codeQuestion
+            ? `${m.content}\n\n(Generated coding exercise — question: "${m.codeQuestion.question}". Starter code:\n${m.codeQuestion.starterCode})`
+            : m.content,
       }));
 
-      const result = await api.post<{ reply: string; suggestedStrategy: string | null }>(
-        '/learning-interventions/chat',
-        {
-          message: inputValue,
-          conversationHistory,
-          courseId,
-          pageType,
-          contentId: contentId || undefined,
-          contentTitle: contentTitle || undefined,
-          selectedText: effectiveSelectedText || undefined,
-          // Bug 1/5/6 (2026-06-12): tell the backend which PDF slide the
-          // student is currently viewing so chat() can narrow the
-          // grounded PDF text to a small window around it. Without this,
-          // the LLM saw the full 50KB cap and answered about slide 1.
-          // Undefined for non-PDF surfaces (PAGE-type lessons), which
-          // the backend treats as a request for full-document context.
-          currentPage:
-            typeof pdfCurrentPage === 'number' && pdfCurrentPage > 0
-              ? pdfCurrentPage
-              : undefined,
-        },
-      );
+      const result = await api.post<{
+        reply: string;
+        suggestedStrategy: string | null;
+        codeQuestion: { question: string; starterCode: string; language: string } | null;
+      }>('/learning-interventions/chat', {
+        message: inputValue,
+        conversationHistory,
+        courseId,
+        pageType,
+        contentId: contentId || undefined,
+        contentTitle: contentTitle || undefined,
+        selectedText: effectiveSelectedText || undefined,
+        // Bug 1/5/6 (2026-06-12): tell the backend which PDF slide the
+        // student is currently viewing so chat() can narrow the
+        // grounded PDF text to a small window around it. Without this,
+        // the LLM saw the full 50KB cap and answered about slide 1.
+        // Undefined for non-PDF surfaces (PAGE-type lessons), which
+        // the backend treats as a request for full-document context.
+        currentPage:
+          typeof pdfCurrentPage === 'number' && pdfCurrentPage > 0 ? pdfCurrentPage : undefined,
+        codeContext: codeContext || undefined,
+        activeCodeQuestion: activeCodeQuestion || undefined,
+      });
 
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -418,8 +438,13 @@ export function ChatbotPanel({
         content: result.reply,
         timestamp: new Date(),
         suggestedStrategy: result.suggestedStrategy || undefined,
+        codeQuestion: result.codeQuestion || undefined,
       };
       setMessages((prev) => [...prev, assistantMsg]);
+      if (result.codeQuestion) {
+        setCodeContext(null);
+        setActiveCodeQuestion(result.codeQuestion);
+      }
       track('CHATBOT_MESSAGE_RECEIVED', {
         courseId,
         moduleItemId: contentId ?? undefined,
@@ -734,6 +759,23 @@ export function ChatbotPanel({
                   )}
                 </div>
               </div>
+              {/* Inline code question — the LLM decided this message was
+                  a request for a coding exercise. Runs entirely
+                  client-side via Pyodide; there's no grading, so
+                  reporting a run just updates PageContext.codeContext for
+                  the next turn (shared with the Playground). */}
+              {msg.role === 'assistant' && msg.codeQuestion && (
+                <div className="flex justify-start mt-1.5">
+                  <div className="max-w-[95%] w-full min-w-0 overflow-hidden px-3 py-2 rounded-lg text-xs bg-gray-100 text-gray-800">
+                    <Suspense fallback={<div className="text-gray-400">Loading code editor…</div>}>
+                      <CodeQuestionMessage
+                        question={msg.codeQuestion.question}
+                        starterCode={msg.codeQuestion.starterCode}
+                      />
+                    </Suspense>
+                  </div>
+                </div>
+              )}
               {/* Strategy suggestion card */}
               {msg.suggestedStrategy && STRATEGY_META[msg.suggestedStrategy] && (
                 <div className="flex justify-start mt-1.5">

@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import type { CodeContext } from '../lib/pyodideRunner';
 
 export type PageType = 'lesson' | 'quiz' | 'reading' | 'dashboard' | 'review-tab' | 'other';
+
+export interface ActiveCodeQuestion {
+  question: string;
+  starterCode: string;
+  language: string;
+}
 
 interface PageContextType {
   pageType: PageType;
@@ -34,6 +41,22 @@ interface PageContextType {
    * on unmount.
    */
   chatbotDocked: boolean;
+  /**
+   * The student's most recent Python run — from the inline code-question
+   * widget in chat OR the standalone Playground, whichever ran last.
+   * Attached to the next chat message so the assistant can see the real
+   * code/output/error instead of guessing. Cleared whenever a new code
+   * question is generated.
+   */
+  codeContext: CodeContext | null;
+  /**
+   * The most recently generated coding exercise, set the moment it's
+   * generated — independent of `codeContext` above, which only exists
+   * after the student clicks Run. Lets the backend answer "what's the
+   * answer" / "give me a hint" before any run happened. Overwritten
+   * whenever a new exercise is generated.
+   */
+  activeCodeQuestion: ActiveCodeQuestion | null;
   setPageContext: (
     ctx: Partial<
       Pick<
@@ -45,6 +68,8 @@ interface PageContextType {
   setSelectedText: (text: string | null) => void;
   clearSelectedText: () => void;
   setChatbotDocked: (docked: boolean) => void;
+  setCodeContext: (ctx: CodeContext | null) => void;
+  setActiveCodeQuestion: (q: ActiveCodeQuestion | null) => void;
   /** Set by the PdfReader (via the lifting prop `onPdfMeta`) so
    *  intervention views can default page-range inputs sensibly. */
   setPdfNumPages: (n: number | null) => void;
@@ -62,6 +87,10 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(null);
   const [selectedText, setSelectedTextState] = useState<string | null>(null);
   const [chatbotDocked, setChatbotDockedState] = useState<boolean>(false);
+  const [codeContext, setCodeContextState] = useState<CodeContext | null>(null);
+  const [activeCodeQuestion, setActiveCodeQuestionState] = useState<ActiveCodeQuestion | null>(
+    null,
+  );
   const [pdfNumPages, setPdfNumPagesState] = useState<number | null>(null);
   const [pdfCurrentPage, setPdfCurrentPage] = useState<number | null>(null);
   const [pdfCurrentPageText, setPdfCurrentPageTextState] = useState<string | null>(null);
@@ -100,6 +129,14 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
 
   const setChatbotDocked = useCallback((docked: boolean) => {
     setChatbotDockedState(docked);
+  }, []);
+
+  const setCodeContext = useCallback((ctx: CodeContext | null) => {
+    setCodeContextState(ctx);
+  }, []);
+
+  const setActiveCodeQuestion = useCallback((q: ActiveCodeQuestion | null) => {
+    setActiveCodeQuestionState(q);
   }, []);
 
   const setPdfNumPages = useCallback((n: number | null) => {
@@ -157,10 +194,14 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         pdfCurrentPage,
         pdfCurrentPageText,
         chatbotDocked,
+        codeContext,
+        activeCodeQuestion,
         setPageContext,
         setSelectedText,
         clearSelectedText,
         setChatbotDocked,
+        setCodeContext,
+        setActiveCodeQuestion,
         setPdfNumPages,
         setPdfCurrentPageText,
       }}

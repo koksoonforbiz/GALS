@@ -30,6 +30,16 @@ import {
 } from '../rag/shared/faithfulness-check.service';
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
+import { CodePracticeService } from '../code-practice/code-practice.service';
+import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
+
+// Marker the chat LLM appends to its own reply, on its own line, when
+// (and only when) it judges the student's message to be a request for
+// a coding-practice exercise — mirrors the [SUGGEST:...] pattern below,
+// but triggers question generation instead of a strategy suggestion.
+// Never touches the 4 existing learning-strategy code paths.
+const CODE_PRACTICE_MARKER = '[CODE_PRACTICE_REQUESTED]';
+const CODE_PRACTICE_MARKER_REGEX = /\n?\[CODE_PRACTICE_REQUESTED\]\s*$/;
 
 const SLIDE_BOILERPLATE_PATTERNS = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
 
@@ -527,6 +537,7 @@ export class LearningInterventionsService {
     // service. Both come through RagModule exports.
     private readonly groundedEvidence: GroundedEvidenceService,
     private readonly faithfulnessCheck: FaithfulnessCheckService,
+    private readonly codePracticeService: CodePracticeService,
   ) {}
 
   // ─── Prompt Config ────────────────────────────────────────
@@ -4028,7 +4039,11 @@ export class LearningInterventionsService {
     userId: string,
     dto: ChatRequestDto,
     activitySessionId?: string,
-  ): Promise<{ reply: string; suggestedStrategy: string | null }> {
+  ): Promise<{
+    reply: string;
+    suggestedStrategy: string | null;
+    codeQuestion: CodePracticeQuestion | null;
+  }> {
     if (!dto.message || dto.message.trim().length < 2) {
       throw new BadRequestException('Message is too short');
     }
@@ -4061,13 +4076,20 @@ export class LearningInterventionsService {
     // Ground the chat reply on whatever context is most relevant for what
     // the student is looking at. Resolution order, first hit wins:
     //
-    //  1. STANDARD-MODE PDF: if dto.contentId is a PDF module item the
-    //     student is currently reading, use that PDF's already-extracted
-    //     text (via the matching teacher SourceDocument). This makes the
-    //     chatbot able to answer "summarise this chapter" for a PDF
+    //  1. SELECTION: if the student highlighted/checked ≥20 chars, that's
+    //     an explicit, deliberate signal of what they want to discuss —
+    //     trust it over a guess at their current page. (2026-08-05: moved
+    //     ahead of pdf-source — it previously ran second, so a highlight
+    //     was silently ignored whenever pdf-source resolution succeeded,
+    //     which was effectively always while a PDF was open. Reported via
+    //     the code-practice feature: a highlighted slide produced a
+    //     coding question about unrelated page content.)
+    //  2. STANDARD-MODE PDF: if dto.contentId is a PDF module item the
+    //     student is currently reading and nothing is selected, use that
+    //     PDF's already-extracted text (via the matching teacher
+    //     SourceDocument), windowed around dto.currentPage. This makes
+    //     the chatbot able to answer "summarise this chapter" for a PDF
     //     lesson without the student having to highlight first.
-    //  2. SELECTION: if the student highlighted ≥20 chars on the page,
-    //     trust that as the most precise signal of what they care about.
     //  3. STUDENT-RAG: dialogue-mode fallback — the student's own
     //     uploaded materials (never the teacher's master corpus,
     //     never another student's data).
@@ -4082,7 +4104,26 @@ export class LearningInterventionsService {
     let evidence: GroundedEvidence | null = null;
     let contextSource: 'pdf-source' | 'selection' | 'student-rag' | 'none' = 'none';
 
-    if (dto.contentId) {
+    {
+      const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
+      if (sel.length >= 20) {
+        evidence = {
+          contextChunks: [
+            {
+              id: 'selection:current',
+              text: sel,
+              citationLabel: `Source 1: highlighted passage`,
+            },
+          ],
+          images: [],
+          hasImages: false,
+          totalImageBytes: 0,
+        };
+        contextSource = 'selection';
+      }
+    }
+
+    if (!evidence && dto.contentId) {
       try {
         // Page-aware resolution (Bug 1 fix, 2026-06-12). When the
         // client supplies `currentPage` (the slide the student is
@@ -4174,25 +4215,6 @@ export class LearningInterventionsService {
     }
 
     if (!evidence) {
-      const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
-      if (sel.length >= 20) {
-        evidence = {
-          contextChunks: [
-            {
-              id: 'selection:current',
-              text: sel,
-              citationLabel: `Source 1: highlighted passage`,
-            },
-          ],
-          images: [],
-          hasImages: false,
-          totalImageBytes: 0,
-        };
-        contextSource = 'selection';
-      }
-    }
-
-    if (!evidence) {
       try {
         const rawChunks = await this.queryStudentRagRawChunks(userId, dto.courseId, dto.message);
         if (rawChunks.length > 0) {
@@ -4211,7 +4233,7 @@ export class LearningInterventionsService {
 
     // Stage 06 — strategy-suggesting persona kept intact; the
     // grounding contract is appended via `buildGroundedMessages`.
-    const systemPersona = `You are a friendly and supportive learning assistant embedded in an educational platform. Your role is to help students understand their course material and guide them to use effective learning strategies.
+    let systemPersona = `You are a friendly and supportive learning assistant embedded in an educational platform. Your role is to help students understand their course material and guide them to use effective learning strategies.
 
 You have access to four learning strategies the student can use:
 - **Practice Testing**: Generate quiz questions from selected text to test knowledge retention
@@ -4242,6 +4264,67 @@ When the student is viewing ${dto.contentTitle ? `"${dto.contentTitle}"` : 'cour
 The student is currently viewing slide ${Math.floor(dto.currentPage)} of the document. If they ask "which slide am I on" or anything about the current page/position, use this number. If their highlighted selection (below) appears to come from a DIFFERENT slide than slide ${Math.floor(dto.currentPage)}, treat the selection as the topic they want to discuss but answer the position question based on their CURRENT viewing slide (${Math.floor(dto.currentPage)}).`
         : ''
     }`;
+
+    // Additive-only: appended on top of the persona above, never
+    // replacing it. Tells the LLM to flag a coding-practice request via
+    // a fixed marker instead of adding a new manual "Code Practice"
+    // trigger anywhere in the UI — the LLM decides, same mechanism as
+    // [SUGGEST:...] above but for a different, independently-handled
+    // outcome (question generation, not a strategy suggestion).
+    const codePracticeInstruction = `
+If — and only if — the student is explicitly asking for a coding practice question, coding exercise, or to write/practice code: do NOT write the exercise, starter code, or any code yourself in this reply — a separate interactive code widget will be generated and shown to the student automatically, scoped to whatever they highlighted. Writing your own version here would duplicate it and can describe a different, unrelated exercise, which is confusing. Instead, respond with ONLY one short, friendly acknowledgement sentence (e.g. "Sure — here's a coding exercise for you below."), then append this exact marker on its own new line at the very end of your reply, after everything else (including any [SUGGEST:...] line): ${CODE_PRACTICE_MARKER}
+Never mention this marker to the student or explain that you're adding it. Do not add it, and do not write a coding exercise yourself, for ordinary questions about code, debugging help, or general course questions — only when they're explicitly asking to be given a new exercise to practice.`;
+
+    systemPersona += `\n${codePracticeInstruction}`;
+
+    // Additive-only: if the student has an active code exercise, fold
+    // in what actually happened on their last Run so a follow-up like
+    // "why is this wrong?" is answered from the real error, not a
+    // guess — on top of the RAG-grounded prompt below, never instead
+    // of it.
+    // NOTE on both blocks below: the shared GROUNDING_CONTRACT appended
+    // after this persona (see buildGroundedMessages) tells the model to
+    // "answer ONLY from the supplied sources... do not guess" — a rule
+    // aimed at RAG citation accuracy that, taken literally, makes the
+    // model refuse to solve a coding exercise (since the solution isn't
+    // "in" the cited passage) and fall back to describing the source
+    // material instead. That's a real failure mode we hit. Since
+    // GROUNDING_CONTRACT is shared fixed infrastructure used by every
+    // grounded surface (all 4 strategies + dialogue) and must not be
+    // edited here, both blocks explicitly carve out this one exception.
+    if (dto.codeContext) {
+      const { question, code, stdout, stderr, error } = dto.codeContext;
+      systemPersona += `
+
+The student is working on this coding exercise: "${question}"
+Their current code:
+\`\`\`python
+${code}
+\`\`\`
+Running it produced:
+stdout: ${stdout || '(empty)'}
+stderr: ${stderr || '(empty)'}
+error: ${error ?? '(none)'}
+The grounding rule below about answering ONLY from the supplied sources does NOT apply to this exercise: diagnosing their code/error, explaining why it's wrong, or writing corrected code is expected and is not "outside knowledge" or "guessing" — it's the whole point. Do this even if it's not from the cited passage.`;
+    }
+
+    // Additive-only, independent of codeContext above: the student may
+    // ask "what's the answer" / "give me a hint" before ever clicking
+    // Run, so codeContext (which only exists post-Run) can be unset here.
+    // Putting the exercise directly in the persona is far more reliable
+    // than hoping the model picks it out of the conversation history
+    // text on its own.
+    if (dto.activeCodeQuestion) {
+      const { question, starterCode } = dto.activeCodeQuestion;
+      systemPersona += `
+
+The student has an active coding exercise open: "${question}"
+Starter code given to them:
+\`\`\`python
+${starterCode}
+\`\`\`
+If they ask for the answer, a hint, or help with "it" / "this" / "the coding question", they mean THIS exercise specifically — answer about it directly (write the actual solving code if asked for "the answer"), don't just describe the source material. The grounding rule below about answering ONLY from the supplied sources does NOT apply here: writing a solution or hint for this exercise is expected and is not "outside knowledge" or "guessing".`;
+    }
 
     const grounded = buildGroundedMessages({
       systemPersona,
@@ -4289,6 +4372,30 @@ The student is currently viewing slide ${Math.floor(dto.currentPage)} of the doc
       suggestedStrategy = strategyMatch[1]!;
       // Remove the tag from the visible reply
       reply = reply.replace(strategyMatch[0], '').trim();
+    }
+
+    // Extract the code-practice marker if present, and generate the
+    // exercise. Failures here are non-fatal — the student still gets
+    // their normal reply even if question generation errors out.
+    let codeQuestion: CodePracticeQuestion | null = null;
+    if (CODE_PRACTICE_MARKER_REGEX.test(reply)) {
+      reply = reply.replace(CODE_PRACTICE_MARKER_REGEX, '').trim();
+      try {
+        const course = await this.prisma.course.findUnique({
+          where: { id: dto.courseId },
+          select: { title: true },
+        });
+        codeQuestion = await this.codePracticeService.generateQuestion(
+          teacherId,
+          dto.courseId,
+          course?.title ?? 'this course',
+          { groundingText: dto.message, highlightedText: dto.selectedText },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `code_practice_generation failed for course ${dto.courseId}: ${(err as Error).message}`,
+        );
+      }
     }
 
     // Persist both turns to chatbot_messages so:
@@ -4345,6 +4452,9 @@ The student is currently viewing slide ${Math.floor(dto.currentPage)} of the doc
             promptTokens: llmPromptTokens,
             completionTokens: llmCompletionTokens,
             model: llmModel,
+            codeQuestion: codeQuestion
+              ? (codeQuestion as unknown as Prisma.InputJsonValue)
+              : undefined,
           },
         ],
       })
@@ -4354,6 +4464,6 @@ The student is currently viewing slide ${Math.floor(dto.currentPage)} of the doc
         ),
       );
 
-    return { reply, suggestedStrategy };
+    return { reply, suggestedStrategy, codeQuestion };
   }
 }

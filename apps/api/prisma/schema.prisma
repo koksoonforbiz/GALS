@@ -949,6 +949,13 @@ model ChatbotMessage {
   completionTokens Int?    @map("completion_tokens")
   model            String?
 
+  // Coding exercise the LLM generated for this turn, if the student
+  // asked for one — {question, starterCode, language}. Null on USER
+  // rows and on ASSISTANT rows that aren't a code question. Lets the
+  // review surface and future reloads render the exercise, not just
+  // the reply text.
+  codeQuestion Json? @map("code_question")
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([studentSessionId])

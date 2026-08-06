@@ -27,4 +27,30 @@ export interface ChatRequestDto {
    * falls back to the full PDF text.
    */
   currentPage?: number;
+  /**
+   * The student's current code-practice exercise (if any), with the
+   * result of their last Run. Attached to the next chat turn so the
+   * assistant can see what actually happened instead of guessing —
+   * purely additive to the RAG-grounded prompt below.
+   */
+  codeContext?: {
+    question: string;
+    code: string;
+    stdout: string;
+    stderr: string;
+    error: string | null;
+  };
+  /**
+   * The most recently generated coding exercise, if any — set the
+   * moment it's generated, independent of whether the student has run
+   * it yet. Lets the backend answer "what's the answer" / "give me a
+   * hint" about the SPECIFIC exercise even before a Run happened (when
+   * `codeContext` above is still unset). Overwritten whenever a new
+   * exercise is generated.
+   */
+  activeCodeQuestion?: {
+    question: string;
+    starterCode: string;
+    language: string;
+  };
 }

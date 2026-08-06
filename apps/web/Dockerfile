@@ -15,6 +15,7 @@ RUN pnpm run build
 
 FROM base AS development
 COPY apps/web/package.json ./
+COPY apps/web/scripts ./scripts
 RUN echo "shamefully-hoist=true" > .npmrc
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN node -e "const p=require('./package.json');p.pnpm={onlyBuiltDependencies:['esbuild']};require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))"
@@ -27,6 +28,7 @@ CMD ["pnpm", "exec", "vite", "--host"]
 
 FROM base AS build
 COPY apps/web/package.json ./
+COPY apps/web/scripts ./scripts
 RUN echo "shamefully-hoist=true" > .npmrc
 RUN sed -i '/"@ats\/config"/d' package.json && sed -i '/"@ats\/shared"/d' package.json && sed -i 's/"workspace:\*"/"*"/g' package.json
 RUN node -e "const p=require('./package.json');p.pnpm={onlyBuiltDependencies:['esbuild']};require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))"

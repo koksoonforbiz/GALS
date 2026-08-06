@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
 import { apiFetch, api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import { usePageContext } from '../../contexts/PageContext';
@@ -8,6 +8,12 @@ import { useActivityLog } from '../../lib/activity-log';
 import BlockRenderer from '../../components/editor/BlockRenderer';
 import PdfReader from '../../components/PdfReader';
 import { DockedChatbot } from '../../components/FloatingChatbot';
+
+const CodePlayground = lazy(() =>
+  import('../../components/code-practice/CodePlayground').then((m) => ({
+    default: m.CodePlayground,
+  })),
+);
 
 interface ModuleItem {
   id: string;
@@ -325,6 +331,10 @@ export function StudentCourseViewPage() {
   //     when their rect is empty so the CSV's aoi_sidebar_w/h flip to 0).
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
+  // Free-to-use Python scratch space docked under the lesson content —
+  // independent of the chat/PDF above it and of any code question the
+  // chatbot may have generated. Visible by default.
+  const [codePlaygroundCollapsed, setCodePlaygroundCollapsed] = useState(false);
   const isResizingSidebar = useRef(false);
   const sidebarResizeStart = useRef({ mouseX: 0, startWidth: 0 });
 
@@ -684,117 +694,156 @@ export function StudentCourseViewPage() {
               listener to this region so the chatbot only ever picks up
               selections from inside the lesson, not from navbar / sidebar.
 
-              The outer container is `overflow-hidden flex flex-col` with
-              no padding so the inner wrappers can control scroll
-              independently — padding inside lets the scrollbar hug the
-              border, not the text. PDF gets a flex-1 layout so PdfReader
-              can fill remaining space; the other variants scroll on
-              their own. */}
+              The outer container scrolls as ONE unit (content + the Code
+              Playground below it) via `overflow-y-auto` — the Playground
+              must never shrink the lecture content's viewing area, so the
+              content wrapper below is pinned to the row's full height
+              (`calc(100vh - 200px)`, matching `rowRef`'s own height)
+              regardless of whether the Playground is open. Scrolling up
+              shows the full-height lecture content exactly as before the
+              Playground existed; scrolling down reveals the Playground
+              underneath it. */}
           <div
             data-selectable="true"
             data-replay-region="lesson"
-            className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col"
+            className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-y-auto"
           >
-            {!selectedItem ? (
-              <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-                <p className="text-gray-400">Select an item from the left.</p>
-              </div>
-            ) : selectedItem.type === 'PAGE' ? (
-              <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
-                {selectedItem.contentMdx ? (
-                  <BlockRenderer content={selectedItem.contentMdx} />
-                ) : (
-                  <p className="text-gray-400">No content yet.</p>
-                )}
-              </div>
-            ) : selectedItem.type === 'PDF' ? (
-              // PDF needs a flex-column inside the column so PdfReader
-              // can take `flex-1 min-h-0` and fill the column. No
-              // explicit pixel height — the parent already bounds us.
-              <div className="p-6 flex-1 min-h-0 flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900">{selectedItem.title}</h3>
-                  <button
-                    onClick={() => handlePdfDownload(selectedItem!.id)}
-                    className="text-xs text-gray-500 hover:text-gray-700 underline"
-                  >
-                    Open in new tab
-                  </button>
+            <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+              {!selectedItem ? (
+                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+                  <p className="text-gray-400">Select an item from the left.</p>
                 </div>
-                {!selectedItem.pdfBlobKey ? (
-                  <p className="text-gray-400">PDF not yet uploaded.</p>
-                ) : pdfUrls[selectedItem.id] ? (
-                  <div
-                    data-replay-region="pdf-viewer"
-                    className="flex-1 min-h-0 border border-gray-200 rounded-lg overflow-hidden"
-                  >
-                    <PdfReader
-                      documentUrl={pdfUrls[selectedItem.id]!}
-                      documentName={selectedItem.pdfFilename ?? selectedItem.title}
-                      onTextSelected={(text) => {
-                        // Drag-selection overrides checkbox selection
-                        setSelectedText(text);
-                        setCheckedPdfPages(new Set());
-                        checkedPdfPagesTextRef.current = new Map();
-                      }}
-                      onSelectionCleared={() => {
-                        // mousedown fires this on every click inside the PDF,
-                        // including checkbox clicks — only clear when no pages
-                        // are checkbox-selected, otherwise preserve combined text.
-                        if (checkedPdfPages.size === 0) clearSelectedText();
-                      }}
-                      onPdfMeta={handlePdfMeta}
-                      onCurrentPageText={({ pageNumber, text }) =>
-                        setPdfCurrentPageText(pageNumber, text)
-                      }
-                      checkedPages={checkedPdfPages}
-                      onPageChecked={handlePageChecked}
-                      courseId={courseId}
-                      vlmConfig={vlmConfig}
-                    />
+              ) : selectedItem.type === 'PAGE' ? (
+                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
+                  {selectedItem.contentMdx ? (
+                    <BlockRenderer content={selectedItem.contentMdx} />
+                  ) : (
+                    <p className="text-gray-400">No content yet.</p>
+                  )}
+                </div>
+              ) : selectedItem.type === 'PDF' ? (
+                // PDF needs a flex-column inside the column so PdfReader
+                // can take `flex-1 min-h-0` and fill the column. No
+                // explicit pixel height — the parent already bounds us.
+                <div className="p-6 flex-1 min-h-0 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900">{selectedItem.title}</h3>
+                    <button
+                      onClick={() => handlePdfDownload(selectedItem!.id)}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline"
+                    >
+                      Open in new tab
+                    </button>
                   </div>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    {pdfLoadingId === selectedItem.id ? 'Loading PDF…' : 'Preparing PDF…'}
+                  {!selectedItem.pdfBlobKey ? (
+                    <p className="text-gray-400">PDF not yet uploaded.</p>
+                  ) : pdfUrls[selectedItem.id] ? (
+                    <div
+                      data-replay-region="pdf-viewer"
+                      className="flex-1 min-h-0 border border-gray-200 rounded-lg overflow-hidden"
+                    >
+                      <PdfReader
+                        documentUrl={pdfUrls[selectedItem.id]!}
+                        documentName={selectedItem.pdfFilename ?? selectedItem.title}
+                        onTextSelected={(text) => {
+                          // Drag-selection overrides checkbox selection
+                          setSelectedText(text);
+                          setCheckedPdfPages(new Set());
+                          checkedPdfPagesTextRef.current = new Map();
+                        }}
+                        onSelectionCleared={() => {
+                          // mousedown fires this on every click inside the PDF,
+                          // including checkbox clicks — only clear when no pages
+                          // are checkbox-selected, otherwise preserve combined text.
+                          if (checkedPdfPages.size === 0) clearSelectedText();
+                        }}
+                        onPdfMeta={handlePdfMeta}
+                        onCurrentPageText={({ pageNumber, text }) =>
+                          setPdfCurrentPageText(pageNumber, text)
+                        }
+                        checkedPages={checkedPdfPages}
+                        onPageChecked={handlePageChecked}
+                        courseId={courseId}
+                        vlmConfig={vlmConfig}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">
+                      {pdfLoadingId === selectedItem.id ? 'Loading PDF…' : 'Preparing PDF…'}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-400 shrink-0">
+                    Highlight text in the PDF to use it with the chatbot, or open the chatbot
+                    without a selection to ground on this PDF's content.
                   </p>
-                )}
-                <p className="mt-2 text-xs text-gray-400 shrink-0">
-                  Highlight text in the PDF to use it with the chatbot, or open the chatbot without
-                  a selection to ground on this PDF's content.
-                </p>
+                </div>
+              ) : selectedItem.type === 'LINK' ? (
+                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
+                  {selectedItem.url ? (
+                    <a
+                      href={selectedItem.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline break-all"
+                    >
+                      {selectedItem.url}
+                    </a>
+                  ) : (
+                    <p className="text-gray-400">No URL set.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
+                  <p className="text-sm text-gray-500">
+                    This is a linked assessment. Go to{' '}
+                    <button
+                      onClick={() => navigate('/student/assessments')}
+                      className="text-blue-600 hover:underline"
+                    >
+                      Assessments
+                    </button>{' '}
+                    to take it.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Code Playground — a free-to-use Python scratch space,
+                independent of the chat above it and of any code question
+                the chatbot may have generated. Runs entirely client-side
+                via Pyodide. Visible by default. Sits below the
+                full-height content above, reachable by scrolling the
+                lesson column down — never shrinks the lecture view. */}
+            <div className="border-t border-gray-200">
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Code Playground
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCodePlaygroundCollapsed((c) => !c)}
+                  className="text-gray-400 hover:text-gray-700"
+                  title={codePlaygroundCollapsed ? 'Expand' : 'Collapse'}
+                  aria-label={
+                    codePlaygroundCollapsed ? 'Expand code playground' : 'Collapse code playground'
+                  }
+                >
+                  {codePlaygroundCollapsed ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+                </button>
               </div>
-            ) : selectedItem.type === 'LINK' ? (
-              <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
-                {selectedItem.url ? (
-                  <a
-                    href={selectedItem.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline break-all"
+              {!codePlaygroundCollapsed && (
+                <div className="h-[32rem]">
+                  <Suspense
+                    fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
                   >
-                    {selectedItem.url}
-                  </a>
-                ) : (
-                  <p className="text-gray-400">No URL set.</p>
-                )}
-              </div>
-            ) : (
-              <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
-                <p className="text-sm text-gray-500">
-                  This is a linked assessment. Go to{' '}
-                  <button
-                    onClick={() => navigate('/student/assessments')}
-                    className="text-blue-600 hover:underline"
-                  >
-                    Assessments
-                  </button>{' '}
-                  to take it.
-                </p>
-              </div>
-            )}
+                    <CodePlayground />
+                  </Suspense>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Vertical drag handle between content and chatbot. 4px hit

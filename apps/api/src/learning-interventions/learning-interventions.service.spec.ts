@@ -37,6 +37,7 @@ function makeService(): LearningInterventionsService {
     stub as never,
     stub as never,
     stub as never,
+    stub as never,
   );
 }
 
@@ -48,6 +49,7 @@ function makeServiceWithPrismaMock(prisma: Record<string, unknown>) {
   const stub = {} as unknown;
   return new LearningInterventionsService(
     prisma as never,
+    stub as never,
     stub as never,
     stub as never,
     stub as never,
@@ -321,10 +323,7 @@ describe('LearningInterventionsService.generatePracticeTest — config & coverag
       const svc = makeServiceWithPrismaMock(prisma);
       const out = await (
         svc as unknown as {
-          lookupMaxPageForContent: (
-            courseId: string,
-            contentId: string,
-          ) => Promise<number | null>;
+          lookupMaxPageForContent: (courseId: string, contentId: string) => Promise<number | null>;
         }
       ).lookupMaxPageForContent('course-1', 'item-1');
       expect(out).toBe(20);
@@ -393,9 +392,8 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
     // Prisma stub.
     (svc as unknown as { lookupPdfFilenameForContent: jest.Mock }).lookupPdfFilenameForContent =
       jest.fn().mockResolvedValue('lesson.pdf');
-    (
-      svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }
-    ).getCourseTeacherIdWithApiKey = jest.fn().mockResolvedValue('teacher-1');
+    (svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }).getCourseTeacherIdWithApiKey =
+      jest.fn().mockResolvedValue('teacher-1');
   }
 
   it('chat() with { contentId, currentPage: 10 } fetches page-windowed chunks via tryResolveFromModuleItemPaged', async () => {
@@ -411,14 +409,12 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
       stub as never,
       stub as never,
       stub as never,
+      stub as never,
     );
     stubChatDependencies(svc, llmService);
 
     const hasChunksSpy = jest
-      .spyOn(
-        svc as unknown as { hasChunksInPageRange: jest.Mock },
-        'hasChunksInPageRange',
-      )
+      .spyOn(svc as unknown as { hasChunksInPageRange: jest.Mock }, 'hasChunksInPageRange')
       .mockResolvedValue(true);
     const pagedSpy = jest
       .spyOn(
@@ -427,10 +423,7 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
       )
       .mockResolvedValue('PAGED PDF TEXT pp.8-12');
     const unwindowedSpy = jest
-      .spyOn(
-        svc as unknown as { tryResolveFromModuleItem: jest.Mock },
-        'tryResolveFromModuleItem',
-      )
+      .spyOn(svc as unknown as { tryResolveFromModuleItem: jest.Mock }, 'tryResolveFromModuleItem')
       .mockResolvedValue('FULL PDF TEXT (should not be used)');
 
     delete process.env.RAG_PAGE_WINDOW; // default window = 2
@@ -468,6 +461,7 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
       stub as never,
       stub as never,
       stub as never,
+      stub as never,
     );
     stubChatDependencies(svc, llmService);
 
@@ -475,10 +469,7 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
     // the paged fetch entirely and fall through to the unwindowed
     // resolver.
     const hasChunksSpy = jest
-      .spyOn(
-        svc as unknown as { hasChunksInPageRange: jest.Mock },
-        'hasChunksInPageRange',
-      )
+      .spyOn(svc as unknown as { hasChunksInPageRange: jest.Mock }, 'hasChunksInPageRange')
       .mockResolvedValue(false);
     const pagedSpy = jest
       .spyOn(
@@ -487,10 +478,7 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
       )
       .mockResolvedValue(null);
     const unwindowedSpy = jest
-      .spyOn(
-        svc as unknown as { tryResolveFromModuleItem: jest.Mock },
-        'tryResolveFromModuleItem',
-      )
+      .spyOn(svc as unknown as { tryResolveFromModuleItem: jest.Mock }, 'tryResolveFromModuleItem')
       .mockResolvedValue('FULL PDF TEXT (fallback)');
 
     delete process.env.RAG_PAGE_WINDOW;
@@ -550,11 +538,11 @@ describe('LearningInterventionsService — page-aware chat + Elab refresh (2026-
       stub as never,
       stub as never,
       stub as never,
+      stub as never,
     );
 
-    (
-      svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }
-    ).getCourseTeacherIdWithApiKey = jest.fn().mockResolvedValue('teacher-1');
+    (svc as unknown as { getCourseTeacherIdWithApiKey: jest.Mock }).getCourseTeacherIdWithApiKey =
+      jest.fn().mockResolvedValue('teacher-1');
 
     const resolveSpy = jest
       .spyOn(
