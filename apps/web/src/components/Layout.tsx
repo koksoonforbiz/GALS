@@ -55,11 +55,19 @@ export function Layout() {
 
   return (
     <PageContextProvider>
-      <div className="min-h-screen bg-gray-100">
+      {/* h-screen + flex-col pins Header at its natural height and gives
+          the row below it exactly the remaining viewport height via
+          flex-1 — no `calc(100vh - Npx)` guessing anywhere. `main` gets
+          its own overflow-y-auto so pages taller than the viewport
+          scroll internally (header/sidebar stay pinned) instead of the
+          whole document scrolling. Pages that want to fill their exact
+          available height (e.g. StudentCourseViewPage) can now just use
+          h-full / flex-1 on their own content. */}
+      <div className="h-screen bg-gray-100 flex flex-col">
         <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
-        <div className="flex">
+        <div className="flex flex-1 min-h-0">
           <Sidebar />
-          <main className="flex-1 p-6">
+          <main className="flex-1 min-h-0 p-4 overflow-y-auto">
             <Outlet />
           </main>
         </div>

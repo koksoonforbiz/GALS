@@ -55,7 +55,6 @@ export function CodePlayground() {
           Reset
         </button>
       </div>
-      <CodeEditor value={code} onChange={setCode} height="360px" />
       <button
         type="button"
         onClick={() => void handleRun()}
@@ -65,6 +64,7 @@ export function CodePlayground() {
         <Play size={12} />
         {running ? 'Running…' : 'Run'}
       </button>
+      <CodeEditor value={code} onChange={setCode} minHeight="40px" />
       {(running || result) && (
         <CodeConsole loading={running} isFirstRun={firstRunEver} result={result} />
       )}

@@ -44,7 +44,7 @@ export function CodeQuestionMessage({ question, starterCode }: CodeQuestionMessa
   return (
     <div className="flex flex-col gap-2 w-full">
       <p className="shrink-0 text-sm font-medium">{question}</p>
-      <CodeEditor value={code} onChange={setCode} />
+      <CodeEditor value={code} onChange={setCode} minHeight="40px" />
       <button
         type="button"
         onClick={() => void handleRun()}

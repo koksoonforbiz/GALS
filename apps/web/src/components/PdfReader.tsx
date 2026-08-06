@@ -117,7 +117,7 @@ export function PdfReader({
       // Subtract a few px for internal padding so the page stays
       // comfortably inside the column instead of touching the scroll
       // gutter or the column border.
-      const w = el.clientWidth - 24;
+      const w = el.clientWidth - 8;
       if (w > 0) setContainerWidth(w);
     };
     update();
@@ -343,7 +343,7 @@ export function PdfReader({
             options={documentOptions}
             loading={null}
           >
-            <div className="flex flex-col items-center gap-4 py-4">
+            <div className="flex flex-col items-center gap-2 py-2">
               {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
                 <div
                   key={pageNum}

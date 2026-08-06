@@ -26,9 +26,9 @@ export function Header({ onLogoutRequest }: HeaderProps) {
         : 'bg-green-100 text-green-800';
 
   return (
-    <header data-replay-region="header" className="bg-white border-b border-gray-200 px-6 py-4">
+    <header data-replay-region="header" className="bg-white border-b border-gray-200 px-4 py-2">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-gray-800">Adaptive Tutoring System</h1>
+        <h1 className="text-lg font-semibold text-gray-800">Adaptive Tutoring System</h1>
 
         {user && (
           <div className="flex items-center gap-4">

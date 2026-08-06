@@ -194,15 +194,6 @@ const STRATEGY_META: Record<
   },
 };
 
-const PAGE_TYPE_LABELS: Record<string, string> = {
-  lesson: 'Lesson',
-  quiz: 'Quiz',
-  reading: 'Reading',
-  dashboard: 'Dashboard',
-  'review-tab': 'Review',
-  other: 'Page',
-};
-
 interface ChatbotPanelProps {
   /**
    * Optional minimize / maximize handlers. Only the floating wrapper
@@ -676,15 +667,6 @@ export function ChatbotPanel({
         onReviewTab={() => setMode('review-tab')}
         isReviewTab={false}
       />
-
-      {/* Context indicator */}
-      <div className="px-3 py-1.5 border-b border-gray-100 text-xs text-gray-500 bg-gray-50 flex items-center gap-1.5">
-        <BookOpen size={14} />
-        <span>
-          {PAGE_TYPE_LABELS[pageType] || 'Page'}
-          {contentTitle ? `: ${contentTitle}` : ''}
-        </span>
-      </div>
 
       {/* Selected text banner */}
       {selectedText && (

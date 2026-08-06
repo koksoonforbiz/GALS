@@ -9,9 +9,29 @@ let pyodidePromise: Promise<PyodideInterface> | null = null;
 
 function getPyodide(): Promise<PyodideInterface> {
   if (!pyodidePromise) {
-    pyodidePromise = import('pyodide').then(({ loadPyodide }) =>
-      loadPyodide({ indexURL: '/pyodide/' }),
-    );
+    pyodidePromise = import('pyodide').then(async ({ loadPyodide }) => {
+      const pyodide = await loadPyodide({ indexURL: '/pyodide/' });
+      // CPython's input(prompt) always writes `prompt` to stdout itself,
+      // then blocks reading stdin — it never passes the text to whatever
+      // reads stdin. Since we redirect stdout into our own buffer (below)
+      // for the console, Pyodide's default browser fallback for stdin
+      // ends up popping a window.prompt() with no visible message. Fix:
+      // replace input() outright so the prompt text goes straight to
+      // window.prompt()'s own argument instead of through stdout.
+      pyodide.runPython(`
+import builtins
+from js import prompt as _js_prompt
+
+def _browser_input(prompt=''):
+    result = _js_prompt(prompt)
+    if result is None:
+        raise EOFError('input() cancelled')
+    return result
+
+builtins.input = _browser_input
+`);
+      return pyodide;
+    });
   }
   return pyodidePromise;
 }

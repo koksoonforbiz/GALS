@@ -6,6 +6,10 @@ interface CodeEditorProps {
   onChange?: (value: string) => void;
   readOnly?: boolean;
   height?: string;
+  /** When set, the editor grows/shrinks with its content (line count)
+   *  instead of a fixed height, never going below this. Takes
+   *  precedence over `height`. */
+  minHeight?: string;
 }
 
 /** Thin shared wrapper around CodeMirror, used by both the inline
@@ -15,12 +19,14 @@ export function CodeEditor({
   value,
   onChange,
   readOnly = false,
-  height = '160px',
+  height,
+  minHeight,
 }: CodeEditorProps) {
   return (
     <CodeMirror
       value={value}
-      height={height}
+      height={minHeight ? undefined : (height ?? '160px')}
+      minHeight={minHeight}
       extensions={[python()]}
       editable={!readOnly}
       readOnly={readOnly}

@@ -52,11 +52,11 @@ const CHATBOT_MIN_WIDTH = 280;
 const CHATBOT_MAX_WIDTH = 700;
 const CHATBOT_DEFAULT_WIDTH = 400;
 // Space we always reserve for the rest of the 3-column row when sizing
-// the chatbot column: 256 (sidebar w-64) + 48 (two gap-6) + 4 (divider)
+// the chatbot column: 256 (sidebar w-64) + 16 (two gap-2) + 4 (divider)
 // + 280 (minimum readable content). When the viewport gets narrower
 // than this + chatbot min, the chatbot is squeezed below its preferred
 // width so the layout still fits without horizontal scroll.
-const CHATBOT_LAYOUT_RESERVE = 588;
+const CHATBOT_LAYOUT_RESERVE = 556;
 
 function loadChatbotWidth(): number {
   try {
@@ -272,7 +272,12 @@ export function StudentCourseViewPage() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // `course` dep: the row (and rowRef) only exists once course data has
+    // loaded — the component renders a "Loading course..." placeholder
+    // before that, so rowRef.current is still null on the very first
+    // mount. Without re-running this effect once `course` arrives, the
+    // observer would silently never attach.
+  }, [course]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -539,17 +544,6 @@ export function StudentCourseViewPage() {
     fetch();
   }, [courseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlePdfDownload = async (itemId: string) => {
-    try {
-      const { url } = await apiFetch<{ url: string; filename: string }>(
-        `/items/${itemId}/download-url`,
-      );
-      window.open(url, '_blank');
-    } catch (err) {
-      toast('error', err instanceof Error ? err.message : 'Failed to open PDF');
-    }
-  };
-
   if (loading || !course) return <div className="text-gray-500">Loading course...</div>;
 
   // Find selected item across all modules
@@ -563,39 +557,40 @@ export function StudentCourseViewPage() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={() => navigate('/student/courses')}
-          className="text-gray-500 hover:text-gray-700"
-        >
-          &larr; Back
-        </button>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{course.title}</h2>
-          <p className="text-sm text-gray-500">by {course.teacher.name}</p>
-        </div>
-      </div>
-
+    <div className="h-full flex flex-col">
       {course.modules.length === 0 ? (
-        <div className="text-gray-400 text-center py-12">This course has no content yet.</div>
+        <>
+          {/* Header — only needed here; when there's a sidebar (below),
+              back/title live inside it instead so the PDF/chat columns
+              don't lose vertical space to a shared full-width bar. */}
+          <div className="flex items-center gap-3 mb-2">
+            <button
+              onClick={() => navigate('/student/courses')}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              &larr; Back
+            </button>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 leading-tight">{course.title}</h2>
+              <p className="text-xs text-gray-500">by {course.teacher.name}</p>
+            </div>
+          </div>
+          <div className="text-gray-400 text-center py-12">This course has no content yet.</div>
+        </>
       ) : (
         // Three-column layout: module sidebar | lesson content | docked
         // chatbot. The middle column is `flex-1` so it absorbs whatever
         // space the chatbot doesn't claim. The vertical divider between
         // content and chatbot is a drag handle (see handleResizeStart).
         // `items-stretch` (default) gives all three columns the same
-        // height. `overflow-hidden` + a hard `height` lock the whole row
-        // to the viewport — without this the chat input got pushed
-        // below the fold whenever the lesson content was long, because
-        // the row grew with the tallest child. Now each column scrolls
-        // on its own inside the viewport-bounded row.
-        <div
-          ref={rowRef}
-          className="flex gap-6 items-stretch overflow-hidden"
-          style={{ height: 'calc(100vh - 200px)' }}
-        >
+        // height. `flex-1 min-h-0` fills exactly the remaining height
+        // Layout's `main` gives this page (itself bounded to the
+        // viewport minus the header — see Layout.tsx) and `overflow-hidden`
+        // locks the row to that height — without this the chat input got
+        // pushed below the fold whenever the lesson content was long,
+        // because the row grew with the tallest child. Now each column
+        // scrolls on its own inside the bounded row.
+        <div ref={rowRef} className="flex-1 min-h-0 flex gap-2 items-stretch overflow-hidden">
           {/* Sidebar: Module/Item navigation. overflow-y-auto so long
               module lists scroll inside the column instead of pushing
               the chatbot down. pr-1 leaves a hair of room for the
@@ -611,55 +606,79 @@ export function StudentCourseViewPage() {
               "panel hidden at this moment". */}
           <div
             data-replay-region="sidebar"
-            className="shrink-0 overflow-y-auto pr-1 relative"
+            className="shrink-0 flex flex-col relative"
             style={
               sidebarCollapsed ? { width: 0, display: 'none' } : { width: `${sidebarWidth}px` }
             }
           >
-            {/* Collapse toggle pinned to the sidebar's top-right corner.
-                sticky so it stays in view when the module list scrolls. */}
-            <button
-              type="button"
-              onClick={toggleSidebarCollapsed}
-              className="sticky top-0 z-10 ml-auto flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-              title="Collapse module list"
-              aria-label="Collapse module list"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            {course.modules.map((mod) => (
-              <div key={mod.id} className="mb-4">
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                  {mod.title}
-                </h4>
-                <div className="space-y-0.5">
-                  {mod.items.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedItemId(item.id)}
-                      className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
-                        selectedItemId === item.id
-                          ? 'bg-blue-50 text-blue-700 font-medium'
-                          : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          item.type === 'PAGE'
-                            ? 'bg-blue-400'
-                            : item.type === 'PDF'
-                              ? 'bg-red-400'
-                              : item.type === 'LINK'
-                                ? 'bg-purple-400'
-                                : 'bg-green-400'
-                        }`}
-                      />
-                      <span className="truncate">{item.title}</span>
-                    </button>
-                  ))}
+            {/* Back/title/teacher live here instead of a shared full-width
+                bar above all three columns — keeps the PDF/chat columns
+                from losing vertical space to chrome that's really only
+                relevant to navigation. shrink-0 so it never scrolls with
+                the module list below it. */}
+            <div className="shrink-0 pr-1 mb-2">
+              <div className="flex items-start justify-between gap-1">
+                <div className="min-w-0">
+                  <button
+                    onClick={() => navigate('/student/courses')}
+                    className="text-gray-500 hover:text-gray-700 text-xs"
+                  >
+                    &larr; Back
+                  </button>
+                  <h2
+                    className="text-sm font-bold text-gray-900 leading-tight truncate"
+                    title={course.title}
+                  >
+                    {course.title}
+                  </h2>
+                  <p className="text-xs text-gray-500 truncate">by {course.teacher.name}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={toggleSidebarCollapsed}
+                  className="shrink-0 flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                  title="Collapse module list"
+                  aria-label="Collapse module list"
+                >
+                  <ChevronLeft size={14} />
+                </button>
               </div>
-            ))}
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              {course.modules.map((mod) => (
+                <div key={mod.id} className="mb-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    {mod.title}
+                  </h4>
+                  <div className="space-y-0.5">
+                    {mod.items.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedItemId(item.id)}
+                        className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                          selectedItemId === item.id
+                            ? 'bg-blue-50 text-blue-700 font-medium'
+                            : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                            item.type === 'PAGE'
+                              ? 'bg-blue-400'
+                              : item.type === 'PDF'
+                                ? 'bg-red-400'
+                                : item.type === 'LINK'
+                                  ? 'bg-purple-400'
+                                  : 'bg-green-400'
+                          }`}
+                        />
+                        <span className="truncate">{item.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Sidebar resize handle. Mirrors the chatbot divider on the
@@ -697,18 +716,18 @@ export function StudentCourseViewPage() {
               The outer container scrolls as ONE unit (content + the Code
               Playground below it) via `overflow-y-auto` — the Playground
               must never shrink the lecture content's viewing area, so the
-              content wrapper below is pinned to the row's full height
-              (`calc(100vh - 200px)`, matching `rowRef`'s own height)
-              regardless of whether the Playground is open. Scrolling up
-              shows the full-height lecture content exactly as before the
-              Playground existed; scrolling down reveals the Playground
-              underneath it. */}
+              content wrapper below is pinned to `h-full` (100% of this
+              column's own height, which flexbox `items-stretch` already
+              matches to the row above) regardless of whether the
+              Playground is open. Scrolling up shows the full-height
+              lecture content exactly as before the Playground existed;
+              scrolling down reveals the Playground underneath it. */}
           <div
             data-selectable="true"
             data-replay-region="lesson"
             className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-y-auto"
           >
-            <div className="flex flex-col" style={{ height: 'calc(100vh - 200px)' }}>
+            <div className="h-full flex flex-col">
               {!selectedItem ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                   <p className="text-gray-400">Select an item from the left.</p>
@@ -726,16 +745,7 @@ export function StudentCourseViewPage() {
                 // PDF needs a flex-column inside the column so PdfReader
                 // can take `flex-1 min-h-0` and fill the column. No
                 // explicit pixel height — the parent already bounds us.
-                <div className="p-6 flex-1 min-h-0 flex flex-col">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900">{selectedItem.title}</h3>
-                    <button
-                      onClick={() => handlePdfDownload(selectedItem!.id)}
-                      className="text-xs text-gray-500 hover:text-gray-700 underline"
-                    >
-                      Open in new tab
-                    </button>
-                  </div>
+                <div className="p-2 flex-1 min-h-0 flex flex-col">
                   {!selectedItem.pdfBlobKey ? (
                     <p className="text-gray-400">PDF not yet uploaded.</p>
                   ) : pdfUrls[selectedItem.id] ? (
