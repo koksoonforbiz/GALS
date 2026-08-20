@@ -13,6 +13,17 @@ function isBackgroundPath(path: string): boolean {
   return BACKGROUND_PATHS.some((p) => path.startsWith(p));
 }
 
+// CompressionStream landed in Chrome 80, Firefox 113, Safari 16.4 — decent
+// coverage, but feature-detected with a plain-JSON fallback for anything
+// older rather than assumed.
+const supportsGzipCompression = typeof CompressionStream !== 'undefined';
+
+async function gzipJson(data: unknown): Promise<Blob> {
+  const json = JSON.stringify(data);
+  const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(stream).blob();
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -89,6 +100,25 @@ export const api = {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
     }),
+
+  /**
+   * POST JSON, gzip-compressed client-side (falls back to plain JSON on
+   * browsers without CompressionStream). Text/HTML compresses ~10:1
+   * losslessly, so this is meant for bandwidth-heavy payloads — currently
+   * just session-replay snapshots — not a general-purpose replacement for
+   * `post`. The server decompresses transparently based on Content-Encoding.
+   */
+  postCompressed: async <T>(path: string, data: unknown): Promise<T> => {
+    if (!supportsGzipCompression) {
+      return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data) });
+    }
+    const compressed = await gzipJson(data);
+    return apiFetch<T>(path, {
+      method: 'POST',
+      body: compressed,
+      headers: { 'Content-Encoding': 'gzip' },
+    });
+  },
 
   patch: <T>(path: string, data: unknown) =>
     apiFetch<T>(path, {

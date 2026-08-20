@@ -67,12 +67,14 @@ function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }
 
   if (!user || !sessionId) return <>{children}</>;
 
-  // captureDom intentionally OFF for the 2026-06-13 study to keep
-  // snapshot storage under control. Pixel screenshots + activity
-  // logs still capture the full session — the loss is the ability
-  // to inspect the DOM tree on replay (text selection targets,
-  // hover behaviour, click target inference). Flip to `true` when
-  // DOM analysis is required and disk space allows.
+  // captureDom OFF — confirmed working end-to-end (2026-08-19 test session,
+  // see gzipRequestDecompression in main.ts + api.postCompressed), but real
+  // measured compression on that session was only ~2:1, not the assumed
+  // ~10:1 — inlineCanvasPixels() embeds base64 JPEG data directly into the
+  // html field for any PDF/canvas content, and that doesn't compress well.
+  // Off by default for the 2026-06-13 study to keep snapshot storage and
+  // bandwidth under control. Flip to `true` when DOM analysis is required
+  // and the storage/bandwidth cost is accepted.
   return (
     <LoggingProvider sessionId={sessionId} userId={user.id} captureDom={false}>
       {children}

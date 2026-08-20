@@ -4,7 +4,8 @@ import { peekPermittedScreenStream } from '../biometrics/permittedStreams';
 
 const API_BASE = '/api';
 const FLUSH_INTERVAL_MS = 10_000;
-const PERIODIC_SNAPSHOT_MS = 3_000;
+// Shared cadence for both screenshot and DOM capture — they fire together.
+const PERIODIC_SNAPSHOT_MS = 1_000;
 // Per-snapshot HTML cap. The previous 250k was hit hard by PDF lessons:
 // react-pdf renders every character of every page as a positioned
 // <span> for selectable text, and a single PDF page can easily push
@@ -824,7 +825,11 @@ export function useSessionReplayRecorder({
 
       try {
         for (const chunk of chunks) {
-          await api.post('/logs/replay-snapshots', {
+          // Compressed (gzip, ~10:1 on HTML/text) — this is the bulk of the
+          // recorder's network cost. The unload/keepalive path above stays
+          // uncompressed: compression is async, and unload handlers need to
+          // fire reliably more than they need to save bandwidth.
+          await api.postCompressed('/logs/replay-snapshots', {
             sessionId,
             userId,
             events: chunk,
@@ -861,6 +866,7 @@ export function useSessionReplayRecorder({
     (trigger: string) => {
       // DOM serialisation — skipped when captureDom is false to avoid the
       // per-snapshot 500 KB–5 MB HTML payload that drives most DB growth.
+      // Fires together with the screenshot below, same cadence.
       let html: string | undefined;
       if (captureDom) {
         html = serializeDocument();

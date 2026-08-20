@@ -30,7 +30,7 @@ session_data.json
 recordings/
   Webcam video files, one per recording segment.
   - recording_0.webm, recording_1.webm, ...
-  - Format: WebM (VP8/VP9), no audio, 640x480 @ 15 fps
+  - Format: WebM (VP8/VP9), no audio, 640x480 @ 30 fps
   - Open with VLC, Chrome, Firefox, or any modern video player.
   - Each segment starts when the student opens a course and ends when they
     leave or the session is paused. Long sessions may produce multiple files.
@@ -61,7 +61,7 @@ RECORDING TECHNICAL DETAILS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Webcam recording
-  Capture rate : 15 fps
+  Capture rate : 30 fps
   Resolution   : 640 x 480 pixels
   Audio        : not recorded
   Storage      : uploaded to MinIO object storage as WebM segments
@@ -277,7 +277,7 @@ Aligning screen frames with webcam video:
   Each webcam recording segment has startWallTime and endWallTime.
   To find the webcam frame corresponding to a screen snapshot:
     webcam_offset_ms = snapshot.capturedAt - Date.parse(recording.startWallTime)
-    webcam_frame     = webcam_offset_ms / 1000 * 15  (webcam is 15 fps)
+    webcam_frame     = webcam_offset_ms / 1000 * 30  (webcam is 30 fps)
 
 Aligning screen frames with emotion data:
   emotionFrame.frameWallMs is directly comparable to snapshot.capturedAt

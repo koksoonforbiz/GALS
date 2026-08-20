@@ -111,7 +111,7 @@ export function useWebcamRecording(
       const stream =
         takePermittedWebcamStream() ??
         (await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 480, frameRate: 15 },
+          video: { width: 640, height: 480, frameRate: 30 },
           audio: false,
         }));
       streamRef.current = stream;
