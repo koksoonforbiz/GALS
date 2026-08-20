@@ -11,7 +11,10 @@ interface WebcamPreviewWindowProps {
  * Floating draggable window that shows the live webcam feed
  * with WebGazer's face-detection bounding box overlay.
  */
-export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPreviewWindowProps = {}) {
+export function WebcamPreviewWindow({
+  showGazeDot,
+  onToggleGazeDot,
+}: WebcamPreviewWindowProps = {}) {
   const [isOpen, setIsOpen] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [hasStream, setHasStream] = useState(false);
@@ -107,10 +110,12 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
           if (positions && positions.length > 0) {
             // Build a lightweight hash from a few sampled landmarks
             // to detect whether positions actually changed between frames.
-            const sample = [0, 10, 50, 100, 200].map((i) => {
-              const pt = positions[Math.min(i, positions.length - 1)];
-              return pt ? `${pt[0]?.toFixed(1)},${pt[1]?.toFixed(1)}` : '';
-            }).join('|');
+            const sample = [0, 10, 50, 100, 200]
+              .map((i) => {
+                const pt = positions[Math.min(i, positions.length - 1)];
+                return pt ? `${pt[0]?.toFixed(1)},${pt[1]?.toFixed(1)}` : '';
+              })
+              .join('|');
 
             if (sample === prevPosHashRef.current) {
               staleCountRef.current += 1;
@@ -121,7 +126,10 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
 
             // Only draw if positions are fresh (changing between frames)
             if (staleCountRef.current < STALE_THRESHOLD) {
-              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              let minX = Infinity,
+                minY = Infinity,
+                maxX = -Infinity,
+                maxY = -Infinity;
               for (const pt of positions) {
                 if (pt && pt.length >= 2) {
                   if (pt[0] < minX) minX = pt[0];
@@ -268,8 +276,18 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
             muted
             className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
           />
-          {/* Canvas with face overlay */}
-          <canvas ref={canvasRef} width={240} height={180} className="w-full h-full object-cover" />
+          {/* Canvas with face overlay. Excluded from session-replay DOM
+              capture (see inlineCanvasPixels in useSessionReplayRecorder.ts)
+              — it's a live re-draw of the same footage the webcam recording
+              pipeline already captures properly; embedding it too just
+              duplicates bytes for no replay benefit. */}
+          <canvas
+            ref={canvasRef}
+            width={240}
+            height={180}
+            className="w-full h-full object-cover"
+            data-replay-exclude-canvas="true"
+          />
           {!hasStream && (
             <div className="absolute inset-0 flex items-center justify-center text-gray-500 text-xs">
               No active webcam
@@ -280,7 +298,9 @@ export function WebcamPreviewWindow({ showGazeDot, onToggleGazeDot }: WebcamPrev
               <span
                 className={`w-1.5 h-1.5 rounded-full animate-pulse ${faceDetected ? 'bg-green-500' : 'bg-red-500'}`}
               />
-              <span className="text-[9px] text-white/70">{faceDetected ? 'FACE OK' : 'NO FACE'}</span>
+              <span className="text-[9px] text-white/70">
+                {faceDetected ? 'FACE OK' : 'NO FACE'}
+              </span>
             </div>
           )}
         </div>

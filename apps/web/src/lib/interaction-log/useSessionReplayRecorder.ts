@@ -6,6 +6,15 @@ const API_BASE = '/api';
 const FLUSH_INTERVAL_MS = 10_000;
 // Shared cadence for both screenshot and DOM capture — they fire together.
 const PERIODIC_SNAPSHOT_MS = 1_000;
+// A scroll (e.g. between two PDF slides) that completes faster than
+// PERIODIC_SNAPSHOT_MS can fall entirely inside the gap between two
+// periodic captures — replay then jumps straight from the pre-scroll state
+// to the post-scroll state with nothing in between, because nothing was
+// ever captured mid-transition. Firing one extra capture once scrolling
+// settles (rather than raising the baseline periodic rate) catches that
+// end state without paying the periodic cadence's bandwidth cost for
+// every second of every session.
+const SCROLL_END_DEBOUNCE_MS = 300;
 // Per-snapshot HTML cap. The previous 250k was hit hard by PDF lessons:
 // react-pdf renders every character of every page as a positioned
 // <span> for selectable text, and a single PDF page can easily push
@@ -296,8 +305,13 @@ function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
  * are skipped (logged once per snapshot) — they fall back to blank in
  * replay, same as before this fix.
  */
-const PDF_CANVAS_JPEG_QUALITY = 0.75;
-const OTHER_CANVAS_JPEG_QUALITY = 0.55;
+// Lowered from 0.75/0.55 — real captured sessions showed the html field
+// dominated by these embedded images (~1.7MB typical, gzip only ~2:1 on
+// them since JPEG is already compressed), so quality is the more direct
+// lever than compression. 0.5 is still legible for PDF text at replay
+// zoom; re-raise if teachers report it's too soft.
+const PDF_CANVAS_JPEG_QUALITY = 0.5;
+const OTHER_CANVAS_JPEG_QUALITY = 0.35;
 // Budget for inlined canvas pixel data per snapshot. Must leave room
 // for the rest of the DOM under MAX_HTML_CHARS, otherwise the
 // trailing chatbot column gets truncated mid-session — that was the
@@ -307,6 +321,13 @@ const OTHER_CANVAS_JPEG_QUALITY = 0.55;
 // 2.5 MB canvas + ~1-2 MB base DOM = comfortably under the 5 MB
 // MAX_HTML_CHARS cap, with room for the screenshot data URL.
 const MAX_CANVAS_PIXEL_BYTES = 2_500_000;
+// A PDF page canvas is often rendered at 2-3x CSS size for on-screen
+// sharpness — replay only needs to be legible, not pixel-perfect, so
+// encoding at full native resolution wastes bytes quadratically. Downscale
+// before JPEG-encoding (on top of the quality drop above); the replacement
+// <img> still gets the canvas's real CSS width/height below, so it displays
+// at the same on-screen size, just from fewer source pixels.
+const MAX_CANVAS_ENCODE_DIMENSION = 1400;
 
 function inlineCanvasPixels(clone: HTMLHtmlElement): void {
   let liveCanvases: HTMLCanvasElement[];
@@ -320,18 +341,27 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
   if (liveCanvases.length === 0 || cloneCanvases.length === 0) return;
 
   // Build an iteration order that prioritizes canvases inside or
-  // near the viewport. When MAX_CANVAS_PIXEL_BYTES is hit, the
-  // surviving canvases are the ones the student is actually looking
-  // at — off-screen pages further up/down in the PDF get skipped
-  // (they're blank in replay but the visible page is preserved, and
-  // critically, the trailing DOM — including the chatbot column —
-  // stays under MAX_HTML_CHARS so it doesn't get truncated).
+  // near the viewport, and — critically — HARD-EXCLUDES anything beyond
+  // MAX_CANVAS_VIEWPORT_DISTANCE, regardless of remaining budget.
+  //
+  // Without this cutoff, a non-virtualized PDF reader (every page is a
+  // live <canvas> at all times, however long the document) lets the byte
+  // budget alone decide how many pages get embedded — at ~35KB/page that's
+  // ~70 pages before MAX_CANVAS_PIXEL_BYTES is hit, so most of a typical
+  // PDF gets re-encoded and re-transmitted on every single 1s snapshot
+  // even though the student is looking at one page. The cutoff makes
+  // "off-screen" mean "never embedded on this snapshot" instead of "embedded
+  // if there's budget left over" — off-screen pages are still blank in
+  // replay exactly as before, just for a different, much narrower reason.
   //
   // Distance metric: vertical distance from the viewport's vertical
   // midline to the canvas's center. Canvases overlapping the
   // viewport get distance 0; the further outside, the higher.
   const viewportH = window.innerHeight;
   const viewportMid = viewportH / 2;
+  // 1.5 screens of buffer above/below — enough to keep a page the student
+  // is about to scroll to already captured, without embedding the whole doc.
+  const MAX_CANVAS_VIEWPORT_DISTANCE = viewportH * 1.5;
   const indexOrder = liveCanvases
     .map((canvas, index) => {
       let distance = Number.POSITIVE_INFINITY;
@@ -348,6 +378,7 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
       }
       return { index, distance };
     })
+    .filter((e) => e.distance <= MAX_CANVAS_VIEWPORT_DISTANCE)
     .sort((a, b) => a.distance - b.distance)
     .map((e) => e.index);
 
@@ -368,6 +399,16 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
     const height = liveCanvas.height;
     if (width <= 0 || height <= 0) continue;
 
+    // Skip canvases explicitly marked as not replay-worthy (e.g.
+    // WebcamPreviewWindow's live face-tracking overlay — the actual webcam
+    // recording pipeline already captures that footage properly; embedding
+    // a second, worse JPEG copy of it every second just wastes bytes), and
+    // anything WebGazer's own library injects into the page (it creates
+    // its own video/face-overlay canvases outside React's control, all
+    // conventionally id-prefixed "webgazer").
+    if (liveCanvas.dataset.replayExcludeCanvas === 'true') continue;
+    if (liveCanvas.id && liveCanvas.id.toLowerCase().startsWith('webgazer')) continue;
+
     // Determine quality based on whether this canvas is part of the
     // pdf-viewer region. `closest()` walks ancestors and is cheap.
     const isInPdfViewer = Boolean(liveCanvas.closest('[data-replay-region="pdf-viewer"]'));
@@ -375,7 +416,22 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
 
     let dataUrl: string | null = null;
     try {
-      dataUrl = liveCanvas.toDataURL('image/jpeg', quality);
+      const scale = Math.min(1, MAX_CANVAS_ENCODE_DIMENSION / Math.max(width, height));
+      if (scale < 1) {
+        const scratch = document.createElement('canvas');
+        scratch.width = Math.max(1, Math.round(width * scale));
+        scratch.height = Math.max(1, Math.round(height * scale));
+        const sctx = scratch.getContext('2d');
+        if (sctx) {
+          sctx.drawImage(liveCanvas, 0, 0, scratch.width, scratch.height);
+          dataUrl = scratch.toDataURL('image/jpeg', quality);
+        }
+      }
+      if (dataUrl === null) {
+        // Either already within the size cap, or the scratch-canvas path
+        // above failed (no 2d context) — fall back to full-resolution encode.
+        dataUrl = liveCanvas.toDataURL('image/jpeg', quality);
+      }
     } catch {
       // Cross-origin / tainted canvas → skip this one, the screenshot
       // fallback at replay time can still surface this region. Use
@@ -800,6 +856,7 @@ export function useSessionReplayRecorder({
   const lastSerializedRef = useRef('');
   const flushTimerRef = useRef<ReturnType<typeof setInterval>>();
   const periodicTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const screenStreamRef = useRef<MediaStream | null>(null);
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const screenCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -864,17 +921,22 @@ export function useSessionReplayRecorder({
 
   const captureSnapshot = useCallback(
     (trigger: string) => {
-      // DOM serialisation — skipped when captureDom is false to avoid the
-      // per-snapshot 500 KB–5 MB HTML payload that drives most DB growth.
-      // Fires together with the screenshot below, same cadence.
-      let html: string | undefined;
-      if (captureDom) {
-        html = serializeDocument();
-        // Deduplicate periodic DOM snapshots: skip if the page hasn't changed.
-        if (trigger === 'periodic' && html === lastSerializedRef.current) return;
-        lastSerializedRef.current = html;
-      }
-
+      // Capture everything CHEAP first — screenshot, scroll state, AOIs —
+      // before the one genuinely expensive step below (serializeDocument's
+      // canvas-to-JPEG encoding for every near-viewport PDF page, which is
+      // real synchronous work, not free). scrollHosts specifically is the
+      // PRIMARY signal ReplayTab uses to restore scroll position on replay
+      // (see applyInnerScrollRestore's source-(a) comment) — capturing it
+      // and the screenshot back-to-back, before any encoding delay, keeps
+      // "what the screenshot shows" and "where replay is told to scroll"
+      // anchored to the same instant. Capturing them AFTER serializeDocument
+      // (the previous order) let live scrolling during that encoding delay
+      // desync the two — replay would scroll to a position captured after
+      // the visible page had already moved on.
+      const capturedAt = Date.now();
+      const screenshotDataUrl = captureScreenshot();
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
       let aois: ReplayAoiRect[] | undefined;
       let scrollHosts: ReplayScrollHost[] | undefined;
       let pdfState: { currentPage: number; totalPages: number } | null = null;
@@ -893,15 +955,31 @@ export function useSessionReplayRecorder({
       } catch {
         pdfState = null;
       }
+
+      // DOM serialisation — skipped when captureDom is false to avoid the
+      // per-snapshot 500 KB–5 MB HTML payload that drives most DB growth.
+      // Deliberately last: the expensive step, now happening after every
+      // fast/authoritative field above has already been captured.
+      let html: string | undefined;
+      if (captureDom) {
+        html = serializeDocument();
+        // Deduplicate periodic/scroll-end DOM snapshots: skip if the page
+        // hasn't changed. Route/visibility/unload triggers always capture —
+        // those moments are too significant to throttle away.
+        const isDedupable = trigger === 'periodic' || trigger === 'scroll-end';
+        if (isDedupable && html === lastSerializedRef.current) return;
+        lastSerializedRef.current = html;
+      }
+
       bufferRef.current.push({
         pageUrl: window.location.pathname + window.location.search + window.location.hash,
         ...(html !== undefined ? { html } : {}),
-        screenshotDataUrl: captureScreenshot(),
+        screenshotDataUrl,
         width: window.innerWidth,
         height: window.innerHeight,
-        scrollX: window.scrollX,
-        scrollY: window.scrollY,
-        capturedAt: Date.now(),
+        scrollX,
+        scrollY,
+        capturedAt,
         trigger,
         ...(aois ? { aois } : {}),
         ...(scrollHosts ? { scrollHosts } : {}),
@@ -966,6 +1044,21 @@ export function useSessionReplayRecorder({
     };
     const onRouteChange = () => captureSnapshot('route');
 
+    // `scroll` doesn't bubble, but IS delivered to a capture-phase listener
+    // on an ancestor — this catches scrolling in any inner container (the
+    // PDF reader, the lesson panel, etc.), not just window scroll, without
+    // needing to know which elements are scrollable in advance (mirrors
+    // captureScrollHosts()'s own document-wide walk for the same reason).
+    // Debounced so a single settle-triggered capture fires once scrolling
+    // actually stops, not once per scroll tick.
+    const onScroll = () => {
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
+      scrollEndTimerRef.current = setTimeout(() => {
+        scrollEndTimerRef.current = undefined;
+        captureSnapshot('scroll-end');
+      }, SCROLL_END_DEBOUNCE_MS);
+    };
+
     const originalPushState = window.history.pushState.bind(window.history) as History['pushState'];
     const originalReplaceState = window.history.replaceState.bind(
       window.history,
@@ -987,6 +1080,7 @@ export function useSessionReplayRecorder({
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('beforeunload', onBeforeUnload);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
 
     flushTimerRef.current = setInterval(() => {
       void flush(false);
@@ -1002,10 +1096,12 @@ export function useSessionReplayRecorder({
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onBeforeUnload);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      document.removeEventListener('scroll', onScroll, { capture: true });
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
       clearInterval(flushTimerRef.current);
       clearInterval(periodicTimerRef.current);
+      if (scrollEndTimerRef.current) clearTimeout(scrollEndTimerRef.current);
       // Gate-provided streams survive cleanup so React StrictMode's second
       // mount can reuse them. clearPermittedScreenStream() (called on logout)
       // is responsible for stopping those tracks. Self-obtained streams

@@ -373,6 +373,21 @@ function applyInnerScrollRestore(
   const doc = iframe.contentDocument;
   if (!doc) return;
 
+  // NOTE: a previous version of this function force-applied a thin
+  // scrollbar globally (`* { scrollbar-width: thin }`) to fix a cosmetic
+  // scrollbar-width mismatch in the PDF viewer specifically. Reverted —
+  // react-pdf's page scale (`--user-unit`) is frozen at capture time based
+  // on whatever width was ACTUALLY available then, which depends on how
+  // much space the sidebar's own scrollbar consumed. Forcing every
+  // scrollbar thinner (not just the PDF viewer's) shifted the flex layout
+  // balance between panels, giving the PDF panel more width in replay than
+  // it had at capture time — the frozen scale factor doesn't know that, so
+  // it now under-fills the wider panel. That's a plausible worse problem
+  // (content width actually wrong) traded for a cosmetic one (scrollbar
+  // looked chunky), without live-browser verification either way. Left
+  // unfixed rather than guessing again — see the PR/conversation history
+  // for the width-mismatch report this caused.
+
   // Single restore pass. Three sources of truth, applied in order so
   // a later, more specific anchor overrides an earlier one:
   //   (a) typed `scrollHosts` payload (post-prompt-06 snapshots) —
@@ -388,6 +403,11 @@ function applyInnerScrollRestore(
       // (a) Typed scroll-host payload. Match by region label first
       //     (most reliable across DOM reflows); fall back to a
       //     selector-equality match for untagged hosts.
+      //
+      // Tracks whether the pdf-viewer host specifically got a precise
+      // restore here, so step (c) below only runs as a TRUE fallback —
+      // see that step's comment for why this matters.
+      let pdfViewerRestoredPrecisely = false;
       const hosts = snapshot?.scrollHosts ?? null;
       if (Array.isArray(hosts) && hosts.length > 0) {
         for (const h of hosts) {
@@ -428,6 +448,7 @@ function applyInnerScrollRestore(
             }
             if (!target) continue;
             applyScrollWithFallback(target, h.scrollTop ?? 0, h.scrollLeft ?? 0);
+            if (h.region === 'pdf-viewer') pdfViewerRestoredPrecisely = true;
           } catch {
             // Per-host failure — skip.
           }
@@ -458,12 +479,20 @@ function applyInnerScrollRestore(
         }
       });
 
-      // (c) PDF page anchor fallback. Even when scrollTop restored
-      //     cleanly above, scrollIntoView pins the matching page to
-      //     the top of the host — keeps the replay aligned to what
-      //     the student was reading even if the recorder picked a
-      //     slightly off scrollTop or the iframe's column width
-      //     differs by a few px.
+      // (c) PDF page anchor fallback — TRUE fallback only. Previously this
+      //     ran unconditionally, snapping to the page's top edge via
+      //     scrollIntoView even when (a) had already restored an accurate
+      //     scrollTop — which silently discarded any mid-page or
+      //     between-page position (a) had just set, since scrollIntoView
+      //     always pins to the top of the host regardless of where within
+      //     the page the student actually was. That made replay
+      //     systematically show pages snapped to their top edge instead of
+      //     the real captured position, most visible during/just after a
+      //     scroll. Now it only runs when (a) didn't restore the
+      //     pdf-viewer host precisely — e.g. no scrollHosts data at all
+      //     (legacy snapshots), or the pdf-viewer region wasn't found —
+      //     genuinely covering the case its name promises instead of
+      //     overriding good data on every replay.
       //
       //     Prefer the iframe DOM's own `data-replay-pdf-current-page`
       //     attribute (set by the recorder onto the PdfReader root)
@@ -489,7 +518,7 @@ function applyInnerScrollRestore(
       ) {
         pdfPage = snapshot.pdfCurrentPage;
       }
-      if (pdfPage !== null) {
+      if (pdfPage !== null && !pdfViewerRestoredPrecisely) {
         const pageEl = doc.querySelector<HTMLElement>(`[data-replay-pdf-page="${pdfPage}"]`);
         if (pageEl) {
           try {
