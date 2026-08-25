@@ -80,7 +80,19 @@ export class ItemActionsController {
     @Param('id') id: string,
     @Body() body: { filename: string; size: number },
   ) {
-    return this.itemsService.getUploadUrl(id, req.user.id, body.filename, body.size);
+    return this.itemsService.getUploadUrl(id, req.user.id, body.filename);
+  }
+
+  // Called by the client after the direct-to-MinIO PUT completes, so the
+  // server can verify the file actually landed before recording it.
+  @Post(':id/upload-url/confirm')
+  @Roles('teacher', 'admin')
+  confirmUpload(
+    @Request() req: { user: RequestUser },
+    @Param('id') id: string,
+    @Body() body: { key: string; filename: string; size: number },
+  ) {
+    return this.itemsService.confirmUpload(id, req.user.id, body.key, body.filename, body.size);
   }
 
   @Get(':id/download-url')
@@ -92,10 +104,7 @@ export class ItemActionsController {
 
   @Get(':id/versions')
   @Roles('teacher', 'admin')
-  getVersionHistory(
-    @Request() req: { user: RequestUser },
-    @Param('id') id: string,
-  ) {
+  getVersionHistory(@Request() req: { user: RequestUser }, @Param('id') id: string) {
     return this.itemsService.getVersionHistory(id, req.user.id);
   }
 

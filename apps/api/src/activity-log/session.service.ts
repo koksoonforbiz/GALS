@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityLogService } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
@@ -26,6 +26,53 @@ export class SessionService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
   ) {}
+
+  /** Throws ForbiddenException unless `teacherId` teaches the course this session belongs to. */
+  async assertTeacherOwnsSession(sessionId: string, teacherId: string): Promise<void> {
+    const session = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: { courseId: true },
+    });
+    if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
+    if (!session.courseId) {
+      throw new ForbiddenException('This session is not associated with a course you teach');
+    }
+    const course = await this.prisma.course.findUnique({
+      where: { id: session.courseId },
+      select: { teacherId: true },
+    });
+    if (!course || course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only view sessions for your own courses');
+    }
+  }
+
+  /** Throws ForbiddenException unless `teacherId` teaches a course `studentId` is enrolled in. */
+  async assertTeacherOwnsStudent(studentId: string, teacherId: string): Promise<void> {
+    const enrollment = await this.prisma.enrollment.findFirst({
+      where: { studentId, course: { teacherId } },
+      select: { id: true },
+    });
+    if (!enrollment) {
+      throw new ForbiddenException('You can only view students enrolled in your own courses');
+    }
+  }
+
+  /**
+   * Throws ForbiddenException unless `userId` owns this session. Used for
+   * self-service session writes (batch telemetry, course tagging, close) —
+   * the session ID for these comes from a client-supplied header/body value,
+   * not something the server derived, so it must be checked before use.
+   */
+  async assertOwnsSession(sessionId: string, userId: string): Promise<void> {
+    const session = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true },
+    });
+    if (!session) throw new NotFoundException(`Session ${sessionId} not found`);
+    if (session.userId !== userId) {
+      throw new ForbiddenException('You can only act on your own session');
+    }
+  }
 
   /** Called when a student authenticates (login or token refresh). */
   async openSession(params: {

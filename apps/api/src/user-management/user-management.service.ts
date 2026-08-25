@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { sanitizeForLog } from '../common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import type { Prisma } from '@prisma/client';
@@ -590,6 +591,10 @@ export class UserManagementService {
       });
     }
 
+    this.logger.log(
+      `Student created by ${sanitizeForLog(teacherId)}: ${sanitizeForLog(newUser.id)} (${sanitizeForLog(newUser.email)}), enrolled in ${dto.courseIds.length} course(s)`,
+    );
+
     return {
       studentId: newUser.id,
       email: newUser.email,
@@ -733,6 +738,12 @@ export class UserManagementService {
       },
     });
 
+    // Audit trail for a sensitive data modification — who reset whose
+    // password. Never logs the new plaintext password itself.
+    this.logger.log(
+      `Password reset by ${sanitizeForLog(callerId)} for student ${sanitizeForLog(studentId)} (${sanitizeForLog(student.email)})`,
+    );
+
     return {
       userId: student.id,
       email: student.email,
@@ -775,6 +786,10 @@ export class UserManagementService {
         isTemporaryPassword: true,
       },
     });
+
+    this.logger.log(
+      `Invitation resent (password regenerated) by ${sanitizeForLog(teacherId)} for student ${sanitizeForLog(studentId)} (${sanitizeForLog(student.email)})`,
+    );
 
     return {
       studentId,

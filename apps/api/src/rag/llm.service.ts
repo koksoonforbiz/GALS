@@ -148,8 +148,13 @@ export class LlmService {
     private readonly ragService: RagService,
     private readonly eventEmitter: EventEmitter2,
   ) {
-    // Derive a 32-byte key from JWT_SECRET for encrypting stored API keys
-    const secret = this.config.get<string>('JWT_SECRET', 'dev-secret-change-in-production');
+    // Derive a 32-byte key from JWT_SECRET for encrypting stored API keys.
+    // getOrThrow (not the previous `.get(..., 'dev-secret-change-in-production')`)
+    // is deliberate: that fallback is a PUBLIC string committed in
+    // docker-compose.yml. If JWT_SECRET were ever missing at runtime, every
+    // stored teacher API key would have been silently encrypted with a key
+    // anyone can derive — fail loudly instead.
+    const secret = this.config.getOrThrow<string>('JWT_SECRET');
     this.encryptionKey = crypto.scryptSync(secret, 'llm-key-salt', 32);
   }
 

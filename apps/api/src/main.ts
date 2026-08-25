@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
 import * as zlib from 'zlib';
 import { AppModule } from './app.module';
 import { validateEnv } from './env';
@@ -75,7 +76,25 @@ async function bootstrap() {
   const env = validateEnv();
 
   const app = await NestFactory.create(AppModule, { rawBody: true });
-  app.enableCors();
+
+  // CSP is meaningless here (this server returns JSON/files, never renders
+  // HTML), but the rest of helmet's defaults are worth having. CORP is
+  // relaxed from the default 'same-origin' because the frontend runs on a
+  // different origin in every environment (dev: 5173 vs API port; prod:
+  // separate web/API hosts) and legitimately loads files (PDFs, exports)
+  // served directly by this API.
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
+
+  const allowedOrigins = env.ALLOWED_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: allowedOrigins, credentials: true });
+
   app.setGlobalPrefix('api');
   app.use(gzipRequestDecompression());
   app.use(json({ limit: '12mb' }));

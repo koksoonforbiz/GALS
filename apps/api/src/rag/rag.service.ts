@@ -152,17 +152,29 @@ export class RagService implements OnModuleInit {
       contentType: file.mimeType,
     });
 
-    const doc = await this.prisma.sourceDocument.create({
-      data: {
-        courseId,
-        uploadedById: userId,
-        title: file.filename.replace(/\.[^.]+$/, ''),
-        filename: file.filename,
-        blobKey,
-        mimeType: file.mimeType,
-        sizeBytes: file.sizeBytes,
-      },
-    });
+    // If the DB write fails, the MinIO object would otherwise be orphaned
+    // (uploaded but never referenced by any row) — roll it back.
+    let doc;
+    try {
+      doc = await this.prisma.sourceDocument.create({
+        data: {
+          courseId,
+          uploadedById: userId,
+          title: file.filename.replace(/\.[^.]+$/, ''),
+          filename: file.filename,
+          blobKey,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+        },
+      });
+    } catch (err) {
+      await this.blobService.delete(blobKey).catch((cleanupErr: unknown) => {
+        this.logger.error(
+          `Failed to roll back orphaned blob ${blobKey} after DB write failure: ${(cleanupErr as Error).message}`,
+        );
+      });
+      throw err;
+    }
 
     // Trigger chunking asynchronously (progress tracked in-memory)
     this.chunkDocument(doc.id).catch((err) => {
@@ -202,11 +214,24 @@ export class RagService implements OnModuleInit {
       throw new ForbiddenException('Only the course teacher can delete documents');
     }
 
-    // Delete per-page image blobs from MinIO before Cascade removes the chunk rows
+    // Read everything that needs blob cleanup BEFORE deleting the DB row —
+    // once sourceDocument is gone, cascade deletes documentChunk rows and
+    // this lookup would come back empty.
     const imageChunks = await this.prisma.documentChunk.findMany({
       where: { documentId, imageObjectKey: { not: null } },
       select: { imageObjectKey: true },
     });
+
+    // The Postgres row is the source of truth: delete it first. If this
+    // throws, nothing else has been touched yet (blobs are all still
+    // intact) — a fully consistent state, not a partial failure. Deleting
+    // blobs first (the old order) risked the opposite: a DB row left
+    // pointing at MinIO objects that no longer exist.
+    await this.prisma.sourceDocument.delete({ where: { id: documentId } });
+
+    // From here on, the DB is already consistent — remaining cleanup is
+    // best-effort. A leftover orphaned blob is a minor, recoverable cost;
+    // it must never block the delete the user already asked for and got.
     await Promise.all(
       imageChunks.map((chunk) =>
         this.blobService
@@ -219,7 +244,6 @@ export class RagService implements OnModuleInit {
       ),
     );
 
-    // Await OpenAI file deletion so failures appear in logs instead of being silently dropped
     if (doc.openaiFileId) {
       try {
         await this.llmService.deleteFileFromOpenAi(doc.uploadedById, doc.openaiFileId);
@@ -230,8 +254,12 @@ export class RagService implements OnModuleInit {
       }
     }
 
-    await this.blobService.delete(doc.blobKey);
-    await this.prisma.sourceDocument.delete({ where: { id: documentId } });
+    await this.blobService.delete(doc.blobKey).catch((err: unknown) => {
+      this.logger.warn(
+        `Failed to delete blob ${doc.blobKey} for deleted document ${documentId}: ${(err as Error).message}`,
+      );
+    });
+
     return { deleted: true };
   }
 

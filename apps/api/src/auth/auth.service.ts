@@ -1,12 +1,10 @@
-import {
-  Injectable,
-  ConflictException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma';
 import { SessionService } from '../activity-log';
+import { sanitizeForLog } from '../common';
+import { LoginProtectionService } from './login-protection.service';
 import type { CreateUser, Login, UserRole } from '@ats/shared';
 
 interface UserWithoutPassword {
@@ -31,10 +29,13 @@ const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly sessionService: SessionService,
+    private readonly loginProtection: LoginProtectionService,
   ) {}
 
   async register(dto: CreateUser): Promise<AuthResponse> {
@@ -97,9 +98,17 @@ export class AuthService {
     // useful "teacher-issued, not yet rotated" hint visible to the
     // teacher roster) but it no longer gates login.
     const identifier = dto.identifier.trim();
+    const safeIdentifier = sanitizeForLog(identifier);
+    const safeIp = sanitizeForLog(requestMeta?.ip);
+
     if (!identifier) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Account-keyed brute-force check — independent of the IP-keyed
+    // @Throttle on the route, so distributing attempts across source IPs
+    // doesn't buy an attacker a fresh budget against the same account.
+    await this.loginProtection.assertNotLockedOut(identifier);
 
     let user = null as Awaited<ReturnType<typeof this.prisma.user.findUnique>> | null;
     if (EMAIL_LIKE.test(identifier)) {
@@ -111,14 +120,22 @@ export class AuthService {
     }
 
     if (!user) {
+      this.logger.warn(
+        `Login failed (unknown identifier): identifier=${safeIdentifier} ip=${safeIp}`,
+      );
+      await this.loginProtection.recordFailure(identifier);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isPasswordValid) {
+      this.logger.warn(`Login failed (invalid password): userId=${user.id} ip=${safeIp}`);
+      await this.loginProtection.recordFailure(identifier);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.loginProtection.recordSuccess(identifier);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _unused, ...userWithoutPassword } = user;
@@ -130,6 +147,8 @@ export class AuthService {
       ipAddress: requestMeta?.ip,
       userAgent: requestMeta?.userAgent,
     });
+
+    this.logger.log(`Login succeeded: userId=${user.id} role=${user.role} ip=${safeIp}`);
 
     return {
       accessToken: token,

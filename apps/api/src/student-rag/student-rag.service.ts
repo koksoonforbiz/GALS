@@ -78,22 +78,33 @@ export class StudentRagService {
       contentType: file.mimetype,
     });
 
-    // Create DB record
-    const document = await this.prisma.studentSourceDocument.create({
-      data: {
-        enrollmentId,
-        studentId,
-        courseId,
-        sessionId: sessionId || null,
-        fileName: file.originalname,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        fileSize: file.size,
-        blobKey,
-        fileType,
-        processingStatus: 'PENDING',
-      },
-    });
+    // Create DB record. If this fails, the MinIO object would otherwise be
+    // orphaned (uploaded but never referenced by any row) — roll it back.
+    let document;
+    try {
+      document = await this.prisma.studentSourceDocument.create({
+        data: {
+          enrollmentId,
+          studentId,
+          courseId,
+          sessionId: sessionId || null,
+          fileName: file.originalname,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          fileSize: file.size,
+          blobKey,
+          fileType,
+          processingStatus: 'PENDING',
+        },
+      });
+    } catch (err) {
+      await this.blobService.delete(blobKey).catch((cleanupErr: unknown) => {
+        this.logger.error(
+          `Failed to roll back orphaned blob ${blobKey} after DB write failure: ${(cleanupErr as Error).message}`,
+        );
+      });
+      throw err;
+    }
 
     // Trigger async processing via NestJS EventEmitter
     this.eventEmitter.emit('student-document.uploaded', { documentId: document.id });

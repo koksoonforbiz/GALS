@@ -51,7 +51,9 @@ function makeService(opts: {
   };
 
   const config = {
-    get: (_k: string, defaultValue?: any) => defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+    get: (_k: string, defaultValue?: any) =>
+      defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+    getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
   } as unknown as ConfigService;
 
   const eventEmitter = new EventEmitter2();

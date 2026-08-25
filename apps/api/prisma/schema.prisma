@@ -1724,7 +1724,7 @@ model RecordingConfig {
 }
 
 model RecordingSegment {
-  id            String                @id @default(cuid())
+  id            String                @id @default(uuid())
   studentId     String                @map("student_id") @db.Uuid
   student       User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   sessionId     String                @map("session_id") @db.Uuid

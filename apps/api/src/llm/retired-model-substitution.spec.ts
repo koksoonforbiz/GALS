@@ -35,6 +35,7 @@ describe('LlmService — read-time guard (retired model substitution)', () => {
     const config = {
       get: (_k: string, defaultValue?: any) =>
         defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+      getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
     } as unknown as ConfigService;
     const service = new LlmService(prisma, config, null as any, new EventEmitter2());
 
@@ -106,6 +107,7 @@ describe('LlmService — read-time guard (retired model substitution)', () => {
     const config = {
       get: (_k: string, defaultValue?: any) =>
         defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+      getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
     } as unknown as ConfigService;
     const service = new LlmService(prisma, config, null as any, new EventEmitter2());
 

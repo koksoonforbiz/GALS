@@ -210,8 +210,12 @@ export class ItemsService {
     });
   }
 
-  // PDF upload: returns a presigned URL for the client to upload to
-  async getUploadUrl(itemId: string, teacherId: string, filename: string, size: number) {
+  // PDF upload: returns a presigned URL for the client to upload to.
+  // Metadata is NOT written here — the client hasn't uploaded anything yet.
+  // It's written by confirmUpload() below, once the file is verified to
+  // actually exist in MinIO, mirroring RecordingService's
+  // initiateSegment/completeSegment verify-before-commit pattern.
+  async getUploadUrl(itemId: string, teacherId: string, filename: string) {
     const item = await this.verifyItemOwnership(itemId, teacherId);
 
     if (item.type !== 'PDF') {
@@ -224,8 +228,37 @@ export class ItemsService {
       contentType: 'application/pdf',
     });
 
-    // Store the blob key and metadata
-    await this.prisma.moduleItem.update({
+    return { url, key };
+  }
+
+  // Called by the client after the direct-to-MinIO PUT completes.
+  // Verifies the object actually landed in storage before trusting it —
+  // an upload that never finished (network drop, expired URL, etc.) must
+  // never leave the database claiming a PDF exists when it doesn't.
+  async confirmUpload(
+    itemId: string,
+    teacherId: string,
+    key: string,
+    filename: string,
+    size: number,
+  ) {
+    const item = await this.verifyItemOwnership(itemId, teacherId);
+
+    if (item.type !== 'PDF') {
+      throw new ForbiddenException('Can only upload PDFs to PDF-type items');
+    }
+
+    const expectedPrefix = `course-materials/${item.module.courseId}/${itemId}/`;
+    if (!key.startsWith(expectedPrefix)) {
+      throw new ForbiddenException('Upload key does not match this item');
+    }
+
+    const exists = await this.blob.exists(key);
+    if (!exists) {
+      throw new NotFoundException('Uploaded file not found in storage');
+    }
+
+    return this.prisma.moduleItem.update({
       where: { id: itemId },
       data: {
         pdfBlobKey: key,
@@ -233,8 +266,6 @@ export class ItemsService {
         pdfSize: size,
       },
     });
-
-    return { url, key };
   }
 
   async getDownloadUrl(itemId: string) {

@@ -65,6 +65,7 @@ export class ActivityLogController {
     @Body(new ZodValidationPipe(BatchLogEventsSchema)) dto: BatchLogEventsDto,
     @Request() req: { user: RequestUser },
   ) {
+    await this.sessionService.assertOwnsSession(dto.sessionId, req.user.id);
     await this.activityLogService.recordBatch(
       dto.events.map((e) => ({
         sessionId: dto.sessionId,
@@ -94,8 +95,13 @@ export class ActivityLogController {
    */
   @Patch('session/course')
   @Roles('student')
-  async setSessionCourse(@SessionId() sessionId: string, @Body() body: { courseId: string }) {
+  async setSessionCourse(
+    @Request() req: { user: RequestUser },
+    @SessionId() sessionId: string,
+    @Body() body: { courseId: string },
+  ) {
     if (sessionId && body.courseId) {
+      await this.sessionService.assertOwnsSession(sessionId, req.user.id);
       await this.sessionService.setCourseId(sessionId, body.courseId);
     }
     return { ok: true };
@@ -107,8 +113,11 @@ export class ActivityLogController {
    */
   @Post('session/close')
   @Roles('student', 'teacher')
-  async closeSession(@SessionId() sessionId: string) {
-    if (sessionId) await this.sessionService.closeSession(sessionId);
+  async closeSession(@Request() req: { user: RequestUser }, @SessionId() sessionId: string) {
+    if (sessionId) {
+      await this.sessionService.assertOwnsSession(sessionId, req.user.id);
+      await this.sessionService.closeSession(sessionId);
+    }
     return { ok: true };
   }
 
@@ -120,7 +129,11 @@ export class ActivityLogController {
    */
   @Get('teacher/students/:studentId/sessions')
   @Roles('teacher')
-  async getStudentSessions(@Param('studentId', ParseUUIDPipe) studentId: string) {
+  async getStudentSessions(
+    @Request() req: { user: RequestUser },
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsStudent(studentId, req.user.id);
     return this.activityLogService.getStudentSessions(studentId);
   }
 
@@ -130,7 +143,11 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId')
   @Roles('teacher')
-  async getSessionLogs(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async getSessionLogs(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.activityLogService.getSessionLogs(sessionId);
   }
 
@@ -140,7 +157,11 @@ export class ActivityLogController {
    */
   @Delete('teacher/sessions/:sessionId')
   @Roles('teacher')
-  async deleteSession(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async deleteSession(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.activityLogService.deleteSession(sessionId);
   }
 
@@ -150,7 +171,12 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId/summary')
   @Roles('teacher')
-  async getSessionSummary(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async getSessionSummary(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
+
     // Try saved summary first
     const saved = await this.activityLogService['prisma'].sessionSummary.findUnique({
       where: { sessionId },
@@ -167,16 +193,22 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId/timeline-data')
   @Roles('teacher')
-  async getTimelineData(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async getTimelineData(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.sessionService.getTimelineData(sessionId);
   }
 
   @Get('teacher/sessions/:sessionId/replay')
   @Roles('teacher')
   async getSessionReplay(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Query('includeSnapshots') includeSnapshots?: string,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.logsService.getSessionReplayData(sessionId, {
       includeSnapshots: includeSnapshots !== 'false',
     });
@@ -185,11 +217,13 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/replay/snapshots')
   @Roles('teacher')
   async getSessionReplaySnapshots(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
     @Query('includeContent') includeContent?: string,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     const parsedLimit = Number(limit);
     return this.logsService.getSessionReplaySnapshots(sessionId, {
       cursor: cursor || undefined,
@@ -201,10 +235,12 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/replay/snapshots/:snapshotId')
   @Roles('teacher')
   async getSessionReplaySnapshotById(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Param('snapshotId') snapshotId: string,
     @Query('includeScreenshot') includeScreenshot?: string,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.logsService.getSessionReplaySnapshotById(sessionId, snapshotId, {
       includeScreenshot: includeScreenshot === 'true',
     });
@@ -218,9 +254,11 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/export')
   @Roles('teacher')
   async exportSessionLog(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Res() res: Response,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     const doc = await this.logExportService.buildSessionLogDocument(sessionId);
     const json = JSON.stringify(doc, null, 2);
 
@@ -237,10 +275,12 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/export/dom-snapshots')
   @Roles('teacher')
   async getExportDomSnapshots(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.logExportService.getExportDomSnapshots(
       sessionId,
       Math.max(0, Number(offset ?? '0')),
@@ -258,10 +298,12 @@ export class ActivityLogController {
   @Get('teacher/sessions/:sessionId/export/screenshots')
   @Roles('teacher')
   async getExportScreenshots(
+    @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Query('offset') offset?: string,
     @Query('limit') limit?: string,
   ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     return this.logExportService.getExportScreenshots(
       sessionId,
       Math.max(0, Number(offset ?? '0')),
@@ -275,7 +317,11 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId/export-url')
   @Roles('teacher')
-  async getExportUrl(@Param('sessionId', ParseUUIDPipe) sessionId: string) {
+  async getExportUrl(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', ParseUUIDPipe) sessionId: string,
+  ) {
+    await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
     const session = await this.activityLogService['prisma'].studentSession.findUniqueOrThrow({
       where: { id: sessionId },
       select: { userId: true },
@@ -291,9 +337,11 @@ export class ActivityLogController {
   @Get('teacher/students/:studentId/all-sessions-export')
   @Roles('teacher')
   async exportAllSessions(
+    @Request() req: { user: RequestUser },
     @Param('studentId', ParseUUIDPipe) studentId: string,
     @Res() res: Response,
   ) {
+    await this.sessionService.assertTeacherOwnsStudent(studentId, req.user.id);
     const sessions = await this.activityLogService.getStudentSessions(studentId);
     const docs = await Promise.all(
       sessions.map((s) => this.logExportService.buildSessionLogDocument(s.id)),

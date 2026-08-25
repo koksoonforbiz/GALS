@@ -51,6 +51,10 @@ const EnvSchema = z.object({
     .url('BLOB_STORAGE_PUBLIC_ENDPOINT must be a valid URL if provided')
     .optional()
     .describe('Public URL for blob storage (optional, for pre-signed URLs)'),
+  ALLOWED_ORIGINS: z
+    .string()
+    .default('http://localhost:5173')
+    .describe('Comma-separated list of origins allowed to call this API via CORS'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

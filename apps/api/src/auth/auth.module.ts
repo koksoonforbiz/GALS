@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { RolesGuard } from './roles.guard';
+import { LoginProtectionService } from './login-protection.service';
 import { ActivityLogModule } from '../activity-log';
 
 @Global()
@@ -23,7 +24,7 @@ import { ActivityLogModule } from '../activity-log';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RolesGuard],
+  providers: [AuthService, JwtStrategy, RolesGuard, LoginProtectionService],
   exports: [AuthService, JwtModule, RolesGuard],
 })
 export class AuthModule {}

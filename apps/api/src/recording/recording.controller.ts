@@ -21,14 +21,18 @@ export class RecordingController {
 
   @Get('config/:courseId')
   @Roles('teacher', 'student')
-  getConfig(@Param('courseId') courseId: string) {
-    return this.recordingService.getConfig(courseId);
+  getConfig(@Request() req: { user: RequestUser }, @Param('courseId') courseId: string) {
+    return this.recordingService.getConfig(courseId, req.user);
   }
 
   @Patch('config/:courseId')
   @Roles('teacher')
-  updateConfig(@Param('courseId') courseId: string, @Body() dto: RecordingConfigDto) {
-    return this.recordingService.updateConfig(courseId, dto);
+  updateConfig(
+    @Request() req: { user: RequestUser },
+    @Param('courseId') courseId: string,
+    @Body() dto: RecordingConfigDto,
+  ) {
+    return this.recordingService.updateConfig(courseId, req.user.id, dto);
   }
 
   // ─── Segments (student) ───────────────────────────────
@@ -41,29 +45,44 @@ export class RecordingController {
 
   @Patch('segments/:segmentId/complete')
   @Roles('student')
-  completeSegment(@Param('segmentId') segmentId: string, @Body() dto: CompleteSegmentDto) {
-    return this.recordingService.completeSegment(segmentId, dto);
+  completeSegment(
+    @Request() req: { user: RequestUser },
+    @Param('segmentId') segmentId: string,
+    @Body() dto: CompleteSegmentDto,
+  ) {
+    return this.recordingService.completeSegment(segmentId, req.user.id, dto);
   }
 
   @Patch('segments/:segmentId/fail')
   @Roles('student')
-  failSegment(@Param('segmentId') segmentId: string, @Body() body: { error: string }) {
-    return this.recordingService.failSegment(segmentId, body.error);
+  failSegment(
+    @Request() req: { user: RequestUser },
+    @Param('segmentId') segmentId: string,
+    @Body() body: { error: string },
+  ) {
+    return this.recordingService.failSegment(segmentId, req.user.id, body.error);
   }
 
   // ─── Segments (teacher) ───────────────────────────────
 
   @Get('segments/:segmentId/download')
   @Roles('teacher')
-  async getDownloadUrl(@Param('segmentId') segmentId: string) {
-    const url = await this.recordingService.getDownloadUrl(segmentId);
+  async getDownloadUrl(
+    @Request() req: { user: RequestUser },
+    @Param('segmentId') segmentId: string,
+  ) {
+    const url = await this.recordingService.getDownloadUrl(segmentId, req.user.id);
     return { url };
   }
 
   @Get('segments/:studentId/:courseId')
   @Roles('teacher')
-  getSegments(@Param('studentId') studentId: string, @Param('courseId') courseId: string) {
-    return this.recordingService.getSegments(studentId, courseId);
+  getSegments(
+    @Request() req: { user: RequestUser },
+    @Param('studentId') studentId: string,
+    @Param('courseId') courseId: string,
+  ) {
+    return this.recordingService.getSegments(studentId, courseId, req.user.id);
   }
 
   // ─── Consent (student) ────────────────────────────────

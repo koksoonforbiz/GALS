@@ -580,16 +580,29 @@ export function CourseBuilderPage() {
   const handlePdfUpload = async (itemId: string, _moduleId: string, file: File) => {
     try {
       // Get presigned upload URL
-      const { url } = await apiFetch<{ url: string; key: string }>(`/items/${itemId}/upload-url`, {
-        method: 'POST',
-        body: JSON.stringify({ filename: file.name, size: file.size }),
-      });
+      const { url, key } = await apiFetch<{ url: string; key: string }>(
+        `/items/${itemId}/upload-url`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ filename: file.name, size: file.size }),
+        },
+      );
 
       // Upload directly to MinIO
-      await fetch(url, {
+      const putRes = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/pdf' },
         body: file,
+      });
+      if (!putRes.ok) {
+        throw new Error(`Upload to storage failed (${putRes.status})`);
+      }
+
+      // Only now does the server record the PDF as attached — it
+      // independently verifies the file actually landed before trusting it.
+      await apiFetch(`/items/${itemId}/upload-url/confirm`, {
+        method: 'POST',
+        body: JSON.stringify({ key, filename: file.name, size: file.size }),
       });
 
       toast('success', `Uploaded "${file.name}"`);

@@ -1,4 +1,11 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { PyfeatService } from '../pyfeat/pyfeat.service';
@@ -24,7 +31,42 @@ export class RecordingService {
     private readonly activityLog: ActivityLogService,
   ) {}
 
-  async getConfig(courseId: string): Promise<RecordingConfig> {
+  /** Verifies `teacherId` teaches `courseId`. Throws ForbiddenException otherwise. */
+  private async assertTeacherOwnsCourse(courseId: string, teacherId: string): Promise<void> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { teacherId: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only access your own courses');
+    }
+  }
+
+  /** Verifies `studentId` is enrolled in `courseId`. Throws ForbiddenException otherwise. */
+  private async assertStudentEnrolled(courseId: string, studentId: string): Promise<void> {
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId, courseId } },
+    });
+    if (!enrollment) {
+      throw new ForbiddenException('You are not enrolled in this course');
+    }
+  }
+
+  async getConfig(
+    courseId: string,
+    requester: { id: string; role: string },
+  ): Promise<RecordingConfig> {
+    if (requester.role === 'teacher') {
+      await this.assertTeacherOwnsCourse(courseId, requester.id);
+    } else {
+      await this.assertStudentEnrolled(courseId, requester.id);
+    }
+    return this.getOrCreateConfig(courseId);
+  }
+
+  /** Internal, unchecked variant for server-side callers that already hold a valid courseId. */
+  private async getOrCreateConfig(courseId: string): Promise<RecordingConfig> {
     let config = await this.prisma.recordingConfig.findUnique({
       where: { courseId },
     });
@@ -36,7 +78,13 @@ export class RecordingService {
     return config;
   }
 
-  async updateConfig(courseId: string, dto: RecordingConfigDto): Promise<RecordingConfig> {
+  async updateConfig(
+    courseId: string,
+    teacherId: string,
+    dto: RecordingConfigDto,
+  ): Promise<RecordingConfig> {
+    await this.assertTeacherOwnsCourse(courseId, teacherId);
+
     // Patch only the fields the caller provided. This lets a focused form
     // (e.g. OpenFace3 settings) update its own subset without clobbering
     // the webcam-recording toggle or vice versa.
@@ -74,6 +122,8 @@ export class RecordingService {
     studentId: string,
     dto: CreateSegmentDto,
   ): Promise<{ segmentId: string; uploadUrl: string; minioKey: string }> {
+    await this.assertStudentEnrolled(dto.courseId, studentId);
+
     const now = new Date(dto.startWallTime);
     const dateStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
     const timeStr =
@@ -106,11 +156,18 @@ export class RecordingService {
     return { segmentId: segment.id, uploadUrl, minioKey };
   }
 
-  async completeSegment(segmentId: string, dto: CompleteSegmentDto): Promise<RecordingSegment> {
+  async completeSegment(
+    segmentId: string,
+    studentId: string,
+    dto: CompleteSegmentDto,
+  ): Promise<RecordingSegment> {
     const segment = await this.prisma.recordingSegment.findUnique({
       where: { id: segmentId },
     });
     if (!segment) throw new NotFoundException('Segment not found');
+    if (segment.studentId !== studentId) {
+      throw new ForbiddenException('You can only update your own recording segments');
+    }
 
     const objectExists = await this.blob.exists(segment.minioKey);
     if (!objectExists) {
@@ -174,7 +231,7 @@ export class RecordingService {
 
     // Enqueue OpenFace 3 if enabled for this course
     try {
-      const recordingConfig = await this.getConfig(updated.courseId);
+      const recordingConfig = await this.getOrCreateConfig(updated.courseId);
       if (recordingConfig.openface3Enabled && recordingConfig.openface3RunOnNewSegments) {
         await this.openface3Service.enqueueJob({
           recordingSegmentId: updated.id,
@@ -198,7 +255,16 @@ export class RecordingService {
     return updated;
   }
 
-  async failSegment(segmentId: string, error: string): Promise<void> {
+  async failSegment(segmentId: string, studentId: string, error: string): Promise<void> {
+    const existing = await this.prisma.recordingSegment.findUnique({
+      where: { id: segmentId },
+      select: { studentId: true },
+    });
+    if (!existing) throw new NotFoundException('Segment not found');
+    if (existing.studentId !== studentId) {
+      throw new ForbiddenException('You can only update your own recording segments');
+    }
+
     const segment = await this.prisma.recordingSegment.update({
       where: { id: segmentId },
       data: { uploadStatus: 'FAILED' },
@@ -214,18 +280,27 @@ export class RecordingService {
     });
   }
 
-  async getSegments(studentId: string, courseId: string): Promise<RecordingSegment[]> {
+  async getSegments(
+    studentId: string,
+    courseId: string,
+    teacherId: string,
+  ): Promise<RecordingSegment[]> {
+    await this.assertTeacherOwnsCourse(courseId, teacherId);
     return this.prisma.recordingSegment.findMany({
       where: { studentId, courseId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  async getDownloadUrl(segmentId: string): Promise<string> {
+  async getDownloadUrl(segmentId: string, teacherId: string): Promise<string> {
     const segment = await this.prisma.recordingSegment.findUnique({
       where: { id: segmentId },
+      include: { course: { select: { teacherId: true } } },
     });
     if (!segment) throw new NotFoundException('Segment not found');
+    if (segment.course.teacherId !== teacherId) {
+      throw new ForbiddenException('You can only access recordings from your own courses');
+    }
 
     return this.blob.getPresignedDownloadUrl({
       key: segment.minioKey,

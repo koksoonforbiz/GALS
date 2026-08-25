@@ -9,6 +9,11 @@ import {
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
+import { sanitizeForLog } from './log-sanitizer';
+
+interface RequestWithUser extends Request {
+  user?: { id: string; role: string };
+}
 
 export interface StandardErrorResponse {
   statusCode: number;
@@ -25,18 +30,28 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const request = ctx.getRequest<RequestWithUser>();
 
     const errorResponse = this.buildResponse(exception, request.url);
 
+    // Every 4xx/5xx flows through this single choke point, so this is
+    // also where auth/authz failures (401 from JwtAuthGuard, 403 from
+    // RolesGuard or an ownership check) get their audit trail — who (when
+    // known), from where, hit what route, and why it was denied.
+    const safeUrl = sanitizeForLog(request.url);
+    const userTag = request.user
+      ? ` user=${sanitizeForLog(request.user.id)}(${sanitizeForLog(request.user.role)})`
+      : '';
+    const ipTag = request.ip ? ` ip=${sanitizeForLog(request.ip)}` : '';
+
     if (errorResponse.statusCode >= 500) {
       this.logger.error(
-        `${request.method} ${request.url} ${errorResponse.statusCode}`,
+        `${request.method} ${safeUrl} ${errorResponse.statusCode}${userTag}${ipTag}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     } else {
       this.logger.warn(
-        `${request.method} ${request.url} ${errorResponse.statusCode} — ${JSON.stringify(errorResponse.message)}`,
+        `${request.method} ${safeUrl} ${errorResponse.statusCode}${userTag}${ipTag} — ${JSON.stringify(errorResponse.message)}`,
       );
     }
 

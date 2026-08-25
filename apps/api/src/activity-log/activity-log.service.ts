@@ -165,8 +165,12 @@ export class ActivityLogService {
       if (job.resultMinioKey) blobKeys.add(job.resultMinioKey);
     });
 
-    await Promise.all([...blobKeys].map((key) => this.blob.delete(key)));
-
+    // Postgres is the source of truth: run the transaction first. If any
+    // part of it fails, the transaction rolls back as a whole and NO blobs
+    // have been touched yet — a consistent state. Deleting blobs first (the
+    // old order) risked the opposite: a partially-deleted MinIO set with
+    // the DB transaction never even attempted, or blobs gone while some DB
+    // rows survive because one MinIO delete in the batch rejected first.
     const result = await this.prisma.$transaction(async (tx) => {
       const [
         chatbotMessages,
@@ -252,6 +256,20 @@ export class ActivityLogService {
         },
       };
     });
+
+    // DB rows are already gone at this point — remaining MinIO cleanup is
+    // best-effort. A leftover orphaned blob is a minor, recoverable cost;
+    // it must never surface as a failure of the delete the caller already
+    // got committed.
+    await Promise.all(
+      [...blobKeys].map((key) =>
+        this.blob.delete(key).catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to delete blob ${key} for deleted session ${sessionId}: ${(err as Error).message}`,
+          );
+        }),
+      ),
+    );
 
     this.logger.log(`Deleted student session ${sessionId}`);
     return result;

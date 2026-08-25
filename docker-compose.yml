@@ -20,6 +20,7 @@ services:
       # Public endpoint used to sign presigned URLs that the browser will fetch.
       # Must match the host the browser uses to reach MinIO (port-mapped on host).
       BLOB_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
     networks:
       - local-dev
     depends_on:

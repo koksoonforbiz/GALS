@@ -28,7 +28,9 @@ function makeService(): { service: LlmService; prisma: any } {
     llmModelPricing: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const config = {
-    get: (_k: string, defaultValue?: any) => defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+    get: (_k: string, defaultValue?: any) =>
+      defaultValue ?? 'test-secret-must-be-at-least-16-chars',
+    getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
   } as unknown as ConfigService;
   const eventEmitter = new EventEmitter2();
   const service = new LlmService(prisma, config, null as any, eventEmitter);
@@ -88,13 +90,7 @@ describe('LlmService.saveApiKey — validation', () => {
     it('mismatched embedding model provider → BadRequestException', async () => {
       const { service } = makeService();
       await expect(
-        service.saveApiKey(
-          'user-1',
-          'openai',
-          'sk-test',
-          'gpt-5.4-mini',
-          'gemini-embedding-001',
-        ),
+        service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-5.4-mini', 'gemini-embedding-001'),
       ).rejects.toThrow(BadRequestException);
     });
   });
