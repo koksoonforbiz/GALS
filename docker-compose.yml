@@ -21,6 +21,11 @@ services:
       # Must match the host the browser uses to reach MinIO (port-mapped on host).
       BLOB_STORAGE_PUBLIC_ENDPOINT: http://localhost:9000
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:?SMTP_USER is required — set it in your root .env}
+      SMTP_PASS: ${SMTP_PASS:?SMTP_PASS is required — set it in your root .env}
+      SMTP_FROM: ${SMTP_FROM:?SMTP_FROM is required — set it in your root .env}
     networks:
       - local-dev
     depends_on:

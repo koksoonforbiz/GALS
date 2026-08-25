@@ -7,13 +7,17 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { RolesGuard } from './roles.guard';
 import { LoginProtectionService } from './login-protection.service';
+import { TwoFactorService } from './two-factor.service';
+import { TotpService } from './totp.service';
 import { ActivityLogModule } from '../activity-log';
+import { MailerModule } from '../mailer';
 
 @Global()
 @Module({
   imports: [
     PassportModule,
     ActivityLogModule,
+    MailerModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -24,7 +28,14 @@ import { ActivityLogModule } from '../activity-log';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RolesGuard, LoginProtectionService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    RolesGuard,
+    LoginProtectionService,
+    TwoFactorService,
+    TotpService,
+  ],
   exports: [AuthService, JwtModule, RolesGuard],
 })
 export class AuthModule {}

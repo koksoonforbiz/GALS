@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { joinStudentRoom, disconnectSocket } from '../lib/socket';
 import { initActivitySession, clearActivitySession } from '../lib/activity-log';
 import { mediaStreamRegistry } from '../lib/biometrics/mediaStreamRegistry';
-import type { UserRole } from '@ats/shared';
+import type { UserRole, TwoFactorMethod } from '@ats/shared';
 import {
   PERMISSION_SESSION_KEY,
   clearPermittedScreenStream,
@@ -14,6 +14,7 @@ interface User {
   email: string;
   name: string;
   role: UserRole;
+  twoFactorMethod: TwoFactorMethod | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +25,18 @@ interface AuthResponse {
   sessionId?: string;
 }
 
+interface TwoFactorPendingResponse {
+  twoFactorRequired: true;
+  challengeId: string;
+  method: TwoFactorMethod;
+}
+
+function isTwoFactorPending(
+  response: AuthResponse | TwoFactorPendingResponse,
+): response is TwoFactorPendingResponse {
+  return 'twoFactorRequired' in response;
+}
+
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
@@ -31,8 +44,31 @@ interface AuthContextValue {
   // assigned login ID. The backend resolves which by inspecting the
   // value (contains `@` → email lookup; otherwise loginId lookup) and
   // both columns are UNIQUE, so the resolution is deterministic.
+  //
+  // When the account has 2FA enabled (email or TOTP), a correct password
+  // does not finish the login — the backend returns { twoFactorRequired,
+  // challengeId, method } instead of a token. `login()` stores the id and
+  // method in `pendingChallengeId`/`pendingMethod` and returns without
+  // touching localStorage/`user`, so the caller (Login.tsx) should watch
+  // `pendingChallengeId` and render a code-entry step (copy branching on
+  // `pendingMethod` — no "resend" for TOTP) that calls `verifyTwoFactor`.
   login: (identifier: string, password: string) => Promise<void>;
+  pendingChallengeId: string | null;
+  pendingMethod: TwoFactorMethod | null;
+  verifyTwoFactor: (code: string) => Promise<void>;
+  resendTwoFactorCode: () => Promise<void>;
+  cancelTwoFactor: () => void;
   register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
+  // Re-fetches the current user from /auth/me and updates context +
+  // localStorage. Used after enabling/disabling 2FA (or any other
+  // account-setting change) so the rest of the app reflects it without
+  // requiring a full reload.
+  refreshUser: () => Promise<void>;
+  // TOTP enrollment: startTotpSetup mints a secret + QR code (not yet
+  // active); confirmTotpSetup proves the user's authenticator app has it,
+  // persists it as the active method, and refreshes `user`.
+  startTotpSetup: () => Promise<{ secret: string; qrCodeDataUrl: string }>;
+  confirmTotpSetup: (code: string) => Promise<void>;
   logout: () => void;
   // Split out of `logout` so a caller that needs to gate the auth
   // transition behind something else (e.g. an exit survey) can stop the
@@ -47,6 +83,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingChallengeId, setPendingChallengeId] = useState<string | null>(null);
+  const [pendingMethod, setPendingMethod] = useState<TwoFactorMethod | null>(null);
 
   // Load user from token on mount
   useEffect(() => {
@@ -103,18 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (identifier: string, password: string) => {
-    // Prompt 05: send a single canonical `identifier` field. Backend
-    // (`AuthService.login`) decides email-vs-loginId by checking for
-    // `@`. The old `requirePasswordChange` / `/change-password`
-    // redirect path was removed — students can no longer change their
-    // own password, so a temporary-password user simply logs in
-    // normally and a teacher resets it via UserManagementPage.
-    const response = await api.post<AuthResponse>('/auth/login', {
-      identifier,
-      password,
-    });
-
+  const applyAuthResponse = useCallback((response: AuthResponse) => {
     localStorage.setItem('token', response.accessToken);
     localStorage.setItem('user', JSON.stringify(response.user));
     setUser(response.user);
@@ -129,6 +156,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearActivitySession();
     }
   }, []);
+
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      // Prompt 05: send a single canonical `identifier` field. Backend
+      // (`AuthService.login`) decides email-vs-loginId by checking for
+      // `@`. The old `requirePasswordChange` / `/change-password`
+      // redirect path was removed — students can no longer change their
+      // own password, so a temporary-password user simply logs in
+      // normally and a teacher resets it via UserManagementPage.
+      const response = await api.post<AuthResponse | TwoFactorPendingResponse>('/auth/login', {
+        identifier,
+        password,
+      });
+
+      if (isTwoFactorPending(response)) {
+        setPendingChallengeId(response.challengeId);
+        setPendingMethod(response.method);
+        return;
+      }
+
+      applyAuthResponse(response);
+    },
+    [applyAuthResponse],
+  );
+
+  const verifyTwoFactor = useCallback(
+    async (code: string) => {
+      if (!pendingChallengeId) {
+        throw new Error('No pending 2FA challenge');
+      }
+      const response = await api.post<AuthResponse>('/auth/2fa/verify', {
+        challengeId: pendingChallengeId,
+        code,
+      });
+      setPendingChallengeId(null);
+      setPendingMethod(null);
+      applyAuthResponse(response);
+    },
+    [pendingChallengeId, applyAuthResponse],
+  );
+
+  const resendTwoFactorCode = useCallback(async () => {
+    if (!pendingChallengeId) {
+      throw new Error('No pending 2FA challenge');
+    }
+    if (pendingMethod === 'totp') {
+      throw new Error('Authenticator app codes cannot be resent');
+    }
+    await api.post('/auth/2fa/resend', { challengeId: pendingChallengeId });
+  }, [pendingChallengeId, pendingMethod]);
+
+  const cancelTwoFactor = useCallback(() => {
+    setPendingChallengeId(null);
+    setPendingMethod(null);
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const freshUser = await api.get<User>('/auth/me');
+    setUser(freshUser);
+    localStorage.setItem('user', JSON.stringify(freshUser));
+  }, []);
+
+  const startTotpSetup = useCallback(async () => {
+    return api.post<{ secret: string; qrCodeDataUrl: string }>('/auth/2fa/totp/setup');
+  }, []);
+
+  const confirmTotpSetup = useCallback(
+    async (code: string) => {
+      await api.post('/auth/2fa/totp/setup/confirm', { code });
+      await refreshUser();
+    },
+    [refreshUser],
+  );
 
   const register = useCallback(
     async (email: string, password: string, name: string, role: UserRole) => {
@@ -203,7 +303,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoading, login, register, logout, stopBiometrics, finishLogout }}
+      value={{
+        user,
+        isLoading,
+        login,
+        pendingChallengeId,
+        pendingMethod,
+        verifyTwoFactor,
+        resendTwoFactorCode,
+        cancelTwoFactor,
+        register,
+        refreshUser,
+        startTotpSetup,
+        confirmTotpSetup,
+        logout,
+        stopBiometrics,
+        finishLogout,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -9,8 +9,21 @@ const BACKGROUND_PATHS = [
   '/logs/',
 ];
 
-function isBackgroundPath(path: string): boolean {
-  return BACKGROUND_PATHS.some((p) => path.startsWith(p));
+// Auth-flow endpoints where a 401 means "wrong password/code", not "your
+// session expired" — some of these run before any token exists at all
+// (login, 2FA verify/resend), so there's no session to have expired. The
+// global redirect below would otherwise hard-navigate to /login mid-flow
+// (e.g. after a wrong 2FA or TOTP-setup code), wiping the in-progress
+// code-entry step before the caller's own catch block can show an inline
+// error and let the user retry. Every /auth/2fa/* route (email-OTP and
+// TOTP alike) plus /auth/login itself fall into this bucket — the caller
+// handles the 401 instead of the global redirect.
+function skipsAuthRedirect(path: string): boolean {
+  return (
+    BACKGROUND_PATHS.some((p) => path.startsWith(p)) ||
+    path === '/auth/login' ||
+    path.startsWith('/auth/2fa/')
+  );
 }
 
 // CompressionStream landed in Chrome 80, Firefox 113, Safari 16.4 — decent
@@ -66,10 +79,13 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   }
 
   if (res.status === 401) {
-    // For background biometric requests, throw without clearing token/redirecting.
-    // This prevents a single 401 from killing all in-flight biometric flushes.
-    if (isBackgroundPath(path)) {
-      throw new ApiError(401, 'Unauthorized');
+    // For background biometric requests and auth-flow endpoints (see
+    // AUTH_FLOW_PATHS above), throw the server's actual message (e.g.
+    // "Incorrect code.") without clearing token/redirecting, so the
+    // caller can show it inline and let the user retry.
+    if (skipsAuthRedirect(path)) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(401, body.message || 'Unauthorized', body.errors);
     }
     localStorage.removeItem('token');
     localStorage.removeItem('user');

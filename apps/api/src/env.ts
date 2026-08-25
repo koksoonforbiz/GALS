@@ -55,6 +55,28 @@ const EnvSchema = z.object({
     .string()
     .default('http://localhost:5173')
     .describe('Comma-separated list of origins allowed to call this API via CORS'),
+  SMTP_HOST: z
+    .string()
+    .min(1, 'SMTP_HOST is required — the hostname of your SMTP provider (e.g. smtp.gmail.com)')
+    .describe('SMTP server hostname used to send 2FA emails'),
+  SMTP_PORT: z.coerce
+    .number()
+    .int('SMTP_PORT must be an integer')
+    .min(1, 'SMTP_PORT must be between 1 and 65535')
+    .max(65535, 'SMTP_PORT must be between 1 and 65535')
+    .describe('SMTP server port (587 for STARTTLS, 465 for implicit TLS)'),
+  SMTP_USER: z
+    .string()
+    .min(1, 'SMTP_USER is required — the SMTP account username')
+    .describe('SMTP account username'),
+  SMTP_PASS: z
+    .string()
+    .min(1, 'SMTP_PASS is required — the SMTP account password or app password')
+    .describe('SMTP account password'),
+  SMTP_FROM: z
+    .string()
+    .min(1, 'SMTP_FROM is required — the From address for outgoing emails')
+    .describe('From address used on outgoing 2FA emails'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

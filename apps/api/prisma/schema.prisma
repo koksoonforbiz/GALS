@@ -15,6 +15,11 @@ enum UserRole {
   admin
 }
 
+enum TwoFactorMethod {
+  email
+  totp
+}
+
 enum QuestionType {
   text
   MCQ_SINGLE
@@ -282,6 +287,17 @@ model User {
   invitedBy           String?   @map("invited_by") @db.Uuid
   invitedAt           DateTime? @map("invited_at") @db.Timestamptz
   passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz
+
+  // Two-factor auth. Exactly one method active at a time (or none) — a
+  // nullable enum rather than a per-method boolean, since that's the
+  // only representable state anyway. Email-OTP has no persistent
+  // secret (codes are per-challenge, live only in Redis — see
+  // TwoFactorService); TOTP's secret is encrypted at rest below.
+  twoFactorMethod    TwoFactorMethod? @map("two_factor_method")
+  twoFactorEnabledAt DateTime?        @map("two_factor_enabled_at") @db.Timestamptz
+  // AES-256-GCM ciphertext (same scheme as encryptedApiKey/cohereApiKey
+  // above, distinct key salt — see TotpService). Null unless method = totp.
+  totpSecret         String?          @map("totp_secret")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz

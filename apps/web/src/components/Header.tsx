@@ -1,5 +1,5 @@
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 interface HeaderProps {
   onLogoutRequest?: () => void;
@@ -38,6 +38,9 @@ export function Header({ onLogoutRequest }: HeaderProps) {
                 {user.role}
               </span>
             </div>
+            <Link to="/account/security" className="text-sm text-gray-500 hover:text-gray-700">
+              Account
+            </Link>
             <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-700">
               Sign out
             </button>

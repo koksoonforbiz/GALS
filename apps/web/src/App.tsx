@@ -24,6 +24,7 @@ import { QuestionGenerationPage } from './pages/teacher/QuestionGenerationPage';
 import { UserManagementPage } from './pages/teacher/UserManagementPage';
 import { BulkUserProvisioningPage } from './pages/teacher/BulkUserProvisioningPage';
 import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
+import { AccountSecurityPage } from './pages/AccountSecurityPage';
 import { SessionTimelinePage } from './pages/dashboard/SessionTimelinePage';
 import { StudentTextMiningPage } from './features/text-mining/pages/StudentTextMiningPage';
 // Prompt 05: the student-facing /change-password page was removed.
@@ -104,6 +105,9 @@ function App() {
                   </ProtectedRoute>
                 }
               >
+                {/* Account settings — any authenticated role, no RoleRoute */}
+                <Route path="/account/security" element={<AccountSecurityPage />} />
+
                 {/* Teacher routes */}
                 <Route
                   path="/teacher"

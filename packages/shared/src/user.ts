@@ -51,8 +51,70 @@ export type Login = z.infer<typeof LoginSchema>;
 export const AuthResponseSchema = z.object({
   accessToken: z.string(),
   user: UserSchema,
+  sessionId: z.string().optional(),
 });
 export type AuthResponse = z.infer<typeof AuthResponseSchema>;
+
+// ── Two-factor authentication (email-OTP or TOTP) ──────────────────
+//
+// Exactly one method active per account at a time (or none) — enabling
+// either method overwrites whichever was previously active. Same lowercase
+// string-literal convention as UserRole (roles.ts); the Prisma enum uses
+// the exact same values, no casing translation between the two.
+export const TwoFactorMethodSchema = z.enum(['email', 'totp']);
+export type TwoFactorMethod = z.infer<typeof TwoFactorMethodSchema>;
+
+// Email-OTP: no persistent secret is exchanged with the client — a
+// 6-digit code is generated per challenge and emailed to the account's
+// address; the server tracks the challenge in Redis only (see
+// TwoFactorService in apps/api/src/auth). TOTP: no code is generated
+// server-side at all — the client's authenticator app computes it from a
+// secret exchanged once during setup (see TotpSetupResponseSchema below).
+// Either way, `challengeId` is an opaque handle the client carries from
+// the initial /auth/login call through to /auth/2fa/verify.
+export const TwoFactorPendingResponseSchema = z.object({
+  twoFactorRequired: z.literal(true),
+  challengeId: z.string().uuid(),
+  method: TwoFactorMethodSchema,
+});
+export type TwoFactorPendingResponse = z.infer<typeof TwoFactorPendingResponseSchema>;
+
+export const LoginResponseSchema = z.union([AuthResponseSchema, TwoFactorPendingResponseSchema]);
+export type LoginResponse = z.infer<typeof LoginResponseSchema>;
+
+export const TwoFactorVerifySchema = z.object({
+  challengeId: z.string().uuid(),
+  code: z.string().length(6, 'Code must be 6 digits').regex(/^\d+$/, 'Code must be 6 digits'),
+});
+export type TwoFactorVerify = z.infer<typeof TwoFactorVerifySchema>;
+
+export const TwoFactorResendSchema = z.object({
+  challengeId: z.string().uuid(),
+});
+export type TwoFactorResend = z.infer<typeof TwoFactorResendSchema>;
+
+export const TwoFactorDisableSchema = z.object({
+  password: z.string().min(1),
+});
+export type TwoFactorDisable = z.infer<typeof TwoFactorDisableSchema>;
+
+// ── TOTP (authenticator app) enrollment ─────────────────────────────
+//
+// POST /auth/2fa/totp/setup returns this — a fresh secret (not yet
+// persisted) plus a QR code the client just renders as an <img>. `secret`
+// doubles as the "can't scan? enter manually" fallback shown alongside it.
+export const TotpSetupResponseSchema = z.object({
+  secret: z.string(),
+  qrCodeDataUrl: z.string(),
+});
+export type TotpSetupResponse = z.infer<typeof TotpSetupResponseSchema>;
+
+// POST /auth/2fa/totp/setup/confirm — proves the user's authenticator app
+// actually has the secret before it's persisted as their active method.
+export const TotpSetupConfirmSchema = z.object({
+  code: z.string().length(6, 'Code must be 6 digits').regex(/^\d+$/, 'Code must be 6 digits'),
+});
+export type TotpSetupConfirm = z.infer<typeof TotpSetupConfirmSchema>;
 
 // ── Teacher bulk user provisioning (prompt 02) ─────────────────────
 //
