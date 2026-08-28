@@ -95,6 +95,31 @@ function loadSidebarWidth(): number {
   }
 }
 
+// Code Playground drawer resizer. Height persists across reloads;
+// dragging trades height between the PDF/lesson content above it and
+// the Playground below — the content pane absorbs whatever the
+// Playground doesn't claim (flex-1), mirroring how the sidebar/chatbot
+// width resizers work.
+const PLAYGROUND_HEIGHT_STORAGE_KEY = 'gals.studentCourseView.playgroundHeight';
+const PLAYGROUND_MIN_HEIGHT = 120;
+const PLAYGROUND_MAX_HEIGHT = 900;
+// Just enough to show the header, Run button, and the default 2-line
+// snippet with no dead space — not an arbitrary large guess. The drag
+// handle lets the student grow it from here whenever they want.
+const PLAYGROUND_DEFAULT_HEIGHT = 170;
+
+function loadPlaygroundHeight(): number {
+  try {
+    const raw = localStorage.getItem(PLAYGROUND_HEIGHT_STORAGE_KEY);
+    if (!raw) return PLAYGROUND_DEFAULT_HEIGHT;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return PLAYGROUND_DEFAULT_HEIGHT;
+    return Math.min(Math.max(n, PLAYGROUND_MIN_HEIGHT), PLAYGROUND_MAX_HEIGHT);
+  } catch {
+    return PLAYGROUND_DEFAULT_HEIGHT;
+  }
+}
+
 function loadSidebarCollapsed(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1';
@@ -114,6 +139,8 @@ export function StudentCourseViewPage() {
     setPdfCurrentPageText,
     setSelectedText,
     clearSelectedText,
+    codePlaygroundCollapsed,
+    setCodePlaygroundCollapsed,
   } = usePageContext();
   const { track } = useActivityLog();
   const [course, setCourse] = useState<Course | null>(null);
@@ -336,10 +363,9 @@ export function StudentCourseViewPage() {
   //     when their rect is empty so the CSV's aoi_sidebar_w/h flip to 0).
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
-  // Free-to-use Python scratch space docked under the lesson content —
-  // independent of the chat/PDF above it and of any code question the
-  // chatbot may have generated. Visible by default.
-  const [codePlaygroundCollapsed, setCodePlaygroundCollapsed] = useState(false);
+  // codePlaygroundCollapsed itself lives in PageContext (see destructure
+  // above) — not local state — so the inline code-question widget's
+  // "Load into Playground" button can expand the drawer directly.
   const isResizingSidebar = useRef(false);
   const sidebarResizeStart = useRef({ mouseX: 0, startWidth: 0 });
 
@@ -396,6 +422,52 @@ export function StudentCourseViewPage() {
       return next;
     });
   }, []);
+
+  // Code Playground resizer. Same MouseDown/MouseMove pattern as the
+  // sidebar/chatbot resizers above, but vertical: the handle sits above
+  // the Playground, so dragging it down shrinks the Playground (gives
+  // more height back to the PDF/lesson content) and dragging it up
+  // grows it.
+  const [playgroundHeight, setPlaygroundHeight] = useState<number>(() => loadPlaygroundHeight());
+  const isResizingPlayground = useRef(false);
+  const playgroundResizeStart = useRef({ mouseY: 0, startHeight: 0 });
+
+  const handlePlaygroundResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (codePlaygroundCollapsed) return;
+      isResizingPlayground.current = true;
+      playgroundResizeStart.current = { mouseY: e.clientY, startHeight: playgroundHeight };
+      e.preventDefault();
+    },
+    [codePlaygroundCollapsed, playgroundHeight],
+  );
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!isResizingPlayground.current) return;
+      const dy = e.clientY - playgroundResizeStart.current.mouseY;
+      const next = Math.min(
+        Math.max(playgroundResizeStart.current.startHeight - dy, PLAYGROUND_MIN_HEIGHT),
+        PLAYGROUND_MAX_HEIGHT,
+      );
+      setPlaygroundHeight(next);
+    };
+    const handleUp = () => {
+      if (!isResizingPlayground.current) return;
+      isResizingPlayground.current = false;
+      try {
+        localStorage.setItem(PLAYGROUND_HEIGHT_STORAGE_KEY, String(playgroundHeight));
+      } catch {
+        // ignore storage errors
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, [playgroundHeight]);
 
   // Emit MODULE_OPENED activity event once per course load. Without these
   // events the teacher's replay timeline has no anchor for the session
@@ -713,21 +785,20 @@ export function StudentCourseViewPage() {
               listener to this region so the chatbot only ever picks up
               selections from inside the lesson, not from navbar / sidebar.
 
-              The outer container scrolls as ONE unit (content + the Code
-              Playground below it) via `overflow-y-auto` — the Playground
-              must never shrink the lecture content's viewing area, so the
-              content wrapper below is pinned to `h-full` (100% of this
-              column's own height, which flexbox `items-stretch` already
-              matches to the row above) regardless of whether the
-              Playground is open. Scrolling up shows the full-height
-              lecture content exactly as before the Playground existed;
-              scrolling down reveals the Playground underneath it. */}
+              The column is a fixed-height flex-column split between the
+              lecture content and the Code Playground below it, with a
+              draggable divider trading height between the two (see
+              handlePlaygroundResizeStart) — same pattern as the
+              sidebar/chatbot width resizers, just vertical. The content
+              pane is `flex-1` so it absorbs whatever height the
+              Playground doesn't claim; when the Playground is collapsed
+              it gets everything. */}
           <div
             data-selectable="true"
             data-replay-region="lesson"
-            className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-y-auto"
+            className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col"
           >
-            <div className="h-full flex flex-col">
+            <div className="flex-1 min-h-0 flex flex-col">
               {!selectedItem ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                   <p className="text-gray-400">Select an item from the left.</p>
@@ -821,20 +892,33 @@ export function StudentCourseViewPage() {
               )}
             </div>
 
+            {/* Drag handle between the lecture content and the Code
+                Playground — hidden while collapsed since there's nothing
+                to trade height with at that point. */}
+            {!codePlaygroundCollapsed && (
+              <div
+                onMouseDown={handlePlaygroundResizeStart}
+                className="h-1 shrink-0 cursor-row-resize bg-gray-200 hover:bg-blue-400 transition-colors"
+                title="Drag to resize Code Playground"
+              />
+            )}
+
             {/* Code Playground — a free-to-use Python scratch space,
                 independent of the chat above it and of any code question
                 the chatbot may have generated. Runs entirely client-side
-                via Pyodide. Visible by default. Sits below the
-                full-height content above, reachable by scrolling the
-                lesson column down — never shrinks the lecture view. */}
-            <div className="border-t border-gray-200">
-              <div className="flex items-center justify-between px-3 py-1.5">
+                via Pyodide. Visible by default; height is user-resizable
+                via the drag handle above (persisted across reloads). */}
+            <div
+              className="border-t border-gray-200 shrink-0 flex flex-col"
+              style={codePlaygroundCollapsed ? undefined : { height: playgroundHeight }}
+            >
+              <div className="shrink-0 flex items-center justify-between px-3 py-1.5">
                 <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
                   Code Playground
                 </span>
                 <button
                   type="button"
-                  onClick={() => setCodePlaygroundCollapsed((c) => !c)}
+                  onClick={() => setCodePlaygroundCollapsed(!codePlaygroundCollapsed)}
                   className="text-gray-400 hover:text-gray-700"
                   title={codePlaygroundCollapsed ? 'Expand' : 'Collapse'}
                   aria-label={
@@ -845,7 +929,7 @@ export function StudentCourseViewPage() {
                 </button>
               </div>
               {!codePlaygroundCollapsed && (
-                <div className="h-[32rem]">
+                <div className="flex-1 min-h-0">
                   <Suspense
                     fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
                   >

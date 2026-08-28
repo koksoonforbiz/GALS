@@ -9,6 +9,14 @@ export interface ActiveCodeQuestion {
   language: string;
 }
 
+export interface PlaygroundLoadRequest {
+  code: string;
+  /** The exercise's question text, shown as a banner above the
+   *  Playground editor so the student doesn't have to scroll back up
+   *  to the chat bubble to see what they're solving. */
+  question: string;
+}
+
 interface PageContextType {
   pageType: PageType;
   courseId: string | null;
@@ -57,6 +65,22 @@ interface PageContextType {
    * whenever a new exercise is generated.
    */
   activeCodeQuestion: ActiveCodeQuestion | null;
+  /**
+   * Whether the Code Playground drawer (StudentCourseViewPage) is
+   * collapsed. Lifted here — rather than local state on the page — so
+   * the inline code-question widget's "Load into Playground" button
+   * (rendered inside the chatbot, a sibling component tree) can expand
+   * it directly.
+   */
+  codePlaygroundCollapsed: boolean;
+  /**
+   * One-shot signal: when non-null, the Playground should adopt this
+   * code + question and then the setter below clears it back to null.
+   * Consumed by CodePlayground's own effect. Set via
+   * `loadPlaygroundCode`, which also expands the drawer — that's the
+   * entirety of the "Load into Playground" action.
+   */
+  pendingPlaygroundLoad: PlaygroundLoadRequest | null;
   setPageContext: (
     ctx: Partial<
       Pick<
@@ -70,6 +94,15 @@ interface PageContextType {
   setChatbotDocked: (docked: boolean) => void;
   setCodeContext: (ctx: CodeContext | null) => void;
   setActiveCodeQuestion: (q: ActiveCodeQuestion | null) => void;
+  setCodePlaygroundCollapsed: (collapsed: boolean) => void;
+  /** Expands the Playground (if collapsed) and hands it the code +
+   *  question to load — the whole "Load into Playground" action in one
+   *  call. */
+  loadPlaygroundCode: (code: string, question: string) => void;
+  /** Consumed by CodePlayground after it applies `pendingPlaygroundLoad`,
+   *  resetting to null so the same code can be loaded again later
+   *  (e.g. after the student edits it away) and still trigger the effect. */
+  clearPendingPlaygroundCode: () => void;
   /** Set by the PdfReader (via the lifting prop `onPdfMeta`) so
    *  intervention views can default page-range inputs sensibly. */
   setPdfNumPages: (n: number | null) => void;
@@ -89,6 +122,10 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [chatbotDocked, setChatbotDockedState] = useState<boolean>(false);
   const [codeContext, setCodeContextState] = useState<CodeContext | null>(null);
   const [activeCodeQuestion, setActiveCodeQuestionState] = useState<ActiveCodeQuestion | null>(
+    null,
+  );
+  const [codePlaygroundCollapsed, setCodePlaygroundCollapsedState] = useState(false);
+  const [pendingPlaygroundLoad, setPendingPlaygroundLoad] = useState<PlaygroundLoadRequest | null>(
     null,
   );
   const [pdfNumPages, setPdfNumPagesState] = useState<number | null>(null);
@@ -137,6 +174,19 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
 
   const setActiveCodeQuestion = useCallback((q: ActiveCodeQuestion | null) => {
     setActiveCodeQuestionState(q);
+  }, []);
+
+  const setCodePlaygroundCollapsed = useCallback((collapsed: boolean) => {
+    setCodePlaygroundCollapsedState(collapsed);
+  }, []);
+
+  const loadPlaygroundCode = useCallback((code: string, question: string) => {
+    setCodePlaygroundCollapsedState(false);
+    setPendingPlaygroundLoad({ code, question });
+  }, []);
+
+  const clearPendingPlaygroundCode = useCallback(() => {
+    setPendingPlaygroundLoad(null);
   }, []);
 
   const setPdfNumPages = useCallback((n: number | null) => {
@@ -196,12 +246,17 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         chatbotDocked,
         codeContext,
         activeCodeQuestion,
+        codePlaygroundCollapsed,
+        pendingPlaygroundLoad,
         setPageContext,
         setSelectedText,
         clearSelectedText,
         setChatbotDocked,
         setCodeContext,
         setActiveCodeQuestion,
+        setCodePlaygroundCollapsed,
+        loadPlaygroundCode,
+        clearPendingPlaygroundCode,
         setPdfNumPages,
         setPdfCurrentPageText,
       }}

@@ -411,6 +411,53 @@ export interface SessionReplayInterventionSessionData {
   // ─── DISTRIBUTED_PRACTICE ────────────────────────
   cards?: Array<{ front: string; back: string }>;
 
+  // ─── CODE_DECOMPOSITION (DBox) ───────────────────
+  // Mirrors apps/api/src/code-decomposition/code-decomposition.service.ts's
+  // CodeDecompositionSessionData/StepNode — see that file for the
+  // authoritative shape.
+  problem?: { question: string; starterCode: string; language: string };
+  inputMode?: 'code_first' | 'tree_first';
+  stage?: 'formation' | 'implementation';
+  nodes?: Array<{
+    id: string;
+    parentId: string | null;
+    order: number;
+    content: string;
+    originalStudentContent: string | null;
+    status:
+      | 'pending'
+      | 'correct'
+      | 'incorrect'
+      | 'missing'
+      | 'can_be_divided'
+      | 'system_generated'
+      | 'implemented'
+      | 'incorrectly_implemented'
+      | 'to_be_coded';
+    llmFeedback: string | null;
+    hints: {
+      general: string | null;
+      detailed: string | null;
+      revealSubstepId: string | null;
+      revealCode: string | null;
+      correctAnswer: string | null;
+      attemptsSinceLastCheck: number;
+      generalViewed: boolean;
+      detailedViewed: boolean;
+      revealed: boolean;
+    };
+    codeMapping: {
+      startLine: number | null;
+      endLine: number | null;
+      commentInsertedAtLine: number | null;
+    } | null;
+  }>;
+  studentCode?: string;
+  formationCheckCount?: number;
+  inferTreeCount?: number;
+  matchCheckCount?: number;
+  commentsCopiedAt?: string | null;
+
   // Free-form so unknown future types don't break the read.
   [key: string]: unknown;
 }

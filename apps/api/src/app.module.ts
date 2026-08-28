@@ -24,6 +24,7 @@ import { CurriculumCoverageModule } from './curriculum-coverage';
 import { KnowledgeVersionModule } from './knowledge-version';
 import { PublishGateModule } from './publish-gate';
 import { LearningInterventionsModule } from './learning-interventions';
+import { CodeDecompositionModule } from './code-decomposition/code-decomposition.module';
 import { QuestionGenerationModule } from './question-generation';
 import { UserManagementModule } from './user-management';
 import { StudentRagModule } from './student-rag';
@@ -80,6 +81,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     KnowledgeVersionModule,
     PublishGateModule,
     LearningInterventionsModule,
+    CodeDecompositionModule,
     QuestionGenerationModule,
     UserManagementModule,
     StudentRagModule,

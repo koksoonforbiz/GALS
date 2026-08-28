@@ -151,4 +151,19 @@ Rules:
 - Do NOT create flashcards about the visual design or structure of the slide (e.g. how a chart is laid out, how many columns a table has, what colour is used, how the slide is organised). Focus only on the subject matter content`,
     userPromptTemplate: `Create {{cardCount}} spaced repetition flashcards from this text:\n\n"{{selectedText}}"`,
   },
+
+  // CODE_DECOMPOSITION (DBox) prompts are fixed and evaluate the
+  // student's own tree/code rather than generate course content, so
+  // they're not teacher-customizable — see
+  // code-decomposition/prompts/code-decomposition.prompt.ts for the
+  // prompts actually used. This entry exists only to satisfy
+  // `Record<InterventionType, ...>`; `getAllPromptConfigs`'s hardcoded
+  // type list deliberately omits CODE_DECOMPOSITION, so it never
+  // surfaces in the teacher prompt-config UI.
+  CODE_DECOMPOSITION: {
+    label: 'Code Decomposition',
+    description: 'Not teacher-configurable — see code-decomposition module.',
+    systemPrompt: '',
+    userPromptTemplate: '',
+  },
 };

@@ -305,12 +305,14 @@ function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
  * are skipped (logged once per snapshot) — they fall back to blank in
  * replay, same as before this fix.
  */
-// Lowered from 0.75/0.55 — real captured sessions showed the html field
-// dominated by these embedded images (~1.7MB typical, gzip only ~2:1 on
-// them since JPEG is already compressed), so quality is the more direct
-// lever than compression. 0.5 is still legible for PDF text at replay
-// zoom; re-raise if teachers report it's too soft.
-const PDF_CANVAS_JPEG_QUALITY = 0.5;
+// A given PDF page's image is embedded at most ONCE per session (see
+// capturedPdfPages below) — after that, later snapshots showing the same
+// page only carry the lightweight page-number + scrollTop reference
+// (already captured via pdfCurrentPage/scrollHosts), and replay looks up
+// the once-captured image by page number instead of re-receiving it.
+// Since each page now costs bytes at most once instead of every second it's
+// visible, a higher quality than the old always-re-sent value is affordable.
+const PDF_CANVAS_JPEG_QUALITY = 0.7;
 const OTHER_CANVAS_JPEG_QUALITY = 0.35;
 // Budget for inlined canvas pixel data per snapshot. Must leave room
 // for the rest of the DOM under MAX_HTML_CHARS, otherwise the
@@ -329,7 +331,7 @@ const MAX_CANVAS_PIXEL_BYTES = 2_500_000;
 // at the same on-screen size, just from fewer source pixels.
 const MAX_CANVAS_ENCODE_DIMENSION = 1400;
 
-function inlineCanvasPixels(clone: HTMLHtmlElement): void {
+function inlineCanvasPixels(clone: HTMLHtmlElement, capturedPdfPages: Set<number>): void {
   let liveCanvases: HTMLCanvasElement[];
   let cloneCanvases: HTMLCanvasElement[];
   try {
@@ -344,15 +346,15 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
   // near the viewport, and — critically — HARD-EXCLUDES anything beyond
   // MAX_CANVAS_VIEWPORT_DISTANCE, regardless of remaining budget.
   //
-  // Without this cutoff, a non-virtualized PDF reader (every page is a
-  // live <canvas> at all times, however long the document) lets the byte
-  // budget alone decide how many pages get embedded — at ~35KB/page that's
-  // ~70 pages before MAX_CANVAS_PIXEL_BYTES is hit, so most of a typical
-  // PDF gets re-encoded and re-transmitted on every single 1s snapshot
-  // even though the student is looking at one page. The cutoff makes
-  // "off-screen" mean "never embedded on this snapshot" instead of "embedded
-  // if there's budget left over" — off-screen pages are still blank in
-  // replay exactly as before, just for a different, much narrower reason.
+  // PDF pages are filtered out entirely below (data-replay-region="pdf-viewer"
+  // skip), so this cutoff now mainly guards the remaining canvas types —
+  // charts, whiteboards — against the same failure mode PDF pages used to
+  // hit: without it, the byte budget alone decides how many get embedded,
+  // which can include ones nowhere near what the student is actually
+  // looking at. "Off-screen" means "never embedded on this snapshot"
+  // instead of "embedded if there's budget left over" — off-screen
+  // canvases are still blank in replay exactly as before, just for a
+  // different, much narrower reason.
   //
   // Distance metric: vertical distance from the viewport's vertical
   // midline to the canvas's center. Canvases overlapping the
@@ -409,10 +411,28 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
     if (liveCanvas.dataset.replayExcludeCanvas === 'true') continue;
     if (liveCanvas.id && liveCanvas.id.toLowerCase().startsWith('webgazer')) continue;
 
-    // Determine quality based on whether this canvas is part of the
-    // pdf-viewer region. `closest()` walks ancestors and is cheap.
-    const isInPdfViewer = Boolean(liveCanvas.closest('[data-replay-region="pdf-viewer"]'));
-    const quality = isInPdfViewer ? PDF_CANVAS_JPEG_QUALITY : OTHER_CANVAS_JPEG_QUALITY;
+    // PDF pages: embed the image at most ONCE per session, not on every
+    // snapshot that shows it. A page's rendered pixels don't change once
+    // drawn (no re-render on scroll, only zoom/rotation would change it,
+    // which isn't in scope here) — re-encoding and re-transmitting the
+    // same picture every second it's visible was pure waste. Position
+    // (which page, exact scrollTop) is already captured separately every
+    // snapshot regardless (capturePdfState() → pdfCurrentPage,
+    // captureScrollHosts() → the pdf-viewer host's scrollTop); replay
+    // reconstructs by combining that per-snapshot position with the
+    // once-per-session image, looked up by page number (see ReplayTab's
+    // buildPdfPageImageCache). `closest()` walks ancestors and is cheap.
+    const isPdfViewerCanvas = Boolean(liveCanvas.closest('[data-replay-region="pdf-viewer"]'));
+    let pdfPageNumber: number | null = null;
+    if (isPdfViewerCanvas) {
+      const pageAttr = liveCanvas.closest('.react-pdf__Page')?.getAttribute('data-page-number');
+      pdfPageNumber = pageAttr ? Number(pageAttr) : null;
+      // Already embedded this page earlier in the session — skip, leaving
+      // the canvas blank; replay fills it in from the earlier capture.
+      if (pdfPageNumber !== null && capturedPdfPages.has(pdfPageNumber)) continue;
+    }
+
+    const quality = isPdfViewerCanvas ? PDF_CANVAS_JPEG_QUALITY : OTHER_CANVAS_JPEG_QUALITY;
 
     let dataUrl: string | null = null;
     try {
@@ -476,6 +496,11 @@ function inlineCanvasPixels(clone: HTMLHtmlElement): void {
       const inlineStyle = cloneCanvas.getAttribute('style');
       if (inlineStyle) img.setAttribute('style', `${inlineStyle};${img.style.cssText}`);
       cloneCanvas.replaceWith(img);
+      // Only mark the page as captured on genuine success — if this
+      // throws, or an earlier continue skipped it (budget), the page
+      // must stay eligible for embedding on a later snapshot instead of
+      // being permanently (and wrongly) treated as already captured.
+      if (pdfPageNumber !== null) capturedPdfPages.add(pdfPageNumber);
     } catch {
       // Replacement failure — fall through. Clone canvas stays blank.
     }
@@ -789,7 +814,7 @@ function capturePdfState(): { currentPage: number; totalPages: number } | null {
   }
 }
 
-function serializeDocument(): string {
+function serializeDocument(capturedPdfPages: Set<number>): string {
   let clone: HTMLHtmlElement | null = document.documentElement.cloneNode(true) as HTMLHtmlElement;
   syncInputState(document, clone);
   // Inline canvas pixels BEFORE removing scripts — script removal can
@@ -797,7 +822,7 @@ function serializeDocument(): string {
   // clone's structure intact and identical in DOM order to the live
   // document so index-matching works.
   try {
-    inlineCanvasPixels(clone);
+    inlineCanvasPixels(clone, capturedPdfPages);
   } catch {
     // Capture failure must never block a snapshot.
   }
@@ -854,6 +879,10 @@ export function useSessionReplayRecorder({
 }: UseSessionReplayRecorderParams) {
   const bufferRef = useRef<ReplaySnapshotPayload[]>([]);
   const lastSerializedRef = useRef('');
+  // Session-scoped: which PDF page numbers have already had their image
+  // embedded once this session (see inlineCanvasPixels). Reset per session
+  // in the main effect below, alongside the other per-session setup.
+  const capturedPdfPagesRef = useRef<Set<number>>(new Set());
   const flushTimerRef = useRef<ReturnType<typeof setInterval>>();
   const periodicTimerRef = useRef<ReturnType<typeof setInterval>>();
   const scrollEndTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -962,7 +991,7 @@ export function useSessionReplayRecorder({
       // fast/authoritative field above has already been captured.
       let html: string | undefined;
       if (captureDom) {
-        html = serializeDocument();
+        html = serializeDocument(capturedPdfPagesRef.current);
         // Deduplicate periodic/scroll-end DOM snapshots: skip if the page
         // hasn't changed. Route/visibility/unload triggers always capture —
         // those moments are too significant to throttle away.
@@ -996,6 +1025,10 @@ export function useSessionReplayRecorder({
 
   useEffect(() => {
     if (!enabled || !sessionId || !userId) return;
+    // Fresh per session — a page captured under a previous session must be
+    // eligible for capture again (a new session may start scrolled to a
+    // page never seen before, and there's no cross-session image cache).
+    capturedPdfPagesRef.current = new Set();
 
     const initScreenCapture = async () => {
       try {

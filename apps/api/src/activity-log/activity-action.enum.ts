@@ -66,4 +66,12 @@ export enum ActivityAction {
 
   // Self-report emotion survey (shown every 15 minutes)
   EMOTION_SELF_REPORT = 'EMOTION_SELF_REPORT',
+
+  // Code Decomposition (DBox) — node-level events INTERVENTION_* doesn't
+  // carry enough detail for (which node, which hint tier)
+  CODE_DECOMP_TREE_CHECKED = 'CODE_DECOMP_TREE_CHECKED',
+  CODE_DECOMP_NODE_HINT_VIEWED = 'CODE_DECOMP_NODE_HINT_VIEWED',
+  CODE_DECOMP_NODE_REVEALED = 'CODE_DECOMP_NODE_REVEALED',
+  CODE_DECOMP_STAGE_ADVANCED = 'CODE_DECOMP_STAGE_ADVANCED',
+  CODE_DECOMP_MATCH_CHECKED = 'CODE_DECOMP_MATCH_CHECKED',
 }

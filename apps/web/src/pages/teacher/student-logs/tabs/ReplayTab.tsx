@@ -7,6 +7,8 @@ import type {
   SessionReplaySnapshot,
 } from '../hooks/useSessionReplay';
 import { exportReplayCsv, downloadCsvFile } from '../lib/exportReplayCsv';
+import { StepTree, type TreeActions } from '../../../../components/code-practice/StepTree';
+import { CodeEditor } from '../../../../components/code-practice/CodeEditor';
 import { api } from '../../../../lib/api';
 import { formatTimeSecSGT } from '../../../../lib/formatDateTime';
 import {
@@ -248,6 +250,87 @@ function injectBaseForIframe(
     cleaned = `${baseTag}${cleaned}`;
   }
   return cleaned;
+}
+
+/**
+ * Reconcile this snapshot's PDF pages against the session-wide image cache.
+ *
+ * The recorder now embeds a given PDF page's image at most once per
+ * session (see inlineCanvasPixels/capturedPdfPages) — every other
+ * snapshot showing that page has a blank `<canvas>` where the image would
+ * be, carrying only the page number. This function does the two-way sync
+ * a lazily-loaded-per-snapshot architecture needs:
+ *   - If THIS snapshot has a page's image, cache it (so an earlier OR
+ *     later snapshot referencing the same page, once loaded, can reuse it).
+ *   - If THIS snapshot is missing a page's image but the cache already has
+ *     it (because some other snapshot with that page was loaded first —
+ *     very likely during normal sequential playback/scrubbing), inject it.
+ *
+ * Honest limitation: the cache only knows what's been loaded so far. If a
+ * researcher jumps straight to a snapshot whose page was first captured in
+ * an earlier snapshot they've never loaded, it'll show blank until they
+ * scrub through that earlier point. This is strictly better than always
+ * blank (today's baseline) at zero risk of showing a WRONG page — it only
+ * ever fills in from a real embed of that exact page number, never guesses.
+ *
+ * DOMParser-based rather than regex — the html contains large base64
+ * blobs, which regex-based tag manipulation is fragile against.
+ */
+function reconstructPdfPages(html: string, cache: Map<number, string>): string {
+  if (!html) return html;
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const pages = doc.querySelectorAll<HTMLElement>('.react-pdf__Page[data-page-number]');
+    pages.forEach((pageEl) => {
+      const pageNumAttr = pageEl.getAttribute('data-page-number');
+      const pageNum = pageNumAttr ? Number(pageNumAttr) : null;
+      if (pageNum === null || !Number.isFinite(pageNum)) return;
+
+      const existingImg = pageEl.querySelector<HTMLImageElement>(
+        'img[data-replay-canvas-replacement]',
+      );
+      if (existingImg) {
+        const src = existingImg.getAttribute('src');
+        if (src) cache.set(pageNum, src);
+        return;
+      }
+
+      const cachedSrc = cache.get(pageNum);
+      if (!cachedSrc) return; // Not seen in any loaded snapshot yet — stays blank.
+
+      const canvasEl = pageEl.querySelector('canvas');
+      if (!canvasEl) return;
+      try {
+        const img = doc.createElement('img');
+        img.setAttribute('src', cachedSrc);
+        img.setAttribute('data-replay-canvas-replacement', '1');
+        // Reused from a different snapshot than the one being viewed —
+        // tagged distinctly in case this ever needs debugging/filtering.
+        img.setAttribute('data-replay-canvas-reused', '1');
+        // Mirror this snapshot's own (blank) canvas sizing — the page's
+        // dimensions are the same regardless of which snapshot captured
+        // it (no zoom/rotation mid-session in scope here), so the current
+        // canvas's own attrs are a faithful stand-in for the originally-
+        // captured size.
+        const width = canvasEl.getAttribute('width');
+        const height = canvasEl.getAttribute('height');
+        if (width) img.setAttribute('width', width);
+        if (height) img.setAttribute('height', height);
+        const cls = canvasEl.getAttribute('class');
+        if (cls) img.setAttribute('class', cls);
+        const style = canvasEl.getAttribute('style');
+        if (style) img.setAttribute('style', style);
+        canvasEl.replaceWith(img);
+      } catch {
+        // Per-page failure — leave this one blank, others still get a shot.
+      }
+    });
+    return doc.documentElement.outerHTML;
+  } catch {
+    // Reconstruction failure must never block replay — fall back to the
+    // snapshot's own html as captured (blank canvases where applicable).
+    return html;
+  }
 }
 
 /**
@@ -753,6 +836,14 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
   // Dev counter so we can verify the spec's "srcDoc only on snapshot
   // change" criterion at runtime without grepping the dev tools.
   const srcDocAssignCountRef = useRef(0);
+  // A given PDF page's image is now embedded at most once per session (see
+  // the recorder's capturedPdfPages) — every other snapshot showing that
+  // page just carries the page number, with a blank canvas in its html.
+  // This grows as snapshots load (reconstructPdfPages, below), caching
+  // page number -> image src the first time we see it so later (or
+  // earlier) snapshots referencing the same page can reuse it instead of
+  // showing blank. Reset per session, same as the buffers above.
+  const pdfPageImageCacheRef = useRef<Map<number, string>>(new Map());
 
   // ─── Double-buffered pixel screenshot ───────────────────────
   // The Pixel Replay thumbnail used to flash on every snapshot
@@ -995,6 +1086,7 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
     ]);
     setVisibleImageBufferIdx(null);
     latestImageTargetIdRef.current = null;
+    pdfPageImageCacheRef.current = new Map();
   }, [sessionId]);
 
   // Image-buffer load effect — mirror of the iframe buffer load
@@ -1524,8 +1616,15 @@ export function ReplayTab({ sessionId }: { sessionId: string }) {
       }
       return;
     }
-    // Fresh load → write the new srcDoc into the hidden slot.
-    const newSrcDoc = injectBaseForIframe(target.html, target.pageUrl);
+    // Fresh load → write the new srcDoc into the hidden slot. Reconcile
+    // PDF pages against the session-wide cache first (fills in a page
+    // whose image lives in a different, already-loaded snapshot; caches
+    // this snapshot's own embedded pages for reuse by others) — see
+    // reconstructPdfPages for why this two-way sync is needed.
+    const reconciledHtml = target.html
+      ? reconstructPdfPages(target.html, pdfPageImageCacheRef.current)
+      : target.html;
+    const newSrcDoc = injectBaseForIframe(reconciledHtml, target.pageUrl);
     srcDocAssignCountRef.current += 1;
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
@@ -2640,6 +2739,13 @@ const TIMELINE_ACTIONS = new Set([
   'SPACED_REP_CARD_RATED',
   'MASTERY_UPDATED',
   'STUDY_MATERIAL_UPLOADED',
+  // DBox (Code Decomposition) — node-level events INTERVENTION_* doesn't
+  // carry enough detail for (which node, which hint tier).
+  'CODE_DECOMP_TREE_CHECKED',
+  'CODE_DECOMP_NODE_HINT_VIEWED',
+  'CODE_DECOMP_NODE_REVEALED',
+  'CODE_DECOMP_STAGE_ADVANCED',
+  'CODE_DECOMP_MATCH_CHECKED',
 ]);
 
 const ACTION_COLORS: Record<string, string> = {
@@ -2662,6 +2768,14 @@ const ACTION_COLORS: Record<string, string> = {
   CHATBOT_MESSAGE_RECEIVED: 'bg-sky-50 text-sky-700',
   MODULE_OPENED: 'bg-slate-100 text-slate-700',
   MODULE_ITEM_VIEWED: 'bg-slate-50 text-slate-600',
+  // DBox — teal for tree/match checks, orange for hint/reveal, distinct
+  // from Stepwise's blue/indigo so a mixed-intervention timeline stays
+  // scannable.
+  CODE_DECOMP_TREE_CHECKED: 'bg-teal-100 text-teal-800',
+  CODE_DECOMP_NODE_HINT_VIEWED: 'bg-orange-50 text-orange-700',
+  CODE_DECOMP_NODE_REVEALED: 'bg-orange-100 text-orange-800',
+  CODE_DECOMP_STAGE_ADVANCED: 'bg-teal-50 text-teal-700',
+  CODE_DECOMP_MATCH_CHECKED: 'bg-teal-100 text-teal-800',
 };
 
 function formatTimelineClock(absoluteMs: number, baseWallClockMs: number): string {
@@ -2768,6 +2882,34 @@ function EventTimelinePanel({
       } else if (log.action === 'CHATBOT_MESSAGE_SENT' || log.action === 'DIALOGUE_MESSAGE_SENT') {
         const msg = (meta.message ?? meta.messageText ?? '') as string;
         detail = msg ? `"${msg.slice(0, 80)}${msg.length > 80 ? '…' : ''}"` : '';
+      } else if (log.action === 'CODE_DECOMP_TREE_CHECKED') {
+        const nodeCount = typeof meta.nodeCount === 'number' ? meta.nodeCount : null;
+        const correctCount = typeof meta.correctCount === 'number' ? meta.correctCount : null;
+        detail =
+          nodeCount != null && correctCount != null
+            ? `${correctCount}/${nodeCount} steps correct`
+            : '';
+      } else if (log.action === 'CODE_DECOMP_MATCH_CHECKED') {
+        const nodeCount = typeof meta.nodeCount === 'number' ? meta.nodeCount : null;
+        const implementedCount =
+          typeof meta.implementedCount === 'number' ? meta.implementedCount : null;
+        detail =
+          nodeCount != null && implementedCount != null
+            ? `${implementedCount}/${nodeCount} steps implemented`
+            : '';
+      } else if (log.action === 'CODE_DECOMP_NODE_HINT_VIEWED') {
+        const tier = typeof meta.tier === 'string' ? meta.tier : '';
+        detail = tier ? `${tier} hint` : '';
+      } else if (log.action === 'CODE_DECOMP_NODE_REVEALED') {
+        const stage = typeof meta.stage === 'string' ? meta.stage : '';
+        detail =
+          stage === 'formation'
+            ? 'substep revealed'
+            : stage === 'implementation'
+              ? 'code revealed'
+              : '';
+      } else if (log.action === 'CODE_DECOMP_STAGE_ADVANCED') {
+        detail = 'formation → implementation';
       } else {
         const title = (meta.itemTitle ??
           meta.contentTitle ??
@@ -3044,6 +3186,10 @@ function InterventionReviewPanel({
 //                              summary }
 //   DISTRIBUTED_PRACTICE    → { cards }  (flashcards for future SR;
 //                              no answers/score concept)
+//   CODE_DECOMPOSITION      → { problem, inputMode, stage, nodes,
+//                              studentCode, formationCheckCount,
+//                              inferTreeCount, matchCheckCount }
+//                              (DBox — see code-decomposition.service.ts)
 
 interface InterventionBodyProps {
   type: string;
@@ -3338,6 +3484,73 @@ function InterventionBody({
             );
           })}
         </ol>
+      </div>
+    );
+  }
+
+  // ─── CODE_DECOMPOSITION (DBox) ────────────────────────
+  // Reuses the student-facing StepTree in a disabled (read-only) mode
+  // rather than re-implementing tree rendering here — same component,
+  // same status colors, no edit/hint/reveal affordances since a teacher
+  // is reviewing, not interacting.
+  if (type === 'CODE_DECOMPOSITION') {
+    const nodes = Array.isArray(session.nodes) ? session.nodes : [];
+    const stage = session.stage === 'implementation' ? 'implementation' : 'formation';
+    if (nodes.length === 0) {
+      return (
+        <p className="text-gray-500">
+          No step tree captured
+          {isCompleted ? '' : ' (still in progress)'}.
+        </p>
+      );
+    }
+    const readOnlyActions: TreeActions = {
+      onAdd: () => {},
+      onEdit: () => {},
+      onDelete: () => {},
+      onReorder: () => {},
+      onHint: () => {},
+      onReveal: () => {},
+      onShowAnswer: () => {},
+      onHoverNode: () => {},
+      disabled: true,
+    };
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+          {session.problem?.question && (
+            <span className="rounded border border-gray-200 bg-white px-2 py-1 text-gray-800">
+              {session.problem.question}
+            </span>
+          )}
+          {session.inputMode && (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-700">
+              {session.inputMode === 'code_first' ? 'started from code' : 'started from tree'}
+            </span>
+          )}
+          <span className="rounded bg-teal-50 px-1.5 py-0.5 font-mono text-[10px] text-teal-700">
+            stage: {stage}
+          </span>
+          {typeof session.formationCheckCount === 'number' && (
+            <span className="font-mono text-[10px] text-gray-500">
+              {session.formationCheckCount} tree check(s)
+            </span>
+          )}
+          {typeof session.matchCheckCount === 'number' && session.matchCheckCount > 0 && (
+            <span className="font-mono text-[10px] text-gray-500">
+              {session.matchCheckCount} match check(s)
+            </span>
+          )}
+        </div>
+        <div className="rounded border border-gray-200 bg-white p-2">
+          <StepTree nodes={nodes} actions={readOnlyActions} stage={stage} />
+        </div>
+        {stage === 'implementation' && session.studentCode && (
+          <div>
+            <p className="mb-1 font-medium text-gray-700">Final code</p>
+            <CodeEditor value={session.studentCode} readOnly minHeight="120px" />
+          </div>
+        )}
       </div>
     );
   }

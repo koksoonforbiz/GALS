@@ -774,8 +774,8 @@ export function CourseBuilderPage() {
     { key: 'overview', label: 'Overview' },
     { key: 'content', label: 'Content' },
     { key: 'sources', label: 'Sources' },
-    { key: 'evaluate', label: 'Evaluate' },
-    { key: 'knowledge', label: 'Knowledge' },
+    // 'evaluate' and 'knowledge' (KC) tabs hidden — code kept intact, just
+    // not linked from the tab bar. Re-add these two lines to restore.
     { key: 'publish', label: 'Publish' },
     ...(learningMode === 'DIALOGUE' ? [{ key: 'dialogue' as TopTabKey, label: 'Dialogue' }] : []),
     { key: 'biometrics' as TopTabKey, label: 'Biometrics' },
