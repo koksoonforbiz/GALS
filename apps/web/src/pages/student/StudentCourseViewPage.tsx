@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiFetch, api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
 import { usePageContext } from '../../contexts/PageContext';
@@ -140,7 +140,6 @@ export function StudentCourseViewPage() {
     setSelectedText,
     clearSelectedText,
     codePlaygroundCollapsed,
-    setCodePlaygroundCollapsed,
   } = usePageContext();
   const { track } = useActivityLog();
   const [course, setCourse] = useState<Course | null>(null);
@@ -854,10 +853,6 @@ export function StudentCourseViewPage() {
                       {pdfLoadingId === selectedItem.id ? 'Loading PDF…' : 'Preparing PDF…'}
                     </p>
                   )}
-                  <p className="mt-2 text-xs text-gray-400 shrink-0">
-                    Highlight text in the PDF to use it with the chatbot, or open the chatbot
-                    without a selection to ground on this PDF's content.
-                  </p>
                 </div>
               ) : selectedItem.type === 'LINK' ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
@@ -907,36 +902,23 @@ export function StudentCourseViewPage() {
                 independent of the chat above it and of any code question
                 the chatbot may have generated. Runs entirely client-side
                 via Pyodide. Visible by default; height is user-resizable
-                via the drag handle above (persisted across reloads). */}
+                via the drag handle above (persisted across reloads). The
+                redundant outer "Code Playground" label row is gone —
+                CodePlayground now renders its own collapse/expand toggle
+                inline in its own toolbar (it already reads
+                codePlaygroundCollapsed/setCodePlaygroundCollapsed from
+                PageContext), so this wrapper just always renders it and
+                lets the collapsed height fall out of that toolbar's
+                natural height. */}
             <div
               className="border-t border-gray-200 shrink-0 flex flex-col"
               style={codePlaygroundCollapsed ? undefined : { height: playgroundHeight }}
             >
-              <div className="shrink-0 flex items-center justify-between px-3 py-1.5">
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  Code Playground
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCodePlaygroundCollapsed(!codePlaygroundCollapsed)}
-                  className="text-gray-400 hover:text-gray-700"
-                  title={codePlaygroundCollapsed ? 'Expand' : 'Collapse'}
-                  aria-label={
-                    codePlaygroundCollapsed ? 'Expand code playground' : 'Collapse code playground'
-                  }
-                >
-                  {codePlaygroundCollapsed ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
-                </button>
-              </div>
-              {!codePlaygroundCollapsed && (
-                <div className="flex-1 min-h-0">
-                  <Suspense
-                    fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
-                  >
-                    <CodePlayground />
-                  </Suspense>
-                </div>
-              )}
+              <Suspense
+                fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
+              >
+                <CodePlayground />
+              </Suspense>
             </div>
           </div>
 

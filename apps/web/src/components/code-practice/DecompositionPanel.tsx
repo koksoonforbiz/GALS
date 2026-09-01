@@ -1,39 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
-import {
-  GitBranch,
-  RefreshCw,
-  ArrowRight,
-  FileCode2,
-  CheckCircle2,
-  Flag,
-  Eye,
-  EyeOff,
-} from 'lucide-react';
+import { ArrowRight, FileCode2, CheckCircle2, Flag, Eye, EyeOff, Play } from 'lucide-react';
 import { api } from '../../lib/api';
 import { usePageContext } from '../../contexts/PageContext';
 import { StepTree, type StepNode, type TreeActions } from './StepTree';
 import { CodeEditor } from './CodeEditor';
+import { CodeConsole } from './CodeConsole';
+import { runPython, isPyodideReady, type PythonRunResult } from '../../lib/pyodideRunner';
 
 interface DecompositionPanelProps {
-  /** Current contents of the Playground's editor — sent to `infer-tree`,
-   *  debounced-synced during implementation, and read by `checkMatch` on
-   *  the backend. DecompositionPanel doesn't own the editor; CodePlayground
-   *  does. */
+  /** Stage-2 (implementation) editor contents — DecompositionPanel owns
+   *  its own editor once implementation starts, but the string itself is
+   *  held by the parent so it survives this component staying mounted
+   *  across session resets. */
   code: string;
-  /** The question text currently loaded/visible in the Playground (set by
-   *  "Load into Playground" on a chat exercise) — the ground truth for
-   *  "what problem is the student looking at right now". Preferred over
-   *  PageContext.activeCodeQuestion when starting a session, since that
-   *  global value reflects whatever chat most recently generated and can
-   *  silently drift out of sync with what's actually loaded here (e.g.
-   *  the student asked chat for a second exercise without loading it). */
+  /** The question text this view was launched for — the session is
+   *  always generated for exactly this question (see `handleStart`). */
   loadedQuestion: string | null;
-  /** Lets DecompositionPanel push new editor contents up to CodePlayground
-   *  — used once, by "Copy to Comments". */
+  /** Pushes new code up to the parent — called on every edit in Stage 2,
+   *  and once by "Copy to Comments". */
   onApplyCode: (code: string) => void;
-  /** Hovering a tree node in stage 2 highlights its mapped code lines in
-   *  the Playground's editor. `null` clears the highlight. */
-  onHighlightRange: (range: { start: number; end: number } | null) => void;
 }
 
 type Stage = 'formation' | 'implementation';
@@ -57,7 +42,7 @@ type MutateAction =
   | { action: 'reorder'; nodeId: string; direction: 'up' | 'down' };
 
 type Phase = 'idle' | 'starting' | 'tree' | 'completed' | 'error';
-type Busy = 'infer' | 'check' | 'advance' | 'copy' | 'match' | 'complete' | 'revealSolution' | null;
+type Busy = 'check' | 'advance' | 'copy' | 'match' | 'complete' | 'revealSolution' | null;
 
 function storageKey(courseId: string) {
   return `code_decomp_session_${courseId}`;
@@ -69,13 +54,8 @@ function storageKey(courseId: string) {
  *  hints and reveal, the formation→implementation gate, and stage-2
  *  code-vs-tree matching (Copy to Comments / Check Match / reveal code /
  *  hover-linked line highlighting). */
-export function DecompositionPanel({
-  code,
-  loadedQuestion,
-  onApplyCode,
-  onHighlightRange,
-}: DecompositionPanelProps) {
-  const { courseId, activeCodeQuestion } = usePageContext();
+export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: DecompositionPanelProps) {
+  const { courseId, activeCodeQuestion, setCodeContext } = usePageContext();
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -100,20 +80,65 @@ export function DecompositionPanel({
   // is never silently discarded; this only surfaces a banner offering
   // to switch.
   const [questionChanged, setQuestionChanged] = useState(false);
+  // Stage-2 "Run" — same client-side Pyodide flow the old standalone
+  // Playground editor used, now scoped to just the implementation stage.
+  const [highlightedRange, setHighlightedRange] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const [running, setRunning] = useState(false);
+  const [firstRunEver] = useState(() => !isPyodideReady());
+  const [runResult, setRunResult] = useState<PythonRunResult | null>(null);
 
-  // Resume an in-progress session for this course, if one exists.
+  const handleStart = useCallback(async () => {
+    if (!courseId) return;
+    setPhase('starting');
+    setErrorMessage(null);
+    try {
+      // Prefer whatever's actually visible right now over
+      // PageContext.activeCodeQuestion — the latter is just "whatever
+      // chat most recently generated" and can silently drift from
+      // `loadedQuestion` (e.g. a second exercise was generated but this
+      // view is still showing the first one).
+      const result = await api.post<GenerateResponse>('/code-decomposition/generate', {
+        courseId,
+        question: loadedQuestion ?? activeCodeQuestion?.question,
+        starterCode: loadedQuestion ? code : activeCodeQuestion?.starterCode,
+        language: activeCodeQuestion?.language,
+      });
+      setSessionId(result.sessionId);
+      setProblem(result.problem.question);
+      setStage(result.stage);
+      setNodes(result.nodes);
+      setPhase('tree');
+      localStorage.setItem(
+        storageKey(courseId),
+        JSON.stringify({ sessionId: result.sessionId, timestamp: Date.now() }),
+      );
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to start a session.');
+      setPhase('error');
+    }
+  }, [courseId, activeCodeQuestion, loadedQuestion, code]);
+
+  // Resume an in-progress session for this course, if one exists and
+  // matches the current question — otherwise start a fresh one
+  // automatically (no "Start Guided Decomposition" button to click).
   useEffect(() => {
     if (!courseId) return;
     const stored = localStorage.getItem(storageKey(courseId));
-    if (!stored) return;
     let parsed: { sessionId: string } | null = null;
-    try {
-      parsed = JSON.parse(stored);
-    } catch {
-      localStorage.removeItem(storageKey(courseId));
+    if (stored) {
+      try {
+        parsed = JSON.parse(stored);
+      } catch {
+        localStorage.removeItem(storageKey(courseId));
+      }
+    }
+    if (!parsed?.sessionId) {
+      void handleStart();
       return;
     }
-    if (!parsed?.sessionId) return;
 
     setPhase('starting');
     api
@@ -127,7 +152,18 @@ export function DecompositionPanel({
       .then((session) => {
         if (session.status === 'COMPLETED') {
           localStorage.removeItem(storageKey(courseId));
-          setPhase('idle');
+          void handleStart();
+          return;
+        }
+        // A resumed session for a DIFFERENT question than the one
+        // currently loaded is stale — e.g. this component just mounted
+        // fresh for a newly generated question, but an older question's
+        // session was still sitting in localStorage. Discard it and
+        // start a fresh session for the current question instead of
+        // showing the stale tree.
+        if (loadedQuestion && session.problem.question !== loadedQuestion) {
+          localStorage.removeItem(storageKey(courseId));
+          void handleStart();
           return;
         }
         setSessionId(session.sessionId);
@@ -135,17 +171,14 @@ export function DecompositionPanel({
         setStage(session.stage);
         setNodes(session.nodes);
         setPhase('tree');
-        if (loadedQuestion && loadedQuestion !== session.problem.question) {
-          setQuestionChanged(true);
-        }
       })
       .catch(() => {
         localStorage.removeItem(storageKey(courseId));
-        setPhase('idle');
+        void handleStart();
       });
     // Deliberately only re-runs on courseId change (a fresh mount) — this
-    // resumes whatever session was in progress, then the effect below
-    // watches for the loaded question moving on afterward.
+    // resumes (or auto-starts) once, then the effect below watches for
+    // the loaded question moving on afterward.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
@@ -168,52 +201,22 @@ export function DecompositionPanel({
     return () => clearTimeout(timer);
   }, [sessionId, stage, code]);
 
-  const handleStart = useCallback(async () => {
-    if (!courseId) return;
-    setPhase('starting');
-    setErrorMessage(null);
+  const handleRun = useCallback(async () => {
+    setRunning(true);
     try {
-      // Prefer whatever's actually visible in the Playground right now
-      // over PageContext.activeCodeQuestion — the latter is just
-      // "whatever chat most recently generated" and can silently drift
-      // from what's loaded here (e.g. a second exercise was generated
-      // but never loaded into the Playground).
-      const result = await api.post<GenerateResponse>('/code-decomposition/generate', {
-        courseId,
-        question: loadedQuestion ?? activeCodeQuestion?.question,
-        starterCode: loadedQuestion ? code : activeCodeQuestion?.starterCode,
-        language: activeCodeQuestion?.language,
-      });
-      setSessionId(result.sessionId);
-      setProblem(result.problem.question);
-      setStage(result.stage);
-      setNodes(result.nodes);
-      setPhase('tree');
-      localStorage.setItem(
-        storageKey(courseId),
-        JSON.stringify({ sessionId: result.sessionId, timestamp: Date.now() }),
-      );
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to start a session.');
-      setPhase('error');
-    }
-  }, [courseId, activeCodeQuestion, loadedQuestion, code]);
-
-  const handleInferTree = useCallback(async () => {
-    if (!sessionId) return;
-    setBusy('infer');
-    setErrorMessage(null);
-    try {
-      const result = await api.post<TreeResponse>(`/code-decomposition/${sessionId}/infer-tree`, {
+      const result = await runPython(code);
+      setRunResult(result);
+      setCodeContext({
+        question: problem ?? '',
         code,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        error: result.error,
       });
-      setNodes(result.nodes);
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to build a step tree.');
     } finally {
-      setBusy(null);
+      setRunning(false);
     }
-  }, [sessionId, code]);
+  }, [code, problem, setCodeContext]);
 
   const handleCheckTree = useCallback(async () => {
     if (!sessionId) return;
@@ -518,12 +521,15 @@ export function DecompositionPanel({
     (nodeId: string | null) => {
       const mapping = nodeId ? nodes.find((n) => n.id === nodeId)?.codeMapping : null;
       if (mapping && mapping.startLine !== null) {
-        onHighlightRange({ start: mapping.startLine, end: mapping.endLine ?? mapping.startLine });
+        setHighlightedRange({
+          start: mapping.startLine,
+          end: mapping.endLine ?? mapping.startLine,
+        });
       } else {
-        onHighlightRange(null);
+        setHighlightedRange(null);
       }
     },
-    [nodes, onHighlightRange],
+    [nodes],
   );
 
   if (!courseId) {
@@ -557,29 +563,16 @@ export function DecompositionPanel({
   const allImplemented = nodes.length > 0 && nodes.every((n) => n.status === 'implemented');
 
   return (
-    <div className="flex flex-col gap-2 h-full overflow-y-auto border-l border-gray-200 pl-3">
-      <div className="shrink-0 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
-        <GitBranch size={12} />
-        Guided Decomposition
-      </div>
-
+    <div className="flex flex-col gap-2 h-full overflow-y-auto p-3">
       {errorMessage && (
         <p className="shrink-0 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-2 py-1.5">
           {errorMessage}
         </p>
       )}
 
-      {phase === 'idle' && (
-        <button
-          type="button"
-          onClick={() => void handleStart()}
-          className="self-start text-xs font-medium bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
-        >
-          Start Guided Decomposition
-        </button>
+      {(phase === 'idle' || phase === 'starting') && (
+        <p className="text-xs text-gray-500">Starting…</p>
       )}
-
-      {phase === 'starting' && <p className="text-xs text-gray-500">Starting…</p>}
 
       {phase === 'error' && (
         <button
@@ -604,10 +597,10 @@ export function DecompositionPanel({
           </div>
           <button
             type="button"
-            onClick={handleStartNew}
+            onClick={handleSwitchToNewQuestion}
             className="self-start text-xs font-medium bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
           >
-            Start New Session
+            Restart This Problem
           </button>
         </div>
       )}
@@ -622,9 +615,7 @@ export function DecompositionPanel({
 
           {questionChanged && (
             <div className="shrink-0 flex flex-wrap items-center gap-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
-              <span className="text-amber-800">
-                A different question is now loaded in the Playground.
-              </span>
+              <span className="text-amber-800">A different question is now loaded.</span>
               <button
                 type="button"
                 onClick={handleSwitchToNewQuestion}
@@ -639,6 +630,29 @@ export function DecompositionPanel({
               >
                 Keep working on this one
               </button>
+            </div>
+          )}
+
+          {stage === 'implementation' && (
+            <div className="shrink-0 flex flex-col gap-2">
+              <CodeEditor
+                value={code}
+                onChange={onApplyCode}
+                minHeight="140px"
+                highlightedRange={highlightedRange}
+              />
+              <button
+                type="button"
+                onClick={() => void handleRun()}
+                disabled={running}
+                className="self-start flex items-center gap-1.5 text-xs font-medium bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              >
+                <Play size={12} />
+                {running ? 'Running…' : 'Run'}
+              </button>
+              {(running || runResult) && (
+                <CodeConsole loading={running} isFirstRun={firstRunEver} result={runResult} />
+              )}
             </div>
           )}
 
@@ -696,15 +710,6 @@ export function DecompositionPanel({
             </div>
           ) : (
             <div className="shrink-0 flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => void handleInferTree()}
-                disabled={busy !== null || nodeBusy}
-                className="flex items-center gap-1.5 text-xs font-medium bg-gray-700 text-white px-2.5 py-1.5 rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                <RefreshCw size={11} className={busy === 'infer' ? 'animate-spin' : ''} />
-                {nodes.length === 0 ? 'Build Step Tree from My Code' : 'Rebuild from My Code'}
-              </button>
               <button
                 type="button"
                 onClick={() => void handleCheckTree()}

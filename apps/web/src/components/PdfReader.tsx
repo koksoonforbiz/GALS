@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { RotateCw, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 const SLIDE_BOILERPLATE = [/SMU\s+Classification\s*:\s*Restricted\.?/gi];
 
@@ -74,7 +74,9 @@ interface PdfReaderProps {
 
 export function PdfReader({
   documentUrl,
-  documentName,
+  // documentName is still accepted (callers pass it) but no longer
+  // rendered — the toolbar that showed it was removed to give the slide
+  // more vertical room. Kept in the props type for API compat.
   onTextSelected,
   onSelectionCleared,
   autoSelectCurrentPage = false,
@@ -95,7 +97,10 @@ export function PdfReader({
   // update depth exceeded" loop where zooming caused rapid
   // ResizeObserver → containerWidth → page-render cycles.
   const scale = 1.0;
-  const [rotation, setRotation] = useState(0);
+  // Rotation is likewise fixed at 0 now that the toolbar (rotate button,
+  // filename, page counter) has been removed to give the slide more
+  // vertical room — there's nowhere left to put a rotate control.
+  const rotation = 0;
   const [loadError, setLoadError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   // Container width drives the rendered Page width so the PDF reflows
@@ -103,13 +108,27 @@ export function PdfReader({
   // this, a wide PDF would push the whole three-column page out past
   // the viewport at any browser zoom level.
   const [containerWidth, setContainerWidth] = useState<number>(0);
+  // Container height + the page's own intrinsic aspect ratio (captured
+  // once from page 1's PDF-native dimensions, NOT measured off the
+  // rendered DOM — see handlePageLoadSuccess) let the width-fit above
+  // be capped further so a full page never exceeds the visible height
+  // either. This is what keeps one whole slide on screen when the
+  // Playground drawer below is dragged taller and squeezes this
+  // column's height. Both containerWidth/containerHeight come from
+  // ResizeObserver measuring the container's own box — never from the
+  // rendered page — so this can't become the same
+  // containerWidth-mirrors-render-output loop the zoom controls used to
+  // cause (see the toolbar comment below).
+  const [containerHeight, setContainerHeight] = useState<number>(0);
+  const [pageAspectRatio, setPageAspectRatio] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  // Observe the scroll container's content-box width and feed it to
+  // Observe the scroll container's content-box size and feed it to
   // <Page width={...}>. ResizeObserver fires on browser zoom, window
-  // resize, divider drag, and devtools toggling — anything that
-  // changes the column's CSS width.
+  // resize, divider drag (including the Playground's vertical resize
+  // handle, which changes this column's height), and devtools toggling
+  // — anything that changes the column's CSS box.
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -119,12 +138,39 @@ export function PdfReader({
       // gutter or the column border.
       const w = el.clientWidth - 8;
       if (w > 0) setContainerWidth(w);
+      const h = el.clientHeight - 8;
+      if (h > 0) setContainerHeight(h);
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Captures page 1's native aspect ratio (height/width at scale 1,
+  // straight from the PDF's own page box via getViewport — independent
+  // of whatever width we asked <Page> to render at) and assumes the
+  // rest of the document shares it, which holds for virtually every
+  // slide-deck/textbook PDF. Deliberately NOT derived from the
+  // rendered <canvas>/page element's measured size, which is what
+  // would recreate the historical resize-loop.
+  const handlePageOneLoadSuccess = useCallback(
+    (page: { getViewport: (params: { scale: number }) => { width: number; height: number } }) => {
+      const viewport = page.getViewport({ scale: 1 });
+      if (viewport.width > 0) setPageAspectRatio(viewport.height / viewport.width);
+    },
+    [],
+  );
+
+  // Fit width to the column, but never render taller than the column's
+  // visible height — whichever constraint is tighter wins, so a single
+  // page always fits without needing to scroll within it to see the
+  // rest. Falls back to the plain width-fit until page 1's aspect
+  // ratio has loaded.
+  const fittedPageWidth =
+    pageAspectRatio && containerHeight > 0
+      ? Math.min(containerWidth, containerHeight / pageAspectRatio)
+      : containerWidth;
 
   // Hold the latest onPdfMeta callback in a ref so internal effects
   // can call it WITHOUT putting it in their dependency arrays. Callers
@@ -231,7 +277,7 @@ export function PdfReader({
 
     const timeout = window.setTimeout(selectCurrentPageText, 250);
     return () => window.clearTimeout(timeout);
-  }, [autoSelectCurrentPage, currentPage, numPages, rotation, containerWidth, onTextSelected]);
+  }, [autoSelectCurrentPage, currentPage, numPages, containerWidth, onTextSelected]);
 
   useEffect(() => {
     if (numPages === 0) return;
@@ -245,7 +291,7 @@ export function PdfReader({
 
     const timeout = window.setTimeout(publishCurrentPageText, 250);
     return () => window.clearTimeout(timeout);
-  }, [currentPage, numPages, rotation, containerWidth]);
+  }, [currentPage, numPages, containerWidth]);
 
   // Escape clears the in-browser selection too.
   useEffect(() => {
@@ -258,8 +304,6 @@ export function PdfReader({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onSelectionCleared]);
-
-  const handleRotate = () => setRotation((r) => (r + 90) % 360);
 
   const documentOptions = useMemo(
     () => ({
@@ -287,36 +331,6 @@ export function PdfReader({
       data-replay-pdf-current-page={currentPage}
       data-replay-pdf-total-pages={numPages}
     >
-      {/* Toolbar */}
-      <div className="h-12 flex items-center justify-between px-3 bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <FileText size={14} className="text-gray-400 flex-shrink-0" />
-          <span className="text-sm text-gray-700 truncate max-w-[260px]">
-            {documentName ?? 'Document'}
-          </span>
-        </div>
-
-        {/* Zoom controls intentionally removed — re-rendering at a
-            different scale caused a layout/render feedback loop
-            (containerWidth ↔ Page width ↔ ResizeObserver) that
-            flickered the column on every zoom step. The page is
-            already auto-fit to the column via <Page width=...>, so
-            users get a "100%" fit by default. */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleRotate}
-            className="rounded-md p-1.5 hover:bg-gray-100 transition-colors"
-            title="Rotate"
-            aria-label="Rotate"
-          >
-            <RotateCw size={16} className="text-gray-600" />
-          </button>
-          <span className="text-sm text-gray-600 font-mono ml-2">
-            {currentPage} / {numPages || '–'}
-          </span>
-        </div>
-      </div>
-
       {/* PDF display area. overflow-auto (not just overflow-y-auto) so
           the user can scroll horizontally inside the reader when they
           zoom the PDF in past 100% via the toolbar. At scale=1.0 the
@@ -415,10 +429,11 @@ export function PdfReader({
                     {containerWidth > 0 && (
                       <Page
                         pageNumber={pageNum}
-                        width={containerWidth * scale}
+                        width={fittedPageWidth * scale}
                         rotate={rotation}
                         renderTextLayer={true}
                         renderAnnotationLayer={true}
+                        onLoadSuccess={pageNum === 1 ? handlePageOneLoadSuccess : undefined}
                       />
                     )}
                   </div>

@@ -55,16 +55,15 @@ export function Layout() {
 
   return (
     <PageContextProvider>
-      {/* h-screen + flex-col pins Header at its natural height and gives
-          the row below it exactly the remaining viewport height via
-          flex-1 — no `calc(100vh - Npx)` guessing anywhere. `main` gets
-          its own overflow-y-auto so pages taller than the viewport
-          scroll internally (header/sidebar stay pinned) instead of the
-          whole document scrolling. Pages that want to fill their exact
-          available height (e.g. StudentCourseViewPage) can now just use
-          h-full / flex-1 on their own content. */}
+      {/* Header is now a fixed bottom-left account button (see
+          Header.tsx) instead of a top row, so it consumes no layout
+          space at all — the row below always gets the full viewport.
+          `main` still gets its own overflow-y-auto so pages taller than
+          the viewport scroll internally (sidebar stays pinned) instead
+          of the whole document scrolling. Pages that want to fill their
+          exact available height (e.g. StudentCourseViewPage) can just
+          use h-full / flex-1 on their own content. */}
       <div className="h-screen bg-gray-100 flex flex-col">
-        <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main className="flex-1 min-h-0 p-4 overflow-y-auto">
@@ -72,6 +71,7 @@ export function Layout() {
           </main>
         </div>
       </div>
+      <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
       {user && <FloatingChatbot />}
       {showSurvey && <EmotionSurveyModal onAnswer={handleAnswer} />}
     </PageContextProvider>

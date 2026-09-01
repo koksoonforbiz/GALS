@@ -141,6 +141,7 @@ import { ReviewTabView } from './ReviewTabView';
 import { PracticeTestingView } from './interventions/PracticeTestingView';
 import { InterrogativeElaborationView } from './interventions/InterrogativeElaborationView';
 import { StepwiseLearningView } from './interventions/StepwiseLearningView';
+import { CodeDecompositionView } from './interventions/CodeDecompositionView';
 import { DistributedPracticeView } from './interventions/DistributedPracticeView';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 import {
@@ -271,6 +272,7 @@ export function ChatbotPanel({
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isResolvingVlm, setIsResolvingVlm] = useState(false);
+  const [isCheckingStepwiseCourse, setIsCheckingStepwiseCourse] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
   const [pendingStrategy, setPendingStrategy] = useState<ChatbotMode | null>(null);
@@ -325,8 +327,16 @@ export function ChatbotPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!inputValue.trim() || isSending) return;
+  // `overrideText` lets a caller send a specific message without going
+  // through the input box first — used by the temporary "Test: Generate
+  // Coding Question" button below. Normal typed sends omit it and fall
+  // back to `inputValue`. Returns whether the reply included a
+  // generated code question, so that same test button can jump straight
+  // into the DBox view afterward instead of leaving the student to find
+  // and click "Step" themselves.
+  const handleSend = async (overrideText?: string): Promise<boolean> => {
+    const textToSend = overrideText ?? inputValue;
+    if (!textToSend.trim() || isSending) return false;
 
     // Resolve VLM descriptions for any checked image slides so the chat
     // call has the same slide context as the strategy buttons.
@@ -344,7 +354,7 @@ export function ChatbotPanel({
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: inputValue,
+      content: textToSend,
       timestamp: new Date(),
     };
 
@@ -381,7 +391,7 @@ export function ChatbotPanel({
       };
       setMessages((prev) => [...prev, assistantMsg]);
       setIsSending(false);
-      return;
+      return false;
     }
 
     try {
@@ -404,7 +414,7 @@ export function ChatbotPanel({
         suggestedStrategy: string | null;
         codeQuestion: { question: string; starterCode: string; language: string } | null;
       }>('/learning-interventions/chat', {
-        message: inputValue,
+        message: textToSend,
         conversationHistory,
         courseId,
         pageType,
@@ -446,6 +456,7 @@ export function ChatbotPanel({
         },
       });
       void flushActivityLog();
+      return Boolean(result.codeQuestion);
     } catch {
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -455,6 +466,7 @@ export function ChatbotPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
+      return false;
     } finally {
       setIsSending(false);
     }
@@ -463,7 +475,9 @@ export function ChatbotPanel({
   const handleInterventionClick = async (type: ChatbotMode) => {
     if (!courseId) return;
 
-    // Resolve VLM descriptions for any checked image slides before launching.
+    // Resolve VLM descriptions for any checked image slides before launching
+    // (also feeds the coding-course check below, so the exercise it
+    // generates can be scoped to whatever's actually highlighted).
     let effectiveSelectedText = selectedText;
     if (resolveVlmSlides) {
       setIsResolvingVlm(true);
@@ -472,6 +486,44 @@ export function ChatbotPanel({
         if (resolved) effectiveSelectedText = resolved;
       } finally {
         setIsResolvingVlm(false);
+      }
+    }
+
+    // "Step" launches DBox (code decomposition) instead of the regular
+    // reading-comprehension stepwise flow whenever the course is
+    // actually about programming — re-checked on every click rather than
+    // trusting leftover `activeCodeQuestion` state, which used to get
+    // stuck pointing at whatever question was generated earliest in the
+    // session even after navigating to unrelated, non-coding material.
+    if (type === 'stepwise-learning') {
+      setIsCheckingStepwiseCourse(true);
+      try {
+        const check = await api.post<
+          | { isCoding: false }
+          | { isCoding: true; question: string; starterCode: string; language: string }
+        >('/learning-interventions/stepwise-learning/course-check', {
+          courseId,
+          selectedText: effectiveSelectedText || undefined,
+        });
+        if (check.isCoding) {
+          setCodeContext(null);
+          setActiveCodeQuestion({
+            question: check.question,
+            starterCode: check.starterCode,
+            language: check.language,
+          });
+          setMode('stepwise-learning');
+          return;
+        }
+        // Not a coding course — clear any stale coding question from
+        // earlier in the session so it can't leak into this course's
+        // Step flow, then fall through to the normal path below.
+        setActiveCodeQuestion(null);
+      } catch {
+        // Check failed — fall through to the normal reading-comprehension
+        // flow rather than blocking the button entirely.
+      } finally {
+        setIsCheckingStepwiseCourse(false);
       }
     }
 
@@ -585,6 +637,37 @@ export function ChatbotPanel({
 
   // ─── Stepwise Learning Mode ─────────────────────────────
   if (mode === 'stepwise-learning') {
+    // DBox lives here now: handleInterventionClick checks whether the
+    // current course is programming-focused on every "Step" click and,
+    // if so, sets activeCodeQuestion to a freshly generated exercise
+    // (clearing it otherwise) — so this reflects the CURRENT course, not
+    // whatever question happened to exist earliest in the session.
+    if (activeCodeQuestion) {
+      return (
+        <div className="flex flex-col h-full bg-white">
+          <PanelHeader
+            onMinimize={onMinimize}
+            onToggleMaximize={onToggleMaximize}
+            isMaximized={isMaximized}
+            onReviewTab={() => setMode('review-tab')}
+            isReviewTab={false}
+          />
+          <StrategyBackBar label="Stepwise Learning" onBack={handleBackToChat} />
+          {/* key forces a full remount whenever the active question
+              changes — without it, React reuses the same component
+              instance across two different generated questions and none
+              of its internal state (the editor's `code`, and
+              DecompositionPanel's whole session) resets, so a stale
+              tree from the previous question stays on screen. */}
+          <CodeDecompositionView
+            key={activeCodeQuestion.question}
+            question={activeCodeQuestion.question}
+            starterCode={activeCodeQuestion.starterCode}
+          />
+        </div>
+      );
+    }
+
     // Check for resumable session
     let resumeSessionId: string | null = null;
     try {
@@ -851,6 +934,11 @@ export function ChatbotPanel({
               <Loader size={12} className="animate-spin" />
               Describing image slides…
             </div>
+          ) : isCheckingStepwiseCourse ? (
+            <div className="flex items-center gap-2 text-xs text-amber-700 py-1">
+              <Loader size={12} className="animate-spin" />
+              Checking course type…
+            </div>
           ) : (
             <>
               <div className="text-xs text-gray-500 mb-1.5">Apply learning strategy:</div>
@@ -921,7 +1009,7 @@ export function ChatbotPanel({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSend();
+                void handleSend();
               }
             }}
             placeholder={selectedText ? 'Ask about these slides...' : 'Type a message...'}
@@ -929,7 +1017,7 @@ export function ChatbotPanel({
             className="flex-1 text-xs border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 disabled:bg-gray-50"
           />
           <button
-            onClick={handleSend}
+            onClick={() => void handleSend()}
             disabled={!inputValue.trim() || isSending}
             className="text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
           >

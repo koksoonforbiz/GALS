@@ -85,7 +85,7 @@ export function StepTree({ nodes, actions, stage }: StepTreeProps) {
     <div className="flex flex-col gap-0.5">
       {nodes.length === 0 && (
         <p className="text-xs text-gray-500 italic px-1 mb-1">
-          No steps yet — build a tree from your code, or add one below.
+          No steps yet — add one below to start breaking down the problem.
         </p>
       )}
       {rootNodes.map((node) => (

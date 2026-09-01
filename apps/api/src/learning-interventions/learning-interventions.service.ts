@@ -31,7 +31,10 @@ import {
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 import { CodePracticeService } from '../code-practice/code-practice.service';
-import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
+import type {
+  CodePracticeQuestion,
+  CodingCourseCheckResult,
+} from '../code-practice/code-practice.service';
 
 // Marker the chat LLM appends to its own reply, on its own line, when
 // (and only when) it judges the student's message to be a request for
@@ -78,6 +81,7 @@ import type {
   AskQuestionDto,
   GenerateStepwiseDto,
   SubmitStepCheckDto,
+  StepwiseCourseCheckDto,
   GenerateCardsDto,
   ReviewCardDto,
   ChatRequestDto,
@@ -2866,6 +2870,34 @@ export class LearningInterventionsService {
 
   // ─── Stepwise Learning ──────────────────────────────────
 
+  /**
+   * Gates the "Step" button: is the course actually about programming?
+   * If so, the frontend generates a DBox (code decomposition) session
+   * from the returned question instead of launching the regular
+   * reading-comprehension stepwise flow. No LearningIntervention row is
+   * created here — this is a stateless check, not a session.
+   */
+  async checkCodingCourse(dto: StepwiseCourseCheckDto): Promise<CodingCourseCheckResult> {
+    if (!dto.courseId) {
+      throw new BadRequestException('courseId is required');
+    }
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
+    const course = await this.prisma.course.findUnique({
+      where: { id: dto.courseId },
+      select: { title: true, description: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    return this.codePracticeService.checkCodingCourseAndGenerate(
+      teacherId,
+      dto.courseId,
+      course.title,
+      {
+        courseDescription: course.description,
+        highlightedText: dto.selectedText,
+      },
+    );
+  }
+
   async generateSteps(
     userId: string,
     dto: GenerateStepwiseDto,
@@ -4273,7 +4305,8 @@ The student is currently viewing slide ${Math.floor(dto.currentPage)} of the doc
     // outcome (question generation, not a strategy suggestion).
     const codePracticeInstruction = `
 If — and only if — the student is explicitly asking for a coding practice question, coding exercise, or to write/practice code: do NOT write the exercise, starter code, or any code yourself in this reply — a separate interactive code widget will be generated and shown to the student automatically, scoped to whatever they highlighted. Writing your own version here would duplicate it and can describe a different, unrelated exercise, which is confusing. Instead, respond with ONLY one short, friendly acknowledgement sentence (e.g. "Sure — here's a coding exercise for you below."), then append this exact marker on its own new line at the very end of your reply, after everything else (including any [SUGGEST:...] line): ${CODE_PRACTICE_MARKER}
-Never mention this marker to the student or explain that you're adding it. Do not add it, and do not write a coding exercise yourself, for ordinary questions about code, debugging help, or general course questions — only when they're explicitly asking to be given a new exercise to practice.`;
+Never mention this marker to the student or explain that you're adding it. Do not add it, and do not write a coding exercise yourself, for ordinary questions about code, debugging help, or general course questions — only when they're explicitly asking to be given a new exercise to practice.
+This instruction takes priority over the grounding rules below when it applies: do not cite sources, do not describe or summarize the highlighted passage, and do not explain what a coding exercise "would" ask — just give the one-sentence acknowledgement and the marker, nothing else.`;
 
     systemPersona += `\n${codePracticeInstruction}`;
 
