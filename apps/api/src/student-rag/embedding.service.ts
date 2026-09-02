@@ -605,6 +605,12 @@ export class EmbeddingService {
       }
       allEmbeddings.push(...batchVectors);
     }
+    // Loud on purpose — the easiest way to confirm from
+    // `docker compose logs api` that a call actually reached Bedrock
+    // while testing this integration live.
+    this.logger.log(
+      `[Bedrock] embed call succeeded — model:${model} inputType:${inputType} texts:${texts.length} vectors:${allEmbeddings.length}`,
+    );
     return allEmbeddings;
   }
 

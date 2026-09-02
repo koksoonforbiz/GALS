@@ -1302,12 +1302,18 @@ export class LlmService {
     };
 
     const content = (data.output?.message?.content ?? []).map((c) => c.text ?? '').join('');
+    const promptTokens = data.usage?.inputTokens || 0;
+    const completionTokens = data.usage?.outputTokens || 0;
 
-    return {
-      content,
-      promptTokens: data.usage?.inputTokens || 0,
-      completionTokens: data.usage?.outputTokens || 0,
-    };
+    // Loud on purpose — this is the easiest way to confirm from
+    // `docker compose logs api` that a call actually reached Bedrock
+    // (vs. silently falling back to another provider or the template
+    // path) while testing this integration live.
+    this.logger.log(
+      `[Bedrock] chat call succeeded — model:${model} promptTokens:${promptTokens} completionTokens:${completionTokens}`,
+    );
+
+    return { content, promptTokens, completionTokens };
   }
 
   // ─── Gemini: registry-driven request shape ──────────────
