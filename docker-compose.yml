@@ -29,11 +29,9 @@ services:
       # Shared AWS Bedrock credential — one key for every teacher who
       # selects "bedrock" as their AI provider (not a per-teacher key,
       # see llm.service.ts's getUserApiKey). Optional: features that
-      # don't touch Bedrock work fine with this unset. Region is NOT
-      # configurable here on purpose — every Bedrock call is hardcoded to
-      # ap-southeast-1 in llm.service.ts (callBedrockApi), matching the
-      # account's access grant.
+      # don't touch Bedrock work fine with this unset.
       AWS_BEARER_TOKEN: ${AWS_BEARER_TOKEN:-}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
     networks:
       - local-dev
     depends_on:

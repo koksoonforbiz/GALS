@@ -1207,10 +1207,8 @@ export class LlmService {
   // reachable via api.openai.com. Auth is the newer Bedrock API-key
   // (bearer token) scheme — no SigV4 request signing needed, same
   // "Authorization: Bearer <token>" shape as callOpenAiApi/callGeminiApi
-  // above. Region is hardcoded (not env-configurable) — every request
-  // MUST go through ap-southeast-1 per the account's Bedrock access
-  // grant, so there's no knob to accidentally point it elsewhere.
-  private static readonly BEDROCK_REGION = 'ap-southeast-1';
+  // above. Region is read from AWS_REGION (defaults to ap-southeast-1,
+  // matching the account's Bedrock access grant) rather than hardcoded.
 
   private async callBedrockApi(
     request: {
@@ -1225,7 +1223,8 @@ export class LlmService {
     model: string,
     spec: ChatModelSpec,
   ): Promise<FunnelResult> {
-    const url = `https://bedrock-runtime.${LlmService.BEDROCK_REGION}.amazonaws.com/model/${encodeURIComponent(model)}/converse`;
+    const region = this.config.get<string>('AWS_REGION') || 'ap-southeast-1';
+    const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(model)}/converse`;
 
     // No schema-bound response_format on Converse for this model family —
     // JSON mode is enforced by prompt instruction only, same fallback

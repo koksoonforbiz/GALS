@@ -10,10 +10,11 @@ import {
   type LlmProvider,
 } from '../llm/model-registry';
 
-// Same shared credential + fixed region as the Bedrock chat funnel — see
-// llm.service.ts's callBedrockApi for the reasoning (one AWS_BEARER_TOKEN
-// for every teacher who selects this provider, region not configurable).
-const BEDROCK_REGION = 'ap-southeast-1';
+// Same shared credential + region source as the Bedrock chat funnel —
+// see llm.service.ts's callBedrockApi (one AWS_BEARER_TOKEN for every
+// teacher who selects this provider; region from AWS_REGION, defaulting
+// to ap-southeast-1).
+const BEDROCK_DEFAULT_REGION = 'ap-southeast-1';
 
 const OPENAI_BATCH_SIZE = 100;
 
@@ -567,7 +568,8 @@ export class EmbeddingService {
     model: string,
     inputType: 'search_document' | 'search_query',
   ): Promise<number[][]> {
-    const url = `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com/model/${encodeURIComponent(model)}/invoke`;
+    const region = this.config.get<string>('AWS_REGION') || BEDROCK_DEFAULT_REGION;
+    const url = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(model)}/invoke`;
 
     const allEmbeddings: number[][] = [];
     for (let off = 0; off < texts.length; off += COHERE_TEXT_BATCH_SIZE) {
