@@ -207,12 +207,17 @@ const CHAT_MODELS: ChatModelSpec[] = [
   // Single shared server-side credential (AWS_BEARER_TOKEN + AWS_REGION,
   // see callBedrockApi in llm.service.ts) rather than a per-teacher key —
   // any teacher who selects this provider uses the same AWS account.
-  // Called via Bedrock's model-agnostic Converse API, always routed to
-  // the ap-southeast-1 regional endpoint. `id` here is the Bedrock model
-  // ID (the resource-name segment of its foundation-model ARN), not an
-  // OpenAI API model string — these are NOT reachable via api.openai.com.
+  // Called via Bedrock's model-agnostic Converse API, routed through the
+  // AWS_REGION regional endpoint (defaults to ap-southeast-1). `id` here
+  // is the Bedrock INFERENCE PROFILE id, not the bare foundation-model
+  // id — these models reject on-demand invocation by the plain model id
+  // ("...isn't supported. Retry your request with the ID or ARN of an
+  // inference profile that contains this model."), and IT confirmed
+  // `global.<model>` is the profile id to use. Verified 2026-09-02
+  // against the real endpoint via scripts/scratch-test-bedrock.mjs —
+  // both return 200 with the expected Converse response shape.
   {
-    id: 'openai.gpt-5.6-terra',
+    id: 'global.openai.gpt-5.6-terra',
     provider: 'bedrock',
     label: 'GPT-5.6 Terra (AWS Bedrock)',
     // GPT-5.x-class models are vision-capable elsewhere in this
@@ -233,7 +238,7 @@ const CHAT_MODELS: ChatModelSpec[] = [
     supportsOpenAiFilesApi: false,
   },
   {
-    id: 'openai.gpt-5.6-sol',
+    id: 'global.openai.gpt-5.6-sol',
     provider: 'bedrock',
     label: 'GPT-5.6 Sol (AWS Bedrock)',
     capabilities: ['chat', 'vision'],
@@ -351,7 +356,7 @@ const EMBEDDING_MODELS: EmbeddingModelSpec[] = [
 const DEFAULT_CHAT_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {
   openai: 'gpt-5.4-mini',
   gemini: 'gemini-3.5-flash',
-  bedrock: 'openai.gpt-5.6-sol',
+  bedrock: 'global.openai.gpt-5.6-sol',
 };
 
 const DEFAULT_EMBEDDING_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {

@@ -83,11 +83,13 @@ describe('LLM model registry', () => {
         } else if (spec.provider === 'gemini') {
           expect(spec.id.startsWith('gemini-')).toBe(true);
         } else if (spec.provider === 'bedrock') {
-          // Bedrock model ids are the resource-name segment of their
-          // foundation-model ARN, not an OpenAI API model string —
-          // `openai.<name>` even though these aren't api.openai.com
-          // models (see model-registry.ts's Bedrock section).
-          expect(spec.id.startsWith('openai.')).toBe(true);
+          // Bedrock chat model ids are inference profile ids, not
+          // OpenAI API model strings — these OpenAI-hosted-on-Bedrock
+          // models reject on-demand invocation by the bare
+          // foundation-model id, so the app calls them by their
+          // `global.<name>` profile id instead (confirmed against the
+          // real endpoint — see model-registry.ts's Bedrock section).
+          expect(spec.id.startsWith('global.openai.')).toBe(true);
         }
       }
     });

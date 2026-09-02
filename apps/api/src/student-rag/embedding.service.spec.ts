@@ -177,7 +177,14 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'bedrock',
         llmEmbeddingModel: 'cohere.embed-v4:0',
       });
-      const config = { get: jest.fn().mockReturnValue('bedrock-bearer-test-token') } as any;
+      // Must discriminate by key — embedBedrockCohere also reads
+      // AWS_REGION now, and a blanket mockReturnValue would feed that
+      // same token back as the region too.
+      const config = {
+        get: jest.fn((key: string) =>
+          key === 'AWS_BEARER_TOKEN' ? 'bedrock-bearer-test-token' : undefined,
+        ),
+      } as any;
       const service = new EmbeddingService(prisma, config);
 
       const captured: Array<{ url: string; body: any; headers: any }> = [];
