@@ -200,7 +200,15 @@ export function PracticeTestingView({
           requestedPageEnd?: number;
           clampedPageEnd?: number;
         };
-      }>('/learning-interventions/practice-testing/generate', buildPayload());
+      }>(
+        '/learning-interventions/practice-testing/generate',
+        buildPayload(),
+        // Without a selection this falls back to RAG retrieval over the
+        // whole course before the LLM call even starts — routinely
+        // slower than the default 15s abort timeout, which was only
+        // meant to catch a genuinely unreachable API.
+        { timeoutMs: 60_000 },
+      );
       setInterventionId(result.interventionId);
       setQuestions(result.questions);
       if (result.coverageFallback) {

@@ -36,9 +36,9 @@ export class LlmModelsController {
   } {
     let providerFilter: LlmProvider | undefined;
     if (provider !== undefined && provider !== '') {
-      if (provider !== 'openai' && provider !== 'gemini') {
+      if (provider !== 'openai' && provider !== 'gemini' && provider !== 'bedrock') {
         throw new BadRequestException(
-          `Unknown provider "${provider}". Expected one of: openai, gemini.`,
+          `Unknown provider "${provider}". Expected one of: openai, gemini, bedrock.`,
         );
       }
       providerFilter = provider;

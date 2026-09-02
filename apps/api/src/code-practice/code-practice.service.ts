@@ -7,10 +7,6 @@ import {
   buildCodingCourseCheckUserPrompt,
 } from './prompts/code-practice.prompt';
 
-export type CodingCourseCheckResult =
-  | { isCoding: false }
-  | ({ isCoding: true } & CodePracticeQuestion);
-
 export interface CodePracticeQuestion {
   question: string;
   starterCode: string;
@@ -70,26 +66,22 @@ export class CodePracticeService {
   }
 
   /**
-   * Classifies whether a course is programming-focused and, in the same
-   * LLM call, generates a coding exercise if it is — used to decide
-   * whether the "Step" button should launch DBox (code decomposition) or
-   * the regular reading-comprehension stepwise flow. On any parse
-   * failure this defaults to `{isCoding: false}` rather than guessing —
-   * a missed DBox launch is a minor inconvenience, but forcing a coding
-   * flow onto a non-coding course would be a much worse one.
+   * Classifies whether a course is programming-focused — used to decide
+   * whether the "Step" button offers a Coding Steps / Reading Steps
+   * choice at all. Non-coding courses always go straight to the regular
+   * reading-comprehension flow. On any parse failure this defaults to
+   * `false` rather than guessing — a missed DBox offer is a minor
+   * inconvenience, but offering a coding flow on a non-coding course
+   * would be a much worse one.
    */
-  async checkCodingCourseAndGenerate(
+  async isCodingCourse(
     teacherId: string,
     courseId: string,
     courseTitle: string,
-    options?: { courseDescription?: string; highlightedText?: string },
-  ): Promise<CodingCourseCheckResult> {
+    courseDescription?: string,
+  ): Promise<boolean> {
     const systemPrompt = buildCodingCourseCheckSystemPrompt();
-    const userPrompt = buildCodingCourseCheckUserPrompt({
-      courseTitle,
-      courseDescription: options?.courseDescription,
-      highlightedText: options?.highlightedText,
-    });
+    const userPrompt = buildCodingCourseCheckUserPrompt({ courseTitle, courseDescription });
 
     const result = await this.llmService.callLlmStructured(
       teacherId,
@@ -101,35 +93,20 @@ export class CodePracticeService {
       { feature: 'code_practice_course_check', courseId },
     );
 
-    return this.parseCourseCheck(result.content) ?? { isCoding: false };
+    return this.parseCourseCheck(result.content);
   }
 
-  private parseCourseCheck(raw: string): CodingCourseCheckResult | null {
+  private parseCourseCheck(raw: string): boolean {
     let cleaned = raw.trim();
     const fenced = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenced?.[1]) cleaned = fenced[1].trim();
 
     try {
-      const data = JSON.parse(cleaned) as Partial<CodePracticeQuestion> & { isCoding?: unknown };
-      if (data.isCoding === false) return { isCoding: false };
-      if (
-        data.isCoding === true &&
-        typeof data.question === 'string' &&
-        data.question.trim().length > 0 &&
-        typeof data.starterCode === 'string' &&
-        data.starterCode.trim().length > 0
-      ) {
-        return {
-          isCoding: true,
-          question: data.question.trim(),
-          starterCode: data.starterCode,
-          language: typeof data.language === 'string' && data.language ? data.language : 'python',
-        };
-      }
+      const data = JSON.parse(cleaned) as { isCoding?: unknown };
+      return data.isCoding === true;
     } catch {
-      // fall through to null
+      return false;
     }
-    return null;
   }
 
   private parseQuestion(raw: string): CodePracticeQuestion | null {

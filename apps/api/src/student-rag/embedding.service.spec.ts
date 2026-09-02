@@ -26,7 +26,7 @@ import * as crypto from 'crypto';
 
 function makeMockPrisma(opts: {
   encryptedApiKey: string | null;
-  llmProvider: 'openai' | 'gemini' | null;
+  llmProvider: 'openai' | 'gemini' | 'bedrock' | null;
   llmEmbeddingModel: string | null;
 }) {
   return {
@@ -39,6 +39,10 @@ function makeMockPrisma(opts: {
     },
   } as any;
 }
+
+/** None of these tests exercise the Bedrock provider (see the Bedrock
+ *  spec for that), so `.get()` never needs a real return value. */
+const mockConfig = { get: jest.fn() } as any;
 
 /** Encrypt a key the same way `EmbeddingService.decryptApiKey` decrypts.
  *  Uses JWT_SECRET from process.env (the spec runs with .env.test loaded
@@ -113,7 +117,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-small',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'openai', dimensions: 1536 });
       try {
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
@@ -133,7 +137,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-large',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'openai', dimensions: 3072 });
       try {
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
@@ -152,7 +156,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'gemini',
         llmEmbeddingModel: 'gemini-embedding-001',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'gemini', dimensions: 768 });
       try {
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
@@ -163,6 +167,66 @@ describe('EmbeddingService — registry-driven funnel', () => {
       } finally {
         fakeFetch.restore();
       }
+    });
+  });
+
+  describe('Bedrock (Cohere Embed 4, one shared server credential)', () => {
+    it('cohere.embed-v4:0 → 1536 dims, hits the Bedrock invoke endpoint with the bearer token', async () => {
+      const prisma = makeMockPrisma({
+        encryptedApiKey: null, // bedrock has no per-teacher key — see resolveTeacherEmbeddingSpec
+        llmProvider: 'bedrock',
+        llmEmbeddingModel: 'cohere.embed-v4:0',
+      });
+      const config = { get: jest.fn().mockReturnValue('bedrock-bearer-test-token') } as any;
+      const service = new EmbeddingService(prisma, config);
+
+      const captured: Array<{ url: string; body: any; headers: any }> = [];
+      const fetchMock = jest.fn(async (url: any, init: any) => {
+        captured.push({ url: String(url), body: JSON.parse(init.body), headers: init.headers });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            embeddings: { float: [Array.from({ length: 1536 }, (_v, j) => j * 0.0001)] },
+          }),
+          text: async () => '',
+        } as any;
+      });
+      const previous = global.fetch;
+      (global as any).fetch = fetchMock;
+      try {
+        const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
+        expect(result.model).toBe('cohere.embed-v4:0');
+        expect(result.dimensions).toBe(1536);
+        expect(result.vectors[0]!.length).toBe(1536);
+        expect(result.provider).toBe('bedrock');
+
+        expect(captured).toHaveLength(1);
+        const req = captured[0]!;
+        expect(req.url).toBe(
+          'https://bedrock-runtime.ap-southeast-1.amazonaws.com/model/cohere.embed-v4%3A0/invoke',
+        );
+        expect(req.headers.Authorization).toBe('Bearer bedrock-bearer-test-token');
+        expect(req.body.texts).toEqual(['hi']);
+        expect(req.body.input_type).toBe('search_document');
+      } finally {
+        (global as any).fetch = previous;
+      }
+    });
+
+    it('falls back to the SHA256 pseudo-embedding when AWS_BEARER_TOKEN is unconfigured', async () => {
+      const prisma = makeMockPrisma({
+        encryptedApiKey: null,
+        llmProvider: 'bedrock',
+        llmEmbeddingModel: 'cohere.embed-v4:0',
+      });
+      const config = { get: jest.fn().mockReturnValue(undefined) } as any;
+      const service = new EmbeddingService(prisma, config);
+      // No fetch mock — the fallback path must never call fetch.
+      const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
+      expect(result.provider).toBe('fallback');
+      expect(result.dimensions).toBe(1536);
+      expect(result.vectors[0]!.length).toBe(1536);
     });
   });
 
@@ -189,7 +253,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
           llmProvider: spec.provider as 'openai' | 'gemini',
           llmEmbeddingModel: modelId as string,
         });
-        const service = new EmbeddingService(prisma);
+        const service = new EmbeddingService(prisma, mockConfig);
         // No fetch mock — fallback path doesn't call fetch.
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hello world']);
         expect(result.provider).toBe('fallback');
@@ -211,7 +275,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-large',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi'], {
         outputDimensions: 1024,
       });
@@ -238,7 +302,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-small',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       await expect(service.callEmbeddingForUser(TEACHER_ID, ['hi'])).rejects.toThrow(
         /RAG_PSEUDO_EMBEDDING_BLOCKED/,
       );
@@ -252,7 +316,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-small',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
       expect(result.provider).toBe('fallback');
       expect(result.model).toBe('sha256-pseudo');
@@ -266,7 +330,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-large',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'openai', dimensions: 1024 });
       try {
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi'], {
@@ -292,7 +356,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: 'text-embedding-3-small',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'openai', dimensions: 1536 });
       try {
         await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
@@ -311,7 +375,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'gemini',
         llmEmbeddingModel: 'gemini-embedding-001',
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({ kind: 'gemini', dimensions: 1536 });
       try {
         await service.callEmbeddingForUser(TEACHER_ID, ['a', 'b'], {
@@ -337,7 +401,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         llmProvider: 'openai',
         llmEmbeddingModel: null,
       });
-      const service = new EmbeddingService(prisma);
+      const service = new EmbeddingService(prisma, mockConfig);
       const fakeFetch = installFetchMock({
         kind: 'openai',
         dimensions: defaultEmbeddingModel('openai').dimensions,

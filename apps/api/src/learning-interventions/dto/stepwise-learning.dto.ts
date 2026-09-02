@@ -18,11 +18,17 @@ export interface SubmitStepCheckDto {
 }
 
 /** Ask "is this course about programming?" before deciding whether the
- *  Step button should launch DBox (code decomposition) or the regular
- *  reading-comprehension stepwise flow. See
- *  CodePracticeService.checkCodingCourseAndGenerate — the classification
- *  and (if applicable) question generation happen in one LLM call. */
+ *  Step button offers a Coding Steps (DBox) / Reading Steps choice, or
+ *  goes straight to the regular reading-comprehension flow. Pure
+ *  classification — see CodePracticeService.isCodingCourse. */
 export interface StepwiseCourseCheckDto {
+  courseId: string;
+}
+
+/** Generate the coding exercise for a Coding Steps (DBox) session —
+ *  called once the student picks Coding Steps after StepwiseCourseCheckDto
+ *  said the course is coding-related. */
+export interface GenerateStepwiseCodeQuestionDto {
   courseId: string;
   /** Currently highlighted passage, if any — steers the generated
    *  question toward it, same as the inline chat code-question flow. */

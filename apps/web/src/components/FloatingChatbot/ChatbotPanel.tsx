@@ -163,6 +163,7 @@ import {
   ArrowLeft,
   Zap,
   Sparkles,
+  Code2,
 } from 'lucide-react';
 
 const STRATEGY_META: Record<
@@ -273,9 +274,17 @@ export function ChatbotPanel({
   const [isSending, setIsSending] = useState(false);
   const [isResolvingVlm, setIsResolvingVlm] = useState(false);
   const [isCheckingStepwiseCourse, setIsCheckingStepwiseCourse] = useState(false);
+  const [isGeneratingCodeQuestion, setIsGeneratingCodeQuestion] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [dueCount, setDueCount] = useState(0);
   const [pendingStrategy, setPendingStrategy] = useState<ChatbotMode | null>(null);
+  // Set instead of jumping straight into a mode when "Step" finds the
+  // course is coding-related — offers a Coding Steps (DBox) / Reading
+  // Steps choice rather than deciding for the student. Carries whatever
+  // was highlighted (if anything) so either choice can use it.
+  const [pendingCodingChoice, setPendingCodingChoice] = useState<{
+    effectiveSelectedText: string | null;
+  } | null>(null);
   const [pregenReady, setPregenReady] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -489,30 +498,23 @@ export function ChatbotPanel({
       }
     }
 
-    // "Step" launches DBox (code decomposition) instead of the regular
-    // reading-comprehension stepwise flow whenever the course is
-    // actually about programming — re-checked on every click rather than
-    // trusting leftover `activeCodeQuestion` state, which used to get
-    // stuck pointing at whatever question was generated earliest in the
+    // "Step" offers a Coding Steps (DBox) / Reading Steps choice whenever
+    // the course is actually about programming, instead of deciding for
+    // the student — re-checked on every click rather than trusting
+    // leftover `activeCodeQuestion` state, which used to get stuck
+    // pointing at whatever question was generated earliest in the
     // session even after navigating to unrelated, non-coding material.
+    // Non-coding courses always go straight to the regular flow, no
+    // choice shown.
     if (type === 'stepwise-learning') {
       setIsCheckingStepwiseCourse(true);
       try {
-        const check = await api.post<
-          | { isCoding: false }
-          | { isCoding: true; question: string; starterCode: string; language: string }
-        >('/learning-interventions/stepwise-learning/course-check', {
-          courseId,
-          selectedText: effectiveSelectedText || undefined,
-        });
+        const check = await api.post<{ isCoding: boolean }>(
+          '/learning-interventions/stepwise-learning/course-check',
+          { courseId },
+        );
         if (check.isCoding) {
-          setCodeContext(null);
-          setActiveCodeQuestion({
-            question: check.question,
-            starterCode: check.starterCode,
-            language: check.language,
-          });
-          setMode('stepwise-learning');
+          setPendingCodingChoice({ effectiveSelectedText });
           return;
         }
         // Not a coding course — clear any stale coding question from
@@ -531,6 +533,50 @@ export function ChatbotPanel({
       setMode(type);
     } else {
       setPendingStrategy(type);
+    }
+  };
+
+  const handleChooseCodingSteps = async () => {
+    if (!courseId || !pendingCodingChoice) return;
+    const { effectiveSelectedText } = pendingCodingChoice;
+    setPendingCodingChoice(null);
+    setIsGeneratingCodeQuestion(true);
+    try {
+      const question = await api.post<{
+        question: string;
+        starterCode: string;
+        language: string;
+      }>('/learning-interventions/stepwise-learning/generate-code-question', {
+        courseId,
+        selectedText: effectiveSelectedText || undefined,
+      });
+      setCodeContext(null);
+      setActiveCodeQuestion(question);
+      setMode('stepwise-learning');
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: "Sorry, I couldn't generate a coding exercise right now. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsGeneratingCodeQuestion(false);
+    }
+  };
+
+  const handleChooseReadingSteps = () => {
+    if (!pendingCodingChoice) return;
+    const { effectiveSelectedText } = pendingCodingChoice;
+    setPendingCodingChoice(null);
+    // A stale coding question from earlier in the session must not leak
+    // into this reading-comprehension session.
+    setActiveCodeQuestion(null);
+    if (effectiveSelectedText) {
+      setMode('stepwise-learning');
+    } else {
+      setPendingStrategy('stepwise-learning');
     }
   };
 
@@ -926,8 +972,45 @@ export function ChatbotPanel({
         </div>
       )}
 
+      {/* Choice prompt when "Step" finds this is a coding course — Coding
+          Steps (DBox) vs the regular reading-comprehension flow, rather
+          than deciding for the student. */}
+      {pendingCodingChoice && (
+        <div className="px-3 py-2.5 border-t border-blue-200 bg-blue-50">
+          <div className="text-xs font-medium text-blue-800 mb-2">
+            This looks like a coding course — which kind of step-by-step practice?
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <button
+              onClick={() => void handleChooseCodingSteps()}
+              className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2"
+            >
+              <Code2 size={14} />
+              <div>
+                <div className="font-medium">Coding Steps</div>
+                <div className="text-[10px] text-blue-500">
+                  Break a coding exercise into a step tree (DBox)
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={handleChooseReadingSteps}
+              className="w-full text-left text-xs px-3 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors flex items-center gap-2"
+            >
+              <Footprints size={14} />
+              <div>
+                <div className="font-medium">Reading Steps</div>
+                <div className="text-[10px] text-blue-500">
+                  Break the reading material into comprehension steps
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Intervention buttons (always visible) */}
-      {!pendingStrategy && (
+      {!pendingStrategy && !pendingCodingChoice && (
         <div className="px-3 py-2 border-t border-gray-100 bg-gray-50">
           {isResolvingVlm ? (
             <div className="flex items-center gap-2 text-xs text-amber-700 py-1">
@@ -938,6 +1021,11 @@ export function ChatbotPanel({
             <div className="flex items-center gap-2 text-xs text-amber-700 py-1">
               <Loader size={12} className="animate-spin" />
               Checking course type…
+            </div>
+          ) : isGeneratingCodeQuestion ? (
+            <div className="flex items-center gap-2 text-xs text-amber-700 py-1">
+              <Loader size={12} className="animate-spin" />
+              Generating a coding exercise…
             </div>
           ) : (
             <>

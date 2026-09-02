@@ -24,6 +24,7 @@ import type {
   GenerateStepwiseDto,
   SubmitStepCheckDto,
   StepwiseCourseCheckDto,
+  GenerateStepwiseCodeQuestionDto,
   GenerateCardsDto,
   ReviewCardDto,
   ChatRequestDto,
@@ -194,6 +195,11 @@ export class LearningInterventionsController {
   @Post('stepwise-learning/course-check')
   checkStepwiseCourseType(@Body() dto: StepwiseCourseCheckDto) {
     return this.service.checkCodingCourse(dto);
+  }
+
+  @Post('stepwise-learning/generate-code-question')
+  generateStepwiseCodeQuestion(@Body() dto: GenerateStepwiseCodeQuestionDto) {
+    return this.service.generateStepwiseCodeQuestion(dto);
   }
 
   @Post('stepwise-learning/generate')

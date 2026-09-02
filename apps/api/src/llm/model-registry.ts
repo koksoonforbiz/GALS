@@ -17,7 +17,7 @@
 
 // ─── Types ──────────────────────────────────────────────────
 
-export type LlmProvider = 'openai' | 'gemini' | 'cohere';
+export type LlmProvider = 'openai' | 'gemini' | 'cohere' | 'bedrock';
 export type ModelCapability = 'chat' | 'embedding' | 'vision';
 
 export interface ChatModelSpec {
@@ -201,6 +201,47 @@ const CHAT_MODELS: ChatModelSpec[] = [
     // teacher still pointed at it to the new Gemini default.
     retiresOn: '2026-06-01',
   },
+
+  // ── Bedrock (OpenAI models hosted on AWS Bedrock) ──
+  //
+  // Single shared server-side credential (AWS_BEARER_TOKEN + AWS_REGION,
+  // see callBedrockApi in llm.service.ts) rather than a per-teacher key —
+  // any teacher who selects this provider uses the same AWS account.
+  // Called via Bedrock's model-agnostic Converse API, always routed to
+  // the ap-southeast-1 regional endpoint. `id` here is the Bedrock model
+  // ID (the resource-name segment of its foundation-model ARN), not an
+  // OpenAI API model string — these are NOT reachable via api.openai.com.
+  {
+    id: 'openai.gpt-5.6-terra',
+    provider: 'bedrock',
+    label: 'GPT-5.6 Terra (AWS Bedrock)',
+    // GPT-5.x-class models are vision-capable elsewhere in this
+    // registry — assumed true here too (untested against the real
+    // Bedrock endpoint; see callBedrockApi's image content-block
+    // translation). Flag this as unverified if VLM testing shows
+    // otherwise.
+    capabilities: ['chat', 'vision'],
+    supportsTemperature: true,
+    // Unused by the Bedrock call path (Converse API has its own
+    // `inferenceConfig.maxTokens` shape) — set only to satisfy this
+    // shared interface.
+    maxTokensParam: 'max_tokens',
+    // No schema-bound response_format on Bedrock Converse for this
+    // model family; JSON mode is enforced by prompt instruction only
+    // (see callBedrockApi).
+    supportsJsonMode: true,
+    supportsOpenAiFilesApi: false,
+  },
+  {
+    id: 'openai.gpt-5.6-sol',
+    provider: 'bedrock',
+    label: 'GPT-5.6 Sol (AWS Bedrock)',
+    capabilities: ['chat', 'vision'],
+    supportsTemperature: true,
+    maxTokensParam: 'max_tokens',
+    supportsJsonMode: true,
+    supportsOpenAiFilesApi: false,
+  },
 ];
 
 const EMBEDDING_MODELS: EmbeddingModelSpec[] = [
@@ -275,6 +316,29 @@ const EMBEDDING_MODELS: EmbeddingModelSpec[] = [
     truncatableTo: [256, 512, 1024, 1536],
     supportsImageEmbedding: true,
   },
+
+  // ── Bedrock (Cohere Embed 4 hosted on AWS Bedrock) ──
+  //
+  // Same server-wide credential as the Bedrock chat models above — see
+  // embedBedrockCohere in embedding.service.ts. This is the TEXT
+  // embedding path only (course document search) — the separate
+  // multimodal page-image embedding pipeline (callMultimodalEmbedding)
+  // still goes through the direct Cohere API + a teacher's own
+  // `cohereApiKey`, not this spec; wiring that one to Bedrock too is
+  // unfinished. `id` is the Bedrock model ID (resource-name segment of
+  // its foundation-model ARN), invoked via Bedrock's native
+  // InvokeModel (Converse doesn't support embedding models).
+  {
+    id: 'cohere.embed-v4:0',
+    provider: 'bedrock',
+    label: 'Cohere Embed 4 (AWS Bedrock, text)',
+    dimensions: 1536,
+    // No truncatableTo: unlike the direct Cohere API, embedBedrockCohere
+    // doesn't send `output_dimension` — unverified whether Bedrock's
+    // InvokeModel body for this model even accepts it, so this always
+    // requests/returns the native 1536-dim vector rather than silently
+    // ignoring a truncation request the registry advertised.
+  },
 ];
 
 // ─── Defaults ───────────────────────────────────────────────
@@ -287,11 +351,13 @@ const EMBEDDING_MODELS: EmbeddingModelSpec[] = [
 const DEFAULT_CHAT_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {
   openai: 'gpt-5.4-mini',
   gemini: 'gemini-3.5-flash',
+  bedrock: 'openai.gpt-5.6-sol',
 };
 
-const DEFAULT_EMBEDDING_BY_PROVIDER: Record<LlmProvider, string> = {
+const DEFAULT_EMBEDDING_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {
   openai: 'text-embedding-3-small',
   gemini: 'gemini-embedding-001',
+  bedrock: 'cohere.embed-v4:0',
   // Stage 05 — Cohere Embed 4 (multimodal). Pinned to 1536 dims via
   // Matryoshka `output_dimension`. Used when `RAG_MULTIMODAL_PDF` is
   // on AND the teacher has a Cohere key configured; otherwise the
@@ -315,9 +381,7 @@ export function listChatModels(provider?: LlmProvider): ChatModelSpec[] {
 }
 
 export function listEmbeddingModels(provider?: LlmProvider): EmbeddingModelSpec[] {
-  return provider
-    ? EMBEDDING_MODELS.filter((m) => m.provider === provider)
-    : [...EMBEDDING_MODELS];
+  return provider ? EMBEDDING_MODELS.filter((m) => m.provider === provider) : [...EMBEDDING_MODELS];
 }
 
 export function defaultChatModel(provider: LlmProvider): ChatModelSpec {
@@ -338,6 +402,11 @@ export function defaultChatModel(provider: LlmProvider): ChatModelSpec {
 
 export function defaultEmbeddingModel(provider: LlmProvider): EmbeddingModelSpec {
   const id = DEFAULT_EMBEDDING_BY_PROVIDER[provider];
+  if (!id) {
+    throw new Error(
+      `Provider "${provider}" has no default embedding model registered (chat-only provider).`,
+    );
+  }
   const spec = getEmbeddingModel(id);
   if (!spec) {
     throw new Error(

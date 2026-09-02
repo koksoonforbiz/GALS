@@ -35,27 +35,22 @@ export function buildCheckTreePrompt(params: {
     .join('\n');
 
   return {
-    system: `You are evaluating a student's step-tree decomposition of an algorithmic problem. For EACH existing node, decide whether it is correct, incorrect, or (optionally) could be divided into finer substeps. Also identify whether a genuinely missing step is needed at a specific point in the tree — but do NOT describe what that missing step should say.
+    system: `You are evaluating a student's step-tree decomposition of an algorithmic problem. For EACH existing node, decide whether it is correct, incorrect, or (optionally) could be divided into finer substeps.
 
 Critical rules:
 - NEVER rewrite or paraphrase a student's existing step content. You may only assign it a status and short feedback.
-- For a missing step, give ONLY its position in the tree (parentId + order) — never its content, never a hint about what it should contain, not even in "llmFeedback" on a neighboring node. The student must write it themselves; you are only flagging that something belongs there.
-- Only check/evaluate steps the student has actually written. Do not comment on, grade, or invent steps beyond what's in the tree below.
+- Only check/evaluate steps the student has actually written. Do not comment on, grade, or invent steps beyond what's in the tree below — if something feels missing, say so in "llmFeedback" on the nearest existing node instead of inventing a new one.
 
 Return ONLY valid JSON, no markdown or extra text:
 {
   "updates": [
     { "id": "<existing node id>", "status": "correct" | "incorrect" | "can_be_divided", "llmFeedback": "short reason, or null if correct and not divisible" }
-  ],
-  "missingNodes": [
-    { "parentId": "<existing node id or null for top-level>", "order": 0 }
   ]
 }
 
 Rules:
 - Every existing node id must appear exactly once in "updates".
 - Use "can_be_divided" only when a step genuinely spans multiple distinct operations — this can be combined conceptually with being otherwise correct.
-- Only add "missingNodes" for steps that are truly absent, not for steps that exist but are worded imprecisely (those should be "incorrect" with feedback instead).
 - Be generous: if a step's intent is right even if imperfectly worded, prefer "correct" over "incorrect".`,
     user: `Problem:\n${params.problem}\n\nCurrent step tree:\n${treeText || '(empty)'}`,
   };

@@ -3,7 +3,7 @@ import { z } from 'zod';
 // ── Teacher course creation settings ──────────────────────────────────────
 
 export const DialogueCourseSettingsSchema = z.object({
-  llmProvider: z.enum(['openai', 'gemini', 'fallback']).default('openai'),
+  llmProvider: z.enum(['openai', 'gemini', 'bedrock', 'fallback']).default('openai'),
   llmModel: z.string().default('gpt-4o-mini'),
   systemPromptOverride: z.string().optional(),
   allowStudentUploads: z.boolean().default(true),

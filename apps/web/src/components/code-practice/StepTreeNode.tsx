@@ -202,19 +202,28 @@ export function StepTreeNode({ node, nodes, actions, stage }: StepTreeNodeProps)
           )}
         </div>
       )}
-      {node.hints.general && (
+      {/* General/detailed hints and the substep/code reveal are scaffolding
+          for a step that's still wrong — once a later Check marks it
+          Correct/Implemented, they're stale and just clutter the tree, so
+          they're gated on canHelp same as the buttons that fetch them.
+          `correctAnswer` (from "Show Answer") is different: that action
+          marks the node done in the same call, so canHelp is already
+          false by the time it's set — gating it the same way would hide
+          it immediately, so it stays unconditional as the permanent
+          record of the answer. */}
+      {canHelp && node.hints.general && (
         <p className="ml-2 mb-1 text-xs bg-amber-50 border border-amber-100 rounded px-2 py-1 text-amber-800">
           <span className="font-semibold">Hint: </span>
           {node.hints.general}
         </p>
       )}
-      {node.hints.detailed && (
+      {canHelp && node.hints.detailed && (
         <p className="ml-2 mb-1 text-xs bg-amber-50 border border-amber-100 rounded px-2 py-1 text-amber-800">
           <span className="font-semibold">Detailed hint: </span>
           {node.hints.detailed}
         </p>
       )}
-      {node.hints.revealCode && (
+      {canHelp && node.hints.revealCode && (
         <pre className="ml-2 mb-1 text-[11px] font-mono whitespace-pre-wrap bg-purple-50 border border-purple-100 rounded px-2 py-1.5 text-purple-900">
           {node.hints.revealCode}
         </pre>

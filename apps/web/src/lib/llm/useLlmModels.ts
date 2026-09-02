@@ -9,7 +9,7 @@ import { apiFetch } from '../api';
  */
 export interface ChatModelSpec {
   id: string;
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' | 'bedrock';
   label: string;
   capabilities: Array<'chat' | 'embedding' | 'vision'>;
   supportsTemperature: boolean;
@@ -23,7 +23,7 @@ export interface ChatModelSpec {
 
 export interface EmbeddingModelSpec {
   id: string;
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' | 'bedrock';
   label: string;
   dimensions: number;
   truncatableTo?: number[];
@@ -86,7 +86,7 @@ export function useLlmModels(): {
  */
 export function recommendedChatModel(
   models: LlmModelsResponse | null,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'bedrock',
 ): ChatModelSpec | undefined {
   if (!models) return undefined;
   return (
@@ -97,7 +97,7 @@ export function recommendedChatModel(
 
 export function recommendedEmbeddingModel(
   models: LlmModelsResponse | null,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'bedrock',
 ): EmbeddingModelSpec | undefined {
   if (!models) return undefined;
   return (

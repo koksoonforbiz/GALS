@@ -55,6 +55,10 @@ function makeMockPrisma(opts: {
   return { user: { findUnique } } as any;
 }
 
+/** None of these tests exercise the Bedrock provider, so `.get()`
+ *  never needs a real return value. */
+const mockConfig = { get: jest.fn() } as any;
+
 function fakePng(size = 16): Buffer {
   const buf = Buffer.alloc(size);
   buf[0] = 0x89;
@@ -84,7 +88,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
       llmEmbeddingModel: 'text-embedding-3-small',
       cohereApiKey: encryptKey('cohere-test-key'),
     });
-    const svc = new EmbeddingService(prisma);
+    const svc = new EmbeddingService(prisma, mockConfig);
 
     const captured: Array<{ url: string; body: any; headers: any }> = [];
     const fetchMock = jest.fn(async (url: any, init: any) => {
@@ -134,9 +138,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
       expect(Array.isArray(req.body.inputs)).toBe(true);
       expect(req.body.inputs).toHaveLength(2);
       expect(req.body.inputs[0].content[0].type).toBe('image');
-      expect(req.body.inputs[0].content[0].image.url).toMatch(
-        /^data:image\/png;base64,/,
-      );
+      expect(req.body.inputs[0].content[0].image.url).toMatch(/^data:image\/png;base64,/);
     } finally {
       (global as any).fetch = previous;
     }
@@ -149,7 +151,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
       llmEmbeddingModel: 'text-embedding-3-small',
       cohereApiKey: encryptKey('cohere-test-key'),
     });
-    const svc = new EmbeddingService(prisma);
+    const svc = new EmbeddingService(prisma, mockConfig);
 
     const captured: Array<{ body: any }> = [];
     const fetchMock = jest.fn(async (_url: any, init: any) => {
@@ -160,9 +162,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
         float: Array.from({ length: n }, (_, i) =>
           // Distinct fingerprint per text vs image call so we can
           // assert ordering at the end.
-          Array.from({ length: 1536 }, () =>
-            body.texts ? 1 + i : 100 + i,
-          ),
+          Array.from({ length: 1536 }, () => (body.texts ? 1 + i : 100 + i)),
         ),
       };
       return {
@@ -202,7 +202,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
       llmEmbeddingModel: 'text-embedding-3-small',
       cohereApiKey: null,
     });
-    const svc = new EmbeddingService(prisma);
+    const svc = new EmbeddingService(prisma, mockConfig);
 
     const result = await svc.callMultimodalEmbedding(TEACHER_ID, [
       { kind: 'text', text: 'hello' },
@@ -224,7 +224,7 @@ describe('EmbeddingService — multimodal funnel (Cohere Embed 4)', () => {
       llmEmbeddingModel: 'text-embedding-3-small',
       cohereApiKey: encryptKey('cohere-test-key'),
     });
-    const svc = new EmbeddingService(prisma);
+    const svc = new EmbeddingService(prisma, mockConfig);
 
     const fetchMock = jest.fn(async () => ({
       ok: false,

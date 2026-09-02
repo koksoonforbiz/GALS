@@ -120,16 +120,24 @@ export function InterrogativeElaborationView({
         interventionId: string;
         suggestedQuestions: SuggestedQuestion[];
         keyConcepts: string[];
-      }>('/learning-interventions/interrogative-elaboration/generate', {
-        selectedText,
-        courseId,
-        contentId: contentId || undefined,
-        pageType,
-        topic: contentTitle || undefined,
-        questionCount: 6,
-        ...(documentId ? { documentId } : {}),
-        ...(pageNumber != null ? { pageNumber } : {}),
-      });
+      }>(
+        '/learning-interventions/interrogative-elaboration/generate',
+        {
+          selectedText,
+          courseId,
+          contentId: contentId || undefined,
+          pageType,
+          topic: contentTitle || undefined,
+          questionCount: 6,
+          ...(documentId ? { documentId } : {}),
+          ...(pageNumber != null ? { pageNumber } : {}),
+        },
+        // Without a selection this falls back to RAG retrieval over the
+        // whole course before the LLM call even starts — routinely
+        // slower than the default 15s abort timeout, which was only
+        // meant to catch a genuinely unreachable API.
+        { timeoutMs: 60_000 },
+      );
       setInterventionId(result.interventionId);
       setSuggestedQuestions(result.suggestedQuestions);
       setKeyConcepts(result.keyConcepts);

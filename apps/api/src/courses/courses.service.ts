@@ -29,9 +29,13 @@ export class CoursesService {
     if (learningMode === 'DIALOGUE') {
       const teacher = await this.prisma.user.findUnique({
         where: { id: teacherId },
-        select: { encryptedApiKey: true },
+        select: { encryptedApiKey: true, llmProvider: true },
       });
-      if (!teacher?.encryptedApiKey) {
+      // Bedrock has no per-teacher encryptedApiKey (one shared server
+      // credential — see llm.service.ts's getUserApiKey), so it must be
+      // checked separately here rather than folded into the same
+      // `!!encryptedApiKey` test.
+      if (!teacher?.encryptedApiKey && teacher?.llmProvider !== 'bedrock') {
         throw new BadRequestException(
           'Dialogue mode requires LLM API credentials. Please configure them in LLM Settings.',
         );
@@ -334,8 +338,11 @@ export class CoursesService {
       }
     }
 
-    // If provider isn't 'fallback', check LLM credentials
-    if (parsed.data.llmProvider !== 'fallback') {
+    // If provider isn't 'fallback', check LLM credentials. Bedrock has no
+    // per-teacher encryptedApiKey (one shared server credential — see
+    // llm.service.ts's getUserApiKey), so it's exempt from this test —
+    // there's nothing for the teacher to have configured here.
+    if (parsed.data.llmProvider !== 'fallback' && parsed.data.llmProvider !== 'bedrock') {
       const teacher = await this.prisma.user.findUnique({
         where: { id: teacherId },
         select: { encryptedApiKey: true },

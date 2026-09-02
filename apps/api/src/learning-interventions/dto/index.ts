@@ -9,6 +9,7 @@ export type {
   GenerateStepwiseDto,
   SubmitStepCheckDto,
   StepwiseCourseCheckDto,
+  GenerateStepwiseCodeQuestionDto,
 } from './stepwise-learning.dto';
 export type { GenerateCardsDto, ReviewCardDto } from './distributed-practice.dto';
 export type { ChatRequestDto, ChatMessageDto } from './chat.dto';

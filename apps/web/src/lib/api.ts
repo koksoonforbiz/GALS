@@ -48,7 +48,18 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+/** Default abort timeout: only meant to catch a genuinely unreachable API
+ *  (see the commit that introduced it) — not tuned for how long a legit
+ *  request can take. LLM-backed generation endpoints (RAG retrieval + a
+ *  completion call) routinely run past this, so those call sites pass a
+ *  longer `timeoutMs` explicitly rather than everyone paying for a
+ *  looser default. */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
+export async function apiFetch<T>(
+  path: string,
+  options?: RequestInit & { timeoutMs?: number },
+): Promise<T> {
   const token = localStorage.getItem('token');
   const sessionId = sessionStorage.getItem('ats_session_id');
 
@@ -60,7 +71,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
+  const timer = setTimeout(() => controller.abort(), options?.timeoutMs ?? DEFAULT_TIMEOUT_MS);
 
   let res: Response;
   try {
@@ -111,10 +122,11 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
 
-  post: <T>(path: string, data?: unknown) =>
+  post: <T>(path: string, data?: unknown, opts?: { timeoutMs?: number }) =>
     apiFetch<T>(path, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
+      timeoutMs: opts?.timeoutMs,
     }),
 
   /**

@@ -43,11 +43,13 @@ export function buildCodePracticeSystemPrompt(): string {
 }
 
 /**
- * Prompt for the "is this a coding course?" check that gates DBox
- * (see CodePracticeService.checkCodingCourseAndGenerate). Classification
- * and generation happen in one LLM call rather than two round-trips —
- * when the course is coding-related, this returns the exercise too,
- * built with the same rules as buildCodePracticeSystemPrompt above.
+ * Prompt for the "is this a coding course?" check that decides whether
+ * the Step button offers a Coding Steps / Reading Steps choice at all
+ * (see CodePracticeService.isCodingCourse) — non-coding courses always
+ * go straight to the regular reading-comprehension flow, no choice
+ * shown. Pure classification, no generation: the exercise itself is
+ * only generated later, on demand, if the student picks Coding Steps
+ * (see buildCodePracticeSystemPrompt/buildCodePracticeUserPrompt above).
  */
 export function buildCodingCourseCheckSystemPrompt(): string {
   return (
@@ -56,44 +58,18 @@ export function buildCodingCourseCheckSystemPrompt(): string {
     `in code. Courses like physics, biology, history, general math, business, or language ` +
     `learning are NOT coding courses, even if they occasionally mention data, formulas, or use ` +
     `a calculator — only courses actually about programming count.\n\n` +
-    `If, and only if, the course IS a coding course, ALSO write a short coding exercise for a ` +
-    `student in it. The student may be a complete beginner — never assume they know a concept ` +
-    `(functions, loops, classes, etc.) that the course material below doesn't already use or ` +
-    `clearly teach.\n\n` +
-    `Respond with ONLY a JSON object, no prose, no markdown code fences.\n` +
-    `- If NOT a coding course: {"isCoding": false}\n` +
-    `- If a coding course: {"isCoding": true, "question": string, "starterCode": string, "language": "python"}\n\n` +
-    `When isCoding is true:\n` +
-    `- "question" is 1-3 sentences describing what to write, in the same vocabulary and at the ` +
-    `same level as the course material.\n` +
-    `- "starterCode" must match that level: DEFAULT to plain top-level statements, NOT wrapped ` +
-    `in a function, unless the course material itself shows a function being defined or called. ` +
-    `It must run without a syntax error as-is and must NOT be a full solution.\n` +
-    `- The exercise must be self-contained: no file I/O, no network access, no third-party ` +
-    `imports beyond the Python standard library. Keep it small enough to solve in a few minutes.`
+    `Respond with ONLY a JSON object, no prose, no markdown code fences: {"isCoding": boolean}`
   );
 }
 
 export function buildCodingCourseCheckUserPrompt(params: {
   courseTitle: string;
   courseDescription?: string;
-  highlightedText?: string;
 }): string {
-  const { courseTitle, courseDescription, highlightedText } = params;
+  const { courseTitle, courseDescription } = params;
   let prompt = `Course: ${courseTitle}`;
   if (courseDescription && courseDescription.trim().length > 0) {
     prompt += `\nDescription: ${courseDescription.trim()}`;
-  }
-  if (highlightedText && highlightedText.trim().length > 0) {
-    prompt +=
-      `\n\nThe student just clicked "Step-by-step" while viewing this highlighted passage from ` +
-      `their course material. If this is a coding course, write an exercise that specifically ` +
-      `implements or exercises the concept described in this passage — not a generic or ` +
-      `unrelated exercise:\n\n"""\n${highlightedText.trim()}\n"""`;
-  } else {
-    prompt +=
-      `\n\nThe student just clicked "Step-by-step" for this course. If it's a coding course, ` +
-      `pick a reasonable, generally useful exercise for the subject.`;
   }
   return prompt;
 }

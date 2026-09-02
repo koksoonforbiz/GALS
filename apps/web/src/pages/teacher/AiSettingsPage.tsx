@@ -21,21 +21,25 @@ interface LlmSettings {
   hasCohereKey?: boolean;
 }
 
-type ProviderKey = 'openai' | 'gemini';
+type ProviderKey = 'openai' | 'gemini' | 'bedrock';
 
-const PROVIDER_KEY_HELP: Record<ProviderKey, { placeholder: string; url: string; label: string }> =
-  {
-    openai: {
-      placeholder: 'sk-...',
-      url: 'https://platform.openai.com/api-keys',
-      label: 'platform.openai.com/api-keys',
-    },
-    gemini: {
-      placeholder: 'AIza...',
-      url: 'https://aistudio.google.com/apikey',
-      label: 'aistudio.google.com/apikey',
-    },
-  };
+const PROVIDER_KEY_HELP: Partial<
+  Record<ProviderKey, { placeholder: string; url: string; label: string }>
+> = {
+  openai: {
+    placeholder: 'sk-...',
+    url: 'https://platform.openai.com/api-keys',
+    label: 'platform.openai.com/api-keys',
+  },
+  gemini: {
+    placeholder: 'AIza...',
+    url: 'https://aistudio.google.com/apikey',
+    label: 'aistudio.google.com/apikey',
+  },
+  // bedrock intentionally absent — it uses one server-wide credential
+  // (AWS_BEARER_TOKEN), not a per-teacher key. See the form below, which
+  // hides the key input entirely when this provider is selected.
+};
 
 export function AiSettingsPage() {
   const { toast } = useToast();
@@ -102,7 +106,11 @@ export function AiSettingsPage() {
       try {
         const data = await apiFetch<LlmSettings>('/llm-settings');
         setSettings(data);
-        if (data.provider === 'openai' || data.provider === 'gemini') {
+        if (
+          data.provider === 'openai' ||
+          data.provider === 'gemini' ||
+          data.provider === 'bedrock'
+        ) {
           setProvider(data.provider);
         }
         if (data.model) setModel(data.model);
@@ -309,6 +317,7 @@ export function AiSettingsPage() {
           >
             <option value="openai">OpenAI</option>
             <option value="gemini">Google Gemini</option>
+            <option value="bedrock">AWS Bedrock</option>
           </select>
         </div>
 
@@ -375,51 +384,60 @@ export function AiSettingsPage() {
           </select>
           <p className="text-xs text-gray-400 mt-1">
             Changing this re-indexes your course documents — see the documents tab.
+            {provider === 'bedrock' &&
+              ' Untested against the real Bedrock endpoint — verify before relying on it.'}
           </p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            API Key {settings?.hasKey && '(replace existing)'}
-          </label>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={
-                settings?.hasKey
-                  ? 'Enter new key to replace...'
-                  : PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...'
-              }
-              className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-              required={!settings?.hasKey}
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
-            >
-              {showKey ? 'Hide' : 'Show'}
-            </button>
+        {provider === 'bedrock' ? (
+          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
+            AWS Bedrock uses one shared server-side key for every teacher — there's nothing to enter
+            here. Just pick a model above and save.
           </div>
-          <p className="text-xs text-gray-400 mt-1">
-            Get your API key from{' '}
-            <a
-              href={PROVIDER_KEY_HELP[provider]?.url || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
-            >
-              {PROVIDER_KEY_HELP[provider]?.label || 'your provider'}
-            </a>
-          </p>
-        </div>
+        ) : (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              API Key {settings?.hasKey && '(replace existing)'}
+            </label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={
+                  settings?.hasKey
+                    ? 'Enter new key to replace...'
+                    : PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...'
+                }
+                className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                required={!settings?.hasKey}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
+              >
+                {showKey ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Get your API key from{' '}
+              <a
+                href={PROVIDER_KEY_HELP[provider]?.url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                {PROVIDER_KEY_HELP[provider]?.label || 'your provider'}
+              </a>
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={saving || (!apiKey && !settings?.hasKey)}
+            disabled={saving || (provider !== 'bedrock' && !apiKey && !settings?.hasKey)}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? 'Saving...' : settings?.hasKey ? 'Update Key' : 'Save Key'}

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -8,6 +9,11 @@ import {
   type EmbeddingModelSpec,
   type LlmProvider,
 } from '../llm/model-registry';
+
+// Same shared credential + fixed region as the Bedrock chat funnel — see
+// llm.service.ts's callBedrockApi for the reasoning (one AWS_BEARER_TOKEN
+// for every teacher who selects this provider, region not configurable).
+const BEDROCK_REGION = 'ap-southeast-1';
 
 const OPENAI_BATCH_SIZE = 100;
 
@@ -85,8 +91,8 @@ export interface EmbeddingFunnelResult {
   model: string;
   /** Dimensionality of each vector — what the corpus must pin. */
   dimensions: number;
-  /** Provider that produced the vectors (`openai` | `gemini` | `fallback`). */
-  provider: 'openai' | 'gemini' | 'fallback';
+  /** Provider that produced the vectors (`openai` | `gemini` | `bedrock` | `fallback`). */
+  provider: 'openai' | 'gemini' | 'bedrock' | 'fallback';
 }
 
 // ─── Stage 05 — Multimodal funnel types ────────────────────
@@ -117,7 +123,7 @@ export interface MultimodalEmbeddingResult {
   vectors: (number[] | null)[];
   model: string;
   dimensions: number;
-  provider: 'cohere' | 'openai' | 'gemini' | 'fallback';
+  provider: 'cohere' | 'openai' | 'gemini' | 'bedrock' | 'fallback';
 }
 
 interface TeacherEmbeddingCredentials {
@@ -134,7 +140,10 @@ interface TeacherEmbeddingCredentials {
 export class EmbeddingService {
   private readonly logger = new Logger(EmbeddingService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   // ─── Registry-driven embedding funnel (Stage 3) ─────────
 
@@ -152,7 +161,13 @@ export class EmbeddingService {
       select: { encryptedApiKey: true, llmProvider: true, llmEmbeddingModel: true },
     });
 
-    const provider = (user?.llmProvider === 'gemini' ? 'gemini' : 'openai') as LlmProvider;
+    const provider = (
+      user?.llmProvider === 'gemini'
+        ? 'gemini'
+        : user?.llmProvider === 'bedrock'
+          ? 'bedrock'
+          : 'openai'
+    ) as LlmProvider;
     const modelId = user?.llmEmbeddingModel;
     const spec = (modelId && getEmbeddingModel(modelId)) || defaultEmbeddingModel(provider);
 
@@ -160,6 +175,26 @@ export class EmbeddingService {
     // provider (Stage 2 validation should prevent this on save, but be
     // defensive), fall back to the provider's default embedding model.
     const effectiveSpec = spec.provider === provider ? spec : defaultEmbeddingModel(provider);
+
+    // Bedrock uses one server-wide credential (AWS_BEARER_TOKEN), not a
+    // per-teacher encrypted key — resolve it separately rather than
+    // falling into the decrypt branch below (encryptedApiKey is always
+    // null for a bedrock-selected teacher, same as llm.service.ts's
+    // getUserApiKey).
+    if (provider === 'bedrock') {
+      const bearerToken = this.config.get<string>('AWS_BEARER_TOKEN') ?? null;
+      if (!bearerToken) {
+        this.logger.error(
+          `Teacher ${teacherId} selected Bedrock but AWS_BEARER_TOKEN is not configured on the server`,
+        );
+      }
+      return {
+        apiKey: bearerToken,
+        provider: bearerToken ? 'bedrock' : 'fallback',
+        spec: effectiveSpec,
+        outputDimensions,
+      };
+    }
 
     let apiKey: string | null = null;
     if (user?.encryptedApiKey) {
@@ -226,12 +261,17 @@ export class EmbeddingService {
         return { vectors, model: creds.spec.id, dimensions: requestedDim, provider: 'openai' };
       }
 
-      const vectors = await this.embedGemini(
-        texts,
-        creds.apiKey,
-        creds.spec.id,
-        requestedDim,
-      );
+      if (creds.provider === 'bedrock') {
+        const vectors = await this.embedBedrockCohere(
+          texts,
+          creds.apiKey,
+          creds.spec.id,
+          'search_document',
+        );
+        return { vectors, model: creds.spec.id, dimensions: requestedDim, provider: 'bedrock' };
+      }
+
+      const vectors = await this.embedGemini(texts, creds.apiKey, creds.spec.id, requestedDim);
       return { vectors, model: creds.spec.id, dimensions: requestedDim, provider: 'gemini' };
     } catch (err) {
       // Hard fail in funnel → fallback so a single bad batch doesn't kill
@@ -338,13 +378,7 @@ export class EmbeddingService {
         const slice = textIndices.slice(off, off + COHERE_TEXT_BATCH_SIZE);
         const texts = slice.map((idx) => (inputs[idx] as MultimodalTextInput).text);
         try {
-          const out = await this.embedCohereText(
-            texts,
-            cohereKey,
-            spec.id,
-            dim,
-            'search_document',
-          );
+          const out = await this.embedCohereText(texts, cohereKey, spec.id, dim, 'search_document');
           for (let j = 0; j < slice.length; j++) vectors[slice[j]!] = out[j]!;
         } catch (err) {
           this.logger.warn(
@@ -390,9 +424,7 @@ export class EmbeddingService {
           'Configure a Cohere key to enable Stage 05 page_image chunks.',
       );
     }
-    const textInputs = inputs.map((i) =>
-      i.kind === 'text' ? i.text : '',
-    );
+    const textInputs = inputs.map((i) => (i.kind === 'text' ? i.text : ''));
     const out = await this.callEmbeddingForUser(teacherId, textInputs);
     const vectors: (number[] | null)[] = inputs.map((i, idx) =>
       i.kind === 'text' ? out.vectors[idx]! : null,
@@ -522,6 +554,60 @@ export class EmbeddingService {
     return arr;
   }
 
+  // ─── Bedrock: Cohere Embed 4 (text) ──────────────────────
+  //
+  // Bedrock's Converse API doesn't cover embedding models — those go
+  // through the native InvokeModel endpoint instead, with Cohere's own
+  // request/response body shape (unlike the model-agnostic envelope
+  // Converse gives chat models). Same bearer-token auth as the chat
+  // funnel (callBedrockApi in llm.service.ts), always ap-southeast-1.
+  private async embedBedrockCohere(
+    texts: string[],
+    apiKey: string,
+    model: string,
+    inputType: 'search_document' | 'search_query',
+  ): Promise<number[][]> {
+    const url = `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com/model/${encodeURIComponent(model)}/invoke`;
+
+    const allEmbeddings: number[][] = [];
+    for (let off = 0; off < texts.length; off += COHERE_TEXT_BATCH_SIZE) {
+      const batch = texts.slice(off, off + COHERE_TEXT_BATCH_SIZE);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          texts: batch,
+          input_type: inputType,
+          embedding_types: ['float'],
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Bedrock Cohere embed ${response.status}: ${errText.slice(0, 200)}`);
+      }
+      const data = (await response.json()) as {
+        embeddings?: { float?: number[][] } | number[][];
+      };
+      // Same dual-shape handling as the direct Cohere API (embedCohereText)
+      // — older/v3-style responses return `embeddings: number[][]`
+      // directly, v3.5+/v4 with `embedding_types` nests under `.float`.
+      let batchVectors: number[][] | undefined;
+      if (Array.isArray(data.embeddings)) {
+        batchVectors = data.embeddings;
+      } else {
+        batchVectors = (data.embeddings as { float?: number[][] } | undefined)?.float;
+      }
+      if (!Array.isArray(batchVectors)) {
+        throw new Error('Bedrock Cohere embed returned no embeddings');
+      }
+      allEmbeddings.push(...batchVectors);
+    }
+    return allEmbeddings;
+  }
+
   /**
    * Embed using a specific (model, provider, key) tuple. The retrieval
    * guard uses this to re-embed a query against the corpus's PINNED
@@ -550,6 +636,10 @@ export class EmbeddingService {
           requestedDim !== spec.dimensions ? requestedDim : undefined,
         );
         return { vectors, model: spec.id, dimensions: requestedDim, provider: 'openai' };
+      }
+      if (provider === 'bedrock') {
+        const vectors = await this.embedBedrockCohere(texts, apiKey, spec.id, 'search_query');
+        return { vectors, model: spec.id, dimensions: requestedDim, provider: 'bedrock' };
       }
       const vectors = await this.embedGemini(texts, apiKey, spec.id, requestedDim);
       return { vectors, model: spec.id, dimensions: requestedDim, provider: 'gemini' };
@@ -625,10 +715,7 @@ export class EmbeddingService {
 
   // ─── Dimension resolution ───────────────────────────────
 
-  private pickOutputDimension(
-    spec: EmbeddingModelSpec,
-    requested: number | undefined,
-  ): number {
+  private pickOutputDimension(spec: EmbeddingModelSpec, requested: number | undefined): number {
     if (!requested) return spec.dimensions;
     if (requested === spec.dimensions) return spec.dimensions;
     if (spec.truncatableTo?.includes(requested)) return requested;

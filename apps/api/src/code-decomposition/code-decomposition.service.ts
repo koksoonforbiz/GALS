@@ -147,22 +147,8 @@ const CHECK_TREE_SCHEMA: Record<string, unknown> = {
         required: ['id', 'status'],
       },
     },
-    // No "content" field — a missing step is flagged by position only
-    // (blank placeholder node), never described, so the student writes
-    // it themselves instead of the LLM handing it to them.
-    missingNodes: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          parentId: { type: ['string', 'null'] },
-          order: { type: 'number' },
-        },
-        required: ['order'],
-      },
-    },
   },
-  required: ['updates', 'missingNodes'],
+  required: ['updates'],
 };
 
 const HINT_SCHEMA: Record<string, unknown> = {
@@ -227,6 +213,13 @@ const MAX_FORMATION_CHECKS = 20; // session-level spam guard (see plan §Throttl
 const MAX_INFER_TREE_CALLS = 20; // same rationale as MAX_FORMATION_CHECKS
 const MAX_MATCH_CHECKS = 20; // same rationale, stage 2's equivalent of MAX_FORMATION_CHECKS
 const REVEAL_ATTEMPT_THRESHOLD = 2; // "after failed two attempts", per the paper
+
+// A "can_be_divided" step is still a substantively correct step (the
+// grader combines that verdict with "otherwise correct" — see
+// buildCheckTreePrompt) that just bundles multiple operations together;
+// it shouldn't block moving to implementation any more than "correct"
+// does. Splitting into finer substeps stays available but optional.
+const PASSING_FORMATION_STATUSES = new Set<NodeStatus>(['correct', 'can_be_divided']);
 
 @Injectable()
 export class CodeDecompositionService {
@@ -432,7 +425,6 @@ export class CodeDecompositionService {
         status: 'correct' | 'incorrect' | 'can_be_divided';
         llmFeedback: string | null;
       }>;
-      missingNodes: Array<{ parentId: string | null; order: number }>;
     };
     try {
       const result = await this.llmService.callLlmStructured(
@@ -455,43 +447,30 @@ export class CodeDecompositionService {
       throw new BadRequestException('Failed to check the step tree. Please try again.');
     }
 
-    const existingIds = new Set(sessionData.nodes.map((n) => n.id));
     const updateById = new Map(parsed.updates.map((u) => [u.id, u]));
 
     // Never touch `content`/`id`/`hints` on existing nodes — only status +
     // feedback are LLM-writable, per the "preserve original structure" rule.
+    // No node insertion here — check-tree only grades what the student
+    // already wrote; it used to also insert a blank "missing step"
+    // placeholder per check, but that meant re-checking an already-flagged
+    // gap added ANOTHER blank node every time instead of just re-flagging
+    // the same one, so a student who checked repeatedly ended up with a
+    // pile of empty steps. Now a perceived gap is only ever surfaced as
+    // feedback text on the nearest node (see the prompt), never a new node.
     const updatedNodes: StepNode[] = sessionData.nodes.map((n) => {
       const u = updateById.get(n.id);
       if (!u) return n; // LLM omitted this node — leave its prior status as-is
       return { ...n, status: u.status, llmFeedback: u.llmFeedback ?? null };
     });
 
-    for (const m of parsed.missingNodes) {
-      const parentId = m.parentId && existingIds.has(m.parentId) ? m.parentId : null;
-      if (this.depthOf(parentId, updatedNodes) >= MAX_TREE_DEPTH) continue; // silently drop over-deep nodes
-      // Blank placeholder — position only, never content. The student
-      // writes what belongs here; the LLM only flags that something does.
-      const newNode: StepNode = {
-        id: randomUUID(),
-        parentId,
-        order: m.order,
-        content: '',
-        originalStudentContent: null,
-        status: 'missing',
-        llmFeedback: null,
-        hints: emptyHintState(),
-        codeMapping: null,
-      };
-      updatedNodes.push(newNode);
-    }
-
     // "Failed attempt" bookkeeping that gates Reveal (Sub)Step: a node
     // still incorrect after this check counts as one more failed attempt;
-    // a node that just became correct has its counter reset. Nodes that
-    // weren't evaluated this round (missing/can_be_divided/pending/
-    // system_generated) are left untouched.
+    // a node that just became correct (or divisible — see PASSING_STATUSES)
+    // has its counter reset. Nodes that weren't evaluated this round
+    // (missing/pending/system_generated) are left untouched.
     const finalNodes = updatedNodes.map((n) => {
-      if (n.status === 'correct') {
+      if (PASSING_FORMATION_STATUSES.has(n.status)) {
         return n.hints.attemptsSinceLastCheck === 0
           ? n
           : { ...n, hints: { ...n.hints, attemptsSinceLastCheck: 0 } };
@@ -1174,7 +1153,10 @@ export class CodeDecompositionService {
     if (sessionData.stage !== 'formation') {
       throw new BadRequestException('Session is not in the formation stage');
     }
-    if (sessionData.nodes.length === 0 || sessionData.nodes.some((n) => n.status !== 'correct')) {
+    if (
+      sessionData.nodes.length === 0 ||
+      sessionData.nodes.some((n) => !PASSING_FORMATION_STATUSES.has(n.status))
+    ) {
       throw new BadRequestException(
         'All steps must be marked correct before moving to implementation',
       );
@@ -1574,11 +1556,10 @@ export class CodeDecompositionService {
       status: 'correct' | 'incorrect' | 'can_be_divided';
       llmFeedback: string | null;
     }>;
-    missingNodes: Array<{ parentId: string | null; order: number }>;
   } {
-    const data = parsed as { updates?: unknown[]; missingNodes?: unknown[] };
-    if (!Array.isArray(data?.updates) || !Array.isArray(data?.missingNodes)) {
-      throw new Error('LLM response missing updates/missingNodes arrays');
+    const data = parsed as { updates?: unknown[] };
+    if (!Array.isArray(data?.updates)) {
+      throw new Error('LLM response missing updates array');
     }
     const validStatuses = new Set(['correct', 'incorrect', 'can_be_divided']);
     const updates = data.updates.map((raw) => {
@@ -1596,17 +1577,7 @@ export class CodeDecompositionService {
         llmFeedback: typeof u.llmFeedback === 'string' ? u.llmFeedback : null,
       };
     });
-    // Deliberately ignore any "content" the LLM sends here even though the
-    // schema no longer asks for it — position only, never description, so
-    // a missing step is never revealed to the student.
-    const missingNodes = data.missingNodes.map((raw) => {
-      const m = raw as Record<string, unknown>;
-      return {
-        parentId: typeof m.parentId === 'string' ? m.parentId : null,
-        order: typeof m.order === 'number' ? m.order : 0,
-      };
-    });
-    return { updates, missingNodes };
+    return { updates };
   }
 
   private validateCheckMatchResponse(parsed: unknown): {

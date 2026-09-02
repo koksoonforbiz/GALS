@@ -559,7 +559,14 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
     onHoverNode: () => {},
     disabled: true,
   };
-  const allCorrect = nodes.length > 0 && nodes.every((n) => n.status === 'correct');
+  // A "can_be_divided" step is still substantively correct — it just
+  // bundles multiple operations together — so it counts the same as
+  // "correct" toward unlocking Move to Implementation. Splitting into
+  // finer substeps stays available but is optional. Mirrors
+  // PASSING_FORMATION_STATUSES in the backend's advanceStage gate.
+  const isPassing = (status: StepNode['status']) =>
+    status === 'correct' || status === 'can_be_divided';
+  const allCorrect = nodes.length > 0 && nodes.every((n) => isPassing(n.status));
   const allImplemented = nodes.length > 0 && nodes.every((n) => n.status === 'implemented');
 
   return (
@@ -753,15 +760,24 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
               ) : (
                 nodes.length > 0 && (
                   <span className="self-center text-[11px] text-gray-500">
-                    {nodes.filter((n) => n.status === 'correct').length}/{nodes.length} steps
-                    correct — get every step to Correct to unlock Move to Implementation
+                    {nodes.filter((n) => isPassing(n.status)).length}/{nodes.length} steps correct —
+                    get every step to Correct (or Can Be Divided) to unlock Move to Implementation
                   </span>
                 )
               )}
             </div>
           )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Not flex-1/min-h-0 — the outer panel (h-full overflow-y-auto)
+              already scrolls as a whole. Giving this its own flex-1 box
+              instead made it compete for space with its shrink-0
+              siblings (the Run console, the button row, the "different
+              question" banner): whenever any of those grew — a Python
+              traceback, hint/feedback text appearing after a Check —
+              this box's height budget shrank right along with it and
+              could collapse to zero, making the tree appear to vanish
+              instead of the page just growing taller and scrolling. */}
+          <div>
             {showingRevealed ? (
               <div className="rounded border border-teal-200 bg-teal-50/40 p-2">
                 <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">

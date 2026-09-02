@@ -254,7 +254,11 @@ export class RagController {
     @Body() body: { provider: string; apiKey: string; model?: string; embeddingModel?: string },
   ) {
     if (!body.provider?.trim()) throw new BadRequestException('Provider is required');
-    if (!body.apiKey?.trim()) throw new BadRequestException('API key is required');
+    // Bedrock uses one server-wide credential (AWS_BEARER_TOKEN) — no
+    // per-teacher key to type in.
+    if (body.provider !== 'bedrock' && !body.apiKey?.trim()) {
+      throw new BadRequestException('API key is required');
+    }
     return this.llmService.saveApiKey(
       req.user.id,
       body.provider,
@@ -280,10 +284,7 @@ export class RagController {
 
   @Post('llm-settings/cohere')
   @Roles('teacher', 'admin')
-  async saveCohereKey(
-    @Request() req: { user: RequestUser },
-    @Body() body: { apiKey: string },
-  ) {
+  async saveCohereKey(@Request() req: { user: RequestUser }, @Body() body: { apiKey: string }) {
     if (!body.apiKey?.trim()) throw new BadRequestException('Cohere API key is required');
     return this.llmService.saveCohereApiKey(req.user.id, body.apiKey);
   }

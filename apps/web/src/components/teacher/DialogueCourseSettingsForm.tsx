@@ -1,11 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { apiFetch } from '../../lib/api';
 import { useToast } from '../Toast';
-import {
-  useLlmModels,
-  recommendedChatModel,
-  type ChatModelSpec,
-} from '../../lib/llm/useLlmModels';
+import { useLlmModels, recommendedChatModel, type ChatModelSpec } from '../../lib/llm/useLlmModels';
 
 interface DialogueSettings {
   llmProvider: string;
@@ -113,7 +109,11 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
 
   const modelOptionsForProvider = useMemo<ChatModelSpec[]>(() => {
     if (!registry) return [];
-    if (settings.llmProvider === 'openai' || settings.llmProvider === 'gemini') {
+    if (
+      settings.llmProvider === 'openai' ||
+      settings.llmProvider === 'gemini' ||
+      settings.llmProvider === 'bedrock'
+    ) {
       return registry.chat.filter((m) => m.provider === settings.llmProvider);
     }
     // `fallback` provider has no real model id — the form hides the
@@ -143,7 +143,12 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
   // never submits a blank/invalid `llmModel`.
   useEffect(() => {
     if (!registry) return;
-    if (settings.llmProvider !== 'openai' && settings.llmProvider !== 'gemini') return;
+    if (
+      settings.llmProvider !== 'openai' &&
+      settings.llmProvider !== 'gemini' &&
+      settings.llmProvider !== 'bedrock'
+    )
+      return;
     if (settings.llmModel) return;
     const rec = recommendedChatModel(registry, settings.llmProvider);
     if (rec) {
@@ -159,7 +164,7 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
         // registry for the new provider's recommended default instead
         // of indexing into a hard-coded dictionary.
         if (key === 'llmProvider') {
-          if (value === 'openai' || value === 'gemini') {
+          if (value === 'openai' || value === 'gemini' || value === 'bedrock') {
             const rec = recommendedChatModel(registry, value);
             if (rec) next.llmModel = rec.id;
             else next.llmModel = '';
@@ -230,6 +235,7 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
               {[
                 { value: 'openai', label: 'OpenAI' },
                 { value: 'gemini', label: 'Google Gemini' },
+                { value: 'bedrock', label: 'AWS Bedrock' },
                 { value: 'fallback', label: 'No API key (Fallback)' },
               ].map((opt) => (
                 <button
@@ -284,7 +290,10 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
                 if (!settings.llmModel || !registry) return null;
                 if (!currentSpec) {
                   // Persisted id no longer in the registry at all = fully retired.
-                  const rec = recommendedChatModel(registry, settings.llmProvider as 'openai' | 'gemini');
+                  const rec = recommendedChatModel(
+                    registry,
+                    settings.llmProvider as 'openai' | 'gemini',
+                  );
                   return (
                     <p className="text-xs text-amber-700 mt-1">
                       Your selected model is retired

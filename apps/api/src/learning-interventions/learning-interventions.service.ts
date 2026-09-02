@@ -31,10 +31,7 @@ import {
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 import { CodePracticeService } from '../code-practice/code-practice.service';
-import type {
-  CodePracticeQuestion,
-  CodingCourseCheckResult,
-} from '../code-practice/code-practice.service';
+import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
 
 // Marker the chat LLM appends to its own reply, on its own line, when
 // (and only when) it judges the student's message to be a request for
@@ -82,6 +79,7 @@ import type {
   GenerateStepwiseDto,
   SubmitStepCheckDto,
   StepwiseCourseCheckDto,
+  GenerateStepwiseCodeQuestionDto,
   GenerateCardsDto,
   ReviewCardDto,
   ChatRequestDto,
@@ -2872,12 +2870,14 @@ export class LearningInterventionsService {
 
   /**
    * Gates the "Step" button: is the course actually about programming?
-   * If so, the frontend generates a DBox (code decomposition) session
-   * from the returned question instead of launching the regular
-   * reading-comprehension stepwise flow. No LearningIntervention row is
-   * created here — this is a stateless check, not a session.
+   * If so, the frontend offers a Coding Steps (DBox) / Reading Steps
+   * choice instead of going straight to the regular reading-comprehension
+   * flow. No LearningIntervention row is created here — this is a
+   * stateless check, not a session, and it doesn't generate anything
+   * (see generateStepwiseCodeQuestion for that, called only once the
+   * student actually picks Coding Steps).
    */
-  async checkCodingCourse(dto: StepwiseCourseCheckDto): Promise<CodingCourseCheckResult> {
+  async checkCodingCourse(dto: StepwiseCourseCheckDto): Promise<{ isCoding: boolean }> {
     if (!dto.courseId) {
       throw new BadRequestException('courseId is required');
     }
@@ -2887,15 +2887,33 @@ export class LearningInterventionsService {
       select: { title: true, description: true },
     });
     if (!course) throw new NotFoundException('Course not found');
-    return this.codePracticeService.checkCodingCourseAndGenerate(
+    const isCoding = await this.codePracticeService.isCodingCourse(
       teacherId,
       dto.courseId,
       course.title,
-      {
-        courseDescription: course.description,
-        highlightedText: dto.selectedText,
-      },
+      course.description,
     );
+    return { isCoding };
+  }
+
+  /** Generates the coding exercise for a Coding Steps (DBox) session,
+   *  scoped to whatever's highlighted if anything — called once the
+   *  student picks Coding Steps after checkCodingCourse said yes. */
+  async generateStepwiseCodeQuestion(
+    dto: GenerateStepwiseCodeQuestionDto,
+  ): Promise<CodePracticeQuestion> {
+    if (!dto.courseId) {
+      throw new BadRequestException('courseId is required');
+    }
+    const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
+    const course = await this.prisma.course.findUnique({
+      where: { id: dto.courseId },
+      select: { title: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    return this.codePracticeService.generateQuestion(teacherId, dto.courseId, course.title, {
+      highlightedText: dto.selectedText,
+    });
   }
 
   async generateSteps(

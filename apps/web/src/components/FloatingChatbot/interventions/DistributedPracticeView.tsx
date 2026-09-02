@@ -69,16 +69,24 @@ export function DistributedPracticeView({
         interventionId: string;
         cards: FlashcardItem[];
         totalCreated: number;
-      }>('/learning-interventions/distributed-practice/generate', {
-        selectedText,
-        courseId,
-        contentId: contentId || undefined,
-        pageType,
-        topic: contentTitle || undefined,
-        cardCount: 5,
-        ...(documentId ? { documentId } : {}),
-        ...(pageNumber != null ? { pageNumber } : {}),
-      });
+      }>(
+        '/learning-interventions/distributed-practice/generate',
+        {
+          selectedText,
+          courseId,
+          contentId: contentId || undefined,
+          pageType,
+          topic: contentTitle || undefined,
+          cardCount: 5,
+          ...(documentId ? { documentId } : {}),
+          ...(pageNumber != null ? { pageNumber } : {}),
+        },
+        // Without a selection this falls back to RAG retrieval over the
+        // whole course before the LLM call even starts — routinely
+        // slower than the default 15s abort timeout, which was only
+        // meant to catch a genuinely unreachable API.
+        { timeoutMs: 60_000 },
+      );
       setInterventionId(result.interventionId);
       setCards(result.cards);
       setPhase('preview');

@@ -203,7 +203,10 @@ export class LlmService {
       select: { llmEmbeddingModel: true },
     });
 
-    const encrypted = this.encrypt(apiKey);
+    // Bedrock uses one server-wide credential (AWS_BEARER_TOKEN), not a
+    // per-teacher key — nothing to encrypt/store beyond the provider +
+    // model selection itself.
+    const encrypted = providerTyped === 'bedrock' ? null : this.encrypt(apiKey);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -253,11 +256,19 @@ export class LlmService {
         cohereApiKey: true,
       },
     });
+    // Bedrock has no per-teacher encryptedApiKey row — "configured" means
+    // the server-wide AWS_BEARER_TOKEN is actually set, not that this
+    // teacher personally saved a key.
+    const hasKey =
+      user?.llmProvider === 'bedrock'
+        ? !!this.config.get<string>('AWS_BEARER_TOKEN')
+        : !!user?.encryptedApiKey;
+
     return {
       provider: user?.llmProvider || null,
       model: user?.llmModel || null,
       embeddingModel: user?.llmEmbeddingModel || null,
-      hasKey: !!user?.encryptedApiKey,
+      hasKey,
       hasCohereKey: !!user?.cohereApiKey,
     };
   }
@@ -321,6 +332,28 @@ export class LlmService {
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
     });
+
+    // Bedrock uses one server-wide credential (AWS_BEARER_TOKEN), not a
+    // per-teacher encrypted key — resolve it separately, before the
+    // `encryptedApiKey` gate below (which would otherwise always be null
+    // for a bedrock-selected teacher and short-circuit to no-key/template
+    // mode).
+    if (user?.llmProvider === 'bedrock') {
+      const bearerToken = this.config.get<string>('AWS_BEARER_TOKEN');
+      if (!bearerToken) {
+        this.logger.error(
+          `User ${userId} selected Bedrock but AWS_BEARER_TOKEN is not configured on the server`,
+        );
+        return null;
+      }
+      const resolvedModel = this.resolveChatModelWithGuard(
+        'bedrock',
+        user.llmModel ?? null,
+        userId,
+      );
+      return { apiKey: bearerToken, model: resolvedModel, provider: 'bedrock' };
+    }
+
     if (!user?.encryptedApiKey) return null;
     try {
       const apiKey = this.decrypt(user.encryptedApiKey);
@@ -377,9 +410,9 @@ export class LlmService {
   }
 
   private assertSelectableProvider(provider: string): LlmProvider {
-    if (provider !== 'openai' && provider !== 'gemini') {
+    if (provider !== 'openai' && provider !== 'gemini' && provider !== 'bedrock') {
       throw new BadRequestException(
-        `Unsupported LLM provider "${provider}". Expected one of: openai, gemini.`,
+        `Unsupported LLM provider "${provider}". Expected one of: openai, gemini, bedrock.`,
       );
     }
     return provider;
@@ -1043,6 +1076,14 @@ export class LlmService {
           effectiveSpec,
         );
       }
+      if (provider === 'bedrock') {
+        return await this.callBedrockApi(
+          request,
+          credentials.apiKey,
+          credentials.model,
+          effectiveSpec,
+        );
+      }
       return await this.callOpenAiApi(
         request,
         credentials.apiKey,
@@ -1154,6 +1195,118 @@ export class LlmService {
       content: data.choices?.[0]?.message?.content || '',
       promptTokens: data.usage?.prompt_tokens || 0,
       completionTokens: data.usage?.completion_tokens || 0,
+    };
+  }
+
+  // ─── AWS Bedrock: Converse API (model-agnostic) ──────────
+  //
+  // Uses Bedrock's Converse API rather than each model's native
+  // InvokeModel body shape — it's the one request/response envelope AWS
+  // guarantees works the same across every hosted model family, which
+  // matters here since these are OpenAI models hosted ON Bedrock, not
+  // reachable via api.openai.com. Auth is the newer Bedrock API-key
+  // (bearer token) scheme — no SigV4 request signing needed, same
+  // "Authorization: Bearer <token>" shape as callOpenAiApi/callGeminiApi
+  // above. Region is hardcoded (not env-configurable) — every request
+  // MUST go through ap-southeast-1 per the account's Bedrock access
+  // grant, so there's no knob to accidentally point it elsewhere.
+  private static readonly BEDROCK_REGION = 'ap-southeast-1';
+
+  private async callBedrockApi(
+    request: {
+      systemPrompt: string;
+      messages: FunnelMessage[];
+      jsonMode?: boolean;
+      jsonSchema?: Record<string, unknown>;
+      maxTokens?: number;
+      temperature?: number;
+    },
+    apiKey: string,
+    model: string,
+    spec: ChatModelSpec,
+  ): Promise<FunnelResult> {
+    const url = `https://bedrock-runtime.${LlmService.BEDROCK_REGION}.amazonaws.com/model/${encodeURIComponent(model)}/converse`;
+
+    // No schema-bound response_format on Converse for this model family —
+    // JSON mode is enforced by prompt instruction only, same fallback
+    // technique already used for the no-API-key template path.
+    let systemText = request.systemPrompt;
+    if (request.jsonMode || request.jsonSchema) {
+      systemText += '\n\nRespond with ONLY valid JSON, no prose, no markdown code fences.';
+      if (request.jsonSchema) {
+        systemText += ` The JSON must conform to this schema: ${JSON.stringify(request.jsonSchema)}`;
+      }
+    }
+
+    // Converse understands text and image content parts natively (used
+    // by VLM slide description — see vlm.service.ts, which sends
+    // `image_url` parts through this same shared funnel). OpenAI
+    // Files-API file-id refs have no Bedrock equivalent and are
+    // dropped (logged) rather than sent as something the API will
+    // reject.
+    const messages = request.messages.map((m) => {
+      if (typeof m.content === 'string') {
+        return { role: m.role, content: [{ text: m.content }] };
+      }
+      const content: Array<
+        { text: string } | { image: { format: string; source: { bytes: string } } }
+      > = [];
+      for (const p of m.content) {
+        if (p.type === 'text') {
+          content.push({ text: p.text });
+        } else if (p.type === 'image_url') {
+          const parsed = parseDataUrl(p.image_url.url);
+          if (!parsed) continue;
+          const format = bedrockImageFormat(parsed.mimeType);
+          if (!format) {
+            this.logger.warn(`callBedrockApi: unsupported image mime type "${parsed.mimeType}"`);
+            continue;
+          }
+          content.push({ image: { format, source: { bytes: parsed.base64 } } });
+        } else {
+          this.logger.warn(`callBedrockApi: dropping unsupported content part "${p.type}"`);
+        }
+      }
+      return { role: m.role, content };
+    });
+
+    const inferenceConfig: Record<string, unknown> = {
+      maxTokens: request.maxTokens ?? 4096,
+    };
+    if (spec.supportsTemperature && request.temperature !== undefined) {
+      inferenceConfig.temperature = request.temperature;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        system: [{ text: systemText }],
+        messages,
+        inferenceConfig,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error(`Bedrock API error: ${response.status} ${errorText}`);
+      throw new Error(`Bedrock API error: ${response.status}`);
+    }
+
+    const data = (await response.json()) as {
+      output?: { message?: { content?: Array<{ text?: string }> } };
+      usage?: { inputTokens?: number; outputTokens?: number };
+    };
+
+    const content = (data.output?.message?.content ?? []).map((c) => c.text ?? '').join('');
+
+    return {
+      content,
+      promptTokens: data.usage?.inputTokens || 0,
+      completionTokens: data.usage?.outputTokens || 0,
     };
   }
 
@@ -1483,4 +1636,25 @@ function parseDataUrl(url: string): { mimeType: string; base64: string } | null 
   const match = url.match(/^data:([^;]+);base64,(.*)$/);
   if (!match) return null;
   return { mimeType: match[1]!, base64: match[2]! };
+}
+
+// ─── Bedrock: Converse image content-block format ────────────
+
+/** Bedrock Converse's `image.format` enum only accepts these four
+ *  values. Returns null for anything else so the caller can drop the
+ *  part rather than sending a value the API will reject. */
+function bedrockImageFormat(mimeType: string): 'png' | 'jpeg' | 'gif' | 'webp' | null {
+  switch (mimeType) {
+    case 'image/png':
+      return 'png';
+    case 'image/jpeg':
+    case 'image/jpg':
+      return 'jpeg';
+    case 'image/gif':
+      return 'gif';
+    case 'image/webp':
+      return 'webp';
+    default:
+      return null;
+  }
 }

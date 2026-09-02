@@ -2,7 +2,6 @@ import {
   defaultChatModel,
   defaultEmbeddingModel,
   getChatModel,
-  getEmbeddingModel,
   isSelectable,
   listChatModels,
   listEmbeddingModels,
@@ -12,11 +11,12 @@ import {
 describe('LLM model registry', () => {
   // Stage 05 — `cohere` is now a registered provider for the
   // multimodal embedding spec (`embed-v4.0`) but it has no chat
-  // default. Tests that iterate "chat providers" stay on openai/
-  // gemini; tests that need to cover ALL embedding providers iterate
-  // EMBEDDING_PROVIDERS instead.
-  const PROVIDERS: LlmProvider[] = ['openai', 'gemini'];
-  const EMBEDDING_PROVIDERS: LlmProvider[] = ['openai', 'gemini', 'cohere'];
+  // default. `bedrock` has both (two chat models + one embedding
+  // model — see model-registry.ts). Tests that iterate "chat
+  // providers" cover openai/gemini/bedrock; tests that need to cover
+  // ALL embedding providers iterate EMBEDDING_PROVIDERS instead.
+  const PROVIDERS: LlmProvider[] = ['openai', 'gemini', 'bedrock'];
+  const EMBEDDING_PROVIDERS: LlmProvider[] = ['openai', 'gemini', 'cohere', 'bedrock'];
 
   describe('chat defaults', () => {
     it.each(PROVIDERS)('default chat model for %s is selectable', (provider) => {
@@ -42,16 +42,13 @@ describe('LLM model registry', () => {
   });
 
   describe('embedding defaults', () => {
-    it.each(EMBEDDING_PROVIDERS)(
-      'default embedding model for %s is selectable',
-      (provider) => {
-        const spec = defaultEmbeddingModel(provider);
-        expect(spec).toBeDefined();
-        expect(spec.provider).toBe(provider);
-        expect(isSelectable(spec.id)).toBe(true);
-        expect(spec.deprecated).not.toBe(true);
-      },
-    );
+    it.each(EMBEDDING_PROVIDERS)('default embedding model for %s is selectable', (provider) => {
+      const spec = defaultEmbeddingModel(provider);
+      expect(spec).toBeDefined();
+      expect(spec.provider).toBe(provider);
+      expect(isSelectable(spec.id)).toBe(true);
+      expect(spec.deprecated).not.toBe(true);
+    });
   });
 
   describe('retirement enforcement', () => {
@@ -67,7 +64,7 @@ describe('LLM model registry', () => {
       expect(isSelectable('gemini-2.0-flash')).toBe(false);
     });
 
-    it('no past-retired model is anyone\'s default', () => {
+    it("no past-retired model is anyone's default", () => {
       for (const provider of PROVIDERS) {
         const chatDef = defaultChatModel(provider);
         expect(isSelectable(chatDef.id)).toBe(true);
@@ -78,19 +75,24 @@ describe('LLM model registry', () => {
   });
 
   describe('provider/id consistency', () => {
-    it('every chat spec\'s id family matches its declared provider', () => {
+    it("every chat spec's id family matches its declared provider", () => {
       for (const spec of listChatModels()) {
         if (spec.provider === 'openai') {
           // OpenAI chat ids start with `gpt-`.
           expect(spec.id.startsWith('gpt-')).toBe(true);
-        } else {
-          // Gemini chat ids start with `gemini-`.
+        } else if (spec.provider === 'gemini') {
           expect(spec.id.startsWith('gemini-')).toBe(true);
+        } else if (spec.provider === 'bedrock') {
+          // Bedrock model ids are the resource-name segment of their
+          // foundation-model ARN, not an OpenAI API model string —
+          // `openai.<name>` even though these aren't api.openai.com
+          // models (see model-registry.ts's Bedrock section).
+          expect(spec.id.startsWith('openai.')).toBe(true);
         }
       }
     });
 
-    it('every embedding spec\'s id family matches its declared provider', () => {
+    it("every embedding spec's id family matches its declared provider", () => {
       for (const spec of listEmbeddingModels()) {
         if (spec.provider === 'openai') {
           // OpenAI embedding ids start with `text-embedding-`.
@@ -100,6 +102,10 @@ describe('LLM model registry', () => {
         } else if (spec.provider === 'cohere') {
           // Stage 05 — Cohere Embed family ids begin with `embed-`.
           expect(spec.id.startsWith('embed-')).toBe(true);
+        } else if (spec.provider === 'bedrock') {
+          // Bedrock's Cohere Embed 4 spec uses the Bedrock model id
+          // (resource-name segment of its foundation-model ARN).
+          expect(spec.id.startsWith('cohere.')).toBe(true);
         }
       }
     });
@@ -154,9 +160,11 @@ describe('LLM model registry', () => {
       const all = listChatModels();
       const openai = listChatModels('openai');
       const gemini = listChatModels('gemini');
-      expect(all.length).toBe(openai.length + gemini.length);
+      const bedrock = listChatModels('bedrock');
+      expect(all.length).toBe(openai.length + gemini.length + bedrock.length);
       expect(openai.length).toBeGreaterThan(0);
       expect(gemini.length).toBeGreaterThan(0);
+      expect(bedrock.length).toBeGreaterThan(0);
     });
 
     it('listEmbeddingModels() filter returns only one provider', () => {
@@ -205,7 +213,7 @@ describe('LLM model registry', () => {
       // each capability flag — Stage 4 regression guard.
       for (const spec of listChatModels()) {
         // provider
-        expect(['openai', 'gemini']).toContain(spec.provider);
+        expect(['openai', 'gemini', 'bedrock']).toContain(spec.provider);
         // id is non-empty
         expect(typeof spec.id).toBe('string');
         expect(spec.id.length).toBeGreaterThan(0);
@@ -228,9 +236,7 @@ describe('LLM model registry', () => {
     it('every Gemini chat spec declares geminiThinkingParam; OpenAI specs do not require it', () => {
       for (const spec of listChatModels('gemini')) {
         // Must be one of the three known values.
-        expect(['thinking_level', 'thinking_budget', 'none']).toContain(
-          spec.geminiThinkingParam,
-        );
+        expect(['thinking_level', 'thinking_budget', 'none']).toContain(spec.geminiThinkingParam);
       }
     });
 

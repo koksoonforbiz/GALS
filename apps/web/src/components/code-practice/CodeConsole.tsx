@@ -23,7 +23,7 @@ export function CodeConsole({ loading, isFirstRun, result }: CodeConsoleProps) {
 
   return (
     <div
-      className={`text-xs font-mono whitespace-pre-wrap rounded-lg p-2.5 border ${
+      className={`text-xs font-mono whitespace-pre-wrap rounded-lg p-2.5 border max-h-48 overflow-y-auto ${
         hasError
           ? 'bg-red-50 border-red-200 text-red-700'
           : 'bg-green-50 border-green-200 text-green-800'
