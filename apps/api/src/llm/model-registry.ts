@@ -330,11 +330,15 @@ const EMBEDDING_MODELS: EmbeddingModelSpec[] = [
   // multimodal page-image embedding pipeline (callMultimodalEmbedding)
   // still goes through the direct Cohere API + a teacher's own
   // `cohereApiKey`, not this spec; wiring that one to Bedrock too is
-  // unfinished. `id` is the Bedrock model ID (resource-name segment of
-  // its foundation-model ARN), invoked via Bedrock's native
-  // InvokeModel (Converse doesn't support embedding models).
+  // unfinished. `id` is the Bedrock INFERENCE PROFILE id, not the bare
+  // foundation-model id — same "on-demand throughput isn't supported"
+  // rejection as the chat models, confirmed against the real endpoint
+  // via scripts/scratch-test-bedrock.mjs (`global.cohere.embed-v4:0`
+  // returns 200 with the expected `{embeddings:{float:[[...]]}}`
+  // shape; the bare `cohere.embed-v4:0` 400s). Invoked via Bedrock's
+  // native InvokeModel (Converse doesn't support embedding models).
   {
-    id: 'cohere.embed-v4:0',
+    id: 'global.cohere.embed-v4:0',
     provider: 'bedrock',
     label: 'Cohere Embed 4 (AWS Bedrock, text)',
     dimensions: 1536,
@@ -362,7 +366,7 @@ const DEFAULT_CHAT_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {
 const DEFAULT_EMBEDDING_BY_PROVIDER: Partial<Record<LlmProvider, string>> = {
   openai: 'text-embedding-3-small',
   gemini: 'gemini-embedding-001',
-  bedrock: 'cohere.embed-v4:0',
+  bedrock: 'global.cohere.embed-v4:0',
   // Stage 05 — Cohere Embed 4 (multimodal). Pinned to 1536 dims via
   // Matryoshka `output_dimension`. Used when `RAG_MULTIMODAL_PDF` is
   // on AND the teacher has a Cohere key configured; otherwise the

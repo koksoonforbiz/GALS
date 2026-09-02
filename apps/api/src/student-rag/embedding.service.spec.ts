@@ -171,11 +171,11 @@ describe('EmbeddingService — registry-driven funnel', () => {
   });
 
   describe('Bedrock (Cohere Embed 4, one shared server credential)', () => {
-    it('cohere.embed-v4:0 → 1536 dims, hits the Bedrock invoke endpoint with the bearer token', async () => {
+    it('global.cohere.embed-v4:0 → 1536 dims, hits the Bedrock invoke endpoint with the bearer token', async () => {
       const prisma = makeMockPrisma({
         encryptedApiKey: null, // bedrock has no per-teacher key — see resolveTeacherEmbeddingSpec
         llmProvider: 'bedrock',
-        llmEmbeddingModel: 'cohere.embed-v4:0',
+        llmEmbeddingModel: 'global.cohere.embed-v4:0',
       });
       // Must discriminate by key — embedBedrockCohere also reads
       // AWS_REGION now, and a blanket mockReturnValue would feed that
@@ -203,7 +203,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
       (global as any).fetch = fetchMock;
       try {
         const result = await service.callEmbeddingForUser(TEACHER_ID, ['hi']);
-        expect(result.model).toBe('cohere.embed-v4:0');
+        expect(result.model).toBe('global.cohere.embed-v4:0');
         expect(result.dimensions).toBe(1536);
         expect(result.vectors[0]!.length).toBe(1536);
         expect(result.provider).toBe('bedrock');
@@ -211,7 +211,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
         expect(captured).toHaveLength(1);
         const req = captured[0]!;
         expect(req.url).toBe(
-          'https://bedrock-runtime.ap-southeast-1.amazonaws.com/model/cohere.embed-v4%3A0/invoke',
+          'https://bedrock-runtime.ap-southeast-1.amazonaws.com/model/global.cohere.embed-v4%3A0/invoke',
         );
         expect(req.headers.Authorization).toBe('Bearer bedrock-bearer-test-token');
         expect(req.body.texts).toEqual(['hi']);
@@ -225,7 +225,7 @@ describe('EmbeddingService — registry-driven funnel', () => {
       const prisma = makeMockPrisma({
         encryptedApiKey: null,
         llmProvider: 'bedrock',
-        llmEmbeddingModel: 'cohere.embed-v4:0',
+        llmEmbeddingModel: 'global.cohere.embed-v4:0',
       });
       const config = { get: jest.fn().mockReturnValue(undefined) } as any;
       const service = new EmbeddingService(prisma, config);

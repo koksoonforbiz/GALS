@@ -105,9 +105,11 @@ describe('LLM model registry', () => {
           // Stage 05 — Cohere Embed family ids begin with `embed-`.
           expect(spec.id.startsWith('embed-')).toBe(true);
         } else if (spec.provider === 'bedrock') {
-          // Bedrock's Cohere Embed 4 spec uses the Bedrock model id
-          // (resource-name segment of its foundation-model ARN).
-          expect(spec.id.startsWith('cohere.')).toBe(true);
+          // Bedrock's Cohere Embed 4 spec uses its inference profile id
+          // — same "on-demand throughput isn't supported" rejection as
+          // the chat models by the bare foundation-model id, confirmed
+          // against the real endpoint.
+          expect(spec.id.startsWith('global.cohere.')).toBe(true);
         }
       }
     });
