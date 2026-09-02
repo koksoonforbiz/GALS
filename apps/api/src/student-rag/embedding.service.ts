@@ -702,7 +702,13 @@ export class EmbeddingService {
   async embed(texts: string[], apiKey: string, provider: string): Promise<number[][]> {
     if (texts.length === 0) return [];
     const llmProvider: LlmProvider | 'fallback' =
-      provider === 'gemini' ? 'gemini' : provider === 'openai' ? 'openai' : 'fallback';
+      provider === 'gemini'
+        ? 'gemini'
+        : provider === 'bedrock'
+          ? 'bedrock'
+          : provider === 'openai'
+            ? 'openai'
+            : 'fallback';
     const spec = defaultEmbeddingModel(llmProvider === 'fallback' ? 'openai' : llmProvider);
     const result = await this.embedWithSpec(texts, apiKey, llmProvider, spec);
     return result.vectors;
