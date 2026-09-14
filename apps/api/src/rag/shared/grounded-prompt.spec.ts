@@ -11,15 +11,12 @@
  *  4. With images → user message is a `FunnelContentPart[]` with the
  *     text part FIRST followed by one `image_url` part per image
  *     with a base64 `data:` URL.
- *  5. History is flattened into the user text in the same shape
- *     dialogue + chat both used historically.
+ *  5. History is emitted as separate role=user/role=assistant messages
+ *     (not flattened into text) so the model gets a structural signal
+ *     about what was asked vs. answered.
  */
 
-import {
-  GROUNDING_CONTRACT,
-  buildCitationLabel,
-  buildGroundedMessages,
-} from './grounded-prompt';
+import { GROUNDING_CONTRACT, buildCitationLabel, buildGroundedMessages } from './grounded-prompt';
 
 describe('buildCitationLabel', () => {
   it('formats text citation with page', () => {
@@ -104,7 +101,7 @@ describe('buildGroundedMessages', () => {
     expect(typeof out.messages[0]!.content).toBe('string');
     expect(out.messages[0]!.content as string).toContain('[Source 1: physics.pdf, p.2]');
     expect(out.messages[0]!.content as string).toContain('water boils at 100°C');
-    expect(out.messages[0]!.content as string).toContain('Student: what is the boiling point?');
+    expect(out.messages[0]!.content as string).toContain('what is the boiling point?');
   });
 
   it('emits FunnelContentPart[] with one image_url per attached image', () => {
@@ -190,7 +187,7 @@ describe('buildGroundedMessages', () => {
     expect(typeof out.messages[0]!.content).toBe('string');
     expect(out.messages[0]!.content).not.toContain('Figure:');
     expect(out.messages[0]!.content).not.toContain('(see attached image)');
-    expect(out.messages[0]!.content as string).toContain('Student: q');
+    expect(out.messages[0]!.content as string).toContain('q');
   });
 
   it('emits per-chunk citation labels in the context block', () => {
@@ -233,7 +230,7 @@ describe('buildGroundedMessages', () => {
     expect(parts[0]!.text).toContain('bar chart of GDP');
   });
 
-  it('flattens history into the user text', () => {
+  it('emits history as separate role=user/assistant messages, followed by the current question', () => {
     const out = buildGroundedMessages({
       systemPersona: 'tutor',
       contextChunks: [],
@@ -244,10 +241,10 @@ describe('buildGroundedMessages', () => {
       ],
       question: 'follow-up',
     });
-    const text = out.messages[0]!.content as string;
-    expect(text).toContain('Student: previous q');
-    expect(text).toContain('Assistant: previous a');
-    expect(text).toContain('Student: follow-up');
+    expect(out.messages).toHaveLength(3);
+    expect(out.messages[0]).toEqual({ role: 'user', content: 'previous q' });
+    expect(out.messages[1]).toEqual({ role: 'assistant', content: 'previous a' });
+    expect(out.messages[2]).toEqual({ role: 'user', content: 'follow-up' });
   });
 
   it('omits the SOURCES block when no chunks or images', () => {
@@ -258,8 +255,9 @@ describe('buildGroundedMessages', () => {
       history: [],
       question: 'q',
     });
+    expect(out.messages).toHaveLength(1);
     const text = out.messages[0]!.content as string;
     expect(text).not.toContain('--- SOURCES ---');
-    expect(text).toContain('Student: q');
+    expect(text).toBe('q');
   });
 });

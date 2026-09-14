@@ -11,6 +11,9 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChunkWithScore, RagService } from './rag.service';
 import { calculateCost } from '../user-management/llm-cost-calculator';
+import { resolveEncryptionSecret } from '../common';
+import { LlmUsageQuotaService } from './llm-usage-quota.service';
+import { SecurityEventService } from '../auth/security-event.service';
 import {
   getChatModel,
   getEmbeddingModel,
@@ -147,14 +150,16 @@ export class LlmService {
     @Inject(forwardRef(() => RagService))
     private readonly ragService: RagService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly usageQuota: LlmUsageQuotaService,
+    private readonly securityEvents: SecurityEventService,
   ) {
-    // Derive a 32-byte key from JWT_SECRET for encrypting stored API keys.
-    // getOrThrow (not the previous `.get(..., 'dev-secret-change-in-production')`)
-    // is deliberate: that fallback is a PUBLIC string committed in
-    // docker-compose.yml. If JWT_SECRET were ever missing at runtime, every
-    // stored teacher API key would have been silently encrypted with a key
-    // anyone can derive — fail loudly instead.
-    const secret = this.config.getOrThrow<string>('JWT_SECRET');
+    // Derive a 32-byte key for encrypting stored API keys — from a
+    // dedicated ENCRYPTION_KEY if set (checklist item 4: decouples
+    // this from JWT_SECRET, which also signs every session token),
+    // else JWT_SECRET as before. Either way, fails loudly rather than
+    // falling back to a public default string — see
+    // resolveEncryptionSecret's doc comment.
+    const secret = resolveEncryptionSecret(this.config);
     this.encryptionKey = crypto.scryptSync(secret, 'llm-key-salt', 32);
   }
 
@@ -327,7 +332,7 @@ export class LlmService {
 
   private async getUserApiKey(
     userId: string,
-  ): Promise<{ apiKey: string; model: string; provider: string } | null> {
+  ): Promise<{ apiKey: string; model: string; provider: string; userId: string } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { llmProvider: true, llmModel: true, encryptedApiKey: true },
@@ -351,7 +356,7 @@ export class LlmService {
         user.llmModel ?? null,
         userId,
       );
-      return { apiKey: bearerToken, model: resolvedModel, provider: 'bedrock' };
+      return { apiKey: bearerToken, model: resolvedModel, provider: 'bedrock', userId };
     }
 
     if (!user?.encryptedApiKey) return null;
@@ -360,12 +365,21 @@ export class LlmService {
       const provider = (user.llmProvider === 'gemini' ? 'gemini' : 'openai') as LlmProvider;
       const storedModel = user.llmModel ?? null;
       const resolvedModel = this.resolveChatModelWithGuard(provider, storedModel, userId);
-      return { apiKey, model: resolvedModel, provider };
+      return { apiKey, model: resolvedModel, provider, userId };
     } catch {
       this.logger.error(`Failed to decrypt API key for user ${userId}`);
       return null;
     }
   }
+
+  // Checklist item 62 (output moderation) — `moderateText()` (OpenAI
+  // Moderation API) was removed along with OpenAI as a selectable
+  // generation provider (Bedrock-only now, product decision): it had no
+  // remaining code path that could ever run, since the only key source
+  // was a teacher's own OpenAI key. No moderation runs today — tracked
+  // as an open gap pending a Bedrock-native option (AWS Bedrock
+  // Guardrails), which needs an AWS resource provisioned first, not
+  // just code.
 
   // ─── Read-time guard + validation helpers ─────────────────
   //
@@ -410,9 +424,16 @@ export class LlmService {
   }
 
   private assertSelectableProvider(provider: string): LlmProvider {
-    if (provider !== 'openai' && provider !== 'gemini' && provider !== 'bedrock') {
+    // Product decision: teachers can no longer bring their own OpenAI/
+    // Gemini API key — Bedrock (one shared server-side credential) is
+    // the only selectable provider going forward. OpenAI/Gemini model
+    // specs and call paths stay in the registry/funnel so any account
+    // still holding one of those (pre-migration data, or a direct DB
+    // write) keeps working read-only rather than hard-erroring; only
+    // NEW saves are restricted here.
+    if (provider !== 'bedrock') {
       throw new BadRequestException(
-        `Unsupported LLM provider "${provider}". Expected one of: openai, gemini, bedrock.`,
+        `Unsupported LLM provider "${provider}". Only "bedrock" can be selected.`,
       );
     }
     return provider;
@@ -529,6 +550,7 @@ export class LlmService {
     const systemPrompt = this.buildRagSystemPrompt(input.strictSource);
     const userPrompt = `${contextBlock}\n\n---\n\nQuestion: ${input.query}`;
 
+    await this.usageQuota.assertNotExceeded(input.userId);
     const credentials = await this.getUserApiKey(input.userId);
     const result = await this.callLlm(
       {
@@ -537,6 +559,13 @@ export class LlmService {
       },
       credentials,
     );
+    const cost = await calculateCost(this.prisma, {
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      model: credentials?.model || 'template',
+      provider: credentials?.provider || 'template',
+    });
+    await this.usageQuota.recordSpend(input.userId, cost.totalCost);
 
     const citations = this.extractCitations(result.content, input.chunks);
 
@@ -588,6 +617,7 @@ export class LlmService {
       inputTokens: result.promptTokens,
       outputTokens: result.completionTokens,
       feature: 'query_rag',
+      cost,
     });
 
     return {
@@ -625,6 +655,7 @@ export class LlmService {
     const systemPrompt = this.buildContentGenerationPrompt(input.strictSource);
     const userPrompt = `${contextBlock}\n\n---\n\nGenerate course content for: "${input.title}"\n\nTeacher instructions: ${input.prompt}`;
 
+    await this.usageQuota.assertNotExceeded(input.userId);
     const credentials = await this.getUserApiKey(input.userId);
     const result = await this.callLlm(
       {
@@ -633,6 +664,13 @@ export class LlmService {
       },
       credentials,
     );
+    const cost = await calculateCost(this.prisma, {
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      model: credentials?.model || 'template',
+      provider: credentials?.provider || 'template',
+    });
+    await this.usageQuota.recordSpend(input.userId, cost.totalCost);
 
     const citations = this.extractCitations(result.content, input.chunks);
 
@@ -694,6 +732,7 @@ export class LlmService {
       inputTokens: result.promptTokens,
       outputTokens: result.completionTokens,
       feature: 'content_generation',
+      cost,
     });
 
     return {
@@ -876,8 +915,26 @@ export class LlmService {
     model: string | null;
     provider: string | null;
   }> {
+    // `userId` here is unambiguously the credential owner (getUserApiKey
+    // looks up THIS id's stored key) — never `usageContext.triggeredByUserId`,
+    // which is only an attribution label for the audit-log row below and
+    // can legitimately be a different person (e.g. the student who asked
+    // the question, billed against their teacher's key). The quota must
+    // track whoever's key/bill this actually is.
+    await this.usageQuota.assertNotExceeded(userId);
     const credentials = await this.getUserApiKey(userId);
     const result = await this.callLlm(request, credentials);
+
+    const cost = await calculateCost(this.prisma, {
+      inputTokens: result.promptTokens,
+      outputTokens: result.completionTokens,
+      model: credentials?.model || 'template',
+      provider: credentials?.provider || 'template',
+    });
+    // Recorded unconditionally — NOT nested inside the `if (usageContext)`
+    // block below, since several real call sites (page-caption, VLM
+    // description) omit usageContext but still make a real, billed call.
+    await this.usageQuota.recordSpend(userId, cost.totalCost);
 
     if (usageContext) {
       await this.logLlmUsage({
@@ -889,6 +946,7 @@ export class LlmService {
         outputTokens: result.completionTokens,
         feature: usageContext.feature,
         modality: usageContext.modality,
+        cost,
       });
     }
 
@@ -1007,14 +1065,15 @@ export class LlmService {
     feature: string;
     modality?: 'text' | 'image';
     metadata?: Record<string, unknown>;
+    /** Pre-computed by the caller (every call site now needs this
+     *  figure anyway, to record it against the usage-quota counter
+     *  BEFORE deciding whether to also write the optional audit-log
+     *  row) — avoids the redundant extra `llmModelPricing` lookup a
+     *  second internal `calculateCost()` call here would cost. */
+    cost: { inputCost: number; outputCost: number; totalCost: number };
   }): Promise<void> {
     try {
-      const cost = await calculateCost(this.prisma, {
-        inputTokens: params.inputTokens,
-        outputTokens: params.outputTokens,
-        model: params.model,
-        provider: params.provider,
-      });
+      const cost = params.cost;
 
       await this.prisma.llmUsageLog.create({
         data: {
@@ -1050,7 +1109,7 @@ export class LlmService {
       maxTokens?: number;
       temperature?: number;
     },
-    credentials: { apiKey: string; model: string; provider: string } | null,
+    credentials: { apiKey: string; model: string; provider: string; userId?: string } | null,
   ): Promise<FunnelResult> {
     // No key → template fallback. The template generator reads simple
     // flat strings, so flatten the structured input for legacy parsing.
@@ -1074,6 +1133,7 @@ export class LlmService {
           credentials.apiKey,
           credentials.model,
           effectiveSpec,
+          credentials.userId,
         );
       }
       if (provider === 'bedrock') {
@@ -1329,6 +1389,7 @@ export class LlmService {
     apiKey: string,
     model: string,
     spec: ChatModelSpec,
+    userId?: string,
   ): Promise<FunnelResult> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -1410,9 +1471,43 @@ export class LlmService {
     }
 
     const data = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+        finishReason?: string;
+      }>;
+      promptFeedback?: { blockReason?: string };
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
     };
+
+    // Checklist item 62 — Gemini applies its own safety filtering on
+    // every call regardless of whether we configure it, and already
+    // returns *why* in fields this code previously discarded. Not a
+    // new moderation call (unlike the OpenAI path) — just reading
+    // what's already in the response instead of silently returning
+    // empty content with no trace of why. Visibility only: behavior
+    // (returning whatever content Gemini did send, even if partial)
+    // is unchanged, since blocking outright would need verification
+    // against a live call this environment can't make. Now also
+    // recorded into the queryable security_events table, not just
+    // Logger.warn output, so it's reviewable the same way an OpenAI
+    // moderation flag is.
+    if (data.promptFeedback?.blockReason) {
+      const reason = data.promptFeedback.blockReason;
+      this.logger.warn(`Gemini blocked the prompt: ${reason}`);
+      this.securityEvents.record({
+        type: 'AI_OUTPUT_FLAGGED',
+        userId,
+        metadata: { source: 'gemini_prompt_feedback', blockReason: reason },
+      });
+    }
+    if (data.candidates?.[0]?.finishReason === 'SAFETY') {
+      this.logger.warn('Gemini blocked the response for safety (finishReason=SAFETY)');
+      this.securityEvents.record({
+        type: 'AI_OUTPUT_FLAGGED',
+        userId,
+        metadata: { source: 'gemini_finish_reason_safety' },
+      });
+    }
 
     // Concat ALL text parts (Gemini sometimes returns multiple).
     const parts = data.candidates?.[0]?.content?.parts ?? [];

@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma';
 import { RagModule } from '../rag';
-import { KcModule } from '../kc';
 import { PageContentService } from './page-content.service';
 import { PageContentController } from './page-content.controller';
 
 @Module({
-  imports: [PrismaModule, RagModule, KcModule],
+  imports: [PrismaModule, RagModule],
   controllers: [PageContentController],
   providers: [PageContentService],
   exports: [PageContentService],

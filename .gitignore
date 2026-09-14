@@ -56,6 +56,12 @@ nul
 backup_*.sql
 *.dump
 
+# One-off debugging scratch files in apps/api — the .webm ones are real
+# participant session recordings (personal/biometric data), the .mjs ones
+# are throwaway scripts. Neither belongs in git. (apps/api/scripts/ is
+# NOT covered by this — those are real, committed utilities.)
+apps/api/scratch-*
+
 # Test env (test-only creds, but still keep out of git)
 .env.test
 

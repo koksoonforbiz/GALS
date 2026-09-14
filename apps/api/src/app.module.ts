@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
+import { GlobalExceptionFilter } from './common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma';
 import { BlobModule } from './blob';
 import { EventBusModule } from './event-bus';
@@ -12,17 +14,11 @@ import { QuestionsModule } from './questions';
 import { AssessmentsModule } from './assessments';
 import { EnrollmentsModule } from './enrollments';
 import { AttemptsModule } from './attempts';
-import { MasteryModule } from './mastery';
 import { CourseModulesModule } from './modules';
 import { RagModule } from './rag';
 import { CourseStructureModule } from './course-structure';
 import { PageContentModule } from './page-content';
 import { EvaluationModule } from './evaluation';
-import { KcModule } from './kc';
-import { KcEvaluationModule } from './kc-evaluation';
-import { CurriculumCoverageModule } from './curriculum-coverage';
-import { KnowledgeVersionModule } from './knowledge-version';
-import { PublishGateModule } from './publish-gate';
 import { LearningInterventionsModule } from './learning-interventions';
 import { CodeDecompositionModule } from './code-decomposition/code-decomposition.module';
 import { QuestionGenerationModule } from './question-generation';
@@ -69,17 +65,11 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     AssessmentsModule,
     EnrollmentsModule,
     AttemptsModule,
-    MasteryModule,
     CourseModulesModule,
     RagModule,
     CourseStructureModule,
     PageContentModule,
     EvaluationModule,
-    KcModule,
-    KcEvaluationModule,
-    CurriculumCoverageModule,
-    KnowledgeVersionModule,
-    PublishGateModule,
     LearningInterventionsModule,
     CodeDecompositionModule,
     QuestionGenerationModule,
@@ -105,5 +95,26 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     VlmModule,
   ],
   controllers: [HealthController],
+  providers: [
+    // Checklist item 16 — critical fix. `ThrottlerModule.forRoot()`
+    // only registers the options/storage providers; it does NOT bind
+    // `ThrottlerGuard` anywhere (confirmed by reading the installed
+    // package's source — no `APP_GUARD` in throttler.module.js). Without
+    // this, NEITHER the global 30/60s default NOR any per-route
+    // `@Throttle()` decorator across the entire app actually runs —
+    // they're inert metadata until something reads it via the guard.
+    // Only `auth.controller.ts` and `code-decomposition.controller.ts`
+    // were protected (they each apply `ThrottlerGuard` per-controller);
+    // every other controller — including every `@Throttle()` added
+    // this pass to rag/question-generation/activity-log/jobs — had NO
+    // rate limiting in effect at all.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Checklist item 25 — moved from a manual `app.useGlobalFilters(new
+    // GlobalExceptionFilter())` in main.ts to APP_FILTER so it's
+    // DI-managed and can inject SecurityEventService (AuthModule is
+    // @Global(), so this resolves without importing it here directly)
+    // to record every 5xx into the queryable security_events table.
+    { provide: APP_FILTER, useClass: GlobalExceptionFilter },
+  ],
 })
 export class AppModule {}

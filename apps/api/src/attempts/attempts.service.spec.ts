@@ -31,24 +31,14 @@ function createMockEventBus() {
   return { publish: jest.fn().mockResolvedValue(undefined) };
 }
 
-function createMockMasteryService() {
-  return { updateMasteryAfterGrading: jest.fn().mockResolvedValue(undefined) };
-}
-
 function createMockActivityLogService() {
   return { record: jest.fn().mockResolvedValue(undefined) };
 }
 
-function createService(
-  prisma: any,
-  eventBus: any,
-  masteryService: any,
-  activityLogService?: any,
-): AttemptsService {
+function createService(prisma: any, eventBus: any, activityLogService?: any): AttemptsService {
   return new AttemptsService(
     prisma,
     eventBus,
-    masteryService,
     activityLogService ?? createMockActivityLogService(),
   );
 }
@@ -58,14 +48,12 @@ function createService(
 describe('AttemptsService', () => {
   let prisma: ReturnType<typeof createMockPrisma>;
   let eventBus: ReturnType<typeof createMockEventBus>;
-  let masteryService: ReturnType<typeof createMockMasteryService>;
   let service: AttemptsService;
 
   beforeEach(() => {
     prisma = createMockPrisma();
     eventBus = createMockEventBus();
-    masteryService = createMockMasteryService();
-    service = createService(prisma, eventBus, masteryService);
+    service = createService(prisma, eventBus);
   });
 
   // ─── create ──────────────────────────────────────────
@@ -570,15 +558,6 @@ describe('AttemptsService', () => {
         where: { id: 'att-1' },
         data: { status: 'graded', currentScore: 8 },
       });
-    });
-
-    it('should update mastery after grading', async () => {
-      await service.manualGrade('att-1', teacherId, {
-        score: 8,
-        feedback: 'Good',
-      });
-
-      expect(masteryService.updateMasteryAfterGrading).toHaveBeenCalledWith('gr-1', 'att-1');
     });
 
     it('should publish GRADE_COMPLETED event', async () => {

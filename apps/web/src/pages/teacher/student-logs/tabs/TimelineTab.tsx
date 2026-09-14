@@ -13,7 +13,6 @@ const ACTION_COLORS: Record<string, string> = {
   CHATBOT_MESSAGE_RECEIVED: 'bg-indigo-200',
   INTERVENTION_TRIGGERED: 'bg-purple-400',
   INTERVENTION_COMPLETED: 'bg-purple-600',
-  MASTERY_UPDATED: 'bg-green-400',
   SPACED_REP_CARD_RATED: 'bg-amber-400',
   MODULE_ITEM_VIEWED: 'bg-gray-300',
 };

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveEncryptionSecret } from '../common';
 import {
   getEmbeddingModel,
   defaultEmbeddingModel,
@@ -865,7 +866,11 @@ export class EmbeddingService {
   // ─── Helpers ────────────────────────────────────────────
 
   private decryptApiKey(encrypted: string): string {
-    const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+    // Matches LlmService's identical derivation (its constructor
+    // comment has the full rationale) — including the opt-in
+    // ENCRYPTION_KEY (checklist item 4). Must stay identical since
+    // this decrypts values LlmService encrypted.
+    const secret = resolveEncryptionSecret(this.config);
     const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
     const parts = encrypted.split(':');
     const iv = Buffer.from(parts[0]!, 'hex');

@@ -37,7 +37,16 @@ describe('LlmService — read-time guard (retired model substitution)', () => {
         defaultValue ?? 'test-secret-must-be-at-least-16-chars',
       getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
     } as unknown as ConfigService;
-    const service = new LlmService(prisma, config, null as any, new EventEmitter2());
+    const usageQuota = { assertNotExceeded: jest.fn(), recordSpend: jest.fn() } as any;
+    const securityEvents = { record: jest.fn() } as any;
+    const service = new LlmService(
+      prisma,
+      config,
+      null as any,
+      new EventEmitter2(),
+      usageQuota,
+      securityEvents,
+    );
 
     const encrypted = encryptViaService(service, 'gm-test');
     prisma.user.findUnique.mockResolvedValue({
@@ -109,7 +118,16 @@ describe('LlmService — read-time guard (retired model substitution)', () => {
         defaultValue ?? 'test-secret-must-be-at-least-16-chars',
       getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
     } as unknown as ConfigService;
-    const service = new LlmService(prisma, config, null as any, new EventEmitter2());
+    const usageQuota = { assertNotExceeded: jest.fn(), recordSpend: jest.fn() } as any;
+    const securityEvents = { record: jest.fn() } as any;
+    const service = new LlmService(
+      prisma,
+      config,
+      null as any,
+      new EventEmitter2(),
+      usageQuota,
+      securityEvents,
+    );
 
     const encrypted = encryptViaService(service, 'sk-test');
     prisma.user.findUnique.mockResolvedValue({

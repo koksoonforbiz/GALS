@@ -20,10 +20,6 @@ function createMockPrisma() {
     topic: {
       findUnique: jest.fn(),
     },
-    questionKc: {
-      createMany: jest.fn(),
-      deleteMany: jest.fn(),
-    },
   };
 }
 
@@ -57,7 +53,6 @@ describe('QuestionsService', () => {
     beforeEach(() => {
       prisma.course.findUnique.mockResolvedValue({ teacherId });
       prisma.question.create.mockResolvedValue({ id: 'q1', ...baseDto });
-      prisma.questionKc.createMany.mockResolvedValue({ count: 0 });
     });
 
     it('should create a question with courseId', async () => {
@@ -85,22 +80,6 @@ describe('QuestionsService', () => {
         include: { course: { select: { teacherId: true } } },
       });
       expect(prisma.question.create).toHaveBeenCalled();
-    });
-
-    it('should link KCs via join table when kcIds provided', async () => {
-      prisma.question.create.mockResolvedValue({ id: 'q1' });
-
-      await service.create(teacherId, {
-        ...baseDto,
-        kcIds: ['kc-1', 'kc-2'],
-      });
-
-      expect(prisma.questionKc.createMany).toHaveBeenCalledWith({
-        data: [
-          { questionId: 'q1', kcId: 'kc-1' },
-          { questionId: 'q1', kcId: 'kc-2' },
-        ],
-      });
     });
 
     it('should throw BadRequestException if no courseId or topicId', async () => {
@@ -391,7 +370,7 @@ describe('QuestionsService', () => {
 
   describe('findOne', () => {
     it('should return question with full includes', async () => {
-      const question = { id: 'q1', prompt: 'Test', course: null, topic: null, questionKcs: [] };
+      const question = { id: 'q1', prompt: 'Test', course: null, topic: null };
       prisma.question.findUnique.mockResolvedValue(question);
 
       const result = await service.findOne('q1');
@@ -402,7 +381,6 @@ describe('QuestionsService', () => {
         include: expect.objectContaining({
           course: expect.any(Object),
           topic: expect.any(Object),
-          questionKcs: expect.any(Object),
         }),
       });
     });
@@ -436,8 +414,6 @@ describe('QuestionsService', () => {
         ...existingQuestion,
         version: 2,
       });
-      prisma.questionKc.deleteMany.mockResolvedValue({ count: 0 });
-      prisma.questionKc.createMany.mockResolvedValue({ count: 0 });
     });
 
     it('should update a question and increment version', async () => {
@@ -469,20 +445,6 @@ describe('QuestionsService', () => {
       await expect(service.update('q1', teacherId, { prompt: 'X' })).rejects.toThrow(
         ForbiddenException,
       );
-    });
-
-    it('should update KC join table when kcIds are provided', async () => {
-      await service.update('q1', teacherId, { kcIds: ['kc-a', 'kc-b'] });
-
-      expect(prisma.questionKc.deleteMany).toHaveBeenCalledWith({
-        where: { questionId: 'q1' },
-      });
-      expect(prisma.questionKc.createMany).toHaveBeenCalledWith({
-        data: [
-          { questionId: 'q1', kcId: 'kc-a' },
-          { questionId: 'q1', kcId: 'kc-b' },
-        ],
-      });
     });
 
     it('should verify new course ownership when moving question', async () => {
@@ -555,7 +517,6 @@ describe('QuestionsService', () => {
       prisma.question.create
         .mockResolvedValueOnce({ id: 'q1' })
         .mockResolvedValueOnce({ id: 'q2' });
-      prisma.questionKc.createMany.mockResolvedValue({ count: 0 });
     });
 
     it('should verify course ownership then create each question', async () => {
@@ -652,7 +613,6 @@ describe('QuestionsService', () => {
       explanation: null,
       difficulty: 3,
       bloomsLevel: 'APPLY',
-      kcIds: ['kc-1'],
       pageIds: [],
       tags: null,
       status: 'active',
@@ -660,14 +620,12 @@ describe('QuestionsService', () => {
       sourceType: null,
       course: { id: 'course-1', title: 'C1', teacherId },
       topic: null,
-      questionKcs: [{ kcId: 'kc-1', kc: { id: 'kc-1', code: 'KC1', label: 'KC One' } }],
     };
 
     beforeEach(() => {
       // findOne is called internally
       prisma.question.findUnique.mockResolvedValue(original);
       prisma.question.create.mockResolvedValue({ id: 'q2', status: 'draft' });
-      prisma.questionKc.createMany.mockResolvedValue({ count: 1 });
     });
 
     it('should create a duplicate with status draft', async () => {
@@ -680,14 +638,6 @@ describe('QuestionsService', () => {
         }),
       });
       expect(result).toEqual(expect.objectContaining({ status: 'draft' }));
-    });
-
-    it('should copy KC join-table links to duplicate', async () => {
-      await service.duplicate('q1', teacherId);
-
-      expect(prisma.questionKc.createMany).toHaveBeenCalledWith({
-        data: [{ questionId: 'q2', kcId: 'kc-1' }],
-      });
     });
 
     it('should throw NotFoundException for non-existent question', async () => {

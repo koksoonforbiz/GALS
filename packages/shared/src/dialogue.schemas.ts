@@ -3,8 +3,15 @@ import { z } from 'zod';
 // ── Teacher course creation settings ──────────────────────────────────────
 
 export const DialogueCourseSettingsSchema = z.object({
-  llmProvider: z.enum(['openai', 'gemini', 'bedrock', 'fallback']).default('openai'),
-  llmModel: z.string().default('gpt-4o-mini'),
+  // 'openai'/'gemini' removed — teachers can no longer select either as
+  // an LLM provider (product decision: Bedrock only, one shared
+  // server-side credential). This field is stored per-course but never
+  // actually read by dialogue.service.ts to pick which provider to call
+  // — generation always goes through the teacher's own account-level
+  // setting (LlmService.getUserApiKey) — so this enum exists purely to
+  // keep the persisted value honest, not to change call behavior.
+  llmProvider: z.enum(['bedrock', 'fallback']).default('bedrock'),
+  llmModel: z.string().default('global.openai.gpt-5.6-sol'),
   systemPromptOverride: z.string().optional(),
   allowStudentUploads: z.boolean().default(true),
   maxFilesPerStudent: z.number().int().min(1).max(50).default(20),
@@ -204,31 +211,46 @@ export const SendDialogueMessageDto = z.object({
   content: z.string().min(1).max(8000),
   activeSourceIds: z.array(z.string()).optional(), // override session defaults
 });
+export type SendDialogueMessageDtoType = z.infer<typeof SendDialogueMessageDto>;
 
 export const CreateDialogueSessionDto = z.object({
   title: z.string().min(1).max(200).default('New Session'),
   activeSourceIds: z.array(z.string()).default([]),
 });
+export type CreateDialogueSessionDtoType = z.infer<typeof CreateDialogueSessionDto>;
 
 export const UpdateDialogueSessionDto = z.object({
   title: z.string().min(1).max(200).optional(),
   activeSourceIds: z.array(z.string()).optional(),
 });
+export type UpdateDialogueSessionDtoType = z.infer<typeof UpdateDialogueSessionDto>;
 
 export const GenerateStudioOutputDto = z.object({
-  type: z.enum([
-    'BRIEFING_DOC',
-    'FLASHCARD_SET',
-    'TABLE_COMPARISON',
-    'MIND_MAP',
-    'TIMELINE',
-    'FAQ',
-  ]),
+  // Matches apps/api's GenerateStudioDto exactly — 'TIMELINE' is listed
+  // as a future option in DialogueCourseSettingsSchema.enabledStudioTools
+  // above but has no prompt config implemented in studio.service.ts yet,
+  // so it's deliberately excluded here (a request for it would otherwise
+  // pass validation only to 404 downstream with "Unknown studio type").
+  type: z.enum(['BRIEFING_DOC', 'FLASHCARD_SET', 'TABLE_COMPARISON', 'MIND_MAP', 'FAQ']),
   sourceIds: z.array(z.string()).min(1),
   promptHint: z.string().max(500).optional(),
   sessionId: z.string().optional(),
 });
+export type GenerateStudioOutputDtoType = z.infer<typeof GenerateStudioOutputDto>;
 
 export const ToggleSourceDto = z.object({
   isActive: z.boolean(),
 });
+
+export const LinkInterventionDto = z.object({
+  type: z.enum([
+    'PRACTICE_TESTING',
+    'DISTRIBUTED_PRACTICE',
+    'STEPWISE_LEARNING',
+    'INTERROGATIVE_ELABORATION',
+  ]),
+  selectedText: z.string().min(1).max(8000),
+  contentId: z.string().optional(),
+  pageType: z.string().max(100).optional(),
+});
+export type LinkInterventionDtoType = z.infer<typeof LinkInterventionDto>;

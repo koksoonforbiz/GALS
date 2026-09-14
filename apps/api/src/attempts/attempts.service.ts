@@ -8,7 +8,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
 import { EventBusService } from '../event-bus';
-import { MasteryService } from '../mastery';
 import { ActivityLogService, ActivityAction } from '../activity-log';
 import { EventTopics } from '@ats/shared';
 import type {
@@ -32,7 +31,6 @@ export class AttemptsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventBus: EventBusService,
-    private readonly masteryService: MasteryService,
     private readonly activityLogService: ActivityLogService,
   ) {}
 
@@ -392,7 +390,7 @@ export class AttemptsService {
     }
 
     // Create grading result
-    const gradingResult = await this.prisma.gradingResult.create({
+    await this.prisma.gradingResult.create({
       data: {
         attemptId,
         score,
@@ -410,13 +408,6 @@ export class AttemptsService {
         autoFeedback: feedback,
       },
     });
-
-    // Update KC mastery
-    try {
-      await this.masteryService.updateMasteryAfterGrading(gradingResult.id, attemptId);
-    } catch (err: any) {
-      this.logger.warn(`Failed to update mastery after auto-grade: ${err.message}`);
-    }
 
     // Publish grade completed event
     const gradeCompletedPayload: GradeCompletedPayload = {
@@ -564,7 +555,7 @@ export class AttemptsService {
       );
     }
 
-    const gradingResult = await this.prisma.gradingResult.create({
+    await this.prisma.gradingResult.create({
       data: {
         attemptId: id,
         score: dto.score,
@@ -581,9 +572,6 @@ export class AttemptsService {
         currentScore: dto.score,
       },
     });
-
-    // Update KC mastery
-    await this.masteryService.updateMasteryAfterGrading(gradingResult.id, id);
 
     // Publish grade completed event
     const gradeCompletedPayload: GradeCompletedPayload = {

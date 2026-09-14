@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
 import { formatDateSGT } from '../../lib/formatDateTime';
 
@@ -731,6 +732,7 @@ function StudentDetailModal({
 
 export function UserManagementPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'students' | 'usage' | 'courses'>('students');
 
   // Students tab state
@@ -878,6 +880,26 @@ export function UserManagementPage() {
     }
   };
 
+  // Checklist item 13 — quarterly review of every account (any role),
+  // admin-only. Separate from handleExport above, which is a teacher's
+  // own-student roster (usage/cost focus), not an access-security review.
+  const handleAccountReviewExport = async () => {
+    try {
+      const res = await fetch('/api/user-management/account-review/export', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'account-review.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast('error', 'Failed to export account review CSV');
+    }
+  };
+
   const totalPages = Math.ceil(totalStudents / 20);
 
   return (
@@ -942,6 +964,15 @@ export function UserManagementPage() {
               >
                 Export CSV
               </button>
+              {user?.role === 'admin' && (
+                <button
+                  onClick={handleAccountReviewExport}
+                  title="Every account, every role — for the quarterly access review"
+                  className="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"
+                >
+                  Account Review Export
+                </button>
+              )}
               <button
                 onClick={() => setShowAddModal(true)}
                 className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"

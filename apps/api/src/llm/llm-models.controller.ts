@@ -36,17 +36,28 @@ export class LlmModelsController {
   } {
     let providerFilter: LlmProvider | undefined;
     if (provider !== undefined && provider !== '') {
-      if (provider !== 'openai' && provider !== 'gemini' && provider !== 'bedrock') {
+      // Bedrock is the only selectable chat provider (product decision
+      // — teachers no longer bring their own OpenAI/Gemini key); Cohere
+      // stays queryable since it's a legitimate embedding/rerank-only
+      // provider, unrelated to that decision.
+      if (provider !== 'bedrock' && provider !== 'cohere') {
         throw new BadRequestException(
-          `Unknown provider "${provider}". Expected one of: openai, gemini, bedrock.`,
+          `Unknown provider "${provider}". Expected one of: bedrock, cohere.`,
         );
       }
       providerFilter = provider;
     }
 
     return {
-      chat: listChatModels(providerFilter).filter((m) => isSelectable(m.id)),
-      embedding: listEmbeddingModels(providerFilter).filter((m) => isSelectable(m.id)),
+      chat: listChatModels(providerFilter)
+        .filter((m) => isSelectable(m.id))
+        .filter((m) => m.provider === 'bedrock'),
+      // Bedrock's Cohere-hosted embed model, plus the direct Cohere spec
+      // (multimodal reranking/embedding stays a separate, still-allowed
+      // provider — see assertSelectableProvider's doc comment).
+      embedding: listEmbeddingModels(providerFilter)
+        .filter((m) => isSelectable(m.id))
+        .filter((m) => m.provider === 'bedrock' || m.provider === 'cohere'),
     };
   }
 }

@@ -11,14 +11,6 @@ import BlockEditor from '../../components/editor/BlockEditor';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import VersionHistoryPanel from '../../components/editor/VersionHistoryPanel';
 import { EvaluationCenterPage } from './EvaluationCenterPage';
-import KcStudioPanel from '../../components/KcStudioPanel';
-import KcGraphStudioPanel from '../../components/KcGraphStudioPanel';
-import KcMappingPanel from '../../components/KcMappingPanel';
-import KcEvaluationDashboard from '../../components/KcEvaluationDashboard';
-import CurriculumCoveragePanel from '../../components/CurriculumCoveragePanel';
-import KnowledgeVersionPanel from '../../components/KnowledgeVersionPanel';
-import PublishGatePanel from '../../components/PublishGatePanel';
-import LearningPathPanel from '../../components/LearningPathPanel';
 import { DialogueCourseSettingsForm } from '../../components/teacher/DialogueCourseSettingsForm';
 import { DialogueActivityPanel } from '../../components/teacher/DialogueActivityPanel';
 import { RecordingSettings } from '../../components/teacher/biometrics/RecordingSettings';
@@ -36,25 +28,9 @@ type TopTabKey =
   | 'content'
   | 'sources'
   | 'evaluate'
-  | 'knowledge'
-  | 'publish'
   | 'settings'
   | 'dialogue'
   | 'biometrics';
-type EvalSubTab = 'content-eval' | 'kc-eval' | 'coverage';
-type KnowledgeSubTab = 'studio' | 'graph' | 'learning-path' | 'mappings' | 'evaluate' | 'versions';
-
-// Legacy tab key mapping → new structure
-const LEGACY_REDIRECTS: Record<string, { top: TopTabKey; sub?: string }> = {
-  'kc-studio': { top: 'knowledge', sub: 'studio' },
-  'kc-graph': { top: 'knowledge', sub: 'graph' },
-  'kc-mappings': { top: 'knowledge', sub: 'mappings' },
-  'kc-eval': { top: 'knowledge', sub: 'evaluate' },
-  'kc-versions': { top: 'knowledge', sub: 'versions' },
-  'learning-path': { top: 'knowledge', sub: 'learning-path' },
-  coverage: { top: 'evaluate', sub: 'coverage' },
-  'publish-gate': { top: 'publish' },
-};
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -77,6 +53,7 @@ interface CourseModule {
   courseId: string;
   title: string;
   orderIndex: number;
+  showPlayground: boolean;
   items: ModuleItem[];
 }
 
@@ -109,8 +86,6 @@ interface SourceDocument {
   uploadedBy: { id: string; name: string };
 }
 
-// (Legacy tab keys like 'kc-studio', 'coverage', etc. are handled by LEGACY_REDIRECTS above)
-
 // ─── Component ──────────────────────────────────────────
 
 export function CourseBuilderPage() {
@@ -121,22 +96,7 @@ export function CourseBuilderPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TopTabKey>('overview');
-  const [evalSubTab, setEvalSubTab] = useState<EvalSubTab>('content-eval');
-  const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>('studio');
   const [showStructureWizard, setShowStructureWizard] = useState(false);
-
-  // Handle legacy tab deep-links (e.g. from bookmarks or external links)
-  const handleTabChange = useCallback((key: string) => {
-    const redirect = LEGACY_REDIRECTS[key];
-    if (redirect) {
-      setActiveTab(redirect.top);
-      if (redirect.top === 'evaluate' && redirect.sub) setEvalSubTab(redirect.sub as EvalSubTab);
-      if (redirect.top === 'knowledge' && redirect.sub)
-        setKnowledgeSubTab(redirect.sub as KnowledgeSubTab);
-      return;
-    }
-    setActiveTab(key as TopTabKey);
-  }, []);
 
   // Overview form state
   const [title, setTitle] = useState('');
@@ -409,6 +369,18 @@ export function CourseBuilderPage() {
       toast('error', err instanceof Error ? err.message : 'Failed to rename module');
     } finally {
       setSavingModuleEdit(false);
+    }
+  };
+
+  const handleTogglePlayground = async (mod: CourseModule) => {
+    try {
+      await apiFetch(`/courses/${courseId}/modules/${mod.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ showPlayground: !mod.showPlayground }),
+      });
+      fetchCourse();
+    } catch (err) {
+      toast('error', err instanceof Error ? err.message : 'Failed to update module');
     }
   };
 
@@ -774,27 +746,11 @@ export function CourseBuilderPage() {
     { key: 'overview', label: 'Overview' },
     { key: 'content', label: 'Content' },
     { key: 'sources', label: 'Sources' },
-    // 'evaluate' and 'knowledge' (KC) tabs hidden — code kept intact, just
-    // not linked from the tab bar. Re-add these two lines to restore.
-    { key: 'publish', label: 'Publish' },
+    // 'evaluate' (content evaluation) tab hidden — code kept intact, just
+    // not linked from the tab bar. Re-add this line to restore.
     ...(learningMode === 'DIALOGUE' ? [{ key: 'dialogue' as TopTabKey, label: 'Dialogue' }] : []),
     { key: 'biometrics' as TopTabKey, label: 'Biometrics' },
     { key: 'settings', label: 'Settings' },
-  ];
-
-  const evalSubTabs: { key: EvalSubTab; label: string }[] = [
-    { key: 'content-eval', label: 'Content Evaluation' },
-    { key: 'kc-eval', label: 'KC-Aware Evaluation' },
-    { key: 'coverage', label: 'Coverage & Gap Map' },
-  ];
-
-  const knowledgeSubTabs: { key: KnowledgeSubTab; label: string }[] = [
-    { key: 'studio', label: 'KC Studio' },
-    { key: 'graph', label: 'KC Graph' },
-    { key: 'learning-path', label: 'Learning Path' },
-    { key: 'mappings', label: 'KC Mappings' },
-    { key: 'evaluate', label: 'KC Evaluate' },
-    { key: 'versions', label: 'Versions' },
   ];
 
   return (
@@ -832,7 +788,7 @@ export function CourseBuilderPage() {
         {topTabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => handleTabChange(tab.key)}
+            onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-blue-600 text-blue-600'
@@ -843,52 +799,6 @@ export function CourseBuilderPage() {
           </button>
         ))}
       </div>
-
-      {/* ─── Sub-navigation for Evaluate ─── */}
-      {activeTab === 'evaluate' && (
-        <div className="bg-gray-50 border-b border-gray-200 px-4">
-          <div className="flex items-center gap-4">
-            {/* Breadcrumb */}
-            <span className="text-xs text-gray-400 py-2 mr-2 select-none">Evaluate &rsaquo;</span>
-            {evalSubTabs.map((sub) => (
-              <button
-                key={sub.key}
-                onClick={() => setEvalSubTab(sub.key)}
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-                  evalSubTab === sub.key
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {sub.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ─── Sub-navigation for Knowledge ─── */}
-      {activeTab === 'knowledge' && (
-        <div className="bg-gray-50 border-b border-gray-200 px-4">
-          <div className="flex items-center gap-4">
-            {/* Breadcrumb */}
-            <span className="text-xs text-gray-400 py-2 mr-2 select-none">Knowledge &rsaquo;</span>
-            {knowledgeSubTabs.map((sub) => (
-              <button
-                key={sub.key}
-                onClick={() => setKnowledgeSubTab(sub.key)}
-                className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
-                  knowledgeSubTab === sub.key
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {sub.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Spacer below sub-nav or top-nav */}
       <div className="mb-6" />
@@ -1044,7 +954,7 @@ export function CourseBuilderPage() {
                 .map((mod, idx, arr) => (
                   <div
                     key={mod.id}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
+                    className={`flex flex-col gap-1.5 px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
                       selectedModuleId === mod.id
                         ? 'bg-blue-50 text-blue-700 font-medium'
                         : 'hover:bg-gray-50 text-gray-700'
@@ -1053,78 +963,104 @@ export function CourseBuilderPage() {
                       if (editingModuleId !== mod.id) setSelectedModuleId(mod.id);
                     }}
                   >
-                    {editingModuleId === mod.id ? (
-                      <input
-                        type="text"
-                        value={editingModuleTitle}
-                        onChange={(e) => setEditingModuleTitle(e.target.value)}
-                        onClick={(e) => e.stopPropagation()}
-                        onBlur={() => handleSaveModuleTitle(mod.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveModuleTitle(mod.id);
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault();
-                            handleCancelEditModule();
-                          }
+                    <div className="flex items-center justify-between">
+                      {editingModuleId === mod.id ? (
+                        <input
+                          type="text"
+                          value={editingModuleTitle}
+                          onChange={(e) => setEditingModuleTitle(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={() => handleSaveModuleTitle(mod.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveModuleTitle(mod.id);
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault();
+                              handleCancelEditModule();
+                            }
+                          }}
+                          autoFocus
+                          disabled={savingModuleEdit}
+                          className="flex-1 min-w-0 px-1.5 py-0.5 text-sm border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-800 disabled:opacity-60"
+                        />
+                      ) : (
+                        <>
+                          <span className="truncate flex-1 min-w-0">{mod.title}</span>
+                          <div className="flex items-center gap-1 ml-2 shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveModule(mod.id, 'up');
+                              }}
+                              disabled={idx === 0 || reorderingModules}
+                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move up"
+                              aria-label="Move module up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMoveModule(mod.id, 'down');
+                              }}
+                              disabled={idx === arr.length - 1 || reorderingModules}
+                              className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Move down"
+                              aria-label="Move module down"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleStartEditModule(mod);
+                              }}
+                              className="text-gray-400 hover:text-blue-600 text-xs"
+                              title="Rename module"
+                              aria-label="Rename module"
+                            >
+                              ✎
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteModule(mod.id);
+                              }}
+                              className="text-gray-400 hover:text-red-500 text-xs"
+                              title="Delete module"
+                              aria-label="Delete module"
+                            >
+                              &times;
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {editingModuleId !== mod.id && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTogglePlayground(mod);
                         }}
-                        autoFocus
-                        disabled={savingModuleEdit}
-                        className="flex-1 min-w-0 px-1.5 py-0.5 text-sm border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-gray-800 disabled:opacity-60"
-                      />
-                    ) : (
-                      <>
-                        <span className="truncate flex-1 min-w-0">{mod.title}</span>
-                        <div className="flex items-center gap-1 ml-2 shrink-0">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveModule(mod.id, 'up');
-                            }}
-                            disabled={idx === 0 || reorderingModules}
-                            className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                            title="Move up"
-                            aria-label="Move module up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMoveModule(mod.id, 'down');
-                            }}
-                            disabled={idx === arr.length - 1 || reorderingModules}
-                            className="text-gray-400 hover:text-blue-600 text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                            title="Move down"
-                            aria-label="Move module down"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEditModule(mod);
-                            }}
-                            className="text-gray-400 hover:text-blue-600 text-xs"
-                            title="Rename module"
-                            aria-label="Rename module"
-                          >
-                            ✎
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteModule(mod.id);
-                            }}
-                            className="text-gray-400 hover:text-red-500 text-xs"
-                            title="Delete module"
-                            aria-label="Delete module"
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      </>
+                        className={`self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                          mod.showPlayground
+                            ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                            : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100 hover:text-gray-500'
+                        }`}
+                        title={
+                          mod.showPlayground
+                            ? 'Playground shown to students in this module'
+                            : 'Playground hidden from students in this module'
+                        }
+                        aria-label="Toggle Code Playground visibility for this module"
+                      >
+                        <span className="text-base leading-none">▶</span>
+                        <span className="text-xs">
+                          Playground {mod.showPlayground ? 'shown' : 'hidden'}
+                        </span>
+                      </button>
                     )}
                   </div>
                 ))}
@@ -1661,29 +1597,10 @@ export function CourseBuilderPage() {
         />
       )}
 
-      {/* ─── Evaluate Tab (sub-tabs) ─── */}
+      {/* ─── Evaluate Tab ─── */}
       {activeTab === 'evaluate' && courseId && (
-        <>
-          {evalSubTab === 'content-eval' && <EvaluationCenterPage courseId={courseId} embedded />}
-          {evalSubTab === 'kc-eval' && <KcEvaluationDashboard courseId={courseId} />}
-          {evalSubTab === 'coverage' && <CurriculumCoveragePanel courseId={courseId} />}
-        </>
+        <EvaluationCenterPage courseId={courseId} embedded />
       )}
-
-      {/* ─── Knowledge Tab (sub-tabs) ─── */}
-      {activeTab === 'knowledge' && courseId && (
-        <>
-          {knowledgeSubTab === 'studio' && <KcStudioPanel courseId={courseId} />}
-          {knowledgeSubTab === 'graph' && <KcGraphStudioPanel courseId={courseId} />}
-          {knowledgeSubTab === 'learning-path' && <LearningPathPanel courseId={courseId} />}
-          {knowledgeSubTab === 'mappings' && <KcMappingPanel courseId={courseId} />}
-          {knowledgeSubTab === 'evaluate' && <KcEvaluationDashboard courseId={courseId} />}
-          {knowledgeSubTab === 'versions' && <KnowledgeVersionPanel courseId={courseId} />}
-        </>
-      )}
-
-      {/* ─── Publish Tab ─── */}
-      {activeTab === 'publish' && courseId && <PublishGatePanel courseId={courseId} />}
 
       {/* ─── Dialogue Tab ─── */}
       {activeTab === 'dialogue' && courseId && (

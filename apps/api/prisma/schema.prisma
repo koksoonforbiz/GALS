@@ -179,7 +179,6 @@ enum ActivityAction {
   // Navigation
   MODULE_OPENED
   MODULE_ITEM_VIEWED
-  KC_GRAPH_VIEWED
 
   // Assessments
   ASSESSMENT_STARTED
@@ -212,9 +211,6 @@ enum ActivityAction {
   STUDY_GUIDE_GENERATED
   STUDIO_OUTPUT_REQUESTED
   STUDIO_OUTPUT_VIEWED
-
-  // Mastery
-  MASTERY_UPDATED
 
   // Feedback
   FEEDBACK_RECEIVED
@@ -296,6 +292,31 @@ model User {
   invitedBy           String?   @map("invited_by") @db.Uuid
   invitedAt           DateTime? @map("invited_at") @db.Timestamptz
   passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz
+  // Checklist item 13 — quarterly account review needs a recency
+  // signal for every role, not just students (who already get one via
+  // ActivityLog/StudentSession). Set on every successful login
+  // (password-only or the final step of a 2FA flow) — see
+  // AuthService.issueSession(). Null for an account that has never
+  // logged in since this field was added.
+  lastLoginAt         DateTime? @map("last_login_at") @db.Timestamptz
+
+  // Account lifecycle & login security (SMU cybersecurity checklist
+  // items 5, 11, 35). isActive is enforced on every authenticated
+  // request (JwtStrategy re-fetches the user each time — see
+  // jwt.strategy.ts), so deactivation takes effect immediately rather
+  // than waiting for the JWT to expire. failedLoginAttempts/lockedUntil
+  // are a persisted, admin-visible complement to the existing
+  // short-window Redis lockout in LoginProtectionService — that one
+  // catches rapid brute-force fast; this one survives a restart and
+  // shows up in the database for an admin to inspect/clear.
+  isActive            Boolean   @default(true) @map("is_active")
+  deactivatedAt       DateTime? @map("deactivated_at") @db.Timestamptz
+  deactivatedBy       String?   @map("deactivated_by") @db.Uuid
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz
+  // When the account holder accepted the data-collection notice
+  // (Terms.tsx). Null for accounts created before this field existed.
+  termsAcceptedAt     DateTime? @map("terms_accepted_at") @db.Timestamptz
 
   // Two-factor auth. Exactly one method active at a time (or none) — a
   // nullable enum rather than a per-method boolean, since that's the
@@ -311,11 +332,12 @@ model User {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
+  passwordHistory          PasswordHistory[]
+  securityEvents           SecurityEvent[]
   taughtCourses            Course[]                   @relation("TeacherCourses")
   enrollments              Enrollment[]
   attempts                 Attempt[]
   gradingResults           GradingResult[]            @relation("GraderResults")
-  masteries                UserMastery[]
   uploadedDocuments        SourceDocument[]           @relation("UploadedDocuments")
   createdDrafts            ContentDraft[]             @relation("CreatedDrafts")
   learningInterventions    LearningIntervention[]
@@ -347,6 +369,92 @@ model User {
   vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
   @@map("users")
+}
+
+// Previous password hashes, kept only for teacher/admin-issued resets
+// (SMU checklist item 5's reuse-prevention rule) — checked so a reset
+// can't reuse one of the account's last 3 passwords. Students have no
+// self-service password change, so this table is only ever written to
+// from the reset-password/bulk-provision paths, never by a student.
+model PasswordHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_history")
+}
+
+// Checklist item 25 — a queryable security-audit table for failed
+// logins and permission denials, which previously only reached
+// application Logger output (searchable in container logs, not the
+// database). See SecurityEventService for the write path.
+enum SecurityEventType {
+  FAILED_LOGIN_UNKNOWN_IDENTIFIER
+  FAILED_LOGIN_INVALID_PASSWORD
+  FAILED_LOGIN_DEACTIVATED_ACCOUNT
+  FAILED_LOGIN_LOCKED_ACCOUNT
+  ACCOUNT_LOCKED_OUT
+  PERMISSION_DENIED
+  DEACTIVATED_TOKEN_REUSE
+  // A user's (or a compromised account's) daily AI cost cap was hit —
+  // see LlmUsageQuotaService. Distinct from the others above in that
+  // it's not necessarily an attack; recorded so it's queryable and
+  // reviewable either way, not just visible in container logs.
+  USAGE_QUOTA_EXCEEDED
+  // Checklist item 25 — "system or security configuration changes"
+  // wasn't captured anywhere queryable. A teacher/admin changed a
+  // course, enrollment-policy, dialogue, or recording-privacy setting;
+  // `metadata` carries which course/setting and (where cheap to
+  // capture) the before/after values. Not an attack signal like the
+  // others above — an accountability record for "who changed what."
+  CONFIG_CHANGED
+  // Checklist item 62 — an AI reply was flagged by output moderation.
+  // Currently only reachable via Gemini's own built-in safety filter
+  // (callGeminiApi's promptFeedback/finishReason check) — dead code
+  // today since Gemini is no longer a selectable generation provider,
+  // kept for any pre-existing data. The OpenAI-Moderation-API path that
+  // used to also feed this was removed outright (not just deactivated)
+  // per an explicit decision to carry no OpenAI dependency at all now
+  // that generation is Bedrock-only.
+  AI_OUTPUT_FLAGGED
+  // Checklist item 25 — "system alerts and failures" (server crashes,
+  // unhandled exceptions) wasn't captured anywhere queryable, only
+  // Logger.error output. Recorded from GlobalExceptionFilter — the
+  // single choke point every 5xx already flows through — for any
+  // unhandled/internal error, not a client mistake (4xx stays
+  // Logger.warn only, same as before; a 4xx isn't a system failure).
+  SYSTEM_ERROR
+}
+
+model SecurityEvent {
+  id   String            @id @default(uuid()) @db.Uuid
+  type SecurityEventType
+
+  // Nullable — a failed login against an unknown identifier has no
+  // matching user to link to. `identifier` preserves the raw
+  // email/loginId that was attempted for that case (already
+  // log-sanitized by callers before it reaches here).
+  userId     String? @map("user_id") @db.Uuid
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  identifier String?
+
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  // Event-specific detail — e.g. { requiredRoles, actualRole, path }
+  // for PERMISSION_DENIED.
+  metadata Json?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@index([createdAt])
+  @@map("security_events")
 }
 
 model Course {
@@ -452,9 +560,7 @@ model Topic {
 
   course              Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   questions           Question[]
-  knowledgeComponents KnowledgeComponent[]
   modules             CourseModule[]
-  proposedKCs         ProposedKC[]
 
   @@index([courseId])
   @@map("topics")
@@ -504,7 +610,6 @@ model Question {
   topic               Topic?               @relation(fields: [topicId], references: [id], onDelete: Cascade)
   attempts            Attempt[]
   assessmentQuestions AssessmentQuestion[]
-  questionKcs         QuestionKc[]
 
   @@index([courseId])
   @@index([topicId])
@@ -549,7 +654,6 @@ model GradingResult {
 
   attempt    Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   grader     User?        @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
-  kcEvidence KcEvidence[]
 
   @@index([attemptId])
   @@index([graderId])
@@ -610,6 +714,7 @@ model CourseModule {
   topicId         String?  @map("topic_id") @db.Uuid
   title           String
   orderIndex      Int      @map("order_index")
+  showPlayground  Boolean  @default(false) @map("show_playground")
   generationJobId String?  @map("generation_job_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
@@ -617,7 +722,6 @@ model CourseModule {
   course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
   topic       Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
   items       ModuleItem[]
-  proposedKCs ProposedKC[]
 
   @@index([courseId])
   @@index([topicId])
@@ -1144,84 +1248,6 @@ model LlmModelPricing {
   @@map("llm_model_pricing")
 }
 
-// ─── Knowledge Components & Mastery ─────────────────────
-
-model KnowledgeComponent {
-  id          String   @id @default(uuid()) @db.Uuid
-  topicId     String   @map("topic_id") @db.Uuid
-  code        String
-  label       String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  topic         Topic         @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  questionKcs   QuestionKc[]
-  kcEvidence    KcEvidence[]
-  userMasteries UserMastery[]
-
-  @@unique([topicId, code])
-  @@index([topicId])
-  @@map("knowledge_components")
-}
-
-model QuestionKc {
-  id             String  @id @default(uuid()) @db.Uuid
-  questionId     String  @map("question_id") @db.Uuid
-  kcId           String  @map("kc_id") @db.Uuid
-  weight         Float   @default(1.0)
-  isAutoAssigned Boolean @default(false) @map("is_auto_assigned")
-  confidence     Float?
-
-  question Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  kc       KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
-
-  @@unique([questionId, kcId])
-  @@index([questionId])
-  @@index([kcId])
-  @@map("question_kcs")
-}
-
-model KcEvidence {
-  id              String   @id @default(uuid()) @db.Uuid
-  gradingResultId String   @map("grading_result_id") @db.Uuid
-  kcId            String   @map("kc_id") @db.Uuid
-  isCorrect       Boolean  @map("is_correct")
-  score           Float
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  gradingResult GradingResult      @relation(fields: [gradingResultId], references: [id], onDelete: Cascade)
-  kc            KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
-
-  @@index([gradingResultId])
-  @@index([kcId])
-  @@map("kc_evidence")
-}
-
-model UserMastery {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @map("user_id") @db.Uuid
-  kcId             String    @map("kc_id") @db.Uuid
-  probabilityKnown Float     @default(0.5) @map("probability_known")
-  totalAttempts    Int       @default(0) @map("total_attempts")
-  correctAttempts  Int       @default(0) @map("correct_attempts")
-  lastAttemptAt    DateTime? @map("last_attempt_at") @db.Timestamptz
-
-  // BKT-ready columns (for future Bayesian Knowledge Tracing)
-  pLearn   Float? @map("p_learn")
-  pGuess   Float? @map("p_guess")
-  pSlip    Float? @map("p_slip")
-  pTransit Float? @map("p_transit")
-
-  user User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  kc   KnowledgeComponent @relation(fields: [kcId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, kcId])
-  @@index([userId])
-  @@index([kcId])
-  @@map("user_mastery")
-}
-
 // ─── Content Evaluation ─────────────────────────────────
 
 enum EvaluationRunStatus {
@@ -1266,184 +1292,6 @@ model PageEvalResult {
   @@index([runId])
   @@index([itemId])
   @@map("page_eval_results")
-}
-
-// ─── Proposed Knowledge Components (AI-generated) ───────
-
-enum ProposedKCStatus {
-  PROPOSED
-  APPROVED
-  ARCHIVED
-}
-
-model ProposedKC {
-  id              String           @id @default(uuid()) @db.Uuid
-  courseId        String           @map("course_id") @db.Uuid
-  name            String
-  description     String?
-  status          ProposedKCStatus @default(PROPOSED)
-  confidenceLevel String           @default("MEDIUM") @map("confidence_level") // LOW, MEDIUM, HIGH
-  createdBy       String           @default("ai") @map("created_by") // "ai" or "human"
-  generationJobId String?          @map("generation_job_id") @db.Uuid
-  relatedToKCId   String?          @map("related_to_kc_id") @db.Uuid
-  evidence        Json             @default("[]") // [{pageId, blockIds, chunkIds}]
-  pageIds         String[]         @map("page_ids") @db.Uuid
-  topicId         String?          @map("topic_id") @db.Uuid
-  subtopicId      String?          @map("subtopic_id") @db.Uuid // references CourseModule id
-  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
-
-  relatedTo  ProposedKC?   @relation("KCDuplicates", fields: [relatedToKCId], references: [id], onDelete: SetNull)
-  duplicates ProposedKC[]  @relation("KCDuplicates")
-  topic      Topic?        @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  subtopic   CourseModule? @relation(fields: [subtopicId], references: [id], onDelete: SetNull)
-
-  // Graph edges where this KC is source or target
-  outgoingEdges KcEdge[] @relation("KcEdgeFrom")
-  incomingEdges KcEdge[] @relation("KcEdgeTo")
-
-  // Content mappings
-  contentMappings KcContentMapping[]
-
-  @@index([courseId])
-  @@index([status])
-  @@index([courseId, status])
-  @@index([topicId])
-  @@index([subtopicId])
-  @@map("proposed_kcs")
-}
-
-// ─── Knowledge Graph Edges (prerequisite relationships) ──
-
-model KcEdge {
-  id           String   @id @default(uuid()) @db.Uuid
-  courseId     String   @map("course_id") @db.Uuid
-  fromKcId     String   @map("from_kc_id") @db.Uuid
-  toKcId       String   @map("to_kc_id") @db.Uuid
-  relationship String   @default("prerequisite") // "prerequisite" | "related" | "builds_on"
-  weight       Float    @default(1.0)
-  createdBy    String   @default("ai") @map("created_by") // "ai" or "human"
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  fromKc ProposedKC @relation("KcEdgeFrom", fields: [fromKcId], references: [id], onDelete: Cascade)
-  toKc   ProposedKC @relation("KcEdgeTo", fields: [toKcId], references: [id], onDelete: Cascade)
-
-  @@unique([fromKcId, toKcId])
-  @@index([courseId])
-  @@map("kc_edges")
-}
-
-// ─── KC-to-Content Mapping Strength ─────────────────────
-
-model KcContentMapping {
-  id        String   @id @default(uuid()) @db.Uuid
-  courseId  String   @map("course_id") @db.Uuid
-  kcId      String   @map("kc_id") @db.Uuid
-  pageId    String   @map("page_id") @db.Uuid
-  strength  String   @default("MEDIUM") // LOW, MEDIUM, HIGH
-  blockIds  String[] @map("block_ids") // specific block IDs within the page
-  createdBy String   @default("ai") @map("created_by") // "ai" or "human"
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  kc ProposedKC @relation(fields: [kcId], references: [id], onDelete: Cascade)
-
-  @@unique([kcId, pageId])
-  @@index([courseId])
-  @@index([pageId])
-  @@index([kcId])
-  @@map("kc_content_mappings")
-}
-
-// ─── Knowledge-Level Versioning ──────────────────────────
-
-model KnowledgeVersion {
-  id            String   @id @default(uuid()) @db.Uuid
-  courseId      String   @map("course_id") @db.Uuid
-  version       Int
-  changeSummary String   @map("change_summary")
-  changeType    String   @map("change_type") // KC_APPROVE, KC_EDIT, KC_MERGE, KC_ARCHIVE, KC_DELETE, EDGE_ADD, EDGE_UPDATE, EDGE_DELETE, EDGE_GENERATE, MAPPING_ADD, MAPPING_UPDATE, MAPPING_DELETE, MAPPING_AUTO_GENERATE, RESTORE
-  source        String   @default("human") // "human" | "ai" | "restore"
-  authorId      String?  @map("author_id") @db.Uuid
-  snapshotKcs   Json     @map("snapshot_kcs") // ProposedKC[] snapshot
-  snapshotEdges Json     @map("snapshot_edges") // KcEdge[] snapshot
-  snapshotMaps  Json     @map("snapshot_maps") // KcContentMapping[] snapshot
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  @@unique([courseId, version])
-  @@index([courseId])
-  @@map("knowledge_versions")
-}
-
-// ─── Curriculum Coverage & Gap Mapping ───────────────────
-
-model CurriculumCoverageRun {
-  id              String              @id @default(uuid()) @db.Uuid
-  courseId        String              @map("course_id") @db.Uuid
-  userId          String              @map("user_id") @db.Uuid
-  status          EvaluationRunStatus @default(PENDING)
-  syllabusText    String              @map("syllabus_text") // raw syllabus/curriculum input
-  parsedOutcomes  Json?               @map("parsed_outcomes") // SyllabusOutcome[]
-  outcomeKcMaps   Json?               @map("outcome_kc_maps") // OutcomeKcMap[]
-  coverageResults Json?               @map("coverage_results") // CoverageAnalysisOutput
-  errorMessage    String?             @map("error_message")
-  startedAt       DateTime?           @map("started_at") @db.Timestamptz
-  completedAt     DateTime?           @map("completed_at") @db.Timestamptz
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
-
-  @@index([courseId])
-  @@index([userId])
-  @@map("curriculum_coverage_runs")
-}
-
-// ─── Publish Gate Audit ──────────────────────────────────
-
-model PublishGateRun {
-  id             String   @id @default(uuid()) @db.Uuid
-  courseId       String   @map("course_id") @db.Uuid
-  userId         String   @map("user_id") @db.Uuid
-  checks         Json // PublishGateCheck[]
-  overallPass    Boolean  @map("overall_pass")
-  overridden     Boolean  @default(false)
-  overrideReason String?  @map("override_reason")
-  published      Boolean  @default(false)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
-
-  @@index([courseId])
-  @@index([userId])
-  @@map("publish_gate_runs")
-}
-
-// ─── KC Graph Layout Persistence ────────────────────────
-
-model KcGraphLayout {
-  id         String   @id @default(uuid()) @db.Uuid
-  courseId   String   @unique @map("course_id") @db.Uuid
-  layoutJson Json     @map("layout_json") // {nodes: {id, x, y, radius}[], viewBox: {x, y, w, h}}
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz
-
-  @@map("kc_graph_layouts")
-}
-
-// ─── KC-Aware Evaluation ────────────────────────────────
-
-model KcEvaluationRun {
-  id           String              @id @default(uuid()) @db.Uuid
-  courseId     String              @map("course_id") @db.Uuid
-  userId       String              @map("user_id") @db.Uuid
-  status       EvaluationRunStatus @default(PENDING)
-  scope        Json // {type: 'course'|'pages', pageIds?: string[]}
-  depth        String              @default("quick") // "quick" | "deep"
-  results      Json? // Full KcEvaluationOutput JSON
-  errorMessage String?             @map("error_message")
-  startedAt    DateTime?           @map("started_at") @db.Timestamptz
-  completedAt  DateTime?           @map("completed_at") @db.Timestamptz
-  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz
-
-  @@index([courseId])
-  @@index([userId])
-  @@map("kc_evaluation_runs")
 }
 
 // ─── Learning Interventions ─────────────────────────────
@@ -1673,7 +1521,6 @@ model ActivityLog {
   questionId        String? @map("question_id") @db.Uuid
   dialogueSessionId String? @map("dialogue_session_id")
   interventionId    String? @map("intervention_id") @db.Uuid
-  kcId              String? @map("kc_id") @db.Uuid
 
   // Free-form JSON payload — action-specific detail
   metadata Json?
@@ -1718,9 +1565,6 @@ model SessionSummary {
   // Pages / materials
   moduleItemsViewed      Int @default(0) @map("module_items_viewed")
   studyMaterialsUploaded Int @default(0) @map("study_materials_uploaded")
-
-  // Mastery deltas — JSON: [{ kcId, kcName, deltaP_L }]
-  masteryDeltas Json? @map("mastery_deltas")
 
   // Full ordered event timeline — JSON array of { action, occurredAt, summary }
   eventTimeline Json? @map("event_timeline")

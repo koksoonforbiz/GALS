@@ -1,4 +1,10 @@
-import { Injectable, ConflictException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  UnauthorizedException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma';
@@ -8,6 +14,9 @@ import { MailerService } from '../mailer';
 import { LoginProtectionService } from './login-protection.service';
 import { TwoFactorService } from './two-factor.service';
 import { TotpService } from './totp.service';
+import { SecurityEventService } from './security-event.service';
+import { PasswordHistoryService } from './password-history.service';
+import { mustChangePassword } from './password-lifecycle.util';
 import type { CreateUser, Login, UserRole, TwoFactorMethod } from '@ats/shared';
 
 interface UserWithoutPassword {
@@ -18,6 +27,10 @@ interface UserWithoutPassword {
   twoFactorMethod: TwoFactorMethod | null;
   createdAt: Date;
   updatedAt: Date;
+  // Checklist item 5 — lets the client redirect straight to the
+  // change-password screen after login rather than discovering the
+  // requirement from a blocked request's PASSWORD_CHANGE_REQUIRED error.
+  mustChangePassword: boolean;
 }
 
 interface AuthResponse {
@@ -41,6 +54,18 @@ const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // Persisted lockout (checklist item 5) — same 5-attempt threshold as
+  // the Redis-based check, but a longer, DB-visible lock duration since
+  // this one is meant to be the durable/administrable layer.
+  private static readonly LOCKOUT_THRESHOLD = 5;
+  private static readonly LOCKOUT_DURATION_MS = 30 * 60 * 1000;
+
+  // Checklist item 5 — minimum password age. Only applies to voluntary
+  // self-service changes; a forced change (isTemporaryPassword) always
+  // bypasses this so a teacher-issued or just-reset password can be
+  // replaced immediately.
+  private static readonly MIN_PASSWORD_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -49,6 +74,8 @@ export class AuthService {
     private readonly twoFactor: TwoFactorService,
     private readonly totp: TotpService,
     private readonly mailer: MailerService,
+    private readonly securityEvents: SecurityEventService,
+    private readonly passwordHistory: PasswordHistoryService,
   ) {}
 
   async register(dto: CreateUser): Promise<AuthResponse> {
@@ -68,6 +95,9 @@ export class AuthService {
         passwordHash,
         name: dto.name,
         role: dto.role,
+        // dto.termsAccepted is a Zod z.literal(true) — always true here,
+        // just recording when it happened (checklist item 35).
+        termsAcceptedAt: new Date(),
       },
       select: {
         id: true,
@@ -84,7 +114,9 @@ export class AuthService {
 
     return {
       accessToken: token,
-      user,
+      // A brand-new account is never temporary/expired — no need to
+      // fetch isTemporaryPassword/passwordChangedAt just to compute it.
+      user: { ...user, mustChangePassword: false },
     };
   }
 
@@ -137,19 +169,67 @@ export class AuthService {
       this.logger.warn(
         `Login failed (unknown identifier): identifier=${safeIdentifier} ip=${safeIp}`,
       );
+      this.securityEvents.record({
+        type: 'FAILED_LOGIN_UNKNOWN_IDENTIFIER',
+        identifier: safeIdentifier,
+        ipAddress: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+      });
       await this.loginProtection.recordFailure(identifier);
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Deactivated accounts get the same generic message as "unknown
+    // identifier" — never confirm to an unauthenticated caller that an
+    // account exists but was disabled (checklist item 11).
+    if (!user.isActive) {
+      this.logger.warn(`Login blocked (deactivated account): userId=${user.id} ip=${safeIp}`);
+      this.securityEvents.record({
+        type: 'FAILED_LOGIN_DEACTIVATED_ACCOUNT',
+        userId: user.id,
+        ipAddress: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+      });
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Persisted, admin-visible lockout — a complement to the ephemeral
+    // Redis-based check above (checklist item 5). Checked after
+    // isActive but before the password compare so a locked account
+    // never leaks whether the supplied password was right.
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      this.logger.warn(`Login blocked (account locked): userId=${user.id} ip=${safeIp}`);
+      this.securityEvents.record({
+        type: 'FAILED_LOGIN_LOCKED_ACCOUNT',
+        userId: user.id,
+        ipAddress: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+      });
+      throw new UnauthorizedException('Too many failed login attempts. Please try again later.');
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
 
     if (!isPasswordValid) {
       this.logger.warn(`Login failed (invalid password): userId=${user.id} ip=${safeIp}`);
+      this.securityEvents.record({
+        type: 'FAILED_LOGIN_INVALID_PASSWORD',
+        userId: user.id,
+        ipAddress: requestMeta?.ip,
+        userAgent: requestMeta?.userAgent,
+      });
       await this.loginProtection.recordFailure(identifier);
+      await this.recordFailedLoginAttempt(user.id, user.failedLoginAttempts);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     await this.loginProtection.recordSuccess(identifier);
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
+    }
 
     const userWithoutPassword = this.toSafeUser(user);
 
@@ -198,7 +278,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
+    if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -206,6 +286,37 @@ export class AuthService {
     const response = await this.issueSession(userWithoutPassword, requestMeta);
     this.logger.log(`2FA verified, login succeeded: userId=${user.id} role=${user.role}`);
     return response;
+  }
+
+  /**
+   * Persisted counterpart to LoginProtectionService's Redis check
+   * (checklist item 5). Increments failedLoginAttempts and, once it
+   * reaches the threshold, sets lockedUntil LOCKOUT_DURATION_MS in the
+   * future and resets the counter — so a subsequent burst starts a
+   * fresh count rather than extending the lock indefinitely.
+   */
+  private async recordFailedLoginAttempt(userId: string, currentAttempts: number): Promise<void> {
+    const attempts = currentAttempts + 1;
+    if (attempts >= AuthService.LOCKOUT_THRESHOLD) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          failedLoginAttempts: 0,
+          lockedUntil: new Date(Date.now() + AuthService.LOCKOUT_DURATION_MS),
+        },
+      });
+      this.logger.warn(`Account locked after ${attempts} failed attempts: userId=${userId}`);
+      this.securityEvents.record({
+        type: 'ACCOUNT_LOCKED_OUT',
+        userId,
+        metadata: { failedAttempts: attempts },
+      });
+    } else {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { failedLoginAttempts: attempts },
+      });
+    }
   }
 
   /**
@@ -222,6 +333,8 @@ export class AuthService {
     twoFactorMethod: TwoFactorMethod | null;
     createdAt: Date;
     updatedAt: Date;
+    isTemporaryPassword: boolean;
+    passwordChangedAt: Date | null;
   }): UserWithoutPassword {
     return {
       id: user.id,
@@ -231,6 +344,7 @@ export class AuthService {
       twoFactorMethod: user.twoFactorMethod,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      mustChangePassword: mustChangePassword(user),
     };
   }
 
@@ -312,6 +426,56 @@ export class AuthService {
     return { twoFactorMethod: null };
   }
 
+  /**
+   * Self-service password change (checklist item 5). No email is ever
+   * sent as part of this — per an explicit product decision, the only
+   * recovery path for a fully-locked-out user remains the existing
+   * teacher-mediated reset. Requires the current password; a forced
+   * change (isTemporaryPassword) skips the minimum-age check since the
+   * whole point of a forced change is to let it happen immediately.
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    if (!user.isTemporaryPassword && user.passwordChangedAt) {
+      const age = Date.now() - user.passwordChangedAt.getTime();
+      if (age < AuthService.MIN_PASSWORD_AGE_MS) {
+        const daysRemaining = Math.ceil(
+          (AuthService.MIN_PASSWORD_AGE_MS - age) / (24 * 60 * 60 * 1000),
+        );
+        throw new BadRequestException(
+          `Password was changed too recently. Please wait ${daysRemaining} more day(s) before changing it again.`,
+        );
+      }
+    }
+
+    await this.passwordHistory.assertNotReused(userId, newPassword);
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: newHash,
+        passwordChangedAt: new Date(),
+        isTemporaryPassword: false,
+      },
+    });
+    await this.passwordHistory.recordReplaced(userId, user.passwordHash);
+    this.logger.log(`Password changed (self-service): userId=${userId}`);
+  }
+
   async resendTwoFactorCode(challengeId: string): Promise<void> {
     const { code, userId } = await this.twoFactor.resend(challengeId);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -337,6 +501,18 @@ export class AuthService {
       userAgent: requestMeta?.userAgent,
     });
 
+    // Checklist item 13 — quarterly account review needs a login-recency
+    // signal for every role. Fire-and-forget: a write failure here must
+    // never block an otherwise-successful login. Wrapped in
+    // Promise.resolve() rather than chained directly off .update() so a
+    // test double that doesn't return a real promise can't throw
+    // synchronously here (undefined has no .catch).
+    Promise.resolve(
+      this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }),
+    ).catch((err) => {
+      this.logger.warn(`Failed to record lastLoginAt: userId=${user.id} ${(err as Error).message}`);
+    });
+
     return {
       accessToken: token,
       user,
@@ -344,7 +520,7 @@ export class AuthService {
     };
   }
 
-  private signToken(user: UserWithoutPassword): string {
+  private signToken(user: { id: string; email: string; role: UserRole }): string {
     const payload = {
       sub: user.id,
       email: user.email,

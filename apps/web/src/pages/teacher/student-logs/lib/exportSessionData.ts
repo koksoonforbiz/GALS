@@ -224,12 +224,6 @@ learning.assessmentEvents
   Fields: action (e.g. QUESTION_ANSWERED, ASSESSMENT_COMPLETED),
           timestamp, assessmentId, attemptId, questionId, metadata.
 
-learning.masteryTrajectory
-  Knowledge component (KC) mastery score updates over time.
-  Each entry represents a change in the student's estimated mastery of a
-  specific knowledge component (topic/concept).
-  Fields: timestamp, kcId, plus mastery-specific numeric fields from metadata.
-
 learning.efDetections
   Executive Function (EF) constructs detected by text-mining chat messages.
   EF constructs include planning, working memory, cognitive flexibility, etc.
@@ -243,7 +237,7 @@ fullEventLog
   Useful for building custom timelines or filtering specific event types.
   Fields: id, action, occurredAt, courseId, moduleId, moduleItemId,
           assessmentId, attemptId, questionId, dialogueSessionId,
-          interventionId, kcId, metadata.
+          interventionId, metadata.
 
 replay.snapshots
   DOM snapshots of the student's browser, one per second (plus events).

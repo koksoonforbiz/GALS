@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -65,6 +66,9 @@ export class PreGenerationController {
 
   @Post('regenerate-course')
   @Roles('teacher', 'admin')
+  // Fans out across every indexed document + PDF module item in the
+  // course, re-queuing potentially hundreds of generation jobs.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   regenerateCourse(@Query('courseId') courseId: string) {
     return this.svc.regenerateCourse(courseId);
   }

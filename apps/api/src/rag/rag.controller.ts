@@ -14,11 +14,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RagService } from './rag.service';
 import { LlmService } from './llm.service';
+import { MalwareScanService } from './shared/malware-scan.service';
 
 interface RequestUser {
   id: string;
@@ -33,6 +35,7 @@ export class RagController {
   constructor(
     private readonly ragService: RagService,
     private readonly llmService: LlmService,
+    private readonly malwareScanService: MalwareScanService,
   ) {}
 
   // ─── Document Management ────────────────────────────────
@@ -55,6 +58,10 @@ export class RagController {
 
   @Post('courses/:courseId/documents')
   @Roles('teacher', 'admin')
+  // Embedding generation is one of the more expensive calls this API
+  // makes — the bare global default (30/60s) is too loose for it
+  // (checklist item 16).
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file'))
   async uploadDocument(
     @Request() req: { user: RequestUser },
@@ -62,6 +69,10 @@ export class RagController {
     @UploadedFile() file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
   ) {
     if (!file) throw new BadRequestException('No file provided');
+    const scan = await this.malwareScanService.scanBuffer(file.buffer, file.originalname);
+    if (!scan.clean) {
+      throw new BadRequestException(`File rejected by malware scan: ${scan.reason}`);
+    }
     return this.ragService.uploadDocument(courseId, req.user.id, {
       filename: file.originalname,
       mimeType: file.mimetype,
@@ -78,6 +89,7 @@ export class RagController {
 
   @Post('documents/:documentId/rechunk')
   @Roles('teacher', 'admin')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   rechunkDocument(@Param('documentId') documentId: string) {
     this.logger.log(`[RAG v2] Rechunk requested for document ${documentId}`);
     // Run chunking async so the client can poll for progress
@@ -96,6 +108,7 @@ export class RagController {
 
   @Post('courses/:courseId/rag/query')
   @Roles('teacher', 'admin')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
   async ragQuery(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
@@ -168,6 +181,7 @@ export class RagController {
 
   @Post('courses/:courseId/rag/generate')
   @Roles('teacher', 'admin')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async generateContent(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,

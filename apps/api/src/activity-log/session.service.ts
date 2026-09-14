@@ -271,8 +271,6 @@ export class SessionService {
         interventionBreakdown[type] = (interventionBreakdown[type] ?? 0) + 1;
       });
 
-    const masteryDeltas = logs.filter((l) => l.action === 'MASTERY_UPDATED').map((l) => l.metadata);
-
     const eventTimeline = logs.map((l) => ({
       action: l.action,
       occurredAt: l.occurredAt.toISOString(),
@@ -305,7 +303,6 @@ export class SessionService {
       flashcardsReviewed: count('SPACED_REP_CARD_RATED'),
       moduleItemsViewed: count('MODULE_ITEM_VIEWED'),
       studyMaterialsUploaded: count('STUDY_MATERIAL_UPLOADED'),
-      masteryDeltas,
       eventTimeline,
     };
 

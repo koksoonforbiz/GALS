@@ -12,7 +12,6 @@ interface Summary {
   studentMessagesSent: number;
   flashcardsReviewed: number;
   moduleItemsViewed: number;
-  masteryDeltas: Array<{ kcId: string; deltaP_L: number; newP_L: number }> | null;
 }
 
 export function SummaryTab({ summary }: { summary: Summary | null }) {
@@ -65,44 +64,6 @@ export function SummaryTab({ summary }: { summary: Summary | null }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Mastery deltas */}
-      {summary.masteryDeltas && summary.masteryDeltas.length > 0 && (
-        <div>
-          <h3 className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Mastery changes this session
-          </h3>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-gray-400 text-left">
-                <th className="pb-1 font-normal">KC</th>
-                <th className="pb-1 font-normal text-right">P(L) after</th>
-                <th className="pb-1 font-normal text-right">{'\u0394'}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {summary.masteryDeltas.map((d, i) => (
-                <tr key={i}>
-                  <td className="py-1 text-gray-700 dark:text-gray-300 font-mono text-[10px]">
-                    {d.kcId}
-                  </td>
-                  <td className="py-1 text-right text-gray-700 dark:text-gray-300">
-                    {(d.newP_L * 100).toFixed(1)}%
-                  </td>
-                  <td
-                    className={`py-1 text-right font-medium ${
-                      d.deltaP_L >= 0 ? 'text-green-600' : 'text-red-500'
-                    }`}
-                  >
-                    {d.deltaP_L >= 0 ? '+' : ''}
-                    {(d.deltaP_L * 100).toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

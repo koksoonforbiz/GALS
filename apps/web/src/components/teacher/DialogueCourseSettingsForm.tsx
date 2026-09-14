@@ -29,7 +29,7 @@ interface DialogueSettings {
 // registry's recommended default — that way a teacher who hits Save
 // with no edits still posts a registry-valid model id.
 const DEFAULT_SETTINGS: DialogueSettings = {
-  llmProvider: 'openai',
+  llmProvider: 'bedrock',
   llmModel: '',
   systemPromptOverride: '',
   citationMode: 'inline',
@@ -109,12 +109,8 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
 
   const modelOptionsForProvider = useMemo<ChatModelSpec[]>(() => {
     if (!registry) return [];
-    if (
-      settings.llmProvider === 'openai' ||
-      settings.llmProvider === 'gemini' ||
-      settings.llmProvider === 'bedrock'
-    ) {
-      return registry.chat.filter((m) => m.provider === settings.llmProvider);
+    if (settings.llmProvider === 'bedrock') {
+      return registry.chat.filter((m) => m.provider === 'bedrock');
     }
     // `fallback` provider has no real model id — the form hides the
     // model dropdown entirely below in that branch.
@@ -143,14 +139,9 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
   // never submits a blank/invalid `llmModel`.
   useEffect(() => {
     if (!registry) return;
-    if (
-      settings.llmProvider !== 'openai' &&
-      settings.llmProvider !== 'gemini' &&
-      settings.llmProvider !== 'bedrock'
-    )
-      return;
+    if (settings.llmProvider !== 'bedrock') return;
     if (settings.llmModel) return;
-    const rec = recommendedChatModel(registry, settings.llmProvider);
+    const rec = recommendedChatModel(registry, 'bedrock');
     if (rec) {
       setSettings((prev) => ({ ...prev, llmModel: rec.id }));
     }
@@ -164,10 +155,9 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
         // registry for the new provider's recommended default instead
         // of indexing into a hard-coded dictionary.
         if (key === 'llmProvider') {
-          if (value === 'openai' || value === 'gemini' || value === 'bedrock') {
-            const rec = recommendedChatModel(registry, value);
-            if (rec) next.llmModel = rec.id;
-            else next.llmModel = '';
+          if (value === 'bedrock') {
+            const rec = recommendedChatModel(registry, 'bedrock');
+            next.llmModel = rec?.id ?? '';
           } else {
             // fallback provider has no model.
             next.llmModel = '';
@@ -233,10 +223,8 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
             <label className="block text-sm font-medium text-gray-700 mb-1">LLM Provider</label>
             <div className="flex gap-2">
               {[
-                { value: 'openai', label: 'OpenAI' },
-                { value: 'gemini', label: 'Google Gemini' },
                 { value: 'bedrock', label: 'AWS Bedrock' },
-                { value: 'fallback', label: 'No API key (Fallback)' },
+                { value: 'fallback', label: 'No AI (Fallback)' },
               ].map((opt) => (
                 <button
                   key={opt.value}
@@ -284,16 +272,15 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
                     </option>
                   )}
               </select>
-              <p className="text-xs text-gray-500 mt-1">Uses your API key from AI Settings</p>
+              <p className="text-xs text-gray-500 mt-1">
+                Uses this deployment's shared AWS Bedrock credential
+              </p>
               {(() => {
                 const currentSpec = registry?.chat.find((m) => m.id === settings.llmModel);
                 if (!settings.llmModel || !registry) return null;
                 if (!currentSpec) {
                   // Persisted id no longer in the registry at all = fully retired.
-                  const rec = recommendedChatModel(
-                    registry,
-                    settings.llmProvider as 'openai' | 'gemini',
-                  );
+                  const rec = recommendedChatModel(registry, 'bedrock');
                   return (
                     <p className="text-xs text-amber-700 mt-1">
                       Your selected model is retired
@@ -323,8 +310,8 @@ export function DialogueCourseSettingsForm({ courseId, hasApiKey }: Props) {
             <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <span className="text-amber-600 text-sm">Warning:</span>
               <div className="text-sm text-amber-700">
-                You haven&apos;t added an API key yet. Students will use the fallback mode until you
-                add one in AI Settings.{' '}
+                AI isn&apos;t enabled yet. Students will use fallback mode until you turn it on in
+                AI Settings.{' '}
                 <a
                   href="/teacher/ai-settings"
                   className="underline font-medium hover:text-amber-800"

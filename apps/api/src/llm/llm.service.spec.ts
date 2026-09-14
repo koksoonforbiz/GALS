@@ -57,7 +57,20 @@ function makeService(opts: {
   } as unknown as ConfigService;
 
   const eventEmitter = new EventEmitter2();
-  const service = new LlmService(prisma, config, null as any, eventEmitter);
+  // No daily cap configured in these tests — assertNotExceeded is a
+  // real no-op in that case, but the constructor still needs a
+  // callable object (not `null`, unlike ragService which these tests
+  // never exercise).
+  const usageQuota = { assertNotExceeded: jest.fn(), recordSpend: jest.fn() } as any;
+  const securityEvents = { record: jest.fn() } as any;
+  const service = new LlmService(
+    prisma,
+    config,
+    null as any,
+    eventEmitter,
+    usageQuota,
+    securityEvents,
+  );
 
   // Encrypt a real key with the service's own crypto so getUserApiKey can
   // decrypt it. The encrypt() method is private — use saveApiKey indirectly
@@ -485,6 +498,82 @@ describe('LlmService funnel — request shaping', () => {
         expect(out.model).toBe('gemini-3.5-flash');
       } finally {
         fakeFetch.restore();
+      }
+    });
+  });
+
+  describe('Gemini safety-block visibility (checklist item 62)', () => {
+    it('logs a warning and still returns gracefully when the prompt itself was blocked', async () => {
+      const { service } = makeService({ llmProvider: 'gemini', llmModel: 'gemini-3.5-flash' });
+      const previous = global.fetch;
+      (global as any).fetch = jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ promptFeedback: { blockReason: 'SAFETY' }, candidates: [] }),
+        text: async () => '',
+      }));
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+      try {
+        const out = await service.callLlmStructured(USER_ID, {
+          systemPrompt: 'sys',
+          messages: [{ role: 'user', content: 'q' }],
+        });
+        expect(out.content).toBe('');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Gemini blocked the prompt: SAFETY'),
+        );
+      } finally {
+        (global as any).fetch = previous;
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('logs a warning when a response is truncated for safety (finishReason=SAFETY)', async () => {
+      const { service } = makeService({ llmProvider: 'gemini', llmModel: 'gemini-3.5-flash' });
+      const previous = global.fetch;
+      (global as any).fetch = jest.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: 'partial' }] }, finishReason: 'SAFETY' }],
+        }),
+        text: async () => '',
+      }));
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+      try {
+        const out = await service.callLlmStructured(USER_ID, {
+          systemPrompt: 'sys',
+          messages: [{ role: 'user', content: 'q' }],
+        });
+        // Behavior unchanged — still returns whatever content Gemini sent.
+        expect(out.content).toBe('partial');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Gemini blocked the response for safety'),
+        );
+      } finally {
+        (global as any).fetch = previous;
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('does not warn on a normal, unblocked response', async () => {
+      const { service } = makeService({ llmProvider: 'gemini', llmModel: 'gemini-3.5-flash' });
+      const fakeFetch = installFetchMock({
+        kind: 'gemini',
+        content: 'all good',
+        promptTokenCount: 5,
+        candidatesTokenCount: 5,
+      });
+      const warnSpy = jest.spyOn((service as any).logger, 'warn');
+      try {
+        await service.callLlmStructured(USER_ID, {
+          systemPrompt: 'sys',
+          messages: [{ role: 'user', content: 'q' }],
+        });
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        fakeFetch.restore();
+        warnSpy.mockRestore();
       }
     });
   });

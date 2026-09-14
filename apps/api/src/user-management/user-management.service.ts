@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { sanitizeForLog } from '../common';
+import { PasswordHistoryService } from '../auth/password-history.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import type { Prisma } from '@prisma/client';
@@ -48,7 +49,10 @@ function generateTemporaryPassword(): string {
 export class UserManagementService {
   private readonly logger = new Logger(UserManagementService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly passwordHistory: PasswordHistoryService,
+  ) {}
 
   // ─── Student List ───────────────────────────────────────
 
@@ -727,7 +731,14 @@ export class UserManagementService {
       }
     }
 
+    await this.passwordHistory.assertNotReused(studentId, dto.newPassword);
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const previousHash = (
+      await this.prisma.user.findUnique({
+        where: { id: studentId },
+        select: { passwordHash: true },
+      })
+    )?.passwordHash;
 
     await this.prisma.user.update({
       where: { id: studentId },
@@ -737,6 +748,9 @@ export class UserManagementService {
         passwordChangedAt: new Date(),
       },
     });
+    if (previousHash) {
+      await this.passwordHistory.recordReplaced(studentId, previousHash);
+    }
 
     // Audit trail for a sensitive data modification — who reset whose
     // password. Never logs the new plaintext password itself.
@@ -749,6 +763,68 @@ export class UserManagementService {
       email: student.email,
       message: 'Password reset. Share the new password with the student manually.',
     };
+  }
+
+  /**
+   * Account deactivation (checklist item 11). Admins may deactivate
+   * anyone; teachers may only deactivate students enrolled in one of
+   * their own courses — mirrors resetStudentPassword's scoping so a
+   * teacher can't pivot to disabling another teacher's or an admin's
+   * account. Enforcement is immediate: JwtStrategy re-checks isActive
+   * on every subsequent authenticated request.
+   */
+  async setUserActive(callerId: string, targetUserId: string, active: boolean) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, email: true, role: true, isActive: true },
+    });
+    if (!target) {
+      throw new NotFoundException(`User ${targetUserId} not found`);
+    }
+    if (target.id === callerId) {
+      throw new ForbiddenException('You cannot deactivate your own account');
+    }
+
+    const caller = await this.prisma.user.findUnique({
+      where: { id: callerId },
+      select: { role: true },
+    });
+    if (!caller) {
+      throw new ForbiddenException('Caller not found');
+    }
+
+    if (caller.role !== 'admin') {
+      if (target.role !== 'student') {
+        throw new ForbiddenException('Only an admin can deactivate a teacher or admin account');
+      }
+      const teacherCourses = await this.prisma.course.findMany({
+        where: { teacherId: callerId },
+        select: { id: true },
+      });
+      const sharedEnrollment = await this.prisma.enrollment.findFirst({
+        where: {
+          studentId: targetUserId,
+          courseId: { in: teacherCourses.map((c) => c.id) },
+          status: 'ACTIVE',
+        },
+      });
+      if (!sharedEnrollment) {
+        throw new ForbiddenException('You can only deactivate students enrolled in your courses');
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: active
+        ? { isActive: true, deactivatedAt: null, deactivatedBy: null }
+        : { isActive: false, deactivatedAt: new Date(), deactivatedBy: callerId },
+    });
+
+    this.logger.log(
+      `Account ${active ? 'reactivated' : 'deactivated'} by ${sanitizeForLog(callerId)}: target=${sanitizeForLog(targetUserId)} (${sanitizeForLog(target.email)})`,
+    );
+
+    return { userId: target.id, email: target.email, isActive: active };
   }
 
   async resendInvitation(teacherId: string, studentId: string) {
@@ -1232,6 +1308,58 @@ export class UserManagementService {
         student.isTemporaryPassword ? 'Yes' : 'No',
       ].join(',');
       rows.push(csvRow);
+    }
+
+    return rows.join('\n');
+  }
+
+  /**
+   * Checklist item 13 — quarterly review of every researcher-managed
+   * account, including privileged (teacher/admin) ones. Deliberately
+   * NOT scoped to "my students" like exportStudentsCsv above — an admin
+   * reviewing access appropriateness needs every account, every role.
+   * Controller-gated to admin only (see UserManagementController).
+   */
+  async exportAccountReviewCsv(): Promise<string> {
+    const users = await this.prisma.user.findMany({
+      orderBy: [{ role: 'asc' }, { email: 'asc' }],
+      select: {
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        twoFactorMethod: true,
+        isTemporaryPassword: true,
+        passwordChangedAt: true,
+        failedLoginAttempts: true,
+        lockedUntil: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+
+    const rows: string[] = [
+      'Email,Name,Role,Active,MFA,Temp Password,Password Changed,Failed Login Attempts,Currently Locked,Last Login,Created',
+    ];
+    const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : 'never');
+    const now = Date.now();
+
+    for (const u of users) {
+      rows.push(
+        [
+          u.email,
+          `"${u.name}"`,
+          u.role,
+          u.isActive ? 'Yes' : 'No',
+          u.twoFactorMethod ?? 'Off',
+          u.isTemporaryPassword ? 'Yes' : 'No',
+          iso(u.passwordChangedAt),
+          String(u.failedLoginAttempts),
+          u.lockedUntil && u.lockedUntil.getTime() > now ? 'Yes' : 'No',
+          iso(u.lastLoginAt),
+          iso(u.createdAt),
+        ].join(','),
+      );
     }
 
     return rows.join('\n');

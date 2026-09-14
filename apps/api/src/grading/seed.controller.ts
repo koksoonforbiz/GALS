@@ -14,7 +14,11 @@ export class SeedController {
 
   @Post('seed')
   async seed() {
-    const env = this.config.get<string>('NODE_ENV', 'development');
+    // No fallback default here — if NODE_ENV is ever unset (e.g. a
+    // misconfigured production deployment), this must fail closed
+    // rather than silently defaulting to "development" and seeding
+    // hardcoded-password test accounts into a real database.
+    const env = this.config.get<string>('NODE_ENV');
     if (env !== 'development') {
       return { error: 'Seed endpoint is only available in development' };
     }

@@ -2737,7 +2737,6 @@ const TIMELINE_ACTIONS = new Set([
   'PRACTICE_TEST_CONFIGURED',
   'SPACED_REP_CARD_VIEWED',
   'SPACED_REP_CARD_RATED',
-  'MASTERY_UPDATED',
   'STUDY_MATERIAL_UPLOADED',
   // DBox (Code Decomposition) — node-level events INTERVENTION_* doesn't
   // carry enough detail for (which node, which hint tier).

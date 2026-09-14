@@ -8,6 +8,7 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -93,6 +94,8 @@ export class PageContentController {
 
   @Post('admin/pages/generate-content-batch')
   @Roles('teacher', 'admin')
+  // LLM content generation fanned out across up to 20 pages per call.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async generateBatch(
     @Body()
     body: {

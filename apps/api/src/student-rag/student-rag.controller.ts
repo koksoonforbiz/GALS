@@ -16,6 +16,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -24,6 +25,7 @@ import { StudentSourceGuideService } from './student-source-guide.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
+import { MalwareScanService } from '../rag/shared/malware-scan.service';
 
 interface RequestUser {
   id: string;
@@ -75,12 +77,17 @@ export class StudentRagController {
     private readonly guideService: StudentSourceGuideService,
     private readonly prisma: PrismaService,
     private readonly blobService: BlobService,
+    private readonly malwareScanService: MalwareScanService,
   ) {}
 
   // ─── Upload document ────────────────────────────────────
 
   @Post('courses/:courseId/documents')
   @Roles('student')
+  // Same upload+malware-scan+chunk+embed cost as rag.controller.ts's
+  // teacher upload (already throttled 10/60s) — this twin is exposed
+  // to the much larger, less-trusted student population.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file'))
   async uploadDocument(
     @Request() req: { user: RequestUser },
@@ -114,6 +121,14 @@ export class StudentRagController {
     // Validate MIME type
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
       throw new BadRequestException(`File type "${file.mimetype}" is not supported`);
+    }
+
+    // Malware scan (checklist item 49) — student uploads are the more
+    // exposed path (untrusted end users), so this runs before any
+    // further processing or persistence.
+    const scan = await this.malwareScanService.scanBuffer(file.buffer, file.originalname);
+    if (!scan.clean) {
+      throw new BadRequestException(`File rejected by malware scan: ${scan.reason}`);
     }
 
     // Check file count limit

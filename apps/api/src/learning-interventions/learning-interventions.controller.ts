@@ -11,6 +11,7 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { LearningInterventionsService } from './learning-interventions.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { SessionId } from '../common';
@@ -328,6 +329,9 @@ export class LearningInterventionsController {
   // ─── Chat ──────────────────────────────────────────────────
 
   @Post('chat')
+  // Open-ended LLM chat plus a moderation follow-up call — the most
+  // LLM-dense student-facing route in this controller.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   chat(
     @Request() req: { user: RequestUser },
     @Body() dto: ChatRequestDto,

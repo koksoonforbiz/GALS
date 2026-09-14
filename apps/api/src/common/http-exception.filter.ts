@@ -4,12 +4,14 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Injectable,
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { sanitizeForLog } from './log-sanitizer';
+import { SecurityEventService } from '../auth/security-event.service';
 
 interface RequestWithUser extends Request {
   user?: { id: string; role: string };
@@ -23,9 +25,12 @@ export interface StandardErrorResponse {
   path: string;
 }
 
+@Injectable()
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+  constructor(private readonly securityEvents: SecurityEventService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -49,6 +54,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         `${request.method} ${safeUrl} ${errorResponse.statusCode}${userTag}${ipTag}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
+      // Checklist item 25 — "system alerts and failures." A 5xx is
+      // always a server-side fault (a client mistake is 4xx and stays
+      // Logger.warn-only above), so every one of these is worth a
+      // queryable row, not just container-log output that scrolls away.
+      this.securityEvents.record({
+        type: 'SYSTEM_ERROR',
+        userId: request.user?.id,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent'],
+        metadata: {
+          method: request.method,
+          path: safeUrl,
+          statusCode: errorResponse.statusCode,
+          exceptionName: exception instanceof Error ? exception.name : typeof exception,
+          message:
+            exception instanceof Error ? sanitizeForLog(exception.message) : String(exception),
+        },
+      });
     } else {
       this.logger.warn(
         `${request.method} ${safeUrl} ${errorResponse.statusCode}${userTag}${ipTag} — ${JSON.stringify(errorResponse.message)}`,

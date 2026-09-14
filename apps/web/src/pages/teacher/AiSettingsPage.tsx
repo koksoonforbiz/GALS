@@ -21,25 +21,13 @@ interface LlmSettings {
   hasCohereKey?: boolean;
 }
 
-type ProviderKey = 'openai' | 'gemini' | 'bedrock';
-
-const PROVIDER_KEY_HELP: Partial<
-  Record<ProviderKey, { placeholder: string; url: string; label: string }>
-> = {
-  openai: {
-    placeholder: 'sk-...',
-    url: 'https://platform.openai.com/api-keys',
-    label: 'platform.openai.com/api-keys',
-  },
-  gemini: {
-    placeholder: 'AIza...',
-    url: 'https://aistudio.google.com/apikey',
-    label: 'aistudio.google.com/apikey',
-  },
-  // bedrock intentionally absent — it uses one server-wide credential
-  // (AWS_BEARER_TOKEN), not a per-teacher key. See the form below, which
-  // hides the key input entirely when this provider is selected.
-};
+// Bedrock is the only selectable LLM provider — teachers can no longer
+// bring their own OpenAI/Gemini API key (product decision). Bedrock uses
+// one shared server-side credential (AWS_BEARER_TOKEN), so there is no
+// per-teacher key to enter here at all — see the info box in the form
+// below.
+type ProviderKey = 'bedrock';
+const PROVIDER: ProviderKey = 'bedrock';
 
 export function AiSettingsPage() {
   const { toast } = useToast();
@@ -47,12 +35,9 @@ export function AiSettingsPage() {
   const [settings, setSettings] = useState<LlmSettings | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [provider, setProvider] = useState<ProviderKey>('openai');
-  const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('');
   const [embeddingModel, setEmbeddingModel] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showKey, setShowKey] = useState(false);
 
   // Stage 04 (RAG) — Cohere Rerank key state. Independent from the
   // chat-LLM key above because Cohere is a separate vendor: the
@@ -86,12 +71,12 @@ export function AiSettingsPage() {
   const { models, loading: modelsLoading, error: modelsError } = useLlmModels();
 
   const chatOptionsForProvider = useMemo<ChatModelSpec[]>(
-    () => models?.chat.filter((m) => m.provider === provider) ?? [],
-    [models, provider],
+    () => models?.chat.filter((m) => m.provider === PROVIDER) ?? [],
+    [models],
   );
   const embeddingOptionsForProvider = useMemo<EmbeddingModelSpec[]>(
-    () => models?.embedding.filter((m) => m.provider === provider) ?? [],
-    [models, provider],
+    () => models?.embedding.filter((m) => m.provider === PROVIDER) ?? [],
+    [models],
   );
 
   useEffect(() => {
@@ -106,13 +91,6 @@ export function AiSettingsPage() {
       try {
         const data = await apiFetch<LlmSettings>('/llm-settings');
         setSettings(data);
-        if (
-          data.provider === 'openai' ||
-          data.provider === 'gemini' ||
-          data.provider === 'bedrock'
-        ) {
-          setProvider(data.provider);
-        }
         if (data.model) setModel(data.model);
         if (data.embeddingModel) setEmbeddingModel(data.embeddingModel);
       } catch {
@@ -123,45 +101,33 @@ export function AiSettingsPage() {
     })();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // After the registry has loaded, ensure the local model/embeddingModel
-  // state references a model the new provider actually offers. We only
-  // fill these from the registry when we don't already have a value from
-  // the persisted settings (so the user's existing — possibly
-  // deprecated — choice survives the initial load and shows up with the
-  // "legacy" badge below).
+  // Once the registry has loaded, fill in a recommended default when the
+  // teacher has no persisted choice yet. We only fill these when we
+  // don't already have a value from the persisted settings (so an
+  // existing — possibly deprecated — choice survives the initial load
+  // and shows up with the "legacy" badge below).
   useEffect(() => {
     if (!models) return;
     if (!model) {
-      const rec = recommendedChatModel(models, provider);
+      const rec = recommendedChatModel(models, PROVIDER);
       if (rec) setModel(rec.id);
     }
     if (!embeddingModel) {
-      const rec = recommendedEmbeddingModel(models, provider);
+      const rec = recommendedEmbeddingModel(models, PROVIDER);
       if (rec) setEmbeddingModel(rec.id);
     }
-  }, [models, provider, model, embeddingModel]);
-
-  const handleProviderChange = (next: ProviderKey) => {
-    setProvider(next);
-    // Reset the model selections to recommended defaults for the new
-    // provider — leaving the previous provider's model id selected would
-    // submit a mismatched-provider payload that the server rejects.
-    const recChat = recommendedChatModel(models, next);
-    setModel(recChat?.id ?? '');
-    const recEmbed = recommendedEmbeddingModel(models, next);
-    setEmbeddingModel(recEmbed?.id ?? '');
-  };
+  }, [models, model, embeddingModel]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
+      // Bedrock uses one shared server-side credential — no apiKey to send.
       await apiFetch('/llm-settings', {
         method: 'POST',
-        body: JSON.stringify({ provider, apiKey, model, embeddingModel }),
+        body: JSON.stringify({ provider: PROVIDER, model, embeddingModel }),
       });
-      toast('success', 'API key saved');
-      setApiKey('');
+      toast('success', 'AI settings saved');
       // Refresh settings
       const data = await apiFetch<LlmSettings>('/llm-settings');
       setSettings(data);
@@ -173,12 +139,12 @@ export function AiSettingsPage() {
   };
 
   const handleRemove = async () => {
-    if (!confirm('Remove your API key? AI features will use template mode.')) return;
+    if (!confirm('Turn off AI features? They will fall back to template mode until re-enabled.'))
+      return;
     try {
       await apiFetch('/llm-settings', { method: 'DELETE' });
-      toast('success', 'API key removed');
+      toast('success', 'AI settings cleared');
       setSettings({ provider: null, model: null, embeddingModel: null, hasKey: false });
-      setApiKey('');
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to remove');
     }
@@ -228,7 +194,7 @@ export function AiSettingsPage() {
   // the option out from under the teacher, just warn and suggest the
   // recommended replacement.
   const savedChatSpec = models?.chat.find((m) => m.id === (settings?.model ?? ''));
-  const recommendedChatForBanner = recommendedChatModel(models, provider);
+  const recommendedChatForBanner = recommendedChatModel(models, PROVIDER);
   const showRetiredChatBanner =
     !!settings?.model && !!models && (!savedChatSpec || savedChatSpec.deprecated === true);
 
@@ -240,8 +206,8 @@ export function AiSettingsPage() {
     <div className="max-w-2xl">
       <h2 className="text-2xl font-bold text-gray-900 mb-2">AI Settings</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Configure your AI provider API key to enable AI-powered content generation and learning
-        strategies. Your key is encrypted at rest and only used for your requests.
+        Configure AI-powered content generation and learning strategies. AI calls go through AWS
+        Bedrock, using this deployment's shared credential — there's nothing for you to enter.
       </p>
 
       {/* Current Status */}
@@ -262,14 +228,14 @@ export function AiSettingsPage() {
             }`}
           >
             {settings?.hasKey
-              ? `Connected - ${settings.provider ?? 'openai'} / ${settings.model ?? '(default)'}`
+              ? `Enabled — ${settings.model ?? '(default)'}`
               : 'Not configured - using template mode (no AI)'}
           </span>
         </div>
         {!settings?.hasKey && (
           <p className="text-xs text-yellow-700 mt-2">
-            Without an API key, the Course Studio will use template-based content generation. To use
-            real AI, enter your API key below.
+            Without this enabled, the Course Studio uses template-based content generation instead
+            of real AI. Pick a model below and save to turn it on.
           </p>
         )}
       </div>
@@ -300,25 +266,18 @@ export function AiSettingsPage() {
       {modelsError && (
         <div className="p-4 rounded-lg border bg-red-50 border-red-200 mb-6">
           <p className="text-sm text-red-700">
-            Could not load the model registry: {modelsError}. You can still save the key, but the
-            model dropdown is empty until the registry endpoint is reachable.
+            Could not load the model registry: {modelsError}. The model dropdown is empty until the
+            registry endpoint is reachable.
           </p>
         </div>
       )}
 
-      {/* API Key Form */}
       <form onSubmit={handleSave} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
-          <select
-            value={provider}
-            onChange={(e) => handleProviderChange(e.target.value as ProviderKey)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="bedrock">AWS Bedrock</option>
-          </select>
+          <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700">
+            AWS Bedrock
+          </div>
         </div>
 
         <div>
@@ -345,13 +304,13 @@ export function AiSettingsPage() {
                 without ever silently mutating their choice. */}
             {model && !chatOptionsForProvider.some((m) => m.id === model) && (
               <option key={model} value={model}>
-                {model} (current — not in {provider} list)
+                {model} (current — not in the Bedrock list)
               </option>
             )}
           </select>
           <p className="text-xs text-gray-400 mt-1">
             {recommendedChatForBanner
-              ? `${recommendedChatForBanner.label} is the recommended default for ${provider}.`
+              ? `${recommendedChatForBanner.label} is the recommended default.`
               : 'Pick the chat model you want to use.'}
           </p>
         </div>
@@ -378,69 +337,28 @@ export function AiSettingsPage() {
             {embeddingModel &&
               !embeddingOptionsForProvider.some((m) => m.id === embeddingModel) && (
                 <option key={embeddingModel} value={embeddingModel}>
-                  {embeddingModel} (current — not in {provider} list)
+                  {embeddingModel} (current — not in the Bedrock list)
                 </option>
               )}
           </select>
           <p className="text-xs text-gray-400 mt-1">
-            Changing this re-indexes your course documents — see the documents tab.
-            {provider === 'bedrock' &&
-              ' Untested against the real Bedrock endpoint — verify before relying on it.'}
+            Changing this re-indexes your course documents — see the documents tab. Untested against
+            the real Bedrock endpoint — verify before relying on it.
           </p>
         </div>
 
-        {provider === 'bedrock' ? (
-          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
-            AWS Bedrock uses one shared server-side key for every teacher — there's nothing to enter
-            here. Just pick a model above and save.
-          </div>
-        ) : (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              API Key {settings?.hasKey && '(replace existing)'}
-            </label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={
-                  settings?.hasKey
-                    ? 'Enter new key to replace...'
-                    : PROVIDER_KEY_HELP[provider]?.placeholder || 'Enter API key...'
-                }
-                className="w-full px-3 py-2 pr-20 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
-                required={!settings?.hasKey}
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700"
-              >
-                {showKey ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Get your API key from{' '}
-              <a
-                href={PROVIDER_KEY_HELP[provider]?.url || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:underline"
-              >
-                {PROVIDER_KEY_HELP[provider]?.label || 'your provider'}
-              </a>
-            </p>
-          </div>
-        )}
+        <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-800">
+          AWS Bedrock uses one shared server-side credential for every teacher — there's nothing to
+          enter here. Just pick a model above and save.
+        </div>
 
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={saving || (provider !== 'bedrock' && !apiKey && !settings?.hasKey)}
+            disabled={saving}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {saving ? 'Saving...' : settings?.hasKey ? 'Update Key' : 'Save Key'}
+            {saving ? 'Saving...' : settings?.hasKey ? 'Update Settings' : 'Enable AI'}
           </button>
           {settings?.hasKey && (
             <button
@@ -448,7 +366,7 @@ export function AiSettingsPage() {
               onClick={handleRemove}
               className="px-4 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100"
             >
-              Remove Key
+              Turn Off AI
             </button>
           )}
         </div>
@@ -626,23 +544,6 @@ export function AiSettingsPage() {
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">VLM provider</label>
-            <select
-              value={vlmConfig.provider}
-              onChange={(e) => setVlmConfig((c) => ({ ...c, provider: e.target.value }))}
-              disabled={!vlmConfig.enabled}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
-            >
-              <option value="same">Same as chat model</option>
-              <option value="openai">OpenAI</option>
-              <option value="gemini">Google Gemini</option>
-            </select>
-            <p className="text-xs text-gray-400 mt-1">
-              Uses the same API key you configured above. "Same as chat model" is recommended.
-            </p>
-          </div>
-
           <button
             type="button"
             disabled={savingVlm}
@@ -669,10 +570,10 @@ export function AiSettingsPage() {
       <div className="mt-8 p-4 bg-gray-50 border border-gray-200 rounded-lg">
         <h4 className="text-sm font-semibold text-gray-700 mb-1">Security</h4>
         <ul className="text-xs text-gray-500 space-y-1">
-          <li>Your API key is encrypted using AES-256-GCM before storage</li>
-          <li>The key is only decrypted server-side when making API calls</li>
+          <li>AI calls use this deployment's shared AWS Bedrock credential — no per-teacher key</li>
+          <li>Your optional Cohere reranking key (below) is encrypted using AES-256-GCM at rest</li>
           <li>Keys are never sent back to the browser after saving</li>
-          <li>You can remove your key at any time</li>
+          <li>You can turn AI off, or remove your Cohere key, at any time</li>
         </ul>
       </div>
     </div>

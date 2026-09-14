@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../components/Toast';
@@ -145,6 +146,23 @@ export function AccountSecurityPage() {
       <p className="mt-1 text-sm text-gray-500">
         Signed in as {user.email} ({user.role})
       </p>
+
+      <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-gray-800">Password</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Passwords expire after 180 days and can&apos;t be reused from your last 3.
+            </p>
+          </div>
+          <Link
+            to="/change-password"
+            className="shrink-0 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50"
+          >
+            Change password
+          </Link>
+        </div>
+      </div>
 
       <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6">
         <div className="flex items-center justify-between">

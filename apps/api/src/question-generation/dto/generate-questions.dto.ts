@@ -12,7 +12,6 @@ export interface ReviewQuestionDto {
   editedQuestion?: {
     questionText?: string;
     difficulty?: 'easy' | 'medium' | 'hard';
-    knowledgeTags?: string[];
     options?: { label: string; text: string; isCorrect: boolean }[];
     answerKey?: Record<string, unknown>;
   };

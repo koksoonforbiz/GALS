@@ -187,22 +187,6 @@ export class QuestionGenerationService {
         data: { status: 'GENERATING' },
       });
 
-      // Fetch knowledge components for this course (via topics)
-      const kcs = await this.prisma.knowledgeComponent.findMany({
-        where: { topic: { courseId: job.courseId } },
-        select: { id: true, code: true, label: true, description: true },
-      });
-
-      const kcListStr =
-        kcs.length > 0
-          ? kcs
-              .map(
-                (kc) =>
-                  `- ${kc.id}: ${kc.label} (${kc.code})${kc.description ? ' — ' + kc.description : ''}`,
-              )
-              .join('\n')
-          : 'No knowledge components defined. Generate questions without KC tags.';
-
       const questionTypes = job.questionTypes as string[];
       const difficultyMix = job.difficultyMix as Record<string, number> | null;
 
@@ -222,7 +206,6 @@ export class QuestionGenerationService {
         .replace(/\{\{questionCount\}\}/g, String(job.questionCount))
         .replace(/\{\{questionTypes\}\}/g, typeStr)
         .replace(/\{\{difficultyMix\}\}/g, difficultyStr)
-        .replace(/\{\{knowledgeComponents\}\}/g, kcListStr)
         .replace(/\{\{retrievedContent\}\}/g, retrievedContent)
         .replace(
           /\{\{additionalInstructions\}\}/g,
@@ -318,15 +301,13 @@ export class QuestionGenerationService {
     if (dto.action === 'edit' && dto.editedQuestion) {
       if (dto.editedQuestion.questionText) question.questionText = dto.editedQuestion.questionText;
       if (dto.editedQuestion.difficulty) question.difficulty = dto.editedQuestion.difficulty;
-      if (dto.editedQuestion.knowledgeTags)
-        question.knowledgeTags = dto.editedQuestion.knowledgeTags;
       if (dto.editedQuestion.options) question.options = dto.editedQuestion.options;
       if (dto.editedQuestion.answerKey) question.answerKey = dto.editedQuestion.answerKey;
       question.reviewStatus = 'edited';
     }
 
     // Approve (or approve after edit)
-    const created = await this.approveQuestion(job.courseId, question, dto.action === 'edit');
+    const created = await this.approveQuestion(job.courseId, question);
 
     question.reviewStatus = dto.action === 'edit' ? 'edited' : 'approved';
     question.approvedQuestionId = created.id;
@@ -355,7 +336,7 @@ export class QuestionGenerationService {
 
     let approvedCount = 0;
     for (const question of pending) {
-      const created = await this.approveQuestion(job.courseId, question, false);
+      const created = await this.approveQuestion(job.courseId, question);
       question.reviewStatus = 'approved';
       question.approvedQuestionId = created.id;
       approvedCount++;
@@ -397,15 +378,6 @@ export class QuestionGenerationService {
     });
     const retrievedContent = fullChunks.map((c) => c.content).join('\n\n---\n\n');
 
-    const kcs = await this.prisma.knowledgeComponent.findMany({
-      where: { topic: { courseId: job.courseId } },
-      select: { id: true, code: true, label: true },
-    });
-    const kcListStr =
-      kcs.length > 0
-        ? kcs.map((kc) => `- ${kc.id}: ${kc.label} (${kc.code})`).join('\n')
-        : 'No knowledge components defined.';
-
     const questionTypes = job.questionTypes as string[];
 
     const systemPrompt = QUESTION_GENERATION_PROMPT.systemPrompt
@@ -417,7 +389,6 @@ export class QuestionGenerationService {
       .replace(/\{\{questionCount\}\}/g, String(count))
       .replace(/\{\{questionTypes\}\}/g, questionTypes.join(', '))
       .replace(/\{\{difficultyMix\}\}/g, 'Let AI decide')
-      .replace(/\{\{knowledgeComponents\}\}/g, kcListStr)
       .replace(/\{\{retrievedContent\}\}/g, retrievedContent)
       .replace(
         /\{\{additionalInstructions\}\}/g,
@@ -641,7 +612,7 @@ export class QuestionGenerationService {
 
   // ─── Private Helpers ─────────────────────────────────────
 
-  private async approveQuestion(courseId: string, generatedQ: any, isEdited: boolean) {
+  private async approveQuestion(courseId: string, generatedQ: any) {
     const qType = mapQuestionType(generatedQ.type);
     const difficulty = difficultyToInt(generatedQ.difficulty || 'medium');
 
@@ -679,19 +650,6 @@ export class QuestionGenerationService {
       rubricJson = { answer_key: generatedQ.answerKey.keywords };
     }
 
-    // Determine KC IDs
-    const kcIds: string[] = generatedQ.knowledgeTags || [];
-
-    // Verify KC IDs exist
-    const validKcs =
-      kcIds.length > 0
-        ? await this.prisma.knowledgeComponent.findMany({
-            where: { id: { in: kcIds } },
-            select: { id: true },
-          })
-        : [];
-    const validKcIds = validKcs.map((kc) => kc.id);
-
     const question = await this.prisma.question.create({
       data: {
         courseId,
@@ -709,21 +667,8 @@ export class QuestionGenerationService {
         status: 'approved',
         createdBy: 'ai',
         sourceType: 'uploaded',
-        kcIds: validKcIds,
       },
     });
-
-    // Create QuestionKc junction records
-    if (validKcIds.length > 0) {
-      await this.prisma.questionKc.createMany({
-        data: validKcIds.map((kcId) => ({
-          questionId: question.id,
-          kcId,
-          isAutoAssigned: !isEdited,
-          confidence: generatedQ.difficultyConfidence ?? null,
-        })),
-      });
-    }
 
     return question;
   }

@@ -15,7 +15,6 @@ export const LogEventSchema = z.object({
   questionId: z.string().uuid().optional(),
   dialogueSessionId: z.string().optional(),
   interventionId: z.string().uuid().optional(),
-  kcId: z.string().uuid().optional(),
 
   metadata: z.record(z.unknown()).optional(),
 });

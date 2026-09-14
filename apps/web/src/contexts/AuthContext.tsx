@@ -17,6 +17,11 @@ interface User {
   twoFactorMethod: TwoFactorMethod | null;
   createdAt: string;
   updatedAt: string;
+  // Checklist item 5 — set when a teacher/admin reset this account's
+  // password (not yet followed by a self-service change) or the
+  // password has passed the 180-day expiry window. ProtectedRoute
+  // redirects to /change-password whenever this is true.
+  mustChangePassword: boolean;
 }
 
 interface AuthResponse {
@@ -58,7 +63,13 @@ interface AuthContextValue {
   verifyTwoFactor: (code: string) => Promise<void>;
   resendTwoFactorCode: () => Promise<void>;
   cancelTwoFactor: () => void;
-  register: (email: string, password: string, name: string, role: UserRole) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    role: UserRole,
+    termsAccepted: boolean,
+  ) => Promise<void>;
   // Re-fetches the current user from /auth/me and updates context +
   // localStorage. Used after enabling/disabling 2FA (or any other
   // account-setting change) so the rest of the app reflects it without
@@ -161,10 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (identifier: string, password: string) => {
       // Prompt 05: send a single canonical `identifier` field. Backend
       // (`AuthService.login`) decides email-vs-loginId by checking for
-      // `@`. The old `requirePasswordChange` / `/change-password`
-      // redirect path was removed — students can no longer change their
-      // own password, so a temporary-password user simply logs in
-      // normally and a teacher resets it via UserManagementPage.
+      // `@`. If the account has an outstanding forced password change
+      // (teacher/admin reset, or 180-day expiry), `response.user.
+      // mustChangePassword` is true and ProtectedRoute redirects to
+      // /change-password on the very next render.
       const response = await api.post<AuthResponse | TwoFactorPendingResponse>('/auth/login', {
         identifier,
         password,
@@ -231,12 +242,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string, name: string, role: UserRole) => {
+    async (
+      email: string,
+      password: string,
+      name: string,
+      role: UserRole,
+      termsAccepted: boolean,
+    ) => {
       await api.post<AuthResponse>('/auth/register', {
         email,
         password,
         name,
         role,
+        termsAccepted,
       });
       // Account created — do NOT auto-login; caller navigates to /login
     },

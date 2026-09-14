@@ -60,8 +60,14 @@ export class VlmService {
     if (dto.imageHeight !== undefined && !validSizes.includes(dto.imageHeight)) {
       throw new BadRequestException('imageHeight must be 128, 256, 512, or 1024');
     }
-    if (dto.provider !== undefined && !['same', 'openai', 'gemini'].includes(dto.provider)) {
-      throw new BadRequestException('provider must be "same", "openai", or "gemini"');
+    // 'openai'/'gemini' overrides removed — teachers can no longer
+    // configure either as an LLM provider (Bedrock is the only
+    // selectable one), and this override was never actually wired into
+    // describePage's model-call path anyway (it reads the teacher's
+    // own configured provider unconditionally). 'same' is the only
+    // meaningful value left.
+    if (dto.provider !== undefined && dto.provider !== 'same') {
+      throw new BadRequestException('provider must be "same"');
     }
 
     const existing = await this.prisma.vlmConfig.findUnique({ where: { teacherId } });
@@ -116,7 +122,7 @@ export class VlmService {
         where: { id: teacherId },
         select: { llmProvider: true },
       });
-      vlmProvider = teacherSettings?.llmProvider ?? 'openai';
+      vlmProvider = teacherSettings?.llmProvider ?? 'bedrock';
     }
 
     const systemPrompt = `You are an educational content analyst. Describe the content of this slide in detail for educational purposes. Extract all visible text, describe diagrams, charts, tables, formulas, and key visual elements. Your description will be used to generate learning exercises, so be thorough and precise. If the slide contains formulas or calculations, write them out explicitly.`;

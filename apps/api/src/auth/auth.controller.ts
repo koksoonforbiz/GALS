@@ -1,8 +1,9 @@
 import { Controller, Post, Get, Body, UseGuards, Request, UsePipes } from '@nestjs/common';
-import { ThrottlerGuard, Throttle, SkipThrottle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ZodValidationPipe } from '../common';
+import { mustChangePassword } from './password-lifecycle.util';
 import {
   CreateUserSchema,
   LoginSchema,
@@ -10,6 +11,7 @@ import {
   TwoFactorResendSchema,
   TwoFactorDisableSchema,
   TotpSetupConfirmSchema,
+  ChangePasswordSchema,
 } from '@ats/shared';
 import type {
   CreateUser,
@@ -20,6 +22,7 @@ import type {
   TwoFactorResend,
   TwoFactorDisable,
   TotpSetupConfirm,
+  ChangePassword,
 } from '@ats/shared';
 
 interface RequestUser {
@@ -30,10 +33,13 @@ interface RequestUser {
   twoFactorMethod: TwoFactorMethod | null;
   createdAt: Date;
   updatedAt: Date;
+  isTemporaryPassword: boolean;
+  passwordChangedAt: Date | null;
 }
 
+// ThrottlerGuard is now bound globally (APP_GUARD in app.module.ts) —
+// no per-controller @UseGuards needed here anymore.
 @Controller('auth')
-@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
@@ -114,18 +120,32 @@ export class AuthController {
     return this.authService.confirmTotpSetup(req.user.id, dto.code);
   }
 
-  // Prompt 05: the legacy `POST /auth/change-password` endpoint that
-  // accepted a short-lived passwordChangeToken has been REMOVED.
-  // Students never set or change their own password. Teacher/admin-
-  // issued resets go through `POST /user-management/users/:userId/
-  // reset-password` (guarded by JwtAuthGuard + RolesGuard +
-  // @Roles('teacher','admin')). No forgot-password / self-reset
-  // endpoint is exposed.
+  // Checklist item 5 — self-service change, for an already-authenticated
+  // user who still knows their current password. Deliberately no email
+  // involved (product decision: no forgot-password/reset-link flow). A
+  // fully-locked-out user's only recovery remains the teacher/admin
+  // reset at `POST /user-management/users/:userId/reset-password`.
+  // Not behind RolesGuard (only JwtAuthGuard), so it stays reachable
+  // even while RolesGuard is blocking every other route for this user
+  // with PASSWORD_CHANGE_REQUIRED.
+  @Post('change-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseGuards(JwtAuthGuard)
+  @UsePipes(new ZodValidationPipe(ChangePasswordSchema))
+  async changePassword(@Body() dto: ChangePassword, @Request() req: { user: RequestUser }) {
+    await this.authService.changePassword(req.user.id, dto.currentPassword, dto.newPassword);
+    return { changed: true };
+  }
 
   @Get('me')
   @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   async getMe(@Request() req: { user: RequestUser }) {
-    return req.user;
+    const {
+      isTemporaryPassword: _isTemporaryPassword,
+      passwordChangedAt: _passwordChangedAt,
+      ...safe
+    } = req.user;
+    return { ...safe, mustChangePassword: mustChangePassword(req.user) };
   }
 }

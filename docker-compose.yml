@@ -9,9 +9,24 @@ services:
     environment:
       NODE_ENV: development
       PORT: "3000"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required — set it in your root .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in your root .env}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required — set it in your root .env}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required — set it in your root .env}
+      # Optional — checklist item 4. Leave unset to keep today's
+      # behaviour (encryption key derived from JWT_SECRET). See
+      # ENCRYPTION_KEY's comment in .env.example before setting this
+      # on a deployment that already has encrypted data.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # Optional — checklist item 4 (encrypted-.env-at-rest, a separate
+      # concern from ENCRYPTION_KEY above). Leave unset to keep today's
+      # behaviour (plaintext .env, read directly) — see
+      # ENV_MASTER_KEY's comment in .env.example for setup.
+      ENV_MASTER_KEY: ${ENV_MASTER_KEY:-}
+      # Optional — checklist item 16. Leave unset to keep today's
+      # behaviour (no daily spend cap — matches local dev). Set this
+      # before the production (L40) deployment. See
+      # LLM_DAILY_COST_CAP_USD's comment in .env.example.
+      LLM_DAILY_COST_CAP_USD: ${LLM_DAILY_COST_CAP_USD:-}
       BLOB_STORAGE_ENDPOINT: http://minio:9000
       BLOB_STORAGE_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
       BLOB_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -32,8 +47,16 @@ services:
       # don't touch Bedrock work fine with this unset.
       AWS_BEARER_TOKEN: ${AWS_BEARER_TOKEN:-}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      # Malware scanning on uploaded files (checklist item 49). Not in
+      # `depends_on` below — ClamAV's virus-database download can take
+      # several minutes on first boot, and MalwareScanService already
+      # handles "scanner not ready yet" by retrying on the next upload
+      # rather than blocking API startup on it.
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
     networks:
       - local-dev
+      - internal-net
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,7 +83,7 @@ services:
     environment:
       ENVIRONMENT: development
       PORT: "8000"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required — set it in your root .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in your root .env}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required — set it in your root .env}
       REDIS_URL: redis://redis:6379
       BLOB_STORAGE_ENDPOINT: http://minio:9000
       BLOB_STORAGE_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
@@ -68,6 +91,7 @@ services:
       BLOB_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     networks:
       - local-dev
+      - internal-net
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,7 +139,7 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required — set it in your root .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in your root .env}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required — set it in your root .env}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -124,6 +148,7 @@ services:
       WORKER_CONCURRENCY: "2"
     networks:
       - local-dev
+      - internal-net
     depends_on:
       redis:
         condition: service_healthy
@@ -143,7 +168,7 @@ services:
       dockerfile: Dockerfile
     environment:
       REDIS_URL: redis://redis:6379
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ats_user}:${POSTGRES_PASSWORD:-ats_password}@postgres:5432/${POSTGRES_DB:-ats_db}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required — set it in your root .env}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in your root .env}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required — set it in your root .env}
       MINIO_ENDPOINT: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -154,6 +179,7 @@ services:
       WORKER_CONCURRENCY: "2"
     networks:
       - local-dev
+      - internal-net
     depends_on:
       redis:
         condition: service_healthy
@@ -179,17 +205,29 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ats_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ats_password}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required — set it in your root .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required — set it in your root .env}
       POSTGRES_DB: ${POSTGRES_DB:-ats_db}
+      # Optional — checklist item 8 (least-privilege DB role). Leave
+      # unset to keep today's behaviour (containers connect as the
+      # POSTGRES_USER superuser). Set it and see
+      # infra/postgres-init/01-create-app-role.sh for how to actually
+      # switch DATABASE_URL over to the scoped `ats_app` role it creates.
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres-init:/docker-entrypoint-initdb.d:ro
+    # internal-net only — the SQL database is never reachable from the
+    # web container (checklist item 17). It's still port-mapped to the
+    # host below for local tooling (Prisma CLI, psql, Adminer); a real
+    # deployment on IITS's AWS account would drop that host mapping
+    # entirely and rely on VPC-level isolation instead.
     networks:
-      - local-dev
+      - internal-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ats_user} -d ${POSTGRES_DB:-ats_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required} -d ${POSTGRES_DB:?POSTGRES_DB is required}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -201,8 +239,11 @@ services:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
+    # internal-net only — see postgres's comment above; Redis holds
+    # session/lockout state and shouldn't be reachable from the web
+    # container either.
     networks:
-      - local-dev
+      - internal-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -210,6 +251,18 @@ services:
       retries: 5
 
   minio:
+    # Reverted to `latest` — the specific RELEASE tag pinned here
+    # earlier turned out to not actually be published to Docker Hub
+    # (it appeared on MinIO's GitHub releases page, but `docker compose
+    # up` failed with "not found" against the real registry — verified
+    # live, not a guess). No reliable way to query the live registry
+    # from this environment to pick a correct replacement tag safely.
+    # TODO (checklist item 24): pin to a specific, verified-real
+    # RELEASE.* tag — check what's actually available via
+    # `docker pull minio/minio:latest && docker inspect --format '{{index .RepoDigests 0}}' minio/minio:latest`
+    # or browse https://hub.docker.com/r/minio/minio/tags directly,
+    # then swap this back to an exact tag (here and in
+    # infra/docker-compose.yml) once confirmed to actually pull.
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     ports:
@@ -228,12 +281,40 @@ services:
       timeout: 5s
       retries: 5
 
+  # Malware scanning for uploaded files (checklist item 49). Only `api`
+  # needs to reach it, so it stays on internal-net like postgres/redis.
+  # First boot downloads ClamAV's virus database (several minutes) —
+  # the healthcheck's long start_period accounts for that; api does
+  # NOT depend_on this being healthy (see api's CLAMAV_HOST comment).
+  clamav:
+    image: clamav/clamav-debian:stable
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks:
+      - internal-net
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 5m
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  clamav_data:
 
 networks:
   local-dev:
     name: local-dev
+    driver: bridge
+  # Segment the SQL database and Redis away from the web container
+  # (checklist item 17) — see the comments on postgres/redis above.
+  internal-net:
+    name: internal-net
     driver: bridge

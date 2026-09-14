@@ -30,7 +30,7 @@ session_<sessionId>/
   messages/
     chatbot.jsonl  dialogue.jsonl  interventions.jsonl  ef_detections.jsonl
   kc/
-    mastery.jsonl  cards.jsonl  attempts.jsonl
+    cards.jsonl  attempts.jsonl
   probes/
     probes.jsonl            (optional; file omitted when no probe data)
   questionnaires/
@@ -58,30 +58,49 @@ finally to `0`.
 {
   "bundleVersion": 1,
   "exporterVersion": "1.0.0",
-  "exportedAt": "2026-06-03T12:00:00.000Z",   // ISO; the only field allowed to differ between reruns
+  "exportedAt": "2026-06-03T12:00:00.000Z", // ISO; the only field allowed to differ between reruns
   "sessionId": "…",
   "userId": "…",
   "courseId": "…",
-  "moduleId": "…",                            // optional
+  "moduleId": "…", // optional
   "timezone": "Asia/Kuala_Lumpur",
   "baseWallClockMs": 1717400000000,
   "durationMs": 1830000,
-  "counts": {                                 // row count per stream / file
-    "webgazer": 64213, "pupil": 0, "emotion_frames": 1820,
-    "au_results": 1820, "clicks": 142, "scrolls": 88, "cursors": 65000,
-    "keystrokes": 12, "clipboard": 3, "visibility": 9, "viewport": 4,
-    "activity": 230, "snapshots": 410, "webcam": 31, "chatbot": 44,
-    "dialogue": 0, "interventions": 6, "ef_detections": 18,
-    "mastery": 9, "cards": 9, "attempts": 21, "probes": 0,
-    "questionnaires": 0, "annotations": 0, "codes": 0
+  "counts": {
+    // row count per stream / file
+    "webgazer": 64213,
+    "pupil": 0,
+    "emotion_frames": 1820,
+    "au_results": 1820,
+    "clicks": 142,
+    "scrolls": 88,
+    "cursors": 65000,
+    "keystrokes": 12,
+    "clipboard": 3,
+    "visibility": 9,
+    "viewport": 4,
+    "activity": 230,
+    "snapshots": 410,
+    "webcam": 31,
+    "chatbot": 44,
+    "dialogue": 0,
+    "interventions": 6,
+    "ef_detections": 18,
+    "cards": 9,
+    "attempts": 21,
+    "probes": 0,
+    "questionnaires": 0,
+    "annotations": 0,
+    "codes": 0,
   },
-  "files": {                                  // relative path -> integrity
+  "files": {
+    // relative path -> integrity
     "session.json": { "sha256": "…", "byteSize": 4096 },
     "streams/webgazer.jsonl": { "sha256": "…", "byteSize": 9123344 },
-    "snapshots/<id>.html": { "sha256": "…", "byteSize": 21000 }
+    "snapshots/<id>.html": { "sha256": "…", "byteSize": 21000 },
     // … every written file except manifest.json itself
   },
-  "notes": ["webcam segment seg_7 missing in blob storage — recorded as status:missing"]
+  "notes": ["webcam segment seg_7 missing in blob storage — recorded as status:missing"],
 }
 ```
 
@@ -110,20 +129,20 @@ JSONL: one JSON object per line. **Every record carries an absolute `wallMs`**
 (number, wall-clock ms) plus the stream's native fields. BigInt DB timestamps
 are converted to numbers; `Timestamptz` columns are converted to epoch ms.
 
-| file | source table | `wallMs` derivation | native fields |
-|------|-------------|---------------------|---------------|
-| `webgazer.jsonl` | `webgazer_logs` | `timestamp` (Timestamptz → ms) | `x`(=gazeX), `y`(=gazeY), `confidence`, `pageUrl` |
-| `pupil.jsonl` | `pupil_size_logs` | `timestamp` → ms | `diameter`(=pupilDiameter) |
-| `emotion_frames.jsonl` | `emotion_frames` | `frameWallMs` (BigInt → num) | `faceDetected`, `dominant`(=dominantEmotion), `dominantProbability`, 8 probs `pHappiness…pNeutral`, head pose |
-| `au_results.jsonl` | `pyfeat_au_results` | `wallTime` → ms | `frameIndex`, `faceConf`, `au01…au45` intensities |
-| `clicks.jsonl` | `click_logs` | `timestamp` (BigInt → num) | `x`, `y`, `target`(=elementSelector), `text`(=elementText), `pageUrl` |
-| `scrolls.jsonl` | `scroll_logs` | `timestamp` → num | `scrollY`, `scrollPercent`, `pageUrl` |
-| `cursors.jsonl` | `cursor_logs` | `timestamp` → num | `x`, `y`, `target`(=elementTarget), `pageUrl` |
-| `keystrokes.jsonl` | `keystroke_logs` | `timestamp` → num | `fieldId`, `keystrokeCount`, `pauseDurationMs`, `typingSpeedWPM` |
-| `clipboard.jsonl` | `clipboard_logs` | `timestamp` → num | `action`, `textLength`, `sourceElement`, `pageUrl` |
-| `visibility.jsonl` | `visibility_logs` | `timestamp` → num | `visibleState`, `hiddenDurationMs`, `pageUrl` |
-| `viewport.jsonl` | `viewport_logs` | `timestamp` → num | `width`, `height`, `orientation` |
-| `activity.jsonl` | `activity_logs` | `occurredAt` → ms | `action`, `metadata`, `moduleId?`, `moduleItemId?`, `interventionId?`, `dialogueSessionId?`, … |
+| file                   | source table        | `wallMs` derivation            | native fields                                                                                                 |
+| ---------------------- | ------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `webgazer.jsonl`       | `webgazer_logs`     | `timestamp` (Timestamptz → ms) | `x`(=gazeX), `y`(=gazeY), `confidence`, `pageUrl`                                                             |
+| `pupil.jsonl`          | `pupil_size_logs`   | `timestamp` → ms               | `diameter`(=pupilDiameter)                                                                                    |
+| `emotion_frames.jsonl` | `emotion_frames`    | `frameWallMs` (BigInt → num)   | `faceDetected`, `dominant`(=dominantEmotion), `dominantProbability`, 8 probs `pHappiness…pNeutral`, head pose |
+| `au_results.jsonl`     | `pyfeat_au_results` | `wallTime` → ms                | `frameIndex`, `faceConf`, `au01…au45` intensities                                                             |
+| `clicks.jsonl`         | `click_logs`        | `timestamp` (BigInt → num)     | `x`, `y`, `target`(=elementSelector), `text`(=elementText), `pageUrl`                                         |
+| `scrolls.jsonl`        | `scroll_logs`       | `timestamp` → num              | `scrollY`, `scrollPercent`, `pageUrl`                                                                         |
+| `cursors.jsonl`        | `cursor_logs`       | `timestamp` → num              | `x`, `y`, `target`(=elementTarget), `pageUrl`                                                                 |
+| `keystrokes.jsonl`     | `keystroke_logs`    | `timestamp` → num              | `fieldId`, `keystrokeCount`, `pauseDurationMs`, `typingSpeedWPM`                                              |
+| `clipboard.jsonl`      | `clipboard_logs`    | `timestamp` → num              | `action`, `textLength`, `sourceElement`, `pageUrl`                                                            |
+| `visibility.jsonl`     | `visibility_logs`   | `timestamp` → num              | `visibleState`, `hiddenDurationMs`, `pageUrl`                                                                 |
+| `viewport.jsonl`       | `viewport_logs`     | `timestamp` → num              | `width`, `height`, `orientation`                                                                              |
+| `activity.jsonl`       | `activity_logs`     | `occurredAt` → ms              | `action`, `metadata`, `moduleId?`, `moduleItemId?`, `interventionId?`, `dialogueSessionId?`, …                |
 
 > **Note on AUs:** the live DB stores a subset of AU columns
 > (`au01,au02,au04…au28`). The bundle writes whichever AU columns are present
@@ -181,9 +200,12 @@ are converted to numbers; `Timestamptz` columns are converted to epoch ms.
 
 ## `kc/`
 
-- `mastery.jsonl` ← `user_mastery`, `cards.jsonl` ← `spaced_repetition_cards`,
+- `cards.jsonl` ← `spaced_repetition_cards`,
   `attempts.jsonl` ← `attempts` for the user (+ course where applicable).
   Each carries a `wallMs` (best-effort from the row's most relevant timestamp).
+- `mastery.jsonl` was removed (previously sourced from `user_mastery`,
+  dropped from the schema along with the rest of the KC mastery-tracking
+  system) — see Changelog below.
 
 ## `probes/` and `questionnaires/` (optional)
 
@@ -214,3 +236,13 @@ These are **reference only**. GALS Studio imports them into a separate
 - No `signals.csv` is emitted: the wide-format binning lives in a web module
   that can't be imported server-side. GALS Studio derives its own binning from
   the raw streams, so duplicating that logic here is intentionally avoided.
+
+## Changelog
+
+- **2026-09-07** — Removed the `kc/mastery.jsonl` stream and its `mastery`
+  count field. Source: the `user_mastery` table (and the rest of the KC
+  mastery-tracking system — `knowledge_components`, `question_kcs`,
+  `kc_evidence`) was dropped from the schema. `bundleVersion` was **not**
+  bumped for this change — confirm with whoever maintains GALS Studio's
+  import side whether it needs updating for bundles that no longer include
+  this file.

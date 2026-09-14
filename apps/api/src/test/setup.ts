@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma';
-import { GlobalExceptionFilter } from '../common';
 
 export async function createTestApp(): Promise<{
   app: INestApplication;
@@ -14,7 +13,9 @@ export async function createTestApp(): Promise<{
 
   const app = moduleFixture.createNestApplication();
   app.setGlobalPrefix('api');
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  // GlobalExceptionFilter is registered via APP_FILTER in AppModule
+  // (DI-managed, so it can inject SecurityEventService) — no manual
+  // app.useGlobalFilters() needed here anymore.
   await app.init();
 
   const prisma = app.get(PrismaService);
@@ -53,18 +54,10 @@ function assertSafeToWipe(): void {
 export async function cleanDatabase(prisma: PrismaService): Promise<void> {
   assertSafeToWipe();
   // Delete in reverse dependency order
-  await prisma.kcGraphLayout.deleteMany();
-  await prisma.publishGateRun.deleteMany();
-  await prisma.knowledgeVersion.deleteMany();
-  await prisma.curriculumCoverageRun.deleteMany();
-  await prisma.kcEvidence.deleteMany();
-  await prisma.userMastery.deleteMany();
   await prisma.gradingResult.deleteMany();
   await prisma.attempt.deleteMany();
   await prisma.assessmentQuestion.deleteMany();
   await prisma.assessment.deleteMany();
-  await prisma.questionKc.deleteMany();
-  await prisma.knowledgeComponent.deleteMany();
   await prisma.question.deleteMany();
   await prisma.topic.deleteMany();
   await prisma.enrollment.deleteMany();

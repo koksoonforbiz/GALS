@@ -22,8 +22,12 @@ import { Prisma } from '@prisma/client';
 import { buildGroundedMessages } from '../rag/shared/grounded-prompt';
 import { GroundedEvidenceService } from '../rag/shared/grounded-evidence.service';
 import { loadImageChunkMetadata } from '../rag/shared/grounded-evidence.helpers';
-import { FaithfulnessCheckService, buildFaithfulnessRetryAddendum } from '../rag/shared/faithfulness-check.service';
+import {
+  FaithfulnessCheckService,
+  buildFaithfulnessRetryAddendum,
+} from '../rag/shared/faithfulness-check.service';
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
+import { detectPii } from '../rag/shared/pii-detection';
 
 // Stage 02 feature flag. `RAG_USE_SHARED_RETRIEVER=false` falls back to
 // the legacy local keyword scorer (`retrieveStudentChunksKeywordLegacy`)
@@ -207,10 +211,7 @@ export class DialogueService {
 
     // Stage 06 — build the shared evidence shape (text + images).
     const imageMeta = await loadImageChunkMetadata(this.prisma, retrievedChunks);
-    const evidence = await this.groundedEvidence.buildEvidence(
-      retrievedChunks,
-      imageMeta,
-    );
+    const evidence = await this.groundedEvidence.buildEvidence(retrievedChunks, imageMeta);
 
     const systemPersona = this.buildDialoguePersona(dblSettings);
     const grounded = buildGroundedMessages({
@@ -250,9 +251,7 @@ export class DialogueService {
     // Stage 06 Task D — faithfulness self-check. OFF by default for
     // chat (latency-sensitive) per spec; flip with
     // `RAG_FAITHFULNESS_CHECK=true` or per-course override.
-    if (
-      faithfulnessCheckEnabled('chat', undefined, dblSettings.faithfulnessCheck)
-    ) {
+    if (faithfulnessCheckEnabled('chat', undefined, dblSettings.faithfulnessCheck)) {
       faithfulnessLog.fired = true;
       const contextForJudge = this.flattenEvidenceForJudge(evidence);
       const outcome = await this.faithfulnessCheck.checkFaithfulness({
@@ -285,6 +284,24 @@ export class DialogueService {
       }
       this.logger.log(
         `faithfulness_check.fired=true passed=${faithfulnessLog.passed} regenerated=${faithfulnessLog.regenerated ?? false}`,
+      );
+    }
+
+    // Checklist item 62 (output moderation) — the OpenAI Moderation API
+    // check that used to run here was removed along with OpenAI as a
+    // generation provider (Bedrock-only now, product decision): it had
+    // no remaining code path that could ever actually run once teachers
+    // could no longer have an OpenAI key. No moderation runs today —
+    // tracked as an open gap pending a Bedrock-native option (AWS
+    // Bedrock Guardrails), which needs an AWS resource provisioned
+    // first, not just code.
+
+    // PII visibility (checklist item 63) — best-effort, log-only. See
+    // pii-detection.ts's doc comment for why this doesn't redact.
+    const piiFound = detectPii(assistantContent);
+    if (piiFound.length > 0) {
+      this.logger.warn(
+        `Dialogue reply for session ${sessionId} contains possible PII: ${piiFound.join(', ')}`,
       );
     }
 

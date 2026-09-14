@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+# Checklist item 4 — opt-in encrypted-.env-at-rest support. No-op
+# unless ENV_MASTER_KEY is set, so this changes nothing for the
+# existing dev workflow unless someone deliberately opts in — see
+# scripts/decrypt-env-boot.js's doc comment.
+node scripts/decrypt-env-boot.js
+
 # Always regenerate Prisma client in dev — the prisma/ folder is volume-mounted
 # so the schema may have changed since the Docker image was built.
 echo "Generating Prisma client..."

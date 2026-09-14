@@ -1112,6 +1112,9 @@ export function ChatbotPanel({
             <SendHorizontal size={14} />
           </button>
         </div>
+        <p className="mt-1.5 text-center text-[10px] text-gray-400">
+          The assistant can make mistakes. Double-check anything important.
+        </p>
       </div>
     </div>
   );

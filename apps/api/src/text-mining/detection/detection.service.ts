@@ -103,8 +103,9 @@ export class DetectionService {
 
     // Get LLM settings to know provider/model for storage
     const llmSettings = await this.llmService.getUserLlmSettings(args.teacherId);
-    const provider = settings.detectionProviderOverride ?? llmSettings.provider ?? 'openai';
-    const model = settings.detectionModelOverride ?? llmSettings.model ?? 'gpt-4o-mini';
+    const provider = settings.detectionProviderOverride ?? llmSettings.provider ?? 'bedrock';
+    const model =
+      settings.detectionModelOverride ?? llmSettings.model ?? 'global.openai.gpt-5.6-sol';
 
     // Run all enabled constructs concurrently with semaphore
     const concurrency = settings.detectionConcurrency;

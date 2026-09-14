@@ -22,8 +22,10 @@
 import { EmbeddingService } from './embedding.service';
 import * as crypto from 'crypto';
 
+const TEST_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+
 function encryptKey(plain: string): string {
-  const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+  const secret = TEST_JWT_SECRET;
   const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
@@ -56,8 +58,10 @@ function makeMockPrisma(opts: {
 }
 
 /** None of these tests exercise the Bedrock provider, so `.get()`
- *  never needs a real return value. */
-const mockConfig = { get: jest.fn() } as any;
+ *  never needs a real return value. `getOrThrow('JWT_SECRET')` DOES —
+ *  `decryptApiKey` calls it whenever a test supplies an encrypted key
+ *  above — kept in lockstep with `encryptKey`'s own secret. */
+const mockConfig = { get: jest.fn(), getOrThrow: () => TEST_JWT_SECRET } as any;
 
 function fakePng(size = 16): Buffer {
   const buf = Buffer.alloc(size);

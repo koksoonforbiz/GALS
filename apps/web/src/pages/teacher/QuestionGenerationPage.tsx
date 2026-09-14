@@ -20,7 +20,6 @@ interface GeneratedQuestion {
   type: 'mcq' | 'true_false' | 'short_answer' | 'open_ended';
   difficulty: 'easy' | 'medium' | 'hard';
   difficultyJustification?: string;
-  knowledgeTags: string[];
   options?: { label: string; text: string; isCorrect: boolean }[];
   answerKey: Record<string, unknown>;
   reviewStatus: 'pending' | 'approved' | 'rejected' | 'edited';
@@ -37,12 +36,6 @@ interface GenerationJob {
   rejectedCount: number;
   error: string | null;
   createdAt: string;
-}
-
-interface KnowledgeComponent {
-  id: string;
-  code: string;
-  label: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,11 +92,10 @@ export function QuestionGenerationPage() {
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<GeneratedQuestion>>({});
-  const [kcs, setKcs] = useState<KnowledgeComponent[]>([]);
   const [reviewAction, setReviewAction] = useState<string | null>(null);
   const [courseName, setCourseName] = useState('');
 
-  // Load documents and KCs on mount
+  // Load documents on mount
   useEffect(() => {
     if (!courseId) return;
     api
@@ -113,11 +105,6 @@ export function QuestionGenerationPage() {
     api
       .get<{ id: string; title: string }>(`/courses/${courseId}`)
       .then((c) => setCourseName(c.title))
-      .catch(() => {});
-    // Load KCs for the course (via topics)
-    api
-      .get<KnowledgeComponent[]>(`/proposed-kcs?courseId=${courseId}&status=APPROVED`)
-      .then(setKcs)
       .catch(() => {});
   }, [courseId]);
 
@@ -236,7 +223,6 @@ export function QuestionGenerationPage() {
     setEditForm({
       questionText: q.questionText,
       difficulty: q.difficulty,
-      knowledgeTags: [...q.knowledgeTags],
       options: q.options ? q.options.map((o) => ({ ...o })) : undefined,
       answerKey: { ...q.answerKey },
     });
@@ -810,30 +796,6 @@ export function QuestionGenerationPage() {
                       Difficulty: {q.difficultyJustification}
                     </p>
                   )}
-
-                  {/* Knowledge tags */}
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                    {q.knowledgeTags.map((tagId) => {
-                      const kc = kcs.find((k) => k.id === tagId);
-                      return (
-                        <span
-                          key={tagId}
-                          style={{
-                            padding: '2px 8px',
-                            background: '#ede9fe',
-                            color: '#6366f1',
-                            borderRadius: 12,
-                            fontSize: 12,
-                          }}
-                        >
-                          {kc?.label || tagId.slice(0, 8)}
-                        </span>
-                      );
-                    })}
-                    {q.knowledgeTags.length === 0 && (
-                      <span style={{ color: '#9ca3af', fontSize: 12 }}>No tags</span>
-                    )}
-                  </div>
 
                   {/* Action buttons */}
                   {q.reviewStatus === 'pending' && (

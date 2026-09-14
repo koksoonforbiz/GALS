@@ -4,8 +4,11 @@
  * Drives `LlmService.saveApiKey` with a stub Prisma and asserts that the
  * stage 2 validation layer rejects:
  *   - Unknown model ids
- *   - Mismatched provider/id pairs (e.g. `openai` + `gemini-3.5-flash`)
+ *   - Mismatched provider/id pairs (e.g. `bedrock` provider + a Gemini model)
  *   - Retired/non-selectable model ids (e.g. `gemini-2.0-flash`)
+ *   - A non-Bedrock provider entirely (product decision: teachers can no
+ *     longer bring their own OpenAI/Gemini key — see
+ *     LlmService.assertSelectableProvider's doc comment)
  *
  * No DB; no network; no real provider call.
  */
@@ -33,7 +36,16 @@ function makeService(): { service: LlmService; prisma: any } {
     getOrThrow: (_k: string) => 'test-secret-must-be-at-least-16-chars',
   } as unknown as ConfigService;
   const eventEmitter = new EventEmitter2();
-  const service = new LlmService(prisma, config, null as any, eventEmitter);
+  const usageQuota = { assertNotExceeded: jest.fn(), recordSpend: jest.fn() } as any;
+  const securityEvents = { record: jest.fn() } as any;
+  const service = new LlmService(
+    prisma,
+    config,
+    null as any,
+    eventEmitter,
+    usageQuota,
+    securityEvents,
+  );
   return { service, prisma };
 }
 
@@ -42,29 +54,43 @@ describe('LlmService.saveApiKey — validation', () => {
     it('unknown chat model id → BadRequestException', async () => {
       const { service } = makeService();
       await expect(
-        service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-9000-unobtanium'),
+        service.saveApiKey('user-1', 'bedrock', '', 'gpt-9000-unobtanium'),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('mismatched provider/id (openai provider + gemini model) → BadRequestException', async () => {
+    it('mismatched provider/id (bedrock provider + gemini model) → BadRequestException', async () => {
       const { service } = makeService();
-      await expect(
-        service.saveApiKey('user-1', 'openai', 'sk-test', 'gemini-3.5-flash'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.saveApiKey('user-1', 'bedrock', '', 'gemini-3.5-flash')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('mismatched provider/id (gemini provider + openai model) → BadRequestException', async () => {
+    it('mismatched provider/id (bedrock provider + openai model) → BadRequestException', async () => {
       const { service } = makeService();
-      await expect(
-        service.saveApiKey('user-1', 'gemini', 'gm-test', 'gpt-5.4-mini'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.saveApiKey('user-1', 'bedrock', '', 'gpt-5.4-mini')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
-    it('retired gemini-2.0-flash → BadRequestException', async () => {
+    it('retired gemini-2.0-flash → BadRequestException (also caught by the provider check below, but the model itself is retired regardless)', async () => {
       const { service } = makeService();
       await expect(
         service.saveApiKey('user-1', 'gemini', 'gm-test', 'gemini-2.0-flash'),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('openai provider → BadRequestException (no longer selectable)', async () => {
+      const { service } = makeService();
+      await expect(
+        service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-5.4-mini'),
+      ).rejects.toThrow('Only "bedrock" can be selected');
+    });
+
+    it('gemini provider → BadRequestException (no longer selectable)', async () => {
+      const { service } = makeService();
+      await expect(
+        service.saveApiKey('user-1', 'gemini', 'gm-test', 'gemini-3.5-flash'),
+      ).rejects.toThrow('Only "bedrock" can be selected');
     });
 
     it('unsupported provider string → BadRequestException', async () => {
@@ -79,9 +105,9 @@ describe('LlmService.saveApiKey — validation', () => {
       await expect(
         service.saveApiKey(
           'user-1',
-          'openai',
-          'sk-test',
-          'gpt-5.4-mini',
+          'bedrock',
+          '',
+          'global.openai.gpt-5.6-sol',
           'text-embedding-9000-nonexistent',
         ),
       ).rejects.toThrow(BadRequestException);
@@ -90,37 +116,37 @@ describe('LlmService.saveApiKey — validation', () => {
     it('mismatched embedding model provider → BadRequestException', async () => {
       const { service } = makeService();
       await expect(
-        service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-5.4-mini', 'gemini-embedding-001'),
+        service.saveApiKey(
+          'user-1',
+          'bedrock',
+          '',
+          'global.openai.gpt-5.6-sol',
+          'gemini-embedding-001',
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('accepts', () => {
-    it('valid openai default save', async () => {
+    it('valid bedrock default save', async () => {
       const { service, prisma } = makeService();
-      await service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-5.4-mini');
+      await service.saveApiKey('user-1', 'bedrock', '', 'global.openai.gpt-5.6-sol');
       expect(prisma.user.update).toHaveBeenCalledTimes(1);
       const updateArg = prisma.user.update.mock.calls[0]![0];
-      expect(updateArg.data.llmModel).toBe('gpt-5.4-mini');
-      expect(updateArg.data.llmEmbeddingModel).toBe('text-embedding-3-small');
+      expect(updateArg.data.llmModel).toBe('global.openai.gpt-5.6-sol');
+      expect(updateArg.data.llmEmbeddingModel).toBe('global.cohere.embed-v4:0');
+      // Bedrock uses one shared server-side credential — nothing per-teacher
+      // to encrypt/store.
+      expect(updateArg.data.encryptedApiKey).toBeNull();
     });
 
-    it('valid gemini default save', async () => {
+    it('the other selectable bedrock chat model (Terra) is accepted too', async () => {
       const { service, prisma } = makeService();
-      await service.saveApiKey('user-1', 'gemini', 'gm-test', 'gemini-3.5-flash');
+      await service.saveApiKey('user-1', 'bedrock', '', 'global.openai.gpt-5.6-terra');
       expect(prisma.user.update).toHaveBeenCalledTimes(1);
-      const updateArg = prisma.user.update.mock.calls[0]![0];
-      expect(updateArg.data.llmModel).toBe('gemini-3.5-flash');
-      expect(updateArg.data.llmEmbeddingModel).toBe('gemini-embedding-001');
-    });
-
-    it('legacy-but-still-selectable model (gpt-4o-mini) accepted', async () => {
-      // gpt-4o-mini is `deprecated: true` but has no past `retiresOn` so it
-      // remains selectable for teachers who already configured it.
-      const { service, prisma } = makeService();
-      await service.saveApiKey('user-1', 'openai', 'sk-test', 'gpt-4o-mini');
-      expect(prisma.user.update).toHaveBeenCalledTimes(1);
-      expect(prisma.user.update.mock.calls[0]![0].data.llmModel).toBe('gpt-4o-mini');
+      expect(prisma.user.update.mock.calls[0]![0].data.llmModel).toBe(
+        'global.openai.gpt-5.6-terra',
+      );
     });
   });
 });

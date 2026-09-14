@@ -13,15 +13,18 @@ const BACKGROUND_PATHS = [
 // session expired" — some of these run before any token exists at all
 // (login, 2FA verify/resend), so there's no session to have expired. The
 // global redirect below would otherwise hard-navigate to /login mid-flow
-// (e.g. after a wrong 2FA or TOTP-setup code), wiping the in-progress
-// code-entry step before the caller's own catch block can show an inline
-// error and let the user retry. Every /auth/2fa/* route (email-OTP and
-// TOTP alike) plus /auth/login itself fall into this bucket — the caller
-// handles the 401 instead of the global redirect.
+// (e.g. after a wrong 2FA/TOTP-setup code, or the wrong current password
+// on the change-password form), wiping the in-progress step before the
+// caller's own catch block can show an inline error and let the user
+// retry. Every /auth/2fa/* route (email-OTP and TOTP alike),
+// /auth/login, and /auth/change-password (its 401 means "current
+// password is wrong," from an otherwise still-valid session) fall into
+// this bucket — the caller handles the 401 instead of the global redirect.
 function skipsAuthRedirect(path: string): boolean {
   return (
     BACKGROUND_PATHS.some((p) => path.startsWith(p)) ||
     path === '/auth/login' ||
+    path === '/auth/change-password' ||
     path.startsWith('/auth/2fa/')
   );
 }
@@ -46,6 +49,17 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+// The backend's GlobalExceptionFilter (apps/api/src/common/http-
+// exception.filter.ts) types its `message` field as `string | string[]`
+// — ZodValidationPipe in particular sends one "field: reason" string
+// per failed field. Join those into one readable line rather than
+// leaving every caller of api.* to guess whether `err.message` is a
+// string or an array.
+function toMessage(raw: unknown, fallback: string): string {
+  if (Array.isArray(raw)) return raw.length > 0 ? raw.join('; ') : fallback;
+  return typeof raw === 'string' && raw ? raw : fallback;
 }
 
 /** Default abort timeout: only meant to catch a genuinely unreachable API
@@ -96,7 +110,7 @@ export async function apiFetch<T>(
     // caller can show it inline and let the user retry.
     if (skipsAuthRedirect(path)) {
       const body = await res.json().catch(() => ({}));
-      throw new ApiError(401, body.message || 'Unauthorized', body.errors);
+      throw new ApiError(401, toMessage(body.message, 'Unauthorized'), body.errors);
     }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -104,9 +118,32 @@ export async function apiFetch<T>(
     throw new ApiError(401, 'Unauthorized');
   }
 
+  if (res.status === 403) {
+    const body = await res.json().catch(() => ({}));
+    // Checklist item 5 — RolesGuard blocks every RolesGuard-covered
+    // route once a password change is outstanding (forced reset, or
+    // 180-day expiry). Normally the client already knows this from
+    // user.mustChangePassword (set by /auth/login or /auth/me) and
+    // ProtectedRoute redirects before any such request fires; this is
+    // the fallback for expiry crossing mid-session, before the next
+    // /auth/me refresh. change-password/logout/me themselves never hit
+    // this (RolesGuard isn't in their guard chain), so there's no loop.
+    if (
+      body.code === 'PASSWORD_CHANGE_REQUIRED' &&
+      window.location.pathname !== '/change-password'
+    ) {
+      window.location.href = '/change-password';
+    }
+    throw new ApiError(403, toMessage(body.message, 'Forbidden'), body.errors);
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, body.message || `API error: ${res.status}`, body.errors);
+    throw new ApiError(
+      res.status,
+      toMessage(body.message, `API error: ${res.status}`),
+      body.errors,
+    );
   }
 
   // Handle empty responses

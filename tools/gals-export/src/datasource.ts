@@ -63,7 +63,6 @@ export interface PrismaLike {
   dialogueMessage: any;
   learningIntervention: any;
   efDetection: any;
-  userMastery: any;
   spacedRepetitionCard: any;
   attempt: any;
   user: any;
@@ -453,23 +452,6 @@ export class PrismaDataSource implements SessionDataSource {
             confidence: r.confidence ?? null,
             severity: r.severity ?? null,
             rationale: r.rationale ?? null,
-          };
-        }
-        return;
-      }
-      case 'mastery': {
-        const s = await this.prisma.studentSession.findUnique({
-          where: { id: sessionId },
-          select: { userId: true, updatedAt: true },
-        });
-        if (!s) return;
-        const rows = await this.prisma.userMastery
-          .findMany({ where: { userId: s.userId } })
-          .catch(() => []);
-        for (const r of rows) {
-          yield {
-            wallMs: (r.updatedAt ?? r.createdAt ?? s.updatedAt).getTime?.() ?? 0,
-            ...serializeRow(r),
           };
         }
         return;

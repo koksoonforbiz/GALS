@@ -43,6 +43,15 @@ function createMockTotp() {
 function createMockMailer() {
   return { sendOtpEmail: jest.fn().mockResolvedValue(undefined) };
 }
+function createMockSecurityEvents() {
+  return { record: jest.fn() };
+}
+function createMockPasswordHistory() {
+  return {
+    assertNotReused: jest.fn().mockResolvedValue(undefined),
+    recordReplaced: jest.fn().mockResolvedValue(undefined),
+  };
+}
 
 describe('AuthService.login', () => {
   let prisma: ReturnType<typeof createMockPrisma>;
@@ -52,6 +61,8 @@ describe('AuthService.login', () => {
   let twoFactor: ReturnType<typeof createMockTwoFactor>;
   let totp: ReturnType<typeof createMockTotp>;
   let mailer: ReturnType<typeof createMockMailer>;
+  let securityEvents: ReturnType<typeof createMockSecurityEvents>;
+  let passwordHistory: ReturnType<typeof createMockPasswordHistory>;
   let service: AuthService;
 
   beforeEach(() => {
@@ -63,6 +74,8 @@ describe('AuthService.login', () => {
     twoFactor = createMockTwoFactor();
     totp = createMockTotp();
     mailer = createMockMailer();
+    securityEvents = createMockSecurityEvents();
+    passwordHistory = createMockPasswordHistory();
     service = new AuthService(
       prisma as any,
       jwtService as any,
@@ -71,6 +84,8 @@ describe('AuthService.login', () => {
       twoFactor as any,
       totp as any,
       mailer as any,
+      securityEvents as any,
+      passwordHistory as any,
     );
   });
 
@@ -104,6 +119,7 @@ describe('AuthService.login', () => {
       email: 'teacher@example.com',
       passwordHash: 'stored-hash',
       role: 'teacher',
+      isActive: true,
     });
     (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
@@ -125,6 +141,9 @@ describe('AuthService.login', () => {
       twoFactorMethod: null,
       createdAt: new Date(),
       updatedAt: new Date(),
+      isActive: true,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
     });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
@@ -149,6 +168,7 @@ describe('AuthService.login', () => {
       twoFactorMethod: 'email',
       createdAt: new Date(),
       updatedAt: new Date(),
+      isActive: true,
     });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     twoFactor.startEmailChallenge.mockResolvedValue({ challengeId: 'challenge-1', code: '123456' });
@@ -174,6 +194,7 @@ describe('AuthService.login', () => {
       twoFactorMethod: 'totp',
       createdAt: new Date(),
       updatedAt: new Date(),
+      isActive: true,
     });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     twoFactor.startTotpChallenge.mockResolvedValue({ challengeId: 'challenge-2' });
@@ -196,6 +217,9 @@ describe('AuthService.login', () => {
       twoFactorMethod: null,
       createdAt: new Date(),
       updatedAt: new Date(),
+      isActive: true,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
     });
     (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
@@ -213,6 +237,8 @@ describe('AuthService.verifyTwoFactor', () => {
   let twoFactor: ReturnType<typeof createMockTwoFactor>;
   let totp: ReturnType<typeof createMockTotp>;
   let mailer: ReturnType<typeof createMockMailer>;
+  let securityEvents: ReturnType<typeof createMockSecurityEvents>;
+  let passwordHistory: ReturnType<typeof createMockPasswordHistory>;
   let service: AuthService;
 
   beforeEach(() => {
@@ -224,6 +250,8 @@ describe('AuthService.verifyTwoFactor', () => {
     twoFactor = createMockTwoFactor();
     totp = createMockTotp();
     mailer = createMockMailer();
+    securityEvents = createMockSecurityEvents();
+    passwordHistory = createMockPasswordHistory();
     service = new AuthService(
       prisma as any,
       jwtService as any,
@@ -232,6 +260,8 @@ describe('AuthService.verifyTwoFactor', () => {
       twoFactor as any,
       totp as any,
       mailer as any,
+      securityEvents as any,
+      passwordHistory as any,
     );
   });
 
@@ -247,6 +277,7 @@ describe('AuthService.verifyTwoFactor', () => {
       twoFactorMethod: 'email',
       createdAt: new Date(),
       updatedAt: new Date(),
+      isActive: true,
     });
 
     const result = await service.verifyTwoFactor({ challengeId: 'challenge-1', code: '123456' });
@@ -272,6 +303,7 @@ describe('AuthService.verifyTwoFactor', () => {
         twoFactorMethod: 'totp',
         createdAt: new Date(),
         updatedAt: new Date(),
+        isActive: true,
       });
     totp.verifyLoginCode.mockReturnValue(true);
     twoFactor.verifyTotpAttempt.mockResolvedValue('user-1');
@@ -300,5 +332,119 @@ describe('AuthService.verifyTwoFactor', () => {
       service.verifyTwoFactor({ challengeId: 'nonexistent', code: '000000' }),
     ).rejects.toThrow('This code has expired. Please log in again.');
     expect(sessionService.openSession).not.toHaveBeenCalled();
+  });
+});
+
+// Checklist item 5 — self-service password change. No email is ever
+// sent by this path (product decision); a fully-locked-out user's only
+// recovery remains a teacher/admin reset (user-management.service.ts).
+describe('AuthService.changePassword', () => {
+  let prisma: ReturnType<typeof createMockPrisma>;
+  let jwtService: ReturnType<typeof createMockJwtService>;
+  let sessionService: ReturnType<typeof createMockSessionService>;
+  let loginProtection: ReturnType<typeof createMockLoginProtection>;
+  let twoFactor: ReturnType<typeof createMockTwoFactor>;
+  let totp: ReturnType<typeof createMockTotp>;
+  let mailer: ReturnType<typeof createMockMailer>;
+  let securityEvents: ReturnType<typeof createMockSecurityEvents>;
+  let passwordHistory: ReturnType<typeof createMockPasswordHistory>;
+  let service: AuthService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma = createMockPrisma();
+    jwtService = createMockJwtService();
+    sessionService = createMockSessionService();
+    loginProtection = createMockLoginProtection();
+    twoFactor = createMockTwoFactor();
+    totp = createMockTotp();
+    mailer = createMockMailer();
+    securityEvents = createMockSecurityEvents();
+    passwordHistory = createMockPasswordHistory();
+    service = new AuthService(
+      prisma as any,
+      jwtService as any,
+      sessionService as any,
+      loginProtection as any,
+      twoFactor as any,
+      totp as any,
+      mailer as any,
+      securityEvents as any,
+      passwordHistory as any,
+    );
+    (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
+  });
+
+  it('rejects when the current password is wrong, without touching password history', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      passwordHash: 'stored-hash',
+      isTemporaryPassword: false,
+      passwordChangedAt: null,
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+    await expect(service.changePassword('user-1', 'wrong', 'NewPassw0rd!')).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(passwordHistory.assertNotReused).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('allows an immediate change when isTemporaryPassword is set, bypassing the minimum-age rule', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      passwordHash: 'stored-hash',
+      isTemporaryPassword: true,
+      // Reset moments ago — would fail the 3-day minimum age if it applied.
+      passwordChangedAt: new Date(),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    await service.changePassword('user-1', 'temp-password', 'NewPassw0rd!');
+
+    expect(passwordHistory.assertNotReused).toHaveBeenCalledWith('user-1', 'NewPassw0rd!');
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        passwordHash: 'new-hashed-password',
+        passwordChangedAt: expect.any(Date),
+        isTemporaryPassword: false,
+      },
+    });
+    expect(passwordHistory.recordReplaced).toHaveBeenCalledWith('user-1', 'stored-hash');
+  });
+
+  it('rejects a voluntary change within the 3-day minimum age window', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      passwordHash: 'stored-hash',
+      isTemporaryPassword: false,
+      passwordChangedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+    await expect(service.changePassword('user-1', 'current', 'NewPassw0rd!')).rejects.toThrow(
+      'Please wait',
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('allows a voluntary change once the minimum age has passed, and propagates password-history rejection', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      passwordHash: 'stored-hash',
+      isTemporaryPassword: false,
+      passwordChangedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+    });
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    passwordHistory.assertNotReused.mockRejectedValue(
+      new Error('Password must not match any of the last 3 passwords used on this account'),
+    );
+
+    await expect(service.changePassword('user-1', 'current', 'OldPassw0rd!')).rejects.toThrow(
+      'must not match',
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });

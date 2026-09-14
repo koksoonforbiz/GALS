@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
-  Body,
-  Param,
-  UseGuards,
-  Request,
-} from '@nestjs/common';
+import { Controller, Post, Patch, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ModulesService } from './modules.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import type { UserRole } from '@ats/shared';
@@ -38,7 +28,7 @@ export class ModulesController {
   update(
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body() dto: { title?: string },
+    @Body() dto: { title?: string; showPlayground?: boolean },
   ) {
     return this.modulesService.update(id, req.user.id, dto);
   }

@@ -9,7 +9,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RagService, ChunkWithScore } from '../rag/rag.service';
 import { LlmService, type FunnelContentPart } from '../rag/llm.service';
 import { BlobService } from '../blob/blob.service';
-import { KcSuggestionService } from '../kc/kc-suggestion.service';
 import {
   buildPageContentSystemPrompt,
   buildPageContentUserPrompt,
@@ -72,7 +71,6 @@ export class PageContentService {
     private readonly ragService: RagService,
     private readonly llmService: LlmService,
     private readonly blobService: BlobService,
-    private readonly kcSuggestionService: KcSuggestionService,
   ) {}
 
   // Max bytes per attached PDF; OpenAI inline file_data should stay modest.
@@ -100,11 +98,20 @@ export class PageContentService {
 
     const mod = await this.prisma.courseModule.findUnique({
       where: { id: input.moduleId },
-      select: { title: true, items: { orderBy: { orderIndex: 'asc' }, select: { id: true, title: true, learningOutcomes: true } } },
+      select: {
+        title: true,
+        items: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, title: true, learningOutcomes: true },
+        },
+      },
     });
     if (!mod) throw new NotFoundException('Module not found');
 
-    const selectedSourceNames = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
+    const selectedSourceNames = await this.resolveSourceNames(
+      input.courseId,
+      input.selectedSourceIds,
+    );
 
     // Build suggested prompt for the first page (or aggregate for bulk)
     if (input.pageIds.length === 1) {
@@ -120,7 +127,11 @@ export class PageContentService {
         pageIndex: mod.items.findIndex((i) => i.id === pageItem.id),
       };
       return {
-        suggestedPrompt: buildSuggestedPrompt(pageContext, selectedSourceNames, input.scopePreference),
+        suggestedPrompt: buildSuggestedPrompt(
+          pageContext,
+          selectedSourceNames,
+          input.scopePreference,
+        ),
       };
     }
 
@@ -152,7 +163,10 @@ export class PageContentService {
       where: { id: input.moduleId },
       select: {
         title: true,
-        items: { orderBy: { orderIndex: 'asc' }, select: { id: true, title: true, learningOutcomes: true, estimatedMinutes: true } },
+        items: {
+          orderBy: { orderIndex: 'asc' },
+          select: { id: true, title: true, learningOutcomes: true, estimatedMinutes: true },
+        },
       },
     });
     if (!mod) throw new NotFoundException('Module not found');
@@ -227,9 +241,17 @@ export class PageContentService {
       const supportsFilesApi = resolved.spec.supportsOpenAiFilesApi === true;
 
       // 7. Build prompts
-      const selectedSourceNames = await this.resolveSourceNames(input.courseId, input.selectedSourceIds);
+      const selectedSourceNames = await this.resolveSourceNames(
+        input.courseId,
+        input.selectedSourceIds,
+      );
       const systemPrompt = buildPageContentSystemPrompt(input.strictSources);
-      const userPrompt = buildPageContentUserPrompt(pageContext, chunks, input.adminPrompt, selectedSourceNames);
+      const userPrompt = buildPageContentUserPrompt(
+        pageContext,
+        chunks,
+        input.adminPrompt,
+        selectedSourceNames,
+      );
 
       // 7b. Multimodal PDFs are an OpenAI-only path today (the Files API).
       // Under Gemini we deliberately fall back to the chunked-text RAG
@@ -337,22 +359,6 @@ export class PageContentService {
         },
         outputPayload: { jobId: job.id, status: parsed.status },
       });
-
-      // 13. Fire-and-forget KC suggestion (non-blocking)
-      this.kcSuggestionService
-        .suggestKcsForPage({
-          courseId: input.courseId,
-          pageId: input.pageId,
-          moduleTitle: mod.title,
-          courseTitle: course.title,
-          pageTitle: pageItem.title,
-          contentJson,
-          generationJobId: job.id,
-          userId: input.userId,
-        })
-        .catch((err) =>
-          this.logger.error(`KC suggestion background task failed: ${err.message}`),
-        );
 
       return {
         pageId: input.pageId,
@@ -559,7 +565,9 @@ export class PageContentService {
       try {
         const { body } = await this.blobService.get(doc.blobKey);
         if (body.length > this.MAX_PDF_BYTES) {
-          this.logger.warn(`Skipping "${doc.filename}" — actual body ${body.length} bytes exceeds cap`);
+          this.logger.warn(
+            `Skipping "${doc.filename}" — actual body ${body.length} bytes exceeds cap`,
+          );
           continue;
         }
         attachments.push({

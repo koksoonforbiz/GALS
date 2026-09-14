@@ -18,7 +18,6 @@ export interface RecordEventParams {
   questionId?: string;
   dialogueSessionId?: string;
   interventionId?: string;
-  kcId?: string;
 
   metadata?: Record<string, unknown>;
 }
@@ -52,7 +51,6 @@ export class ActivityLogService {
           questionId: params.questionId ?? null,
           dialogueSessionId: params.dialogueSessionId ?? null,
           interventionId: params.interventionId ?? null,
-          kcId: params.kcId ?? null,
           metadata: (params.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         },
       });
@@ -83,7 +81,6 @@ export class ActivityLogService {
           questionId: e.questionId ?? null,
           dialogueSessionId: e.dialogueSessionId ?? null,
           interventionId: e.interventionId ?? null,
-          kcId: e.kcId ?? null,
           metadata: (e.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
         })),
         skipDuplicates: true,
@@ -297,7 +294,6 @@ export class ActivityLogService {
         studentMessagesSent: 0,
         flashcardsReviewed: 0,
         moduleItemsViewed: 0,
-        masteryDeltas: null,
       };
     }
 
@@ -337,9 +333,6 @@ export class ActivityLogService {
       studentMessagesSent: count('DIALOGUE_MESSAGE_SENT'),
       flashcardsReviewed: count('SPACED_REP_CARD_RATED'),
       moduleItemsViewed: count('MODULE_ITEM_VIEWED'),
-      masteryDeltas: logs
-        .filter((l) => l.action === 'MASTERY_UPDATED')
-        .map((l) => l.metadata) as any,
     };
   }
 }

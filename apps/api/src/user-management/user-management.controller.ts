@@ -12,6 +12,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard, Roles, RolesGuard } from '../auth';
 import { ZodValidationPipe } from '../common';
 import {
@@ -70,6 +71,18 @@ export class UserManagementController {
     res!.send(csv);
   }
 
+  // Checklist item 13 — quarterly review of every account, including
+  // privileged ones. Admin-only (not 'teacher' — a teacher has no
+  // business seeing the full roster of other teachers/admins).
+  @Get('account-review/export')
+  @Roles('admin')
+  async exportAccountReview(@Res() res: Response) {
+    const csv = await this.service.exportAccountReviewCsv();
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=account-review.csv');
+    res.send(csv);
+  }
+
   @Get('students/:studentId')
   @Roles('teacher', 'admin')
   async getStudentDetail(
@@ -123,6 +136,21 @@ export class UserManagementController {
     return this.service.resetStudentPassword(req.user.id, userId, dto);
   }
 
+  // Account deactivation (checklist item 11). Admins may act on anyone;
+  // teachers only on students enrolled in their own courses — see
+  // UserManagementService.setUserActive for the exact scoping.
+  @Post('users/:userId/deactivate')
+  @Roles('teacher', 'admin')
+  async deactivateUser(@Request() req: { user: RequestUser }, @Param('userId') userId: string) {
+    return this.service.setUserActive(req.user.id, userId, false);
+  }
+
+  @Post('users/:userId/reactivate')
+  @Roles('teacher', 'admin')
+  async reactivateUser(@Request() req: { user: RequestUser }, @Param('userId') userId: string) {
+    return this.service.setUserActive(req.user.id, userId, true);
+  }
+
   // ─── Bulk provisioning (prompt 02) ────────────────────
   //
   // Teacher spreadsheet → batch of { email, loginId, password, ... }.
@@ -131,11 +159,10 @@ export class UserManagementController {
   // response never includes the plaintext password.
   @Post('users/bulk-provision')
   @Roles('teacher', 'admin')
+  // Up to 500 rows per call, each bcrypt-hashed and inserted.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UsePipes(new ZodValidationPipe(BulkProvisionUsersSchema))
-  async bulkProvisionUsers(
-    @Request() req: { user: RequestUser },
-    @Body() dto: BulkProvisionUsers,
-  ) {
+  async bulkProvisionUsers(@Request() req: { user: RequestUser }, @Body() dto: BulkProvisionUsers) {
     return this.service.bulkProvisionUsers(req.user.id, dto);
   }
 
@@ -144,10 +171,7 @@ export class UserManagementController {
   @Post('enrollments/bulk')
   @Roles('teacher', 'admin')
   @UsePipes(new ZodValidationPipe(BulkEnrollSchema))
-  async bulkEnroll(
-    @Request() req: { user: RequestUser },
-    @Body() dto: BulkEnroll,
-  ) {
+  async bulkEnroll(@Request() req: { user: RequestUser }, @Body() dto: BulkEnroll) {
     return this.service.bulkEnroll(req.user.id, dto);
   }
 

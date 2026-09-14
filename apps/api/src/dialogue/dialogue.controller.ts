@@ -12,8 +12,22 @@ import {
 import { DialogueService } from './dialogue.service';
 import { StudioService } from './studio.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
-import { SessionId } from '../common';
-import type { UserRole } from '@ats/shared';
+import { SessionId, ZodValidationPipe } from '../common';
+import {
+  CreateDialogueSessionDto,
+  UpdateDialogueSessionDto,
+  SendDialogueMessageDto,
+  GenerateStudioOutputDto,
+  LinkInterventionDto,
+} from '@ats/shared';
+import type {
+  UserRole,
+  CreateDialogueSessionDtoType,
+  UpdateDialogueSessionDtoType,
+  SendDialogueMessageDtoType,
+  GenerateStudioOutputDtoType,
+  LinkInterventionDtoType,
+} from '@ats/shared';
 
 interface RequestUser {
   id: string;
@@ -45,7 +59,7 @@ export class DialogueController {
   createSession(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
-    @Body() dto: { title?: string; activeSourceIds?: string[] },
+    @Body(new ZodValidationPipe(CreateDialogueSessionDto)) dto: CreateDialogueSessionDtoType,
     @SessionId() sessionId?: string,
   ) {
     return this.dialogueService.createSession(req.user.id, courseId, dto, sessionId);
@@ -68,7 +82,7 @@ export class DialogueController {
   updateSession(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
-    @Body() dto: { title?: string; activeSourceIds?: string[] },
+    @Body(new ZodValidationPipe(UpdateDialogueSessionDto)) dto: UpdateDialogueSessionDtoType,
   ) {
     return this.dialogueService.updateSession(sessionId, req.user.id, dto);
   }
@@ -86,7 +100,7 @@ export class DialogueController {
   sendMessage(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
-    @Body() dto: { content: string; activeSourceIds?: string[] },
+    @Body(new ZodValidationPipe(SendDialogueMessageDto)) dto: SendDialogueMessageDtoType,
     @SessionId() activitySessionId?: string,
   ) {
     return this.dialogueService.sendMessage(sessionId, req.user.id, dto, activitySessionId);
@@ -105,13 +119,7 @@ export class DialogueController {
   generateStudioOutput(
     @Request() req: { user: RequestUser },
     @Param('courseId') courseId: string,
-    @Body()
-    dto: {
-      type: 'BRIEFING_DOC' | 'FLASHCARD_SET' | 'TABLE_COMPARISON' | 'MIND_MAP' | 'FAQ';
-      sourceIds: string[];
-      promptHint?: string;
-      sessionId?: string;
-    },
+    @Body(new ZodValidationPipe(GenerateStudioOutputDto)) dto: GenerateStudioOutputDtoType,
   ) {
     return this.studioService.generate(req.user.id, courseId, dto);
   }
@@ -135,17 +143,7 @@ export class DialogueController {
   async linkIntervention(
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
-    @Body()
-    dto: {
-      type:
-        | 'PRACTICE_TESTING'
-        | 'DISTRIBUTED_PRACTICE'
-        | 'STEPWISE_LEARNING'
-        | 'INTERROGATIVE_ELABORATION';
-      selectedText: string;
-      contentId?: string;
-      pageType?: string;
-    },
+    @Body(new ZodValidationPipe(LinkInterventionDto)) dto: LinkInterventionDtoType,
   ) {
     // Verify session ownership
     const session = await this.dialogueService.getSession(sessionId, req.user.id);

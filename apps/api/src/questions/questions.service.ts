@@ -12,13 +12,6 @@ import type { CreateQuestion, UpdateQuestion } from '@ats/shared';
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/** Standard KC include used across multiple queries */
-const KC_INCLUDE = {
-  questionKcs: {
-    include: { kc: { select: { id: true, code: true, label: true } } },
-  },
-} as const;
-
 /** Full relation payload for single-question reads */
 const FULL_INCLUDE = {
   course: { select: { id: true, title: true, teacherId: true } },
@@ -27,7 +20,6 @@ const FULL_INCLUDE = {
       course: { select: { id: true, title: true, teacherId: true } },
     },
   },
-  ...KC_INCLUDE,
 } as const;
 
 interface FindByCourseFilters {
@@ -65,9 +57,7 @@ export class QuestionsService {
     }
 
     if (!dto.courseId && !dto.topicId) {
-      throw new BadRequestException(
-        'Either courseId or topicId must be provided',
-      );
+      throw new BadRequestException('Either courseId or topicId must be provided');
     }
 
     // --- MCQ validations ------------------------------------------ */
@@ -79,46 +69,35 @@ export class QuestionsService {
         courseId: dto.courseId ?? null,
         topicId: dto.topicId ?? null,
         prompt: dto.prompt,
-        stem: dto.stem === null
-          ? Prisma.DbNull
-          : (dto.stem as Prisma.InputJsonValue | undefined),
+        stem: dto.stem === null ? Prisma.DbNull : (dto.stem as Prisma.InputJsonValue | undefined),
         type: dto.type,
         maxScore: dto.maxScore,
-        rubricJson: dto.rubricJson === null
-          ? Prisma.DbNull
-          : (dto.rubricJson as Prisma.InputJsonValue | undefined),
-        options: dto.options === null
-          ? Prisma.DbNull
-          : (dto.options as unknown as Prisma.InputJsonValue | undefined),
+        rubricJson:
+          dto.rubricJson === null
+            ? Prisma.DbNull
+            : (dto.rubricJson as Prisma.InputJsonValue | undefined),
+        options:
+          dto.options === null
+            ? Prisma.DbNull
+            : (dto.options as unknown as Prisma.InputJsonValue | undefined),
         correctOptionId: dto.correctOptionId ?? null,
-        correctAnswer: dto.correctAnswer === null
-          ? Prisma.DbNull
-          : (dto.correctAnswer as Prisma.InputJsonValue | undefined),
-        explanation: dto.explanation === null
-          ? Prisma.DbNull
-          : (dto.explanation as Prisma.InputJsonValue | undefined),
+        correctAnswer:
+          dto.correctAnswer === null
+            ? Prisma.DbNull
+            : (dto.correctAnswer as Prisma.InputJsonValue | undefined),
+        explanation:
+          dto.explanation === null
+            ? Prisma.DbNull
+            : (dto.explanation as Prisma.InputJsonValue | undefined),
         difficulty: dto.difficulty ?? null,
         bloomsLevel: dto.bloomsLevel ?? null,
-        kcIds: dto.kcIds ?? [],
         pageIds: dto.pageIds ?? [],
-        tags: dto.tags === null
-          ? Prisma.DbNull
-          : (dto.tags as Prisma.InputJsonValue | undefined),
+        tags: dto.tags === null ? Prisma.DbNull : (dto.tags as Prisma.InputJsonValue | undefined),
         status: dto.status ?? 'draft',
         createdBy: dto.createdBy ?? null,
         sourceType: dto.sourceType ?? null,
       },
     });
-
-    // Link KCs via join table
-    if (dto.kcIds && dto.kcIds.length > 0) {
-      await this.prisma.questionKc.createMany({
-        data: dto.kcIds.map((kcId) => ({
-          questionId: question.id,
-          kcId,
-        })),
-      });
-    }
 
     return question;
   }
@@ -140,7 +119,6 @@ export class QuestionsService {
 
     return this.prisma.question.findMany({
       where,
-      include: KC_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -159,10 +137,7 @@ export class QuestionsService {
     const courseIds = courses.map((c) => c.id);
 
     const where: Prisma.QuestionWhereInput = {
-      OR: [
-        { courseId: { in: courseIds } },
-        { topic: { course: { teacherId } } },
-      ],
+      OR: [{ courseId: { in: courseIds } }, { topic: { course: { teacherId } } }],
     };
 
     if (filters.courseId) {
@@ -185,7 +160,6 @@ export class QuestionsService {
     return this.prisma.question.findMany({
       where,
       include: {
-        ...KC_INCLUDE,
         course: { select: { id: true, title: true } },
         topic: { select: { id: true, title: true } },
       },
@@ -200,7 +174,6 @@ export class QuestionsService {
   async findByTopic(topicId: string) {
     return this.prisma.question.findMany({
       where: { topicId },
-      include: KC_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -251,12 +224,10 @@ export class QuestionsService {
     if (dto.prompt !== undefined) updateData.prompt = dto.prompt;
     if (dto.type !== undefined) updateData.type = dto.type;
     if (dto.maxScore !== undefined) updateData.maxScore = dto.maxScore;
-    if (dto.courseId !== undefined) updateData.course = dto.courseId
-      ? { connect: { id: dto.courseId } }
-      : { disconnect: true };
-    if (dto.topicId !== undefined) updateData.topic = dto.topicId
-      ? { connect: { id: dto.topicId } }
-      : { disconnect: true };
+    if (dto.courseId !== undefined)
+      updateData.course = dto.courseId ? { connect: { id: dto.courseId } } : { disconnect: true };
+    if (dto.topicId !== undefined)
+      updateData.topic = dto.topicId ? { connect: { id: dto.topicId } } : { disconnect: true };
     if (dto.correctOptionId !== undefined) updateData.correctOptionId = dto.correctOptionId ?? null;
     if (dto.difficulty !== undefined) updateData.difficulty = dto.difficulty ?? null;
     if (dto.bloomsLevel !== undefined) updateData.bloomsLevel = dto.bloomsLevel ?? null;
@@ -266,57 +237,35 @@ export class QuestionsService {
 
     // JSON fields
     if (dto.rubricJson !== undefined) {
-      updateData.rubricJson = dto.rubricJson === null
-        ? Prisma.DbNull
-        : (dto.rubricJson as Prisma.InputJsonValue);
+      updateData.rubricJson =
+        dto.rubricJson === null ? Prisma.DbNull : (dto.rubricJson as Prisma.InputJsonValue);
     }
     if (dto.stem !== undefined) {
-      updateData.stem = dto.stem === null
-        ? Prisma.DbNull
-        : (dto.stem as Prisma.InputJsonValue);
+      updateData.stem = dto.stem === null ? Prisma.DbNull : (dto.stem as Prisma.InputJsonValue);
     }
     if (dto.options !== undefined) {
-      updateData.options = dto.options === null
-        ? Prisma.DbNull
-        : (dto.options as unknown as Prisma.InputJsonValue);
+      updateData.options =
+        dto.options === null ? Prisma.DbNull : (dto.options as unknown as Prisma.InputJsonValue);
     }
     if (dto.correctAnswer !== undefined) {
-      updateData.correctAnswer = dto.correctAnswer === null
-        ? Prisma.DbNull
-        : (dto.correctAnswer as Prisma.InputJsonValue);
+      updateData.correctAnswer =
+        dto.correctAnswer === null ? Prisma.DbNull : (dto.correctAnswer as Prisma.InputJsonValue);
     }
     if (dto.explanation !== undefined) {
-      updateData.explanation = dto.explanation === null
-        ? Prisma.DbNull
-        : (dto.explanation as Prisma.InputJsonValue);
+      updateData.explanation =
+        dto.explanation === null ? Prisma.DbNull : (dto.explanation as Prisma.InputJsonValue);
     }
     if (dto.tags !== undefined) {
-      updateData.tags = dto.tags === null
-        ? Prisma.DbNull
-        : (dto.tags as Prisma.InputJsonValue);
+      updateData.tags = dto.tags === null ? Prisma.DbNull : (dto.tags as Prisma.InputJsonValue);
     }
 
     // Array fields
-    if (dto.kcIds !== undefined) updateData.kcIds = dto.kcIds ?? [];
     if (dto.pageIds !== undefined) updateData.pageIds = dto.pageIds ?? [];
 
     const updated = await this.prisma.question.update({
       where: { id },
       data: updateData,
     });
-
-    // Update KC join-table links if provided
-    if (dto.kcIds !== undefined) {
-      await this.prisma.questionKc.deleteMany({ where: { questionId: id } });
-      if (dto.kcIds && dto.kcIds.length > 0) {
-        await this.prisma.questionKc.createMany({
-          data: dto.kcIds.map((kcId) => ({
-            questionId: id,
-            kcId,
-          })),
-        });
-      }
-    }
 
     return updated;
   }
@@ -335,11 +284,7 @@ export class QuestionsService {
   /*  BULK IMPORT                                                      */
   /* ================================================================ */
 
-  async bulkImport(
-    teacherId: string,
-    courseId: string,
-    questions: CreateQuestion[],
-  ) {
+  async bulkImport(teacherId: string, courseId: string, questions: CreateQuestion[]) {
     await this.verifyCourseOwnership(courseId, teacherId);
 
     const results = [];
@@ -374,12 +319,9 @@ export class QuestionsService {
     }
 
     for (const q of questions) {
-      const owner =
-        q.course?.teacherId ?? q.topic?.course?.teacherId ?? null;
+      const owner = q.course?.teacherId ?? q.topic?.course?.teacherId ?? null;
       if (owner !== teacherId) {
-        throw new ForbiddenException(
-          `You do not own question ${q.id}`,
-        );
+        throw new ForbiddenException(`You do not own question ${q.id}`);
       }
     }
 
@@ -399,10 +341,7 @@ export class QuestionsService {
     const original = await this.findOne(id);
 
     // Verify ownership
-    const owner =
-      original.course?.teacherId ??
-      original.topic?.course?.teacherId ??
-      null;
+    const owner = original.course?.teacherId ?? original.topic?.course?.teacherId ?? null;
     if (owner !== teacherId) {
       throw new ForbiddenException('You can only duplicate your own questions');
     }
@@ -412,46 +351,33 @@ export class QuestionsService {
         courseId: original.courseId ?? null,
         topicId: original.topicId ?? null,
         prompt: original.prompt,
-        stem: original.stem === null
-          ? Prisma.DbNull
-          : (original.stem as Prisma.InputJsonValue),
+        stem: original.stem === null ? Prisma.DbNull : (original.stem as Prisma.InputJsonValue),
         type: original.type,
         maxScore: original.maxScore,
-        rubricJson: original.rubricJson === null
-          ? Prisma.DbNull
-          : (original.rubricJson as Prisma.InputJsonValue),
-        options: original.options === null
-          ? Prisma.DbNull
-          : (original.options as Prisma.InputJsonValue),
+        rubricJson:
+          original.rubricJson === null
+            ? Prisma.DbNull
+            : (original.rubricJson as Prisma.InputJsonValue),
+        options:
+          original.options === null ? Prisma.DbNull : (original.options as Prisma.InputJsonValue),
         correctOptionId: original.correctOptionId ?? null,
-        correctAnswer: original.correctAnswer === null
-          ? Prisma.DbNull
-          : (original.correctAnswer as Prisma.InputJsonValue),
-        explanation: original.explanation === null
-          ? Prisma.DbNull
-          : (original.explanation as Prisma.InputJsonValue),
+        correctAnswer:
+          original.correctAnswer === null
+            ? Prisma.DbNull
+            : (original.correctAnswer as Prisma.InputJsonValue),
+        explanation:
+          original.explanation === null
+            ? Prisma.DbNull
+            : (original.explanation as Prisma.InputJsonValue),
         difficulty: original.difficulty ?? null,
         bloomsLevel: original.bloomsLevel ?? null,
-        kcIds: original.kcIds ?? [],
         pageIds: original.pageIds ?? [],
-        tags: original.tags === null
-          ? Prisma.DbNull
-          : (original.tags as Prisma.InputJsonValue),
+        tags: original.tags === null ? Prisma.DbNull : (original.tags as Prisma.InputJsonValue),
         status: 'draft',
         createdBy: original.createdBy ?? null,
         sourceType: original.sourceType ?? null,
       },
     });
-
-    // Duplicate KC join-table links
-    if (original.questionKcs && original.questionKcs.length > 0) {
-      await this.prisma.questionKc.createMany({
-        data: original.questionKcs.map((qk) => ({
-          questionId: duplicate.id,
-          kcId: qk.kcId,
-        })),
-      });
-    }
 
     return duplicate;
   }
@@ -481,9 +407,7 @@ export class QuestionsService {
   private validateMCQOptions(dto: CreateQuestion) {
     if (dto.type === 'MCQ_SINGLE') {
       if (!dto.options || dto.options.length === 0) {
-        throw new BadRequestException(
-          'MCQ_SINGLE questions require at least one option',
-        );
+        throw new BadRequestException('MCQ_SINGLE questions require at least one option');
       }
       const correctCount = dto.options.filter((o) => o.isCorrect).length;
       if (correctCount !== 1 && !dto.correctOptionId) {
@@ -495,15 +419,11 @@ export class QuestionsService {
 
     if (dto.type === 'MCQ_MULTI') {
       if (!dto.options || dto.options.length === 0) {
-        throw new BadRequestException(
-          'MCQ_MULTI questions require at least one option',
-        );
+        throw new BadRequestException('MCQ_MULTI questions require at least one option');
       }
       const correctCount = dto.options.filter((o) => o.isCorrect).length;
       if (correctCount < 1) {
-        throw new BadRequestException(
-          'MCQ_MULTI questions must have at least one correct option',
-        );
+        throw new BadRequestException('MCQ_MULTI questions must have at least one correct option');
       }
     }
   }
@@ -519,9 +439,7 @@ export class QuestionsService {
       throw new NotFoundException(`Course ${courseId} not found`);
     }
     if (course.teacherId !== teacherId) {
-      throw new ForbiddenException(
-        'You can only manage questions in your own courses',
-      );
+      throw new ForbiddenException('You can only manage questions in your own courses');
     }
   }
 
@@ -536,9 +454,7 @@ export class QuestionsService {
       throw new NotFoundException(`Topic ${topicId} not found`);
     }
     if (topic.course.teacherId !== teacherId) {
-      throw new ForbiddenException(
-        'You can only add questions to your own courses',
-      );
+      throw new ForbiddenException('You can only add questions to your own courses');
     }
   }
 
@@ -559,15 +475,10 @@ export class QuestionsService {
       throw new NotFoundException(`Question ${id} not found`);
     }
 
-    const owner =
-      question.course?.teacherId ??
-      question.topic?.course?.teacherId ??
-      null;
+    const owner = question.course?.teacherId ?? question.topic?.course?.teacherId ?? null;
 
     if (owner !== teacherId) {
-      throw new ForbiddenException(
-        'You can only manage questions in your own courses',
-      );
+      throw new ForbiddenException('You can only manage questions in your own courses');
     }
 
     return question;

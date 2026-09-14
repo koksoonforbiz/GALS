@@ -29,6 +29,7 @@ import {
   buildFaithfulnessRetryAddendum,
 } from '../rag/shared/faithfulness-check.service';
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
+import { detectPii } from '../rag/shared/pii-detection';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 import { CodePracticeService } from '../code-practice/code-practice.service';
 import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
@@ -4447,6 +4448,24 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
           `code_practice_generation failed for course ${dto.courseId}: ${(err as Error).message}`,
         );
       }
+    }
+
+    // Checklist item 62 (output moderation) — the OpenAI Moderation API
+    // check that used to run here was removed along with OpenAI as a
+    // generation provider (Bedrock-only now, product decision): it had
+    // no remaining code path that could ever actually run once teachers
+    // could no longer have an OpenAI key. No moderation runs today —
+    // tracked as an open gap pending a Bedrock-native option (AWS
+    // Bedrock Guardrails), which needs an AWS resource provisioned
+    // first, not just code.
+
+    // PII visibility (checklist item 63) — best-effort, log-only. See
+    // pii-detection.ts's doc comment for why this doesn't redact.
+    const piiFound = detectPii(reply);
+    if (piiFound.length > 0) {
+      this.logger.warn(
+        `Chatbot reply for course ${dto.courseId} contains possible PII: ${piiFound.join(', ')}`,
+      );
     }
 
     // Persist both turns to chatbot_messages so:

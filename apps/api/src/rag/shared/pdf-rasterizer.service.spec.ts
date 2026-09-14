@@ -75,7 +75,7 @@ describe('PdfRasterizerService', () => {
   });
 
   it('clamps to maxPages and logs the cap', async () => {
-    const pages = Array.from({ length: 5 }, (_, i) => new Uint8Array(fakePng(10, 10)));
+    const pages = Array.from({ length: 5 }, (_, _i) => new Uint8Array(fakePng(10, 10)));
     convertMock.mockResolvedValueOnce(pages);
 
     const svc = new PdfRasterizerService();

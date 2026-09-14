@@ -27,8 +27,8 @@ interface PageContextType {
   /**
    * Id of the teacher-uploaded source document the student is currently
    * reading (typically a PDF inside a PDF-type module item). Used by the
-   * floating chatbot to tell the backend which source to ground on when
-   * the student has not highlighted anything.
+   * chatbot to tell the backend which source to ground on when the
+   * student has not highlighted anything.
    */
   sourceDocumentId: string | null;
   /**
@@ -41,14 +41,6 @@ interface PageContextType {
   pdfNumPages: number | null;
   pdfCurrentPage: number | null;
   pdfCurrentPageText: string | null;
-  /**
-   * True when a page (e.g. StudentCourseViewPage) renders the chatbot
-   * inline as a docked right-side panel. The global FloatingChatbot reads
-   * this and hides itself so we never show both at once. Pages opt in by
-   * calling setChatbotDocked(true) on mount and setChatbotDocked(false)
-   * on unmount.
-   */
-  chatbotDocked: boolean;
   /**
    * The student's most recent Python run — from the inline code-question
    * widget in chat OR the standalone Playground, whichever ran last.
@@ -91,7 +83,6 @@ interface PageContextType {
   ) => void;
   setSelectedText: (text: string | null) => void;
   clearSelectedText: () => void;
-  setChatbotDocked: (docked: boolean) => void;
   setCodeContext: (ctx: CodeContext | null) => void;
   setActiveCodeQuestion: (q: ActiveCodeQuestion | null) => void;
   setCodePlaygroundCollapsed: (collapsed: boolean) => void;
@@ -119,7 +110,6 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
   const [contentText, setContentText] = useState<string | null>(null);
   const [sourceDocumentId, setSourceDocumentId] = useState<string | null>(null);
   const [selectedText, setSelectedTextState] = useState<string | null>(null);
-  const [chatbotDocked, setChatbotDockedState] = useState<boolean>(false);
   const [codeContext, setCodeContextState] = useState<CodeContext | null>(null);
   const [activeCodeQuestion, setActiveCodeQuestionState] = useState<ActiveCodeQuestion | null>(
     null,
@@ -162,10 +152,6 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
 
   const clearSelectedText = useCallback(() => {
     setSelectedTextState(null);
-  }, []);
-
-  const setChatbotDocked = useCallback((docked: boolean) => {
-    setChatbotDockedState(docked);
   }, []);
 
   const setCodeContext = useCallback((ctx: CodeContext | null) => {
@@ -243,7 +229,6 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         pdfNumPages,
         pdfCurrentPage,
         pdfCurrentPageText,
-        chatbotDocked,
         codeContext,
         activeCodeQuestion,
         codePlaygroundCollapsed,
@@ -251,7 +236,6 @@ export function PageContextProvider({ children }: { children: ReactNode }) {
         setPageContext,
         setSelectedText,
         clearSelectedText,
-        setChatbotDocked,
         setCodeContext,
         setActiveCodeQuestion,
         setCodePlaygroundCollapsed,

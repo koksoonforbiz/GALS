@@ -180,7 +180,7 @@ export class CoursesService {
     return course;
   }
 
-  async update(id: string, teacherId: string, dto: UpdateCourse & Record<string, unknown>) {
+  async update(id: string, teacherId: string, dto: UpdateCourse) {
     const course = await this.prisma.course.findUnique({ where: { id } });
 
     if (!course) throw new NotFoundException(`Course ${id} not found`);

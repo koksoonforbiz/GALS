@@ -9,6 +9,7 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -42,6 +43,9 @@ export class CourseStructureController {
 
   @Post('admin/courses/:courseId/generate-structure')
   @Roles('teacher', 'admin')
+  // Checklist item 16 — the biggest single LLM fan-out in the app
+  // (up to 30 topics × 10 subtopics × 5 lessons per call).
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async generateStructure(
     @Param('courseId') courseId: string,
     @Body() body: GenerateStructureBody,
@@ -101,6 +105,8 @@ export class CourseStructureController {
 
   @Post('admin/courses/:courseId/apply-structure/:jobId')
   @Roles('teacher', 'admin')
+  // Bulk-creates potentially hundreds of topic/subtopic/lesson rows.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async applyStructure(
     @Param('courseId') courseId: string,
     @Param('jobId') jobId: string,

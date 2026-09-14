@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -35,6 +36,8 @@ export class Openface3Controller {
 
   @Post('backfill')
   @Roles('teacher', 'admin')
+  // Bulk-(re)queues facial-analysis jobs for up to ~200 segments.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   backfill(
     @Body()
     body: {

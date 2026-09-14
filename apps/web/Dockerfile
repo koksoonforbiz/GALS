@@ -38,7 +38,13 @@ RUN pnpm add /shared
 COPY apps/web/ .
 RUN pnpm run build
 
-FROM nginx:alpine AS production
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+# Pinned (checklist item 24) — was the rolling `alpine` tag.
+# `nginx-unprivileged` (not plain `nginx`) — pre-built to run as a
+# non-root user out of the box (checklist item 50 / CIS Docker
+# Benchmark 4.1), rather than hand-patching pid/temp-dir paths onto
+# the root-oriented official image. Listens on 8080, not 80 — see
+# nginx.conf's comment (non-root can't bind ports below 1024).
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS production
+COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
+COPY --chown=nginx:nginx apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 8080

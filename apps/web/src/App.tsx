@@ -6,6 +6,7 @@ import { RoleRoute } from './components/RoleRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { Terms } from './pages/Terms';
 import Health from './pages/Health';
 import { ActivityLogProvider } from './lib/activity-log';
 
@@ -25,10 +26,9 @@ import { UserManagementPage } from './pages/teacher/UserManagementPage';
 import { BulkUserProvisioningPage } from './pages/teacher/BulkUserProvisioningPage';
 import { StudentLogPage } from './pages/teacher/student-logs/StudentLogPage';
 import { AccountSecurityPage } from './pages/AccountSecurityPage';
+import { ChangePasswordPage } from './pages/ChangePasswordPage';
 import { SessionTimelinePage } from './pages/dashboard/SessionTimelinePage';
 import { StudentTextMiningPage } from './features/text-mining/pages/StudentTextMiningPage';
-// Prompt 05: the student-facing /change-password page was removed.
-// Only teachers/admins reset passwords now, via UserManagementPage.
 
 // Student pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -91,8 +91,15 @@ function App() {
               {/* Public routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              {/* Prompt 05: /change-password removed (no student self-
-                  service password flow). Teacher/admin resets only. */}
+              <Route path="/terms" element={<Terms />} />
+              <Route
+                path="/change-password"
+                element={
+                  <ProtectedRoute>
+                    <ChangePasswordPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/health" element={<Health />} />
 
               {/* Protected routes with layout */}

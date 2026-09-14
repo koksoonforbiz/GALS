@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import { UserRole } from './roles';
 
+// Shared password-complexity rule (SMU cybersecurity checklist item 3):
+// 12+ chars, at least one digit, one lowercase, one uppercase, one
+// special character. Applied everywhere a password is SET — public
+// self-registration, teacher bulk-provisioning, and teacher-issued
+// resets — so there's exactly one place to update the policy.
+const PASSWORD_COMPLEXITY = z
+  .string()
+  .min(12, 'Password must be at least 12 characters')
+  .max(128)
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[~!@#$%^&*\-+?]/, 'Password must contain at least one special character (~!@#$%^&*-+?)');
+
 export const UserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
@@ -11,11 +25,21 @@ export const UserSchema = z.object({
 });
 export type User = z.infer<typeof UserSchema>;
 
+// Public self-registration only ever creates a student or teacher account.
+// Admin accounts are never created through this endpoint — deliberately
+// narrower than UserRole (which also includes 'admin') so an unauthenticated
+// caller can't POST { role: "admin" } and grant themselves admin access.
 export const CreateUserSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
+  password: PASSWORD_COMPLEXITY,
   name: z.string().min(1),
-  role: UserRole,
+  role: z.enum(['student', 'teacher']),
+  // SMU checklist item 35 — general data-collection consent, required
+  // at signup. See TermsAcceptedSchema's doc comment for the caveat on
+  // the actual policy text.
+  termsAccepted: z.literal(true, {
+    errorMap: () => ({ message: 'You must accept the terms to create an account' }),
+  }),
 });
 export type CreateUser = z.infer<typeof CreateUserSchema>;
 
@@ -132,7 +156,13 @@ export const BulkProvisionUserRowSchema = z.object({
   loginId: z.string().min(3).max(64).regex(LOGIN_ID_PATTERN, {
     message: 'loginId may only contain letters, digits, dot, underscore, hyphen',
   }),
-  password: z.string().min(6),
+  // Was min(6) with no complexity rule ("simple memorable handout
+  // password"). Tightened to the shared policy for SMU checklist item
+  // 3 — teachers provisioning a roster now need a generator/template
+  // rather than a hand-typed simple password. If that trade-off turns
+  // out to be too much friction for real classroom use, this is the
+  // one line to relax back.
+  password: PASSWORD_COMPLEXITY,
   name: z.string().min(1).max(120).optional(),
   role: z.enum(['student', 'teacher', 'admin']).optional(),
 });
@@ -206,20 +236,22 @@ export type BulkEnrollResponse = z.infer<typeof BulkEnrollResponseSchema>;
 // ── Teacher-issued password reset (prompt 05) ──────────────────────
 //
 // A teacher/admin sets a student's password to a value of THEIR
-// choice. No token round-trip, no email reset link, no student
-// self-service — students never set or change their own password.
+// choice. No token round-trip, no email reset link. This remains the
+// only recovery path for a user who is fully locked out (forgot their
+// password with no way to prove identity) — see ChangePasswordSchema
+// below for the self-service path added later, for a user who still
+// knows their current password.
 // Backend re-hashes with bcryptjs(pw, 10) (the existing library, same
 // salt rounds as register/bulk-provision), updates `passwordHash`, and
 // sets `isTemporaryPassword = true` so the teacher roster still shows
-// the "Temp pwd" badge until the teacher decides otherwise.
+// the "Temp pwd" badge and the user is forced to change it on next
+// login (see ChangePasswordSchema).
 //
-// Strength rules match the existing bulk-provision row: min 6 chars.
-// We don't enforce the uppercase/lowercase/digit triple here so a
-// teacher can use a simple memorable handout password and rotate it
-// later. The endpoint is teacher/admin-guarded so the floor is
-// "trusted user with course access", not "internet".
+// Was min(8) with no complexity rule. Tightened to the shared policy
+// for SMU checklist item 3 (see BulkProvisionUserRowSchema's comment
+// for the same trade-off note).
 export const ResetStudentPasswordSchema = z.object({
-  newPassword: z.string().min(8).max(128),
+  newPassword: PASSWORD_COMPLEXITY,
 });
 export type ResetStudentPassword = z.infer<typeof ResetStudentPasswordSchema>;
 
@@ -229,3 +261,18 @@ export const ResetStudentPasswordResponseSchema = z.object({
   message: z.string(),
 });
 export type ResetStudentPasswordResponse = z.infer<typeof ResetStudentPasswordResponseSchema>;
+
+// ── Self-service password change (SMU checklist item 5) ────────────
+//
+// POST /auth/change-password — for an already-authenticated user who
+// still knows their current password. Deliberately does NOT send
+// email: no forgot-password / reset-link flow exists in this system.
+// A user who is fully locked out has no self-service recovery; the
+// only path is a teacher/admin reset (ResetStudentPasswordSchema
+// above), which also sets isTemporaryPassword so this endpoint's
+// caller is then forced to change it again on next login.
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: PASSWORD_COMPLEXITY,
+});
+export type ChangePassword = z.infer<typeof ChangePasswordSchema>;

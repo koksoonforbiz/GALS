@@ -32,6 +32,7 @@ interface CourseModule {
   id: string;
   title: string;
   orderIndex: number;
+  showPlayground: boolean;
   items: ModuleItem[];
 }
 
@@ -617,12 +618,14 @@ export function StudentCourseViewPage() {
 
   if (loading || !course) return <div className="text-gray-500">Loading course...</div>;
 
-  // Find selected item across all modules
+  // Find selected item (and its containing module) across all modules
   let selectedItem: ModuleItem | null = null;
+  let selectedModule: CourseModule | null = null;
   for (const mod of course.modules) {
     const found = mod.items.find((i) => i.id === selectedItemId);
     if (found) {
       selectedItem = found;
+      selectedModule = mod;
       break;
     }
   }
@@ -887,39 +890,39 @@ export function StudentCourseViewPage() {
               )}
             </div>
 
-            {/* Drag handle between the lecture content and the Code
-                Playground — hidden while collapsed since there's nothing
-                to trade height with at that point. */}
-            {!codePlaygroundCollapsed && (
-              <div
-                onMouseDown={handlePlaygroundResizeStart}
-                className="h-1 shrink-0 cursor-row-resize bg-gray-200 hover:bg-blue-400 transition-colors"
-                title="Drag to resize Code Playground"
-              />
-            )}
-
             {/* Code Playground — a free-to-use Python scratch space,
                 independent of the chat above it and of any code question
                 the chatbot may have generated. Runs entirely client-side
-                via Pyodide. Visible by default; height is user-resizable
-                via the drag handle above (persisted across reloads). The
-                redundant outer "Code Playground" label row is gone —
-                CodePlayground now renders its own collapse/expand toggle
-                inline in its own toolbar (it already reads
-                codePlaygroundCollapsed/setCodePlaygroundCollapsed from
-                PageContext), so this wrapper just always renders it and
-                lets the collapsed height fall out of that toolbar's
-                natural height. */}
-            <div
-              className="border-t border-gray-200 shrink-0 flex flex-col"
-              style={codePlaygroundCollapsed ? undefined : { height: playgroundHeight }}
-            >
-              <Suspense
-                fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
-              >
-                <CodePlayground />
-              </Suspense>
-            </div>
+                via Pyodide. Gated per-module by the teacher's
+                showPlayground toggle (Course Builder); height is
+                user-resizable via the drag handle above (persisted across
+                reloads) when shown. CodePlayground renders its own
+                collapse/expand toggle inline in its own toolbar (it
+                already reads codePlaygroundCollapsed/setCodePlaygroundCollapsed
+                from PageContext), so this wrapper just renders it and lets
+                the collapsed height fall out of that toolbar's natural
+                height. */}
+            {selectedModule?.showPlayground && (
+              <>
+                {!codePlaygroundCollapsed && (
+                  <div
+                    onMouseDown={handlePlaygroundResizeStart}
+                    className="h-1 shrink-0 cursor-row-resize bg-gray-200 hover:bg-blue-400 transition-colors"
+                    title="Drag to resize Code Playground"
+                  />
+                )}
+                <div
+                  className="border-t border-gray-200 shrink-0 flex flex-col"
+                  style={codePlaygroundCollapsed ? undefined : { height: playgroundHeight }}
+                >
+                  <Suspense
+                    fallback={<div className="p-3 text-xs text-gray-400">Loading playground…</div>}
+                  >
+                    <CodePlayground />
+                  </Suspense>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Vertical drag handle between content and chatbot. 4px hit

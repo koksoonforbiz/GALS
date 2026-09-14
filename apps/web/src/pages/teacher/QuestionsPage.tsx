@@ -31,7 +31,6 @@ interface Question {
   explanation: string | null;
   difficulty: number;
   bloomsLevel: BloomsLevel | null;
-  kcIds: string[];
   pageIds: string[];
   tags: string[] | null;
   status: QuestionStatus;

@@ -11,6 +11,7 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { QuestionGenerationService } from './question-generation.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import type {
@@ -36,6 +37,8 @@ export class QuestionGenerationController {
   @Post('generate')
   @UseGuards(RolesGuard)
   @Roles('teacher', 'admin')
+  // LLM-backed batch generation — checklist item 16.
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   generate(@Request() req: { user: RequestUser }, @Body() dto: GenerateQuestionsDto) {
     return this.service.createJob(req.user.id, dto);
   }
@@ -76,6 +79,7 @@ export class QuestionGenerationController {
   @Post('jobs/:jobId/regenerate')
   @UseGuards(RolesGuard)
   @Roles('teacher', 'admin')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   regenerate(
     @Request() req: { user: RequestUser },
     @Param('jobId') jobId: string,
@@ -89,6 +93,7 @@ export class QuestionGenerationController {
   @Post('grade-open-ended')
   @UseGuards(RolesGuard)
   @Roles('teacher', 'admin')
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   gradeOpenEnded(@Request() req: { user: RequestUser }, @Body() dto: GradeOpenEndedDto) {
     return this.service.gradeOpenEnded(req.user.id, dto);
   }

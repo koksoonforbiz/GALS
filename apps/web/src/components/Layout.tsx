@@ -3,7 +3,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { PageContextProvider } from '../contexts/PageContext';
-import { FloatingChatbot } from './FloatingChatbot';
 import { EmotionSurveyModal, type EmotionOption } from './EmotionSurveyModal';
 import { useAuth } from '../contexts/AuthContext';
 import { usePageViewTracker, useActivityLog } from '../lib/activity-log';
@@ -72,7 +71,6 @@ export function Layout() {
         </div>
       </div>
       <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
-      {user && <FloatingChatbot />}
       {showSurvey && <EmotionSurveyModal onAnswer={handleAnswer} />}
     </PageContextProvider>
   );

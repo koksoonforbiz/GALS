@@ -41,15 +41,16 @@ function makeMockPrisma(opts: {
 }
 
 /** None of these tests exercise the Bedrock provider (see the Bedrock
- *  spec for that), so `.get()` never needs a real return value. */
-const mockConfig = { get: jest.fn() } as any;
+ *  spec for that), so `.get()` never needs a real return value.
+ *  `getOrThrow('JWT_SECRET')` DOES need a real value — `decryptApiKey`
+ *  calls it on every encrypted-key test below — kept in lockstep with
+ *  `encryptKey`'s own fallback so both sides always agree. */
+const TEST_JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const mockConfig = { get: jest.fn(), getOrThrow: () => TEST_JWT_SECRET } as any;
 
-/** Encrypt a key the same way `EmbeddingService.decryptApiKey` decrypts.
- *  Uses JWT_SECRET from process.env (the spec runs with .env.test loaded
- *  by the parent `pnpm test` cmd; for direct jest invocation we fall back
- *  to the same dev secret). */
+/** Encrypt a key the same way `EmbeddingService.decryptApiKey` decrypts. */
 function encryptKey(plain: string): string {
-  const secret = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+  const secret = TEST_JWT_SECRET;
   const key = crypto.scryptSync(secret, 'llm-key-salt', 32);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);

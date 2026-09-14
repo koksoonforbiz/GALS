@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
-import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { CodeDecompositionService } from './code-decomposition.service';
 import { JwtAuthGuard } from '../auth';
 import { SessionId } from '../common';
@@ -17,21 +17,21 @@ interface RequestUser {
   role: string;
 }
 
-// ThrottlerGuard is opt-in per controller in this codebase (no global
-// APP_GUARD binding it — see auth.controller.ts for the only other
-// precedent), so it must be applied here explicitly for @Throttle to have
-// any effect. check-tree/infer-tree/hint get tighter overrides than the
-// global default (30/min) since this module is the most LLM-call-dense
-// feature in the app — see the DBox plan's Throttling section. Every
-// LLM-calling action also has its own session-level cap enforced in the
-// service (formationCheckCount/inferTreeCount), since a per-minute limit
-// alone doesn't stop a slow, hour-long spam session.
+// ThrottlerGuard is now bound globally (APP_GUARD in app.module.ts), so
+// @Throttle here just overrides the global 30/min default. check-tree/
+// infer-tree/hint get tighter overrides than that since this module is
+// the most LLM-call-dense feature in the app — see the DBox plan's
+// Throttling section. Every LLM-calling action also has its own
+// session-level cap enforced in the service (formationCheckCount/
+// inferTreeCount), since a per-minute limit alone doesn't stop a slow,
+// hour-long spam session.
 @Controller('code-decomposition')
-@UseGuards(JwtAuthGuard, ThrottlerGuard)
+@UseGuards(JwtAuthGuard)
 export class CodeDecompositionController {
   constructor(private readonly service: CodeDecompositionService) {}
 
   @Post('generate')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   generate(@Request() req: { user: RequestUser }, @Body() dto: GenerateDecompositionDto) {
     return this.service.generateSession(req.user.id, dto);
   }

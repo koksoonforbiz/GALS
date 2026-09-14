@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import * as zlib from 'zlib';
 import { AppModule } from './app.module';
 import { validateEnv } from './env';
-import { GlobalExceptionFilter } from './common';
 
 // Matches the existing express.json() limit below — applies to BOTH the
 // compressed bytes received and the decompressed JSON, so a gzip request
@@ -96,10 +96,33 @@ async function bootstrap() {
   app.enableCors({ origin: allowedOrigins, credentials: true });
 
   app.setGlobalPrefix('api');
+
+  // API documentation (SMU checklist item 14). Gated to non-production —
+  // a full route/schema map is useful for development and for whoever
+  // reviews this against the checklist, but publishing it unauthenticated
+  // in a real deployment would hand an attacker a map of the API surface
+  // for free. Swagger reads route/DTO metadata via decorators that are
+  // already present (Zod schemas aren't auto-introspected the way
+  // class-validator DTOs are, so this documents paths/methods/guards
+  // accurately; request/response body shapes are only as detailed as
+  // each controller method's TS return type).
+  if (env.NODE_ENV !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('GALS API')
+      .setDescription('Adaptive learning platform API — auto-generated from route metadata.')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api-docs', app, swaggerDocument);
+  }
+
   app.use(gzipRequestDecompression());
   app.use(json({ limit: '12mb' }));
   app.use(urlencoded({ extended: true, limit: '12mb' }));
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  // GlobalExceptionFilter is now registered via APP_FILTER in
+  // app.module.ts (DI-managed, so it can inject SecurityEventService —
+  // checklist item 25) instead of instantiated manually here.
 
   await app.listen(env.PORT);
   console.log(`API running on port ${env.PORT} [${env.NODE_ENV}]`);

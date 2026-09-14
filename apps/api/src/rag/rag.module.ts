@@ -11,6 +11,8 @@ import { PdfRasterizerService } from './shared/pdf-rasterizer.service';
 import { PageCaptionService } from './shared/page-caption.service';
 import { GroundedEvidenceService } from './shared/grounded-evidence.service';
 import { FaithfulnessCheckService } from './shared/faithfulness-check.service';
+import { MalwareScanService } from './shared/malware-scan.service';
+import { LlmUsageQuotaService } from './llm-usage-quota.service';
 import { EmbeddingService } from '../student-rag/embedding.service';
 import { StudentRagRetrievalService } from '../student-rag/student-rag-retrieval.service';
 import { CohereRerankerService } from './reranker/cohere-reranker.service';
@@ -67,6 +69,13 @@ import { rerankEnabled } from './reranker/reranker.flags';
     // import.
     GroundedEvidenceService,
     FaithfulnessCheckService,
+    // Checklist item 49 — malware scanning on uploaded files. Exported
+    // so StudentRagModule (which imports RagModule) can resolve it for
+    // the student upload path too.
+    MalwareScanService,
+    // Per-key-owner daily spend cap — see the service's own doc
+    // comment for the full rationale.
+    LlmUsageQuotaService,
     {
       provide: RERANKER_SERVICE,
       useFactory: (cohere: CohereRerankerService, noop: NoopRerankerService) =>
@@ -87,6 +96,8 @@ import { rerankEnabled } from './reranker/reranker.flags';
     PageCaptionService,
     GroundedEvidenceService,
     FaithfulnessCheckService,
+    MalwareScanService,
+    LlmUsageQuotaService,
     RERANKER_SERVICE,
   ],
 })

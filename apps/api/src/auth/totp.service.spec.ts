@@ -55,7 +55,13 @@ import { authenticator } from 'otplib';
 import { TotpService } from './totp.service';
 
 function createConfig() {
-  return { getOrThrow: jest.fn().mockReturnValue('redis://localhost:6379') };
+  return {
+    // Unset ENCRYPTION_KEY so resolveEncryptionSecret falls through
+    // to getOrThrow('JWT_SECRET') below, matching the deployment
+    // default (checklist item 4's opt-in var).
+    get: jest.fn().mockReturnValue(undefined),
+    getOrThrow: jest.fn().mockReturnValue('redis://localhost:6379'),
+  };
 }
 
 describe('TotpService', () => {

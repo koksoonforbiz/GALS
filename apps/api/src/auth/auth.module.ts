@@ -9,6 +9,8 @@ import { RolesGuard } from './roles.guard';
 import { LoginProtectionService } from './login-protection.service';
 import { TwoFactorService } from './two-factor.service';
 import { TotpService } from './totp.service';
+import { SecurityEventService } from './security-event.service';
+import { PasswordHistoryService } from './password-history.service';
 import { ActivityLogModule } from '../activity-log';
 import { MailerModule } from '../mailer';
 
@@ -35,7 +37,9 @@ import { MailerModule } from '../mailer';
     LoginProtectionService,
     TwoFactorService,
     TotpService,
+    SecurityEventService,
+    PasswordHistoryService,
   ],
-  exports: [AuthService, JwtModule, RolesGuard],
+  exports: [AuthService, JwtModule, RolesGuard, SecurityEventService, PasswordHistoryService],
 })
 export class AuthModule {}

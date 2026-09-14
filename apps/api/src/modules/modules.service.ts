@@ -44,7 +44,11 @@ export class ModulesService {
     });
   }
 
-  async update(moduleId: string, teacherId: string, dto: { title?: string }) {
+  async update(
+    moduleId: string,
+    teacherId: string,
+    dto: { title?: string; showPlayground?: boolean },
+  ) {
     await this.verifyModuleOwnership(moduleId, teacherId);
 
     return this.prisma.courseModule.update({

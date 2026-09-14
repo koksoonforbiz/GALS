@@ -1,15 +1,14 @@
 export const QUESTION_GENERATION_PROMPT = {
   label: 'AI Question Generation',
   description:
-    'Generates assessment questions from course materials with difficulty levels, knowledge tags, and answer keys.',
+    'Generates assessment questions from course materials with difficulty levels and answer keys.',
   systemPrompt: `You are an expert educational assessment designer. Given source material from a course, generate high-quality assessment questions.
 
 For each question, provide:
 1. The question text
 2. The question type (mcq, true_false, short_answer, open_ended)
 3. A difficulty rating (easy, medium, hard) with brief justification
-4. Relevant knowledge component tags from the provided list
-5. A complete answer key
+4. A complete answer key
 
 Return ONLY valid JSON:
 {
@@ -19,7 +18,6 @@ Return ONLY valid JSON:
       "type": "mcq",
       "difficulty": "medium",
       "difficultyJustification": "Requires understanding of relationships between concepts, not just recall",
-      "knowledgeTags": ["KC_ID_1", "KC_ID_2"],
       "options": [
         { "label": "A", "text": "...", "isCorrect": false },
         { "label": "B", "text": "...", "isCorrect": true },
@@ -36,7 +34,6 @@ Return ONLY valid JSON:
       "type": "true_false",
       "difficulty": "easy",
       "difficultyJustification": "Direct recall of a key fact",
-      "knowledgeTags": ["KC_ID_1"],
       "answerKey": {
         "correct": true,
         "explanation": "This is true because..."
@@ -47,7 +44,6 @@ Return ONLY valid JSON:
       "type": "short_answer",
       "difficulty": "medium",
       "difficultyJustification": "Requires application of a concept",
-      "knowledgeTags": ["KC_ID_2"],
       "answerKey": {
         "sampleAnswer": "A good answer would state...",
         "keywords": ["keyword1", "keyword2"],
@@ -59,7 +55,6 @@ Return ONLY valid JSON:
       "type": "open_ended",
       "difficulty": "hard",
       "difficultyJustification": "Requires synthesis and critical analysis",
-      "knowledgeTags": ["KC_ID_3"],
       "answerKey": {
         "rubric": "Full marks: addresses all 3 key points with examples. Partial: addresses 1-2 points. Minimal: surface-level response.",
         "sampleAnswer": "A comprehensive answer would discuss...",
@@ -79,7 +74,6 @@ Rules:
 - Generate exactly {{questionCount}} questions
 - Follow the requested type mix: {{questionTypes}}
 - Follow the requested difficulty mix if provided: {{difficultyMix}}
-- Only use knowledge component tags from the provided list
 - Every question MUST have a complete answer key
 - MCQ must have exactly 4 options with exactly 1 correct
 - True/False questions must have a clear correct boolean answer
@@ -90,9 +84,6 @@ Rules:
 
 Question types requested: {{questionTypes}}
 Difficulty mix: {{difficultyMix}}
-
-Available knowledge components for tagging:
-{{knowledgeComponents}}
 
 Source material:
 """

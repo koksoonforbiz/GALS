@@ -256,14 +256,6 @@ export class LogExportService {
         })
       : [];
 
-    const masteryTrajectory = logs
-      .filter((l) => l.action === 'MASTERY_UPDATED')
-      .map((l) => ({
-        timestamp: l.occurredAt.toISOString(),
-        kcId: l.kcId,
-        ...(l.metadata as object | null),
-      }));
-
     return {
       _meta: {
         exportedAt: new Date().toISOString(),
@@ -431,7 +423,6 @@ export class LogExportService {
           autoFeedback: a.autoFeedback ?? null,
           submittedAt: a.submittedAt?.toISOString() ?? null,
         })),
-        masteryTrajectory,
         efDetections: efDetections.map((e) => ({
           createdAt: e.createdAt.toISOString(),
           constructKey: e.constructKey,
@@ -455,7 +446,6 @@ export class LogExportService {
         questionId: l.questionId,
         dialogueSessionId: l.dialogueSessionId,
         interventionId: l.interventionId,
-        kcId: l.kcId,
         metadata: l.metadata,
       })),
 
@@ -553,11 +543,19 @@ export class LogExportService {
 
   /**
    * Upload a session log to MinIO and return a 1-hour presigned download URL.
+   * `actorId` is the teacher/admin who triggered the export — logged
+   * separately from `subjectUserId` (the session owner, used only for
+   * the storage key) so the audit trail records WHO accessed the data,
+   * not just whose data it was (checklist item 34).
    */
-  async exportToStorage(sessionId: string, userId: string): Promise<string> {
+  async exportToStorage(
+    sessionId: string,
+    subjectUserId: string,
+    actorId?: string,
+  ): Promise<string> {
     const doc = await this.buildSessionLogDocument(sessionId);
     const json = JSON.stringify(doc);
-    const key = `student-logs/${userId}/${sessionId}.json`;
+    const key = `student-logs/${subjectUserId}/${sessionId}.json`;
 
     await this.s3.send(
       new PutObjectCommand({
@@ -574,7 +572,7 @@ export class LogExportService {
       { expiresIn: 3600 },
     );
 
-    this.logger.log(`Log exported: ${key}`);
+    this.logger.log(`Log exported: ${key} actor=${actorId ?? 'unknown'}`);
     return url;
   }
 }

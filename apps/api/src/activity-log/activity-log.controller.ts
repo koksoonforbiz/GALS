@@ -11,7 +11,9 @@ import {
   Request,
   ParseUUIDPipe,
   Query,
+  Logger,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -33,6 +35,8 @@ interface RequestUser {
 @Controller('activity-log')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ActivityLogController {
+  private readonly logger = new Logger(ActivityLogController.name);
+
   constructor(
     private readonly activityLogService: ActivityLogService,
     private readonly sessionService: SessionService,
@@ -80,7 +84,6 @@ export class ActivityLogController {
         questionId: e.questionId,
         dialogueSessionId: e.dialogueSessionId,
         interventionId: e.interventionId,
-        kcId: e.kcId,
         metadata: e.metadata,
       })),
     );
@@ -253,12 +256,16 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId/export')
   @Roles('teacher')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
   async exportSessionLog(
     @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
     @Res() res: Response,
   ) {
     await this.sessionService.assertTeacherOwnsSession(sessionId, req.user.id);
+    // Actor-identity audit trail (checklist item 34) — who exported
+    // whose session data, not just which session was exported.
+    this.logger.log(`Session log exported: sessionId=${sessionId} actor=${req.user.id}`);
     const doc = await this.logExportService.buildSessionLogDocument(sessionId);
     const json = JSON.stringify(doc, null, 2);
 
@@ -317,6 +324,7 @@ export class ActivityLogController {
    */
   @Get('teacher/sessions/:sessionId/export-url')
   @Roles('teacher')
+  @Throttle({ default: { limit: 15, ttl: 60000 } })
   async getExportUrl(
     @Request() req: { user: RequestUser },
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
@@ -326,7 +334,7 @@ export class ActivityLogController {
       where: { id: sessionId },
       select: { userId: true },
     });
-    const url = await this.logExportService.exportToStorage(sessionId, session.userId);
+    const url = await this.logExportService.exportToStorage(sessionId, session.userId, req.user.id);
     return { url };
   }
 
@@ -336,6 +344,7 @@ export class ActivityLogController {
    */
   @Get('teacher/students/:studentId/all-sessions-export')
   @Roles('teacher')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async exportAllSessions(
     @Request() req: { user: RequestUser },
     @Param('studentId', ParseUUIDPipe) studentId: string,

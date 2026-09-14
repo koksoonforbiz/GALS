@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import Redis from 'ioredis';
+import { resolveEncryptionSecret } from '../common';
 
 const ENCRYPTION_ALGO = 'aes-256-gcm';
 const SETUP_TTL_SECONDS = 10 * 60;
@@ -27,9 +28,10 @@ export class TotpService implements OnModuleDestroy {
   constructor(config: ConfigService) {
     this.redis = new Redis(config.getOrThrow<string>('REDIS_URL'));
     // Same derivation scheme as LlmService's API-key encryption
-    // (apps/api/src/rag/llm.service.ts), distinct salt so key material
-    // is independent between the two secrets.
-    const secret = config.getOrThrow<string>('JWT_SECRET');
+    // (apps/api/src/rag/llm.service.ts) — including the opt-in
+    // ENCRYPTION_KEY (checklist item 4) — distinct salt so key
+    // material is independent between the two secrets.
+    const secret = resolveEncryptionSecret(config);
     this.encryptionKey = crypto.scryptSync(secret, 'totp-secret-salt', 32);
   }
 

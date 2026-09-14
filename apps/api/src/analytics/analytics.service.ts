@@ -3,7 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EngagementService } from './computations/engagement.service';
 import { CognitiveLoadService } from './computations/cognitive-load.service';
 import { EmotionService } from './computations/emotion.service';
-import { LearningVelocityService } from './computations/learning-velocity.service';
 import { AtRiskService } from './computations/at-risk.service';
 
 @Injectable()
@@ -13,7 +12,6 @@ export class AnalyticsService {
     private readonly engagement: EngagementService,
     private readonly cognitiveLoad: CognitiveLoadService,
     private readonly emotion: EmotionService,
-    private readonly learningVelocity: LearningVelocityService,
     private readonly atRisk: AtRiskService,
   ) {}
 
@@ -24,9 +22,7 @@ export class AnalyticsService {
     const results: Record<string, unknown> = {};
 
     const jobs =
-      jobType === 'all'
-        ? ['engagement', 'cognitive_load', 'emotion', 'learning_velocity', 'at_risk']
-        : [jobType];
+      jobType === 'all' ? ['engagement', 'cognitive_load', 'emotion', 'at_risk'] : [jobType];
 
     for (const job of jobs) {
       switch (job) {
@@ -39,9 +35,6 @@ export class AnalyticsService {
         case 'emotion':
           results.emotion = await this.emotion.compute(sessionId);
           break;
-        case 'learning_velocity':
-          results.learning_velocity = await this.learningVelocity.compute(sessionId);
-          break;
         case 'at_risk':
           results.at_risk = await this.atRisk.compute(sessionId);
           break;
@@ -52,7 +45,7 @@ export class AnalyticsService {
   }
 
   async getSummary(sessionId: string) {
-    const [engagementWindows, cognitiveWindows, emotions, velocity, riskFlags] = await Promise.all([
+    const [engagementWindows, cognitiveWindows, emotions, riskFlags] = await Promise.all([
       this.prisma.derived_engagement.findMany({
         where: { sessionId },
         orderBy: { windowStartMs: 'asc' },
@@ -64,9 +57,6 @@ export class AnalyticsService {
       this.prisma.derived_emotion_timeline.findMany({
         where: { sessionId },
         orderBy: { windowStartMs: 'asc' },
-      }),
-      this.prisma.derived_learning_velocity.findMany({
-        where: { sessionId },
       }),
       this.prisma.derived_at_risk_flags.findMany({
         where: { sessionId },
@@ -120,7 +110,6 @@ export class AnalyticsService {
         dominantEmotion,
         distribution: emotionDistribution,
       },
-      learningVelocity: velocity,
       atRisk: {
         currentLevel: latestRisk?.riskLevel ?? 'none',
         activeConditions: (latestRisk?.reasons as string[]) ?? [],
