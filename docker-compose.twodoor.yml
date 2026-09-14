@@ -1,0 +1,88 @@
+# ============================================================================
+# GALS two-door overlay — layer this on top of docker-compose.yml:
+#
+#   docker compose --env-file .env --env-file deploy/.env.twodoor.local \
+#     -f docker-compose.yml -f docker-compose.twodoor.yml up -d --build
+#
+# (deploy/scripts/twodoor.sh wraps exactly that.) Requires Docker Compose
+# v2.24+ for the `!reset` tag. Plain `docker compose up` without this file
+# is the unchanged dev stack (Vite on :5173, everything port-mapped).
+#
+# What it changes:
+#   * ONLY nginx is published to the host: the public door on
+#     GALS_STUDENT_PUBLISH, the private door on GALS_ADMIN_PUBLISH, plain
+#     HTTP (ACME + redirect) on GALS_HTTP_PUBLISH. api / worker / postgres /
+#     redis / minio lose their host port mappings (`ports: !reset []`).
+#   * The Vite dev `web` service is moved to a profile so it doesn't start.
+#   * The API is told the door origins (CORS) and signs presigned URLs
+#     against the internal MinIO endpoint, which is what nginx forwards
+#     `Host` as on /s3/.
+# See docs/two-door/ and deploy/README.md.
+# ============================================================================
+services:
+  api:
+    build:
+      target: ${GALS_API_BUILD_TARGET:-development}
+    ports: !reset []
+    environment:
+      NODE_ENV: ${GALS_API_NODE_ENV:-development}
+      ALLOWED_ORIGINS: ${GALS_ALLOWED_ORIGINS:?GALS_ALLOWED_ORIGINS is required — set it in deploy/.env.twodoor.<env>}
+      # Must equal BLOB_STORAGE_ENDPOINT: presigned URLs are served through
+      # nginx's /s3/ proxy, which forwards Host as `minio:9000`. The log
+      # export service signs against this value (blob.service.ts already
+      # signs against the internal endpoint regardless).
+      BLOB_STORAGE_PUBLIC_ENDPOINT: http://minio:9000
+
+  worker:
+    ports: !reset []
+
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  minio:
+    ports: !reset []
+
+  # Vite dev server — not part of the two-door stack. `--profile vite-dev`
+  # brings it back if you want HMR alongside nginx.
+  web:
+    profiles: [vite-dev]
+
+  nginx:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: twodoor
+    environment:
+      NGINX_ENVSUBST_FILTER: ^GALS_
+      GALS_STUDENT_HOST: ${GALS_STUDENT_HOST:?GALS_STUDENT_HOST is required — set it in deploy/.env.twodoor.<env>}
+      GALS_ADMIN_HOST: ${GALS_ADMIN_HOST:?GALS_ADMIN_HOST is required — set it in deploy/.env.twodoor.<env>}
+      GALS_STUDENT_PORT: "8443"
+      GALS_ADMIN_PORT: "9443"
+      GALS_HTTP_PORT: "8080"
+    ports:
+      - "${GALS_STUDENT_PUBLISH:-127.0.0.1:8443}:8443"
+      - "${GALS_ADMIN_PUBLISH:-127.0.0.1:9443}:9443"
+      - "${GALS_HTTP_PUBLISH:-127.0.0.1:8080}:8080"
+    volumes:
+      - ${GALS_CERT_DIR:-./deploy/certs}:/etc/nginx/certs:ro
+      - ${GALS_ADMIN_ACCESS_FILE:-./deploy/nginx/admin-access.local.conf}:/etc/nginx/gals/admin-access.conf:ro
+      - certbot_webroot:/var/www/certbot
+    networks:
+      - local-dev
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # Plain-HTTP liveness endpoint (gals.conf.template) — no TLS involved.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  certbot_webroot:

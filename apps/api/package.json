@@ -17,7 +17,8 @@
     "prisma:migrate:reset": "prisma migrate reset",
     "prisma:studio": "prisma studio",
     "rag:eval": "ts-node --transpile-only -P tsconfig.json src/rag/eval/runner.ts",
-    "reindex": "ts-node --transpile-only -P tsconfig.json prisma/scripts/reindex-embeddings.ts"
+    "reindex": "ts-node --transpile-only -P tsconfig.json prisma/scripts/reindex-embeddings.ts",
+    "seed:twodoor": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-twodoor-local.ts"
   },
   "dependencies": {
     "@ats/shared": "workspace:*",
