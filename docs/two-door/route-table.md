@@ -128,3 +128,14 @@ Redirect-loop fix: `Login.tsx` and `RoleRoute.tsx` now use `useHomePath(role) ??
 Same-origin sockets: `lib/socket.ts#getSocketOrigin()` — `VITE_API_URL`, else `localhost:3000` in dev, else `window.location.origin` (nginx proxies `/socket.io`). `DialogueLearning.tsx` uses the same helper.
 
 Bundle check on `dist-student` (2026-09-14): zero hits for `/teacher`, `/dashboard/sessions`, `/register`, `auth/register`, `/health`, `user-management`, `ai-settings`, `text-mining`, `openface`, `/api/jobs`, `/api/users`, `/api/security-events`. Only the wrong-door copy and `/wrong-door` itself are present. `AuthContext.register` moved into `pages/Register.tsx` to achieve the `auth/register` zero. Boundary rule now seeds from `src/entry-student.tsx`; `editor-styles.css` joined the renderer exception because `BlockRenderer` uses the `.tiptap` class.
+
+## Phase 5 guardrails (CI)
+
+| Check           | Where                                                                                     | What fails it                                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Import boundary | `apps/web/.dependency-cruiser.cjs` via `pnpm lint` (`lint-typecheck` job)                 | any module reachable from `src/entry-student.tsx` landing in a teacher-only directory or admin wiring module                         |
+| Bundle leak     | `scripts/two-door/check-student-bundle.mjs` (`build-two-door` job)                        | any of 28 private-door strings (teacher routes, `/register`, `/health`, private API prefixes) in `dist-student`                      |
+| Route coverage  | `scripts/two-door/check-route-coverage.mjs` (`build-two-door` job)                        | any controller route where the nginx allowlist and DoorGuard (derived from `@Roles`/`@PublicDoor`/`@PrivateDoor` in source) disagree |
+| nginx config    | `nginx -t` on the envsubst-rendered template in the official image (`build-two-door` job) | a syntax error or missing include                                                                                                    |
+
+`pnpm check:two-door` runs the two scripts locally (needs `pnpm build:two-door` first for the bundle check). The coverage check found one real gap the first time it ran — `GET/POST /api/dialogue-notes` (bare prefix) were denied by a `^~ /api/dialogue-notes/` rule; an exact-match location was added.
