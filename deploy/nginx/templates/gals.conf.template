@@ -21,11 +21,15 @@
 # (see deploy/.env.twodoor.l40.example).
 # ============================================================================
 
-# Compose service names (docker-compose.yml), resolved once at startup.
-# Declared as upstreams so the variable-bearing proxy_pass in s3-proxy.conf
-# (needed to forward the raw URI) does not require a runtime resolver.
-upstream gals_api   { server api:3000;   keepalive 32; }
-upstream gals_minio { server minio:9000; keepalive 16; }
+# Compose service names (docker-compose.yml). `resolve` (nginx >= 1.27.3,
+# needs a shared `zone`) re-resolves them through Docker's embedded DNS at
+# runtime instead of once at startup — without it, `up -d --build api`
+# handing the API a new container IP left nginx serving 502s until a
+# manual reload (reproduced during the local rehearsal). 127.0.0.11 is
+# the embedded resolver on every user-defined compose network.
+resolver 127.0.0.11 valid=10s ipv6=off;
+upstream gals_api   { zone gals_upstreams 64k; server api:3000   resolve; keepalive 32; }
+upstream gals_minio { zone gals_upstreams 64k; server minio:9000 resolve; keepalive 16; }
 
 # ---------------------------------------------------------------------------
 # Plain HTTP: Let's Encrypt HTTP-01 challenge + redirect everything else.
