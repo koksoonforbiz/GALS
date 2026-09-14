@@ -4,21 +4,38 @@ import {
   SubscribeMessage,
   ConnectedSocket,
   MessageBody,
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
-import { Server, Socket } from 'socket.io';
+import { Namespace, Socket } from 'socket.io';
+import { PrismaService } from '../prisma';
+import { WsAuthService, wsUser, wsIsStaff } from '../auth';
 
+// Two-door Phase 4: the handshake is authenticated (WsAuthService
+// middleware installed in afterInit — an unauthenticated socket never
+// connects) and every join checks ownership, so a student can only
+// receive their own streamed replies. Students only through the public
+// door; staff may observe any session from the private door.
 @WebSocketGateway({ namespace: 'dialogue', cors: true })
-export class DialogueGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class DialogueGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(DialogueGateway.name);
 
   @WebSocketServer()
-  server!: Server;
+  server!: Namespace;
+
+  constructor(
+    private readonly wsAuth: WsAuthService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  afterInit(server: Namespace) {
+    server.use(this.wsAuth.middleware({ namespace: 'dialogue', publicDoor: 'student' }));
+  }
 
   handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+    this.logger.log(`Client connected: ${client.id} user=${wsUser(client)?.id}`);
   }
 
   handleDisconnect(client: Socket) {
@@ -26,13 +43,28 @@ export class DialogueGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('join_session')
-  handleJoinSession(
+  async handleJoinSession(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { sessionId: string },
-  ): void {
+  ): Promise<{ joined?: string; error?: string }> {
+    const user = wsUser(client);
+    if (!user || typeof data?.sessionId !== 'string') return { error: 'Unauthorized' };
+
+    if (!wsIsStaff(client)) {
+      const owned = await this.prisma.dialogueSession.findFirst({
+        where: { id: data.sessionId, studentId: user.id },
+        select: { id: true },
+      });
+      if (!owned) {
+        this.logger.warn(`Client ${client.id} (user ${user.id}) refused session ${data.sessionId}`);
+        return { error: 'Not found' };
+      }
+    }
+
     const room = `session:${data.sessionId}`;
-    client.join(room);
+    await client.join(room);
     this.logger.log(`Client ${client.id} joined room ${room}`);
+    return { joined: room };
   }
 
   @SubscribeMessage('leave_session')
@@ -46,13 +78,23 @@ export class DialogueGateway implements OnGatewayConnection, OnGatewayDisconnect
   }
 
   @SubscribeMessage('join_student')
-  handleJoinStudent(
+  async handleJoinStudent(
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { studentId: string },
-  ): void {
+  ): Promise<{ joined?: string; error?: string }> {
+    const user = wsUser(client);
+    if (!user || typeof data?.studentId !== 'string') return { error: 'Unauthorized' };
+    if (data.studentId !== user.id && !wsIsStaff(client)) {
+      this.logger.warn(
+        `Client ${client.id} (user ${user.id}) refused student room ${data.studentId}`,
+      );
+      return { error: 'Not found' };
+    }
+
     const room = `student:${data.studentId}`;
-    client.join(room);
+    await client.join(room);
     this.logger.log(`Client ${client.id} joined student room ${room}`);
+    return { joined: room };
   }
 
   // ─── Emit helpers ─────────────────────────────────────────

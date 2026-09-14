@@ -650,3 +650,26 @@ Columns: `@Roles` as declared (`(none)` = any authenticated), effective guards (
 | GET    | `/api/webgazer/logs/:studentId/:courseId`         | teacher         | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                                                   |
 | GET    | `/api/webgazer/logs/:studentId/:sessionId/export` | (none)          | JwtAuthGuard,RolesGuard | **PRIVATE** | ★ BUG: no @Roles — any authenticated user can export any student's biometric CSV. Teacher-intent; fix in Phase 4. |
 | GET    | `/api/webgazer/calibration/:studentId/:courseId`  | teacher         | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                                                   |
+
+## Corrections found while implementing (Phase 3/4)
+
+The Phase 0 extractor skipped a handler whenever another decorator (`@Throttle`, `@UsePipes`, …) sat between the HTTP-method decorator and the method. A direct grep of every `@Get/@Post/@Patch/@Put/@Delete` finds **342** routes, not 332. The ten missing rows, classified by the same rules:
+
+| Method | Path                                                  | @Roles        | Door       | nginx allowlist                                      | DoorGuard                   |
+| ------ | ----------------------------------------------------- | ------------- | ---------- | ---------------------------------------------------- | --------------------------- |
+| POST   | `/api/learning-interventions/chat`                    | (none)        | **PUBLIC** | allowed by the `/api/learning-interventions/` prefix | class-level `@PublicDoor()` |
+| POST   | `/api/student-rag/courses/:courseId/documents`        | student       | **PUBLIC** | allowed by the `/api/student-rag/` prefix            | `@Roles('student')`         |
+| POST   | `/api/courses/:courseId/documents`                    | teacher,admin | PRIVATE    | denied (two segments after `/courses`)               | staff-only `@Roles`         |
+| POST   | `/api/admin/courses/:courseId/generate-structure`     | teacher,admin | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+| POST   | `/api/admin/courses/:courseId/apply-structure/:jobId` | teacher,admin | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+| POST   | `/api/admin/pages/generate-content-batch`             | teacher,admin | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+| POST   | `/api/openface3/backfill`                             | teacher       | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+| POST   | `/api/pre-generation/regenerate-course`               | teacher       | PRIVATE    | denied (only two exact GETs are allowed)             | staff-only `@Roles`         |
+| POST   | `/api/question-generation/generate`                   | teacher,admin | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+| POST   | `/api/user-management/users/bulk-provision`           | teacher,admin | PRIVATE    | denied (default)                                     | staff-only `@Roles`         |
+
+Neither layer needed a change for these — both already had the right answer because the nginx allowlist is prefix/pattern based and DoorGuard derives from `@Roles`. Totals become **342 routes — 90 PUBLIC / 47 BOTH / 205 PRIVATE**.
+
+Decision applied in Phase 3/4: `POST /api/auth/register` is **PRIVATE** (students are provisioned by a teacher; nginx `= /api/auth/register { return 404; }`, `@PrivateDoor()` on the handler).
+
+Phase 4 also made the log-export presigned URLs relative (`/s3/...`, signed against the internal MinIO endpoint, like `BlobService`) — under the two-door stack MinIO is not published, so the previous absolute `BLOB_STORAGE_PUBLIC_ENDPOINT` URLs would have been unreachable from the teacher's browser.

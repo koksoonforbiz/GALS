@@ -11,6 +11,7 @@ import { TwoFactorService } from './two-factor.service';
 import { TotpService } from './totp.service';
 import { SecurityEventService } from './security-event.service';
 import { PasswordHistoryService } from './password-history.service';
+import { WsAuthService } from './ws-auth.service';
 import { ActivityLogModule } from '../activity-log';
 import { MailerModule } from '../mailer';
 
@@ -39,7 +40,15 @@ import { MailerModule } from '../mailer';
     TotpService,
     SecurityEventService,
     PasswordHistoryService,
+    WsAuthService,
   ],
-  exports: [AuthService, JwtModule, RolesGuard, SecurityEventService, PasswordHistoryService],
+  exports: [
+    AuthService,
+    JwtModule,
+    RolesGuard,
+    SecurityEventService,
+    PasswordHistoryService,
+    WsAuthService,
+  ],
 })
 export class AuthModule {}

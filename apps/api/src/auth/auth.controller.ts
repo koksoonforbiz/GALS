@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, UseGuards, Request, UsePipes } from '@nest
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { ZodValidationPipe } from '../common';
+import { ZodValidationPipe, PublicDoor, PrivateDoor } from '../common';
 import { mustChangePassword } from './password-lifecycle.util';
 import {
   CreateUserSchema,
@@ -39,11 +39,16 @@ interface RequestUser {
 
 // ThrottlerGuard is now bound globally (APP_GUARD in app.module.ts) —
 // no per-controller @UseGuards needed here anymore.
+// Two-door: sign-in, 2FA and self-service password routes are served on both doors — see docs/two-door/api-classification.md.
+@PublicDoor()
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  // Two-door: self-registration is a staff workflow — students are
+  // provisioned by a teacher — so it is not served on the public door.
+  @PrivateDoor()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UsePipes(new ZodValidationPipe(CreateUserSchema))
   async register(@Body() dto: CreateUser) {

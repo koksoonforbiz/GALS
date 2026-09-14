@@ -96,6 +96,11 @@ export class WebgazerController {
   }
 
   @Get('logs/:studentId/:sessionId/export')
+  // Was the only route in this controller with no @Roles — RolesGuard
+  // passes any authenticated user when none are required, so any
+  // logged-in student could export another student's CSV by id. Same
+  // restriction as the sibling log reads (two-door Phase 4 finding).
+  @Roles('teacher')
   exportCsv(@Param('studentId') studentId: string, @Param('sessionId') sessionId: string) {
     return this.webgazerService.exportSessionCsv(studentId, sessionId);
   }

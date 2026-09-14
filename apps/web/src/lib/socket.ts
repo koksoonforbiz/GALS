@@ -23,6 +23,10 @@ export function connectSocket(): Socket {
     socket = io(getSocketOrigin(), {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
+      // The grading gateway authenticates the handshake (two-door Phase 4).
+      // A function, not a value, so every reconnect picks up the current
+      // token rather than the one from first connect.
+      auth: (cb) => cb({ token: localStorage.getItem('token') }),
     });
   }
   return socket;

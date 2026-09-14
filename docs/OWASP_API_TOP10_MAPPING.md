@@ -22,8 +22,21 @@ scopes teacher actions to students enrolled in the teacher's own courses.
 service-layer ownership check rather than a route-level role guard alone —
 flagged there explicitly as a distinct authorization pattern rather than
 silently mixed in with the route-level table, so it's auditable as its own
-category. No route was found that takes a foreign resource id (course,
-attempt, document) without checking who owns it.
+category.
+
+**Correction (two-door Phase 0 audit, fixed in Phase 4):** the earlier
+claim that "no route was found that takes a foreign resource id without
+checking who owns it" was wrong for two routes.
+`GET /api/pupil-size/logs/:studentId/:sessionId/export` and
+`GET /api/webgazer/logs/:studentId/:sessionId/export` had `RolesGuard`
+from their controller class but no `@Roles()` — and `RolesGuard` passes
+any authenticated user when no roles are required — so any logged-in
+student could export another student's gaze/pupil CSV by supplying ids.
+Both now carry `@Roles('teacher')` like their sibling log-read routes
+(`docs/two-door/api-classification.md`, "★ Finding"). The same audit
+also found the three Socket.IO gateways accepted unauthenticated
+connections and unverified room joins; they now authenticate the
+handshake JWT and check room ownership (`apps/api/src/auth/ws-auth.service.ts`).
 
 ## API2:2023 — Broken Authentication
 

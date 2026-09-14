@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PublicDoor } from '../common';
 import { ChatHistoryService } from './chat-history.service';
 
 interface RequestUser {
@@ -25,6 +26,8 @@ interface RequestUser {
  *   GET /chat-history/me               — list all conversations
  *   GET /chat-history/me/:surface/:id  — full transcript
  */
+// Two-door: a student's own chat history — see docs/two-door/api-classification.md.
+@PublicDoor()
 @Controller('chat-history')
 @UseGuards(JwtAuthGuard)
 export class ChatHistoryController {

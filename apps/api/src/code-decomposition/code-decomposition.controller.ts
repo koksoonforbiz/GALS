@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@
 import { Throttle } from '@nestjs/throttler';
 import { CodeDecompositionService } from './code-decomposition.service';
 import { JwtAuthGuard } from '../auth';
-import { SessionId } from '../common';
+import { SessionId, PublicDoor } from '../common';
 import type {
   GenerateDecompositionDto,
   InferTreeDto,
@@ -25,6 +25,8 @@ interface RequestUser {
 // session-level cap enforced in the service (formationCheckCount/
 // inferTreeCount), since a per-minute limit alone doesn't stop a slow,
 // hour-long spam session.
+// Two-door: student-facing throughout — see docs/two-door/api-classification.md.
+@PublicDoor()
 @Controller('code-decomposition')
 @UseGuards(JwtAuthGuard)
 export class CodeDecompositionController {

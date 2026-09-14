@@ -18,6 +18,7 @@ import type { Request, Response } from 'express';
 import { BlobService } from './blob.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { PublicDoor } from '../common';
 
 const ALLOWED_TYPES: Record<string, string> = {
   'strokes.json': 'application/json',
@@ -29,6 +30,8 @@ interface RequestUser {
   role: string;
 }
 
+// Two-door: attempt artefacts are read/written by students (BOTH) — see docs/two-door/api-classification.md.
+@PublicDoor()
 @Controller('blobs')
 @UseGuards(JwtAuthGuard)
 export class BlobController {

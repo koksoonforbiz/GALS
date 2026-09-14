@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AssessmentsService } from './assessments.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import { PublicDoor } from '../common';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -28,7 +29,8 @@ export class AssessmentsController {
   @Roles('teacher', 'admin')
   create(
     @Request() req: { user: RequestUser },
-    @Body() dto: {
+    @Body()
+    dto: {
       courseId: string;
       title: string;
       description?: string;
@@ -41,10 +43,9 @@ export class AssessmentsController {
   }
 
   @Get()
-  findAll(
-    @Request() req: { user: RequestUser },
-    @Query('courseId') courseId?: string,
-  ) {
+  // Two-door: read-only assessment access is BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
+  findAll(@Request() req: { user: RequestUser }, @Query('courseId') courseId?: string) {
     if (courseId) {
       return this.assessmentsService.findByCourse(courseId);
     }
@@ -58,6 +59,8 @@ export class AssessmentsController {
   }
 
   @Get(':id')
+  // Two-door: BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findOne(@Param('id') id: string) {
     return this.assessmentsService.findOne(id);
   }
@@ -67,7 +70,14 @@ export class AssessmentsController {
   update(
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body() dto: { isPublished?: boolean; title?: string; description?: string; mode?: string; settings?: any },
+    @Body()
+    dto: {
+      isPublished?: boolean;
+      title?: string;
+      description?: string;
+      mode?: string;
+      settings?: any;
+    },
   ) {
     return this.assessmentsService.update(id, req.user.id, dto);
   }

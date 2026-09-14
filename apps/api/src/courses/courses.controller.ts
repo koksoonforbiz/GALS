@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { JwtAuthGuard, RolesGuard, Roles, SecurityEventService } from '../auth';
-import { ZodValidationPipe } from '../common';
+import { ZodValidationPipe, PublicDoor } from '../common';
 import { CreateCourseSchema, UpdateCourseSchema, UpdateEnrollmentPolicySchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UpdateEnrollmentPolicy, UserRole } from '@ats/shared';
 
@@ -40,16 +40,22 @@ export class CoursesController {
   }
 
   @Get()
+  // Two-door: read-only course access is BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findAll(@Request() req: { user: RequestUser }) {
     return this.coursesService.findAll(req.user.id, req.user.role);
   }
 
   @Get('catalog')
+  // Two-door: BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   catalog() {
     return this.coursesService.findCatalog();
   }
 
   @Get(':id')
+  // Two-door: BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findOne(@Param('id') id: string) {
     return this.coursesService.findOne(id);
   }

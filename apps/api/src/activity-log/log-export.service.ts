@@ -8,8 +8,6 @@ import { ConfigService } from '@nestjs/config';
 export class LogExportService {
   private readonly logger = new Logger(LogExportService.name);
   private readonly s3: S3Client;
-  /** Separate client whose endpoint matches what the browser will use — so the presigned URL host is correct. */
-  private readonly s3Public: S3Client;
   private readonly bucket: string;
   private readonly recordingBucket: string;
 
@@ -18,9 +16,6 @@ export class LogExportService {
     private readonly config: ConfigService,
   ) {
     const internalEndpoint = config.get<string>('BLOB_STORAGE_ENDPOINT', 'http://localhost:9000');
-    // Public endpoint is what the browser reaches (e.g. http://localhost:9000 on the host machine).
-    // Presigned URLs must be signed with this host so MinIO validates the Host header correctly.
-    const publicEndpoint = config.get<string>('BLOB_STORAGE_PUBLIC_ENDPOINT', internalEndpoint);
     const region = config.get<string>('BLOB_STORAGE_REGION', 'us-east-1');
     const credentials = {
       accessKeyId: config.get<string>('BLOB_STORAGE_ACCESS_KEY', 'minioadmin'),
@@ -28,12 +23,6 @@ export class LogExportService {
     };
     this.s3 = new S3Client({
       endpoint: internalEndpoint,
-      region,
-      credentials,
-      forcePathStyle: true,
-    });
-    this.s3Public = new S3Client({
-      endpoint: publicEndpoint,
       region,
       credentials,
       forcePathStyle: true,
@@ -176,11 +165,7 @@ export class LogExportService {
         let downloadUrl: string | null = null;
         if (seg.uploadStatus === 'COMPLETED' && seg.minioKey) {
           try {
-            downloadUrl = await getSignedUrl(
-              this.s3Public,
-              new GetObjectCommand({ Bucket: this.recordingBucket, Key: seg.minioKey }),
-              { expiresIn: 3600 },
-            );
+            downloadUrl = await this.presignDownload(this.recordingBucket, seg.minioKey);
           } catch {
             // Non-fatal — segment may have been deleted
           }
@@ -566,13 +551,35 @@ export class LogExportService {
       }),
     );
 
-    const url = await getSignedUrl(
-      this.s3Public,
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
-      { expiresIn: 3600 },
-    );
+    const url = await this.presignDownload(this.bucket, key);
 
     this.logger.log(`Log exported: ${key} actor=${actorId ?? 'unknown'}`);
     return url;
+  }
+
+  /**
+   * Presigned GET as a RELATIVE `/s3/<bucket>/<key>?X-Amz-...` path — the
+   * same convention as BlobService.toRelativePath. The Vite dev proxy and
+   * the two-door nginx both forward /s3/ to MinIO with the INTERNAL host,
+   * so the signature is computed against BLOB_STORAGE_ENDPOINT and no
+   * public MinIO endpoint is ever needed (MinIO is not published under
+   * the two-door stack). Previously signed against
+   * BLOB_STORAGE_PUBLIC_ENDPOINT, which produced absolute URLs the
+   * browser could only reach when MinIO was port-mapped to the host.
+   */
+  private async presignDownload(bucket: string, key: string): Promise<string> {
+    const absolute = await getSignedUrl(
+      this.s3,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      {
+        expiresIn: 3600,
+      },
+    );
+    try {
+      const parsed = new URL(absolute);
+      return `/s3${parsed.pathname}${parsed.search}`;
+    } catch {
+      return absolute;
+    }
   }
 }
