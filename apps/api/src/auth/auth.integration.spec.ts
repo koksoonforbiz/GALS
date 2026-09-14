@@ -3,6 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { createTestApp, cleanDatabase } from '../test/setup';
 
+// Satisfies CreateUserSchema's PASSWORD_COMPLEXITY (12+ chars, upper,
+// lower, digit, special) — the checklist hardening tightened it from the
+// old password123 these fixtures were written against.
+const TEST_PASSWORD = 'Test-Passw0rd!';
+
 describe('Auth Integration', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -25,7 +30,8 @@ describe('Auth Integration', () => {
         .post('/api/auth/register')
         .send({
           email: 'test@example.com',
-          password: 'password123',
+          password: TEST_PASSWORD,
+          termsAccepted: true,
           name: 'Test User',
           role: 'student',
         })
@@ -43,7 +49,8 @@ describe('Auth Integration', () => {
     it('should reject duplicate email with 409', async () => {
       const payload = {
         email: 'dup@example.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
+        termsAccepted: true,
         name: 'User One',
         role: 'student',
       };
@@ -71,14 +78,15 @@ describe('Auth Integration', () => {
     it('should login with correct credentials', async () => {
       await request(app.getHttpServer()).post('/api/auth/register').send({
         email: 'login@example.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
+        termsAccepted: true,
         name: 'Login User',
         role: 'student',
       });
 
       const res = await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'login@example.com', password: 'password123' })
+        .send({ email: 'login@example.com', password: TEST_PASSWORD })
         .expect(201);
 
       expect(res.body).toHaveProperty('accessToken');
@@ -88,7 +96,8 @@ describe('Auth Integration', () => {
     it('should reject wrong password with 401', async () => {
       await request(app.getHttpServer()).post('/api/auth/register').send({
         email: 'wrong@example.com',
-        password: 'password123',
+        password: TEST_PASSWORD,
+        termsAccepted: true,
         name: 'User',
         role: 'student',
       });
@@ -102,7 +111,7 @@ describe('Auth Integration', () => {
     it('should reject non-existent email with 401', async () => {
       await request(app.getHttpServer())
         .post('/api/auth/login')
-        .send({ email: 'nobody@example.com', password: 'password123' })
+        .send({ email: 'nobody@example.com', password: TEST_PASSWORD })
         .expect(401);
     });
   });
