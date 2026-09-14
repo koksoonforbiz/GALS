@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ApiError } from '../lib/api';
 import { PERMISSION_SESSION_KEY } from '../lib/biometrics/permittedStreams';
+import { useHomePath } from '../nav/NavConfigContext';
+import { DOOR, WRONG_DOOR_PATH } from '../door';
 
 export function Login() {
   // Prompt 05: a single identifier input that accepts either the
@@ -26,6 +28,9 @@ export function Login() {
     cancelTwoFactor,
   } = useAuth();
   const navigate = useNavigate();
+  // Two-door split: where this role lands on THIS door, or null if the
+  // door doesn't serve the role (a teacher on the public student door).
+  const homePath = useHomePath(user?.role);
 
   // Clear the permission gate flag on every visit to the login page so a
   // fresh login always shows the gate, even if a previous session set it.
@@ -33,13 +38,14 @@ export function Login() {
     sessionStorage.removeItem(PERMISSION_SESSION_KEY);
   }, []);
 
-  // Redirect if already logged in
+  // Redirect if already logged in. A role with no home on this door goes
+  // to the wrong-door screen (sign-out only) rather than to a route this
+  // bundle doesn't have, which would bounce back here forever.
   useEffect(() => {
     if (user) {
-      const destination = user.role === 'student' ? '/student' : '/teacher';
-      navigate(destination, { replace: true });
+      navigate(homePath ?? WRONG_DOOR_PATH, { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, homePath, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,11 +254,16 @@ export function Login() {
             </button>
           </div>
 
-          <div className="text-center">
-            <Link to="/register" className="text-blue-600 hover:text-blue-500 text-sm">
-              Don&apos;t have an account? Register
-            </Link>
-          </div>
+          {/* Self-registration is a staff workflow; the public student
+              door has no /register route (students get their login from
+              a teacher). */}
+          {DOOR === 'admin' && (
+            <div className="text-center">
+              <Link to="/register" className="text-blue-600 hover:text-blue-500 text-sm">
+                Don&apos;t have an account? Register
+              </Link>
+            </div>
+          )}
         </form>
       </div>
     </div>

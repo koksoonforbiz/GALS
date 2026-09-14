@@ -105,3 +105,26 @@ In a student-only build with no `/teacher` route, a teacher logging in on the pu
 3. **captureDom** — currently `true` in code vs "OFF for the study" in the documents. Which ships?
 4. **Wrong-door wording** — proposed default above.
 5. **Admin build includes student surface?** — default per spec is admin-only. Note that no "preview as student" feature exists in the code today (no teacher page imports a student page), so nothing breaks either way.
+
+## Phase 2 outcome (implemented)
+
+Decisions taken: `/register` and `/health` are admin-door only; wrong-door wording is the proposed default (sign-out only, no other-door link); captureDom left exactly as the code had it (`true`, comment intact) — the teacher-portal toggle is a separate, later phase; the admin build carries **both** route trees so staff can use the student surface from the private hostname (and `vite` dev is unchanged).
+
+Where things live now:
+
+| Concern                                                          | File                                                                                                                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Door constant (`__GALS_DOOR__` via Vite `define`)                | `apps/web/src/door.ts`, `vite-env.d.ts`, `vite.config.shared.ts`                                                                                                 |
+| Provider stack (Router › ActivityLog › Auth › Toast › NavConfig) | `src/app/AppShell.tsx`                                                                                                                                           |
+| Sensing spine (moved verbatim from `App.tsx`)                    | `src/app/AuthenticatedLoggingWrapper.tsx`                                                                                                                        |
+| Route modules                                                    | `src/routes/{authRoutes,adminOnlyRoutes,shell,studentRoutes,teacherRoutes}.tsx`                                                                                  |
+| Per-door nav + home paths (replaces `Sidebar.tsx` inline arrays) | `src/nav/{NavConfigContext,studentNav,teacherNav}.tsx`                                                                                                           |
+| Wrong-door screen                                                | `src/pages/WrongDoorPage.tsx` at `/wrong-door`                                                                                                                   |
+| Apps / entries / HTML                                            | `src/app/{StudentApp,AdminApp}.tsx`, `src/entry-{student,admin}.tsx`, `index.html` (admin), `student.html` (student)                                             |
+| Builds                                                           | `vite.config.ts` (admin → `dist`, dev default), `vite.config.admin.ts` (`dist-admin`), `vite.config.student.ts` (`dist-student`, output renamed to `index.html`) |
+
+Redirect-loop fix: `Login.tsx` and `RoleRoute.tsx` now use `useHomePath(role) ?? WRONG_DOOR_PATH` — a role the door doesn't serve goes to `/wrong-door`, never to a route the bundle lacks. No teacher path literal remains outside `nav/teacherNav.tsx` and `routes/teacherRoutes.tsx`.
+
+Same-origin sockets: `lib/socket.ts#getSocketOrigin()` — `VITE_API_URL`, else `localhost:3000` in dev, else `window.location.origin` (nginx proxies `/socket.io`). `DialogueLearning.tsx` uses the same helper.
+
+Bundle check on `dist-student` (2026-09-14): zero hits for `/teacher`, `/dashboard/sessions`, `/register`, `auth/register`, `/health`, `user-management`, `ai-settings`, `text-mining`, `openface`, `/api/jobs`, `/api/users`, `/api/security-events`. Only the wrong-door copy and `/wrong-door` itself are present. `AuthContext.register` moved into `pages/Register.tsx` to achieve the `auth/register` zero. Boundary rule now seeds from `src/entry-student.tsx`; `editor-styles.css` joined the renderer exception because `BlockRenderer` uses the `.tiptap` class.

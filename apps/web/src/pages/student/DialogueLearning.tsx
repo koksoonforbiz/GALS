@@ -13,6 +13,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { getSocketOrigin } from '../../lib/socket';
 import { formatDateSGT } from '../../lib/formatDateTime';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../components/Toast';
@@ -210,9 +211,8 @@ export function DialogueLearning() {
   useEffect(() => {
     if (!user || !activeSession) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     const token = localStorage.getItem('token');
-    const socket = io(`${apiUrl}/dialogue`, {
+    const socket = io(`${getSocketOrigin()}/dialogue`, {
       path: '/socket.io',
       transports: ['websocket', 'polling'],
       auth: { token },
