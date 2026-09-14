@@ -297,6 +297,11 @@ def worker_loop(r: redis.Redis, worker_id: int, inferencer: Openface3Inferencer)
             _, raw = result
             job_data = json.loads(raw)
             process_job(job_data, inferencer)
+        except redis.exceptions.TimeoutError:
+            # Idle queue. Newer redis-py (>= 6) surfaces the BLPOP timeout as
+            # a socket TimeoutError rather than returning None; either way it
+            # is not an error and must not trigger the 2 s back-off below.
+            continue
         except Exception as exc:
             # Catch-all so a single bad job doesn't kill the worker thread.
             print(f'[OpenFace3] worker {worker_id} loop error: {exc}')
