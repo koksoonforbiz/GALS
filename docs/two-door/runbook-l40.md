@@ -4,17 +4,17 @@ The L40 host runs exactly the stack that passed `verification-local.md`, with th
 
 ## 0. What changes between local and L40
 
-| Concern                  | Local (verified)                                    | L40                                                                                                                     |
-| ------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Hostnames                | `student.gals.test`, `admin.gals.test` (hosts file) | real DNS names → `GALS_STUDENT_HOST`, `GALS_ADMIN_HOST`                                                                 |
-| TLS                      | mkcert                                              | Let's Encrypt (HTTP-01 through the `:80` server block) or institutional certs                                           |
-| Public door bind         | `127.0.0.1:8443`                                    | `0.0.0.0:443` (`GALS_STUDENT_PUBLISH`)                                                                                  |
-| HTTP (ACME + redirect)   | `127.0.0.1:8080`                                    | `0.0.0.0:80` (`GALS_HTTP_PUBLISH`)                                                                                      |
-| Private door bind        | `127.0.0.1:9443`                                    | **still not the internet**: `127.0.0.1:9443` + SSH tunnel, or `<vpn-interface-ip>:443` + `admin-access.conf` allow/deny |
-| API image                | `development` (bind-mounted src)                    | `production`, `NODE_ENV=production` (`GALS_API_BUILD_TARGET`, `GALS_API_NODE_ENV`)                                      |
-| Dev seed                 | `pnpm run seed:twodoor`                             | never run — refuses `NODE_ENV=production`; accounts are provisioned through the teacher UI                              |
-| MinIO / Postgres / Redis | not published                                       | not published (unchanged)                                                                                               |
-| Secrets                  | root `.env`                                         | root `.env` (or `.env.enc` + `ENV_MASTER_KEY`, see `.env.example`), plus the two gitignored door files                  |
+| Concern                  | Local (verified)                                                            | L40                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Hostnames                | `student.gals.test`, `admin.gals.test` (hosts file)                         | real DNS names → `GALS_STUDENT_HOST`, `GALS_ADMIN_HOST`                                                                 |
+| TLS                      | mkcert                                                                      | Let's Encrypt (HTTP-01 through the `:80` server block) or institutional certs                                           |
+| Public door bind         | `127.0.0.1:8443`                                                            | `0.0.0.0:443` (`GALS_STUDENT_PUBLISH`)                                                                                  |
+| HTTP (ACME + redirect)   | `127.0.0.1:8080`                                                            | `0.0.0.0:80` (`GALS_HTTP_PUBLISH`)                                                                                      |
+| Private door bind        | `127.0.0.1:9443`                                                            | **still not the internet**: `127.0.0.1:9443` + SSH tunnel, or `<vpn-interface-ip>:443` + `admin-access.conf` allow/deny |
+| API image                | `development` (bind-mounted src)                                            | `production`, `NODE_ENV=production` (`GALS_API_BUILD_TARGET`, `GALS_API_NODE_ENV`)                                      |
+| Dev seed                 | `pnpm run seed:twodoor` (`-e NODE_ENV=development` on the production image) | never run — refuses `NODE_ENV=production`; accounts are provisioned through the teacher UI                              |
+| MinIO / Postgres / Redis | not published                                                               | not published (unchanged)                                                                                               |
+| Secrets                  | root `.env`                                                                 | root `.env` (or `.env.enc` + `ENV_MASTER_KEY`, see `.env.example`), plus the two gitignored door files                  |
 
 Everything else — bundles, nginx allowlist, DoorGuard, socket auth — is byte-for-byte what CI built and the local click-through exercised.
 

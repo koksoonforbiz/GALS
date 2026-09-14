@@ -37,12 +37,14 @@ apps/api/prisma/scripts/seed-twodoor-local.ts   opt-in click-through fixture
 2. **Certs** — `./deploy/scripts/mkcert-local.sh` (run where the browser runs so `mkcert -install` trusts the CA there; the files go to `deploy/certs/`).
 3. **Env** — `cp deploy/.env.twodoor.local.example deploy/.env.twodoor.local` (defaults are fine). Your root `.env` is still required.
 4. **Up** — `./deploy/scripts/twodoor.sh local up -d --build`
-5. **Seed** (optional, prints fresh credentials) — `./deploy/scripts/twodoor.sh local exec api pnpm run seed:twodoor`
+5. **Seed** (optional, prints fresh credentials) — `./deploy/scripts/twodoor.sh local exec api pnpm run seed:twodoor`. If the API runs the production image (`GALS_API_BUILD_TARGET=production`, which sets `NODE_ENV=production`), the seed refuses by design — override for the one command: `./deploy/scripts/twodoor.sh local exec -e NODE_ENV=development api pnpm run seed:twodoor`.
 6. Open `https://student.gals.test:8443` (student door) and `https://admin.gals.test:9443` (staff door). `https://localhost:8443` / `:9443` also work — each door is the default server on its port.
 
 `./deploy/scripts/twodoor.sh local down` stops it. The plain `docker compose up` dev stack is untouched by any of this.
 
 Requires Docker Compose v2.24+ (`ports: !reset`).
+
+**WSL2 note:** if Docker Engine runs inside WSL2 (no Docker Desktop), WSL shuts the distro down a few seconds after its last process exits — and every container with it. Keep a WSL shell open (or a background `wsl -e sleep infinity`) while the stack should stay up. The `restart: unless-stopped` policies in the overlay bring everything back when the daemon returns, but only the daemon coming back does that.
 
 ## What to expect on the public door
 

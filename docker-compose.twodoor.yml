@@ -24,6 +24,9 @@ services:
     build:
       target: ${GALS_API_BUILD_TARGET:-development}
     ports: !reset []
+    # Production stacks restart on failure/host reboot (the base compose
+    # file, being the dev stack, sets no policy on these services).
+    restart: unless-stopped
     environment:
       NODE_ENV: ${GALS_API_NODE_ENV:-development}
       ALLOWED_ORIGINS: ${GALS_ALLOWED_ORIGINS:?GALS_ALLOWED_ORIGINS is required — set it in deploy/.env.twodoor.<env>}
@@ -35,15 +38,19 @@ services:
 
   worker:
     ports: !reset []
+    restart: unless-stopped
 
   postgres:
     ports: !reset []
+    restart: unless-stopped
 
   redis:
     ports: !reset []
+    restart: unless-stopped
 
   minio:
     ports: !reset []
+    restart: unless-stopped
 
   # Vite dev server — not part of the two-door stack. `--profile vite-dev`
   # brings it back if you want HMR alongside nginx.

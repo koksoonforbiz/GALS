@@ -31,13 +31,28 @@ export class PreGenerationService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    // Run backfill immediately on startup, then every 60 seconds
-    void this.runBackfill();
-    this.backfillInterval = setInterval(() => void this.runBackfill(), 60_000);
+    // Run backfill immediately on startup, then every 60 seconds.
+    //
+    // Both timers .catch() like the other pollers (guide-generation,
+    // grade-completed) do: processNextPending()'s first two Prisma calls
+    // sit outside its try/catch, so with `void` a transient DB outage
+    // became an unhandled rejection and Node 20 exited the whole API
+    // (seen live during the two-door rehearsal when Postgres was stopped
+    // under a running API).
+    const swallow = (what: string) => (err: unknown) =>
+      this.logger.warn(`${what} tick failed: ${String((err as Error).message ?? err).trim()}`);
+    this.runBackfill().catch(swallow('Backfill'));
+    this.backfillInterval = setInterval(
+      () => this.runBackfill().catch(swallow('Backfill')),
+      60_000,
+    );
 
     // Process one pending exercise every 5 seconds
     this.workerRunning = true;
-    this.workerInterval = setInterval(() => void this.processNextPending(), 5_000);
+    this.workerInterval = setInterval(
+      () => this.processNextPending().catch(swallow('Pre-generation worker')),
+      5_000,
+    );
   }
 
   onModuleDestroy() {
