@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:student": "tsc && vite build --config vite.config.student.ts",
+    "build:admin": "tsc && vite build --config vite.config.admin.ts",
     "preview": "vite preview",
-    "lint": "eslint src --ext .ts,.tsx",
+    "lint": "eslint src --ext .ts,.tsx && pnpm run lint:boundaries",
+    "lint:boundaries": "depcruise src --config .dependency-cruiser.cjs",
     "typecheck": "tsc --noEmit",
     "postinstall": "node scripts/copy-pyodide-assets.mjs"
   },
@@ -62,6 +65,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "@vitejs/plugin-basic-ssl": "^1.2.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "dependency-cruiser": "^18.3.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.0",
