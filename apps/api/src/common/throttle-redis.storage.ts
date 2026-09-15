@@ -19,24 +19,51 @@ export class ThrottlerRedisStorage implements ThrottlerStorage, OnModuleDestroy 
     this.redis = new Redis(env.REDIS_URL);
   }
 
+  // @nestjs/throttler v6 delegates the block decision to the storage: the
+  // guard only throws 429 when this returns isBlocked=true (it passes limit
+  // and blockDuration in for exactly that purpose). The previous version of
+  // this method hardcoded isBlocked=false, which silently disabled rate
+  // limiting app-wide — counts and X-RateLimit-* headers looked right, but
+  // requests over the limit were never rejected (caught by the §2 live
+  // smoke test). timeToExpire/timeToBlockExpire are in seconds, matching
+  // the library's own in-memory storage.
   async increment(
     key: string,
     ttl: number,
-    _limit: number,
-    _blockDuration: number,
+    limit: number,
+    blockDuration: number,
     _throttlerName: string,
   ): Promise<ThrottlerStorageRecord> {
+    const blockKey = `${key}:blocked`;
+    const blockTtlMs = await this.redis.pttl(blockKey);
+    if (blockTtlMs > 0) {
+      const secs = Math.ceil(blockTtlMs / 1000);
+      return {
+        totalHits: limit + 1,
+        timeToExpire: secs,
+        isBlocked: true,
+        timeToBlockExpire: secs,
+      };
+    }
+
     const totalHits = await this.redis.incr(key);
     if (totalHits === 1) {
-      await this.redis.expire(key, Math.ceil(ttl / 1000));
+      await this.redis.pexpire(key, ttl);
     }
-    const ttlRemaining = await this.redis.ttl(key);
-    return {
-      totalHits,
-      timeToExpire: ttlRemaining * 1000,
-      isBlocked: false,
-      timeToBlockExpire: 0,
-    };
+    const ttlRemainingMs = await this.redis.pttl(key);
+    const timeToExpire = Math.ceil(Math.max(ttlRemainingMs, 0) / 1000);
+
+    if (totalHits > limit) {
+      await this.redis.set(blockKey, '1', 'PX', blockDuration);
+      return {
+        totalHits,
+        timeToExpire,
+        isBlocked: true,
+        timeToBlockExpire: Math.ceil(blockDuration / 1000),
+      };
+    }
+
+    return { totalHits, timeToExpire, isBlocked: false, timeToBlockExpire: 0 };
   }
 
   async onModuleDestroy(): Promise<void> {
