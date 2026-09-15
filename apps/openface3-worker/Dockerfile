@@ -40,6 +40,21 @@ RUN pip install --no-cache-dir -r requirements.txt
 # fine-tuned checkpoint without rebuilding), mount a host directory or named
 # volume at /models/openface3 — that hides the baked copy.
 ENV OPENFACE3_MODEL_PATH=/models/openface3
+
+# Non-root runtime (SMU checklist items 8/50, CIS Docker 4.1). Created
+# *before* the model download so the weights, the /app/weights symlink and
+# every cache dir (torch hub, HuggingFace) are owned by — and writable for —
+# the runtime user; pip installs above stay root-owned and read-only, which
+# is what we want. Video scratch files go through tempfile → /tmp.
+RUN groupadd --system --gid 10001 worker \
+    && useradd --system --uid 10001 --gid worker --create-home --home-dir /home/worker worker \
+    && mkdir -p /models \
+    && chown worker:worker /models /app
+ENV HOME=/home/worker \
+    HF_HOME=/home/worker/.cache/huggingface \
+    TORCH_HOME=/home/worker/.cache/torch
+USER worker
+
 # NOTE: do NOT pre-mkdir the target. The openface CLI's download_weights_from_hf
 # checks `if not os.path.exists(save_path)` — if the dir exists it short-circuits
 # with "Weights already exist. Skipping download." Letting the CLI create the
@@ -57,6 +72,6 @@ RUN openface download --output ${OPENFACE3_MODEL_PATH} && \
 # /app/weights/..., which we point at the real model directory.
 RUN ln -s ${OPENFACE3_MODEL_PATH} /app/weights
 
-COPY . .
+COPY --chown=worker:worker . .
 
 CMD ["python", "main.py"]
