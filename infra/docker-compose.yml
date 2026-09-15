@@ -46,9 +46,11 @@ services:
         condition: service_healthy
 
   minio:
-    # Reverted to `latest` — see docker-compose.yml's matching comment
-    # (the previously pinned tag didn't actually exist on Docker Hub).
-    image: minio/minio:latest
+    # Pinned by digest 2026-09-15 (was `minio/minio:latest`) — see
+    # docker-compose.yml's matching comment for why the pin points at
+    # quay.io (docker.io/minio/minio now refuses pulls; quay serves the
+    # identical manifest digest). Keep both files in sync.
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     command: server /data --console-address ":9001"
     ports:
       - "${MINIO_API_PORT:-9000}:9000"

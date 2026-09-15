@@ -259,19 +259,15 @@ services:
       retries: 5
 
   minio:
-    # Reverted to `latest` — the specific RELEASE tag pinned here
-    # earlier turned out to not actually be published to Docker Hub
-    # (it appeared on MinIO's GitHub releases page, but `docker compose
-    # up` failed with "not found" against the real registry — verified
-    # live, not a guess). No reliable way to query the live registry
-    # from this environment to pick a correct replacement tag safely.
-    # TODO (checklist item 24): pin to a specific, verified-real
-    # RELEASE.* tag — check what's actually available via
-    # `docker pull minio/minio:latest && docker inspect --format '{{index .RepoDigests 0}}' minio/minio:latest`
-    # or browse https://hub.docker.com/r/minio/minio/tags directly,
-    # then swap this back to an exact tag (here and in
-    # infra/docker-compose.yml) once confirmed to actually pull.
-    image: minio/minio:latest
+    # Pinned by digest 2026-09-15 (checklist item 24) — this is the exact
+    # image that was running as `minio/minio:latest` when the pin was made.
+    # Pinned via quay.io, NOT Docker Hub: docker.io/minio/minio now refuses
+    # pulls outright ("pull access denied", verified live 2026-09-15), so a
+    # docker.io digest would be unpullable on any fresh machine. quay.io
+    # serves the IDENTICAL manifest digest (verified with
+    # `docker manifest inspect`); the pull and boot of this exact line were
+    # verified live. Keep in sync with infra/docker-compose.yml.
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     command: server /data --console-address ":9001"
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
@@ -295,7 +291,11 @@ services:
   # the healthcheck's long start_period accounts for that; api does
   # NOT depend_on this being healthy (see api's CLAMAV_HOST comment).
   clamav:
-    image: clamav/clamav-debian:stable
+    # Pinned by digest 2026-09-15 (was the rolling `stable` tag). Pinning
+    # the image does NOT freeze virus signatures: freshclam updates the
+    # signature database at runtime into the clamav_data volume, so the
+    # scanner still tracks new malware while the software itself is pinned.
+    image: clamav/clamav-debian@sha256:cc16781fe005e49de6a8fc1231b63b265f74b18fc2a6347c670c35716914c3b6
     volumes:
       - clamav_data:/var/lib/clamav
     networks:
