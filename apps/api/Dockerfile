@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 # Without this Corepack ignores the activated version whenever the cwd has
 # no `packageManager` field and downloads the LATEST pnpm at runtime

@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 # See apps/api/Dockerfile — keep Corepack on the activated pnpm.
 ENV COREPACK_DEFAULT_TO_LATEST=0

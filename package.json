@@ -97,7 +97,7 @@
     }
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",
