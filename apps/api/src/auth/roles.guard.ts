@@ -1,15 +1,17 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { UserRole } from '@ats/shared';
+import type { UserRole, TwoFactorMethod } from '@ats/shared';
 import { ROLES_KEY } from './roles.decorator';
 import { SecurityEventService } from './security-event.service';
 import { mustChangePassword } from './password-lifecycle.util';
+import { MfaPolicyService } from './mfa-policy.service';
 
 interface RequestUser {
   id: string;
   email: string;
   name: string;
   role: UserRole;
+  twoFactorMethod: TwoFactorMethod | null;
   isTemporaryPassword: boolean;
   passwordChangedAt: Date | string | null;
   createdAt: Date | string;
@@ -20,6 +22,7 @@ export class RolesGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private readonly securityEvents: SecurityEventService,
+    private readonly mfaPolicy: MfaPolicyService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -40,6 +43,7 @@ export class RolesGuard implements CanActivate {
     // plan, since none of them expose sensitive admin/teacher actions.
     if (user) {
       this.assertPasswordLifecycleOk(user);
+      this.assertMfaEnrolled(user);
     }
 
     const requiredRoles = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
@@ -91,6 +95,24 @@ export class RolesGuard implements CanActivate {
         message: user.isTemporaryPassword
           ? 'Your password was reset by a teacher/admin and must be changed before continuing.'
           : 'Your password has expired and must be changed before continuing.',
+      });
+    }
+  }
+
+  /**
+   * Checklist item 12 — mandatory MFA for the roles in
+   * MFA_REQUIRED_ROLES (see MfaPolicyService). Same shape as the
+   * password gate above: the client catches MFA_ENROLMENT_REQUIRED and
+   * routes to Account Security, whose enrolment endpoints live on
+   * AuthController (JwtAuthGuard only) and so stay reachable.
+   */
+  private assertMfaEnrolled(user: RequestUser): void {
+    if (this.mfaPolicy.mustEnrol(user)) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'MFA_ENROLMENT_REQUIRED',
+        message:
+          'Two-factor authentication is required for your role. Enrol an authenticator app or email code before continuing.',
       });
     }
   }

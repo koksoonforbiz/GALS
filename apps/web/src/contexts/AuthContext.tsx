@@ -22,6 +22,11 @@ interface User {
   // password has passed the 180-day expiry window. ProtectedRoute
   // redirects to /change-password whenever this is true.
   mustChangePassword: boolean;
+  // Checklist item 12 — set when MFA_REQUIRED_ROLES (server env) covers
+  // this role and no factor is enrolled yet. ProtectedRoute redirects
+  // to /account/security whenever this is true (after any pending
+  // password change).
+  mustEnrolMfa: boolean;
 }
 
 interface AuthResponse {

@@ -27,6 +27,10 @@ services:
       # before the production (L40) deployment. See
       # LLM_DAILY_COST_CAP_USD's comment in .env.example.
       LLM_DAILY_COST_CAP_USD: ${LLM_DAILY_COST_CAP_USD:-}
+      # Optional — checklist item 12. Leave unset to keep today's
+      # behaviour (2FA opt-in for every role). The L40 runbook sets
+      # `admin,teacher`. See MFA_REQUIRED_ROLES's comment in .env.example.
+      MFA_REQUIRED_ROLES: ${MFA_REQUIRED_ROLES:-}
       BLOB_STORAGE_ENDPOINT: http://minio:9000
       BLOB_STORAGE_BUCKET: ${BLOB_STORAGE_BUCKET:-ats-blobs}
       BLOB_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required — set it in your root .env}

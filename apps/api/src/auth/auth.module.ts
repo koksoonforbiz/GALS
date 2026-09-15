@@ -12,6 +12,7 @@ import { TotpService } from './totp.service';
 import { SecurityEventService } from './security-event.service';
 import { PasswordHistoryService } from './password-history.service';
 import { WsAuthService } from './ws-auth.service';
+import { MfaPolicyService } from './mfa-policy.service';
 import { ActivityLogModule } from '../activity-log';
 import { MailerModule } from '../mailer';
 
@@ -41,6 +42,7 @@ import { MailerModule } from '../mailer';
     SecurityEventService,
     PasswordHistoryService,
     WsAuthService,
+    MfaPolicyService,
   ],
   exports: [
     AuthService,
@@ -49,6 +51,7 @@ import { MailerModule } from '../mailer';
     SecurityEventService,
     PasswordHistoryService,
     WsAuthService,
+    MfaPolicyService,
   ],
 })
 export class AuthModule {}

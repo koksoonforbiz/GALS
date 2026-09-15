@@ -5,6 +5,7 @@ import type { UserRole } from '@ats/shared';
 import { PrismaService } from '../prisma';
 import { SecurityEventService } from './security-event.service';
 import { mustChangePassword } from './password-lifecycle.util';
+import { MfaPolicyService } from './mfa-policy.service';
 import { requestDoor } from '../common/door/door.decorator';
 
 export interface WsUser {
@@ -49,6 +50,7 @@ export class WsAuthService {
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
     private readonly securityEvents: SecurityEventService,
+    private readonly mfaPolicy: MfaPolicyService,
   ) {}
 
   middleware(opts: WsAuthOptions): (socket: Socket, next: WsNext) => void {
@@ -107,6 +109,7 @@ export class WsAuthService {
       select: {
         id: true,
         role: true,
+        twoFactorMethod: true,
         isActive: true,
         isTemporaryPassword: true,
         passwordChangedAt: true,
@@ -119,6 +122,8 @@ export class WsAuthService {
       throw new Error('Unauthorized: account deactivated');
     }
     if (mustChangePassword(user)) throw new Error('Unauthorized: password change required');
+    // Checklist item 12 — same gate RolesGuard applies to HTTP routes.
+    if (this.mfaPolicy.mustEnrol(user)) throw new Error('Unauthorized: MFA enrolment required');
 
     return { id: user.id, role: user.role };
   }

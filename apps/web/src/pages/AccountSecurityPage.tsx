@@ -147,6 +147,19 @@ export function AccountSecurityPage() {
         Signed in as {user.email} ({user.role})
       </p>
 
+      {user.mustEnrolMfa && (
+        <div
+          role="alert"
+          className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+        >
+          <p className="font-medium">Two-factor authentication is required for your role.</p>
+          <p className="mt-1">
+            Enrol an authenticator app or email code below before continuing — every other page
+            stays locked until you do.
+          </p>
+        </div>
+      )}
+
       <div className="mt-6 bg-white border border-gray-200 rounded-lg p-6">
         <div className="flex items-center justify-between">
           <div>

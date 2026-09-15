@@ -52,6 +52,9 @@ function createMockPasswordHistory() {
     recordReplaced: jest.fn().mockResolvedValue(undefined),
   };
 }
+// No MFA_REQUIRED_ROLES in these tests — the policy is a no-op, mirroring
+// the default (unset) configuration.
+const mfaPolicy = { requiredRoles: new Set(), mustEnrol: jest.fn().mockReturnValue(false) };
 
 describe('AuthService.login', () => {
   let prisma: ReturnType<typeof createMockPrisma>;
@@ -86,6 +89,7 @@ describe('AuthService.login', () => {
       mailer as any,
       securityEvents as any,
       passwordHistory as any,
+      mfaPolicy as any,
     );
   });
 
@@ -262,6 +266,7 @@ describe('AuthService.verifyTwoFactor', () => {
       mailer as any,
       securityEvents as any,
       passwordHistory as any,
+      mfaPolicy as any,
     );
   });
 
@@ -371,6 +376,7 @@ describe('AuthService.changePassword', () => {
       mailer as any,
       securityEvents as any,
       passwordHistory as any,
+      mfaPolicy as any,
     );
     (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
   });

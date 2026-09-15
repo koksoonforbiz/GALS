@@ -17,6 +17,7 @@ import { TotpService } from './totp.service';
 import { SecurityEventService } from './security-event.service';
 import { PasswordHistoryService } from './password-history.service';
 import { mustChangePassword } from './password-lifecycle.util';
+import { MfaPolicyService } from './mfa-policy.service';
 import type { CreateUser, Login, UserRole, TwoFactorMethod } from '@ats/shared';
 
 interface UserWithoutPassword {
@@ -31,6 +32,10 @@ interface UserWithoutPassword {
   // change-password screen after login rather than discovering the
   // requirement from a blocked request's PASSWORD_CHANGE_REQUIRED error.
   mustChangePassword: boolean;
+  // Checklist item 12 — true when MFA_REQUIRED_ROLES covers this role
+  // and no factor is enrolled yet; the client routes to Account
+  // Security before any RolesGuard-covered request is blocked.
+  mustEnrolMfa: boolean;
 }
 
 interface AuthResponse {
@@ -76,6 +81,7 @@ export class AuthService {
     private readonly mailer: MailerService,
     private readonly securityEvents: SecurityEventService,
     private readonly passwordHistory: PasswordHistoryService,
+    private readonly mfaPolicy: MfaPolicyService,
   ) {}
 
   async register(dto: CreateUser): Promise<AuthResponse> {
@@ -116,7 +122,7 @@ export class AuthService {
       accessToken: token,
       // A brand-new account is never temporary/expired — no need to
       // fetch isTemporaryPassword/passwordChangedAt just to compute it.
-      user: { ...user, mustChangePassword: false },
+      user: { ...user, mustChangePassword: false, mustEnrolMfa: this.mfaPolicy.mustEnrol(user) },
     };
   }
 
@@ -345,6 +351,7 @@ export class AuthService {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       mustChangePassword: mustChangePassword(user),
+      mustEnrolMfa: this.mfaPolicy.mustEnrol(user),
     };
   }
 

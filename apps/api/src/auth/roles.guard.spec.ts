@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { RolesGuard } from './roles.guard';
 import { ROLES_KEY } from './roles.decorator';
+import { MfaPolicyService, parseMfaRequiredRoles } from './mfa-policy.service';
 
 function forbiddenCode(fn: () => unknown): unknown {
   try {
@@ -23,6 +24,16 @@ function createMockSecurityEvents() {
   return { record: jest.fn() };
 }
 
+// Checklist item 12 — MFA policy stubs. `noMfaPolicy` mirrors the default
+// (MFA_REQUIRED_ROLES unset); `mfaRequiredFor` builds the real service
+// against a fake ConfigService so the parsing path is exercised too.
+function noMfaPolicy() {
+  return new MfaPolicyService({ get: () => undefined } as any);
+}
+function mfaRequiredFor(roles: string) {
+  return new MfaPolicyService({ get: () => roles } as any);
+}
+
 function createContext(request: Record<string, unknown>): ExecutionContext {
   return {
     getHandler: () => ({}),
@@ -33,7 +44,11 @@ function createContext(request: Record<string, unknown>): ExecutionContext {
 
 describe('RolesGuard', () => {
   it('allows the request through when no roles are required on the route', () => {
-    const guard = new RolesGuard(createMockReflector(undefined), createMockSecurityEvents() as any);
+    const guard = new RolesGuard(
+      createMockReflector(undefined),
+      createMockSecurityEvents() as any,
+      noMfaPolicy(),
+    );
     const ctx = createContext({ user: { id: 'u1', role: 'student' } });
 
     expect(guard.canActivate(ctx)).toBe(true);
@@ -41,7 +56,11 @@ describe('RolesGuard', () => {
 
   it('denies an unauthenticated request (no user on the request)', () => {
     const securityEvents = createMockSecurityEvents();
-    const guard = new RolesGuard(createMockReflector(['teacher']), securityEvents as any);
+    const guard = new RolesGuard(
+      createMockReflector(['teacher']),
+      securityEvents as any,
+      noMfaPolicy(),
+    );
     const ctx = createContext({});
 
     expect(guard.canActivate(ctx)).toBe(false);
@@ -51,7 +70,11 @@ describe('RolesGuard', () => {
 
   it('allows a user whose role matches one of the required roles', () => {
     const securityEvents = createMockSecurityEvents();
-    const guard = new RolesGuard(createMockReflector(['teacher', 'admin']), securityEvents as any);
+    const guard = new RolesGuard(
+      createMockReflector(['teacher', 'admin']),
+      securityEvents as any,
+      noMfaPolicy(),
+    );
     const ctx = createContext({ user: { id: 'u1', role: 'teacher' } });
 
     expect(guard.canActivate(ctx)).toBe(true);
@@ -60,7 +83,11 @@ describe('RolesGuard', () => {
 
   it('denies a student hitting a teacher-only route and records a PERMISSION_DENIED event', () => {
     const securityEvents = createMockSecurityEvents();
-    const guard = new RolesGuard(createMockReflector(['teacher']), securityEvents as any);
+    const guard = new RolesGuard(
+      createMockReflector(['teacher']),
+      securityEvents as any,
+      noMfaPolicy(),
+    );
     const ctx = createContext({
       user: { id: 'student-1', role: 'student' },
       method: 'DELETE',
@@ -88,6 +115,7 @@ describe('RolesGuard', () => {
       const guard = new RolesGuard(
         createMockReflector(undefined),
         createMockSecurityEvents() as any,
+        noMfaPolicy(),
       );
       const ctx = createContext({
         user: {
@@ -106,6 +134,7 @@ describe('RolesGuard', () => {
       const guard = new RolesGuard(
         createMockReflector(undefined),
         createMockSecurityEvents() as any,
+        noMfaPolicy(),
       );
       const staleDate = new Date(Date.now() - 181 * 24 * 60 * 60 * 1000);
       const ctx = createContext({
@@ -125,6 +154,7 @@ describe('RolesGuard', () => {
       const guard = new RolesGuard(
         createMockReflector(undefined),
         createMockSecurityEvents() as any,
+        noMfaPolicy(),
       );
       const ctx = createContext({
         user: {
@@ -143,6 +173,7 @@ describe('RolesGuard', () => {
       const guard = new RolesGuard(
         createMockReflector(undefined),
         createMockSecurityEvents() as any,
+        noMfaPolicy(),
       );
       const staleDate = new Date(Date.now() - 181 * 24 * 60 * 60 * 1000);
       const ctx = createContext({
@@ -165,4 +196,72 @@ describe('RolesGuard', () => {
 // other fails loudly here instead of silently disabling every guard.
 it('RolesGuard and the @Roles() decorator agree on the reflection key', () => {
   expect(ROLES_KEY).toBe('roles');
+});
+
+// Checklist item 12 — mandatory MFA for MFA_REQUIRED_ROLES.
+describe('RolesGuard — mandatory MFA enrolment (checklist item 12)', () => {
+  const base = {
+    id: 'u1',
+    isTemporaryPassword: false,
+    passwordChangedAt: new Date(),
+    createdAt: new Date(),
+  };
+
+  it('is a no-op when MFA_REQUIRED_ROLES is unset', () => {
+    const guard = new RolesGuard(
+      createMockReflector(undefined),
+      createMockSecurityEvents() as any,
+      noMfaPolicy(),
+    );
+    const ctx = createContext({ user: { ...base, role: 'admin', twoFactorMethod: null } });
+    expect(guard.canActivate(ctx)).toBe(true);
+  });
+
+  it('blocks an un-enrolled account of a required role with MFA_ENROLMENT_REQUIRED, even on a route with no @Roles()', () => {
+    const guard = new RolesGuard(
+      createMockReflector(undefined),
+      createMockSecurityEvents() as any,
+      mfaRequiredFor('admin, teacher'),
+    );
+    const ctx = createContext({ user: { ...base, role: 'teacher', twoFactorMethod: null } });
+    expect(forbiddenCode(() => guard.canActivate(ctx))).toBe('MFA_ENROLMENT_REQUIRED');
+  });
+
+  it('lets an enrolled account of a required role through', () => {
+    const guard = new RolesGuard(
+      createMockReflector(['teacher']),
+      createMockSecurityEvents() as any,
+      mfaRequiredFor('admin,teacher'),
+    );
+    const ctx = createContext({ user: { ...base, role: 'teacher', twoFactorMethod: 'totp' } });
+    expect(guard.canActivate(ctx)).toBe(true);
+  });
+
+  it('does not gate roles outside the list', () => {
+    const guard = new RolesGuard(
+      createMockReflector(undefined),
+      createMockSecurityEvents() as any,
+      mfaRequiredFor('admin,teacher'),
+    );
+    const ctx = createContext({ user: { ...base, role: 'student', twoFactorMethod: null } });
+    expect(guard.canActivate(ctx)).toBe(true);
+  });
+
+  it('the password-change gate takes precedence over the MFA gate', () => {
+    const guard = new RolesGuard(
+      createMockReflector(undefined),
+      createMockSecurityEvents() as any,
+      mfaRequiredFor('admin'),
+    );
+    const ctx = createContext({
+      user: { ...base, role: 'admin', twoFactorMethod: null, isTemporaryPassword: true },
+    });
+    expect(forbiddenCode(() => guard.canActivate(ctx))).toBe('PASSWORD_CHANGE_REQUIRED');
+  });
+
+  it('rejects an unknown role name in MFA_REQUIRED_ROLES at startup', () => {
+    expect(() => parseMfaRequiredRoles('admin,superuser')).toThrow(/unknown role "superuser"/);
+    expect([...parseMfaRequiredRoles(' Admin ,teacher,, ')]).toEqual(['admin', 'teacher']);
+    expect(parseMfaRequiredRoles(undefined).size).toBe(0);
+  });
 });

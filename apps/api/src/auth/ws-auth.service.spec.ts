@@ -19,7 +19,12 @@ function createService(user: Record<string, unknown> | null = ACTIVE_STUDENT) {
   };
   const prisma = { user: { findUnique: jest.fn(async () => user) } };
   const securityEvents = { record: jest.fn() };
-  const service = new WsAuthService(jwt as any, prisma as any, securityEvents as any);
+  const service = new WsAuthService(
+    jwt as any,
+    prisma as any,
+    securityEvents as any,
+    { mustEnrol: () => false } as any,
+  );
   return { service, jwt, prisma, securityEvents };
 }
 

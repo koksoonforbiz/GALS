@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { ZodValidationPipe, PublicDoor, PrivateDoor } from '../common';
 import { mustChangePassword } from './password-lifecycle.util';
+import { MfaPolicyService } from './mfa-policy.service';
 import {
   CreateUserSchema,
   LoginSchema,
@@ -43,7 +44,10 @@ interface RequestUser {
 @PublicDoor()
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly mfaPolicy: MfaPolicyService,
+  ) {}
 
   @Post('register')
   // Two-door: self-registration is a staff workflow — students are
@@ -151,6 +155,10 @@ export class AuthController {
       passwordChangedAt: _passwordChangedAt,
       ...safe
     } = req.user;
-    return { ...safe, mustChangePassword: mustChangePassword(req.user) };
+    return {
+      ...safe,
+      mustChangePassword: mustChangePassword(req.user),
+      mustEnrolMfa: this.mfaPolicy.mustEnrol(req.user),
+    };
   }
 }

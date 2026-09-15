@@ -50,7 +50,7 @@ Which flows use it (all through `/s3/`): recording segment uploads (`POST /api/r
 
 ## 5. Environment variables the API validates (`apps/api/src/env.ts`)
 
-`NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `BLOB_STORAGE_ENDPOINT`, `BLOB_STORAGE_BUCKET`, `BLOB_STORAGE_ACCESS_KEY`, `BLOB_STORAGE_SECRET_KEY`, `BLOB_STORAGE_REGION` (default `us-east-1`), `BLOB_STORAGE_PUBLIC_ENDPOINT` (optional, unused), `ALLOWED_ORIGINS`, `SMTP_HOST/PORT/USER/PASS/FROM`. Read elsewhere via `ConfigService` (not in the schema): `ENCRYPTION_KEY`, `ENV_MASTER_KEY`, `LLM_DAILY_COST_CAP_USD`, `AWS_BEARER_TOKEN`, `AWS_REGION`, `CLAMAV_HOST/PORT`, `POSTGRES_APP_PASSWORD`. None of these embed a public hostname. The `.env` encryption path (`scripts/decrypt-env-boot.js`) is opt-in and unaffected.
+`NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `BLOB_STORAGE_ENDPOINT`, `BLOB_STORAGE_BUCKET`, `BLOB_STORAGE_ACCESS_KEY`, `BLOB_STORAGE_SECRET_KEY`, `BLOB_STORAGE_REGION` (default `us-east-1`), `BLOB_STORAGE_PUBLIC_ENDPOINT` (optional, unused), `ALLOWED_ORIGINS`, `SMTP_HOST/PORT/USER/PASS/FROM`. Read elsewhere via `ConfigService` (not in the schema): `ENCRYPTION_KEY`, `ENV_MASTER_KEY`, `LLM_DAILY_COST_CAP_USD`, `AWS_BEARER_TOKEN`, `AWS_REGION`, `CLAMAV_HOST/PORT`, `POSTGRES_APP_PASSWORD`, `MFA_REQUIRED_ROLES`, `BEDROCK_GUARDRAIL_ID/VERSION`. None of these embed a public hostname. The `.env` encryption path (`scripts/decrypt-env-boot.js`) is opt-in and unaffected.
 
 ## 6. Current Docker topology (dev) and the production baseline
 
