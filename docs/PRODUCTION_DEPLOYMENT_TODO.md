@@ -5,20 +5,6 @@ This consolidates every checklist item and follow-up that's already built but
 to configure — nothing here needs code changes, it needs to be _done_ once
 the L40 deployment target exists. Work through it before go-live, not after.
 
-## 0. Known broken thing (caught live, needs a real fix)
-
-- [ ] **Pin MinIO to a real, verified tag.** An earlier pass pinned
-      `minio/minio` to a specific `RELEASE.*` tag that turned out not to be
-      published to Docker Hub — `docker compose up` failed with "not found,"
-      caught by an actual run, not by anything checkable from this
-      environment. Currently reverted to `minio/minio:latest` (works, but
-      unpinned again) in both `docker-compose.yml` and
-      `infra/docker-compose.yml`. Fix properly once you have Docker access:
-      `docker pull minio/minio:latest`, then
-      `docker inspect --format '{{index .RepoDigests 0}}' minio/minio:latest`
-      to get the exact digest actually running, and pin to that (or a
-      confirmed-real `RELEASE.*` tag from https://hub.docker.com/r/minio/minio/tags).
-
 ## 1. Environment variables to set (all currently optional / unset in dev)
 
 | Variable                                  | What it does                                                                                                                                                                                              | Why it matters for production                                                                                                                                                                                                                                                                                                                                          |
@@ -39,50 +25,70 @@ Everything below was written and unit-tested this project, but could not be
 exercised against a live Docker/Postgres/Redis stack in the environment this
 work was done in. Do these once, right after first deploy:
 
-- [ ] **Rate limiting actually enforces.** Hit any route 30+ times in 60s and
-      confirm a real 429 comes back. This was silently broken app-wide until
-      a fix this pass (`APP_GUARD` was never bound to `ThrottlerGuard`) — the
-      fix is code-reviewed and unit-tested, but the actual HTTP 429 behavior
-      has never been observed by a real request.
-- [ ] **Usage quota.** Set a low `LLM_DAILY_COST_CAP_USD` temporarily, run
-      enough chat calls to cross it, confirm the refusal message, that a
-      `USAGE_QUOTA_EXCEEDED` row lands in `security_events`, and that normal
-      usage resumes the next UTC day.
-- [ ] **Malware scanner.** Upload a real file and an [EICAR test
-      string](https://en.wikipedia.org/wiki/EICAR_test_file) through both the
-      teacher and student document-upload endpoints; confirm the clean file
-      passes and the EICAR file is rejected.
-- [ ] **Least-privilege DB role.** Follow
-      `infra/postgres-init/01-create-app-role.sh`'s header comment to create
-      and switch to the `ats_app` role; confirm the API still connects and
-      `prisma migrate deploy` still succeeds.
-- [ ] **Non-root production containers.** `docker build --target production`
-      for both `apps/api` and `apps/web`; confirm both start and serve
-      traffic (the web image also changed its internal port to 8080 — make
-      sure whatever fronts it points at the new port).
-- [ ] **`security_events` table.** Confirm both migrations applied (the
-      table itself, and the later `USAGE_QUOTA_EXCEEDED` enum value), then
-      trigger a failed login and a permission-denied request and check rows
-      land in the table.
-- [ ] **Non-root worker containers.** `docker compose build worker
-    openface3-worker pyfeat-worker` — all three now run as uid 10001
-      (`worker`). Confirm the openface3 image build still downloads its
-      weights (that step now runs as the non-root user into `/models`),
-      that py-feat can load/download its models (its `feat/resources`
-      dir is chowned to the worker user), and that a recording job
-      completes end-to-end. Written blind to Docker in this environment.
-- [ ] **Mandatory MFA gate.** With `MFA_REQUIRED_ROLES=admin,teacher`
-      set, sign in as a teacher with no 2FA enrolled: every page should
-      redirect to Account Security (and any direct API call return
-      `403 MFA_ENROLMENT_REQUIRED`) until a factor is enrolled; students
-      must be unaffected.
+- [x] **Rate limiting actually enforces.** Verified live 2026-09-15 — and the
+      suspicion was justified: the `APP_GUARD` fix alone was NOT enough. The
+      custom `ThrottlerRedisStorage` hardcoded `isBlocked: false`, and
+      @nestjs/throttler v6 only throws 429 when the storage reports blocked,
+      so counts/headers looked right while nothing was ever rejected. Fixed
+      in this pass (block key honouring `blockDuration`); a live run now
+      returns exactly 30×401 then 429s with `Retry-After: 60`.
+- [x] **Usage quota.** Verified live 2026-09-15 with a temporarily tiny cap
+      and real Bedrock calls: first call over the cap succeeds and records
+      spend, subsequent calls get the 429 refusal, and a
+      `USAGE_QUOTA_EXCEEDED` row lands in `security_events` with cap+spend
+      metadata. Day-rollover resume verified structurally (the Redis key is
+      UTC-date-scoped with a 25 h TTL). **Found and fixed a real gap:**
+      `llm_model_pricing` had no `bedrock` rows, so every Bedrock call cost
+      $0 and the cap could never trigger for the production provider —
+      migration `20260915000000_add_bedrock_model_pricing` adds proxy rates
+      (replace with the real Bedrock price sheet before go-live).
+- [x] **Malware scanner.** Verified live 2026-09-15 against the ClamAV
+      sidecar: on both the teacher (`POST /api/courses/:id/documents`) and
+      student (`POST /api/student-rag/courses/:id/documents`) endpoints, a
+      clean PDF was accepted (201) and the EICAR test file rejected (400,
+      "File rejected by malware scan: Eicar-Test-Signature").
+- [x] **Least-privilege DB role.** Verified live 2026-09-15 following the
+      script's header: `ats_app` created (no SUPERUSER/CREATEDB/CREATEROLE/
+      REPLICATION), API booted healthy with `DATABASE_URL` switched to it
+      (`pg_stat_activity` showed the connections), `prisma migrate deploy`
+      ran clean, and a CREATE/DROP TABLE probe confirmed DDL works. Dev
+      stack switched back to `ats_user` afterwards; `POSTGRES_APP_PASSWORD`
+      stays set in `.env` so the role persists.
+- [x] **Non-root production containers.** Verified live 2026-09-15: both
+      production targets (and web's `twodoor` target) build on Node 24;
+      api boots as uid 1000 (`node`) against live Postgres/Redis/MinIO with
+      `/api/health` all-ok; web serves 200 on its internal port 8080;
+      twodoor serves 200 on both the 8080 healthz and the 8443 TLS door.
+- [x] **`security_events` table.** Verified live 2026-09-15: both
+      migrations applied (table present; enum includes
+      `USAGE_QUOTA_EXCEEDED`); a wrong-password login produced a
+      `FAILED_LOGIN_INVALID_PASSWORD` row and a student hitting a
+      teacher-only route produced a `PERMISSION_DENIED` row, both with
+      user id + IP captured.
+- [x] **Non-root worker containers.** Verified live 2026-09-15: all three
+      images build and run as uid 10001 (`worker`); the openface3 weights
+      landed in `/models/openface3` owned by `worker`; py-feat's
+      `feat/resources` is worker-owned and writable; a real recording
+      segment was processed end-to-end by both workers (68 EmotionFrame
+      rows, 15 PyfeatAuResult rows) with zero permission errors in logs.
+- [x] **Mandatory MFA gate.** API side verified live 2026-09-15 with
+      `MFA_REQUIRED_ROLES=admin,teacher`: un-enrolled teacher gets 403
+      (MFA enrolment required) on RolesGuard routes and
+      `mustEnrolMfa: true` from `/api/auth/me`; students unaffected;
+      after TOTP setup + confirm the same route returns 200. (Browser
+      redirect-to-Account-Security flow still to be eyeballed manually.)
 - [ ] **Bedrock Guardrail intervention.** Once `BEDROCK_GUARDRAIL_ID` is
       set, send a prompt the guardrail's content policy blocks; confirm
       the student sees the guardrail's blocked message and the API log
       shows `[Bedrock] guardrail intervened` with the policy trace.
-- [ ] **Nodemailer major-version bump (6.x→10.x).** Trigger a real 2FA email
-      and confirm delivery — this was a 4-major-version dependency bump
-      patched for a CVE, verified only by type-checking and unit tests.
+- [x] **Nodemailer major-version bump (6.x→10.x).** Verified live
+      2026-09-15: a real 2FA OTP email sent through Gmail SMTP with
+      nodemailer 10.0.10. **Found and fixed a real gap:** the CVE bump
+      only existed as a root `pnpm.overrides` entry, which the api
+      Dockerfile's lockfile-less `pnpm install` (from `apps/api/
+    package.json` alone) never applied — containers were still running
+      nodemailer 6.10.1. `apps/api/package.json` now declares `^10.0.1`
+      directly so images get the patched major too.
 
 ## 3. Decisions that need a human, not more code
 
