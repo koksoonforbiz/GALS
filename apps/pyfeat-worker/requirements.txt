@@ -4,7 +4,7 @@ scipy==1.11.4
 h5py==3.10.0
 matplotlib==3.8.3
 Pillow==10.2.0
-torch==2.1.2
+torch==2.14.0
 torchvision==0.16.2
 kornia==0.7.1
 py-feat==0.5.1
