@@ -53,6 +53,13 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60000, limit: 30 }],
       storage: new ThrottlerRedisStorage(),
+      // The integration suites fire more requests per minute than the
+      // per-route limits allow (register alone is 5/60s), and they share
+      // one Redis, so with blocking actually enforced (see
+      // ThrottlerRedisStorage) they'd 429 each other. Rate-limit behavior
+      // itself is covered by roles.guard/throttler unit tests and the §2
+      // live smoke test; production/dev are unaffected by this skip.
+      skipIf: () => process.env.NODE_ENV === 'test',
     }),
     PrismaModule,
     BlobModule,
