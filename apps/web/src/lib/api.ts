@@ -134,6 +134,16 @@ export async function apiFetch<T>(
     ) {
       window.location.href = '/change-password';
     }
+    // Checklist item 12 — same fallback for the mandatory-MFA gate
+    // (MFA_REQUIRED_ROLES turned on server-side mid-session). The 2FA
+    // enrolment routes are on AuthController without RolesGuard, so the
+    // Account Security page itself can never trigger this.
+    if (
+      body.code === 'MFA_ENROLMENT_REQUIRED' &&
+      window.location.pathname !== '/account/security'
+    ) {
+      window.location.href = '/account/security';
+    }
     throw new ApiError(403, toMessage(body.message, 'Forbidden'), body.errors);
   }
 

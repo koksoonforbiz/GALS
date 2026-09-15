@@ -43,8 +43,11 @@ CONCURRENCY = int(os.environ.get('WORKER_CONCURRENCY', '2'))
 
 MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'minio')
 MINIO_PORT = os.environ.get('MINIO_PORT', '9000')
-MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
+# Required — no 'minioadmin' fallback (SMU checklist items 1/4). A KeyError
+# here at import time is the intended failure mode: fail loudly rather than
+# run against a well-known default credential.
+MINIO_ACCESS_KEY = os.environ['MINIO_ACCESS_KEY']
+MINIO_SECRET_KEY = os.environ['MINIO_SECRET_KEY']
 MINIO_BUCKET = os.environ.get('MINIO_BUCKET', 'ats-blobs')
 MINIO_SECURE = os.environ.get('MINIO_SECURE', 'false').lower() == 'true'
 
@@ -297,6 +300,11 @@ def worker_loop(r: redis.Redis, worker_id: int, inferencer: Openface3Inferencer)
             _, raw = result
             job_data = json.loads(raw)
             process_job(job_data, inferencer)
+        except redis.exceptions.TimeoutError:
+            # Idle queue. Newer redis-py (>= 6) surfaces the BLPOP timeout as
+            # a socket TimeoutError rather than returning None; either way it
+            # is not an error and must not trigger the 2 s back-off below.
+            continue
         except Exception as exc:
             # Catch-all so a single bad job doesn't kill the worker thread.
             print(f'[OpenFace3] worker {worker_id} loop error: {exc}')

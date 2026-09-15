@@ -1,5 +1,7 @@
 # Worker glue libs.
-redis>=5.0.0
+# Pinned like pyfeat-worker: an unpinned build resolved to redis-py 8.1, where an
+# idle blpop(timeout=5) raises TimeoutError instead of returning None (two-door rehearsal).
+redis==5.0.1
 psycopg2-binary>=2.9.0
 minio>=7.2.0
 python-dotenv>=1.0.0

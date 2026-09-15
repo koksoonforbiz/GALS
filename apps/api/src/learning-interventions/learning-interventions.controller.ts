@@ -14,7 +14,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { LearningInterventionsService } from './learning-interventions.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
-import { SessionId } from '../common';
+import { SessionId, PublicDoor } from '../common';
 import type {
   CreateSavedReviewDto,
   UpdateSavedReviewDto,
@@ -37,6 +37,8 @@ interface RequestUser {
   role: string;
 }
 
+// Two-door: student-facing; the prompt-config/* methods stay private via their @Roles — see docs/two-door/api-classification.md.
+@PublicDoor()
 @Controller('learning-interventions')
 @UseGuards(JwtAuthGuard)
 export class LearningInterventionsController {

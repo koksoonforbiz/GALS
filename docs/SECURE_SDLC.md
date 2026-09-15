@@ -49,10 +49,15 @@ unvalidated endpoints in `dialogue.controller.ts` and `recording.controller.ts`)
 
 ## Dependency management (OWASP A06 — vulnerable components)
 
-- `pnpm audit --prod` is the working baseline (not yet wired into CI — see
-  "Not yet true" below). `pnpm.overrides` in the root `package.json` pins
-  every patchable finding to a fixed, same-major version — each override
-  documents which advisory it closes.
+- `pnpm audit --prod` runs in CI on every push/PR (`dependency-audit` job
+  in `.github/workflows/ci.yml`) and fails the pipeline on any high or
+  critical advisory; Dependabot (`.github/dependabot.yml`) opens PRs for
+  npm, pip (the three Python workers), Docker base images and GitHub
+  Actions weekly and for security advisories as they land. `pnpm.overrides`
+  in the root `package.json` pins every patchable finding to a fixed,
+  same-major version — each override documents which advisory it closes.
+  Remaining known findings (moderate only) are tracked in
+  `docs/PRODUCTION_DEPLOYMENT_TODO.md` §5.
 - `docs/BOM.md` / `docs/bom.csv` — regenerable software bill of materials
   (`pnpm bom`), checklist item 45.
 
@@ -80,9 +85,9 @@ observable from the repository alone.
 
 ## What's NOT yet true (be honest about the gap)
 
-- **No SAST/DAST tool wired into CI** (checklist item 21) — the checklist
-  specifies this is IITS-provided; `pnpm audit` is the closest thing to an
-  automated security scan running today, and it's manual, not CI-gated.
+- **No SAST/DAST tool wired into CI** (checklist item 20) — the checklist
+  specifies this is IITS-provided; the CI-gated `pnpm audit` above covers
+  dependency advisories only, not static/dynamic analysis of our own code.
 - **No formal secure-coding training or SDLC sign-off process** — this
   document itself is the first formalization of "what do we actually do,"
   written retroactively rather than as an upfront policy.

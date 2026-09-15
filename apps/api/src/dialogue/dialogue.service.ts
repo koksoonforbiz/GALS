@@ -287,14 +287,13 @@ export class DialogueService {
       );
     }
 
-    // Checklist item 62 (output moderation) — the OpenAI Moderation API
-    // check that used to run here was removed along with OpenAI as a
-    // generation provider (Bedrock-only now, product decision): it had
-    // no remaining code path that could ever actually run once teachers
-    // could no longer have an OpenAI key. No moderation runs today —
-    // tracked as an open gap pending a Bedrock-native option (AWS
-    // Bedrock Guardrails), which needs an AWS resource provisioned
-    // first, not just code.
+    // Checklist item 62 (output moderation) — handled inside the Bedrock
+    // call itself: LlmService attaches AWS Bedrock Guardrails to every
+    // Converse request when BEDROCK_GUARDRAIL_ID is set, and Bedrock
+    // replaces a flagged reply with the guardrail's blocked message
+    // before it ever reaches this point (logged there as a warn). No
+    // application-side moderation runs until that resource exists in
+    // the AWS account — see docs/PRODUCTION_DEPLOYMENT_TODO.md.
 
     // PII visibility (checklist item 63) — best-effort, log-only. See
     // pii-detection.ts's doc comment for why this doesn't redact.

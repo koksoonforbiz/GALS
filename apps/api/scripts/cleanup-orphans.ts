@@ -32,10 +32,22 @@ import {
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const DRY_RUN = !process.argv.includes('--execute');
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    console.error(
+      `${name} is required — export it (or source your root .env) before running this script.`,
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
 const ENDPOINT = process.env.BLOB_STORAGE_ENDPOINT ?? 'http://localhost:9000';
 const BUCKET = process.env.BLOB_STORAGE_BUCKET ?? 'ats-blobs';
-const ACCESS_KEY = process.env.BLOB_STORAGE_ACCESS_KEY ?? 'minioadmin';
-const SECRET_KEY = process.env.BLOB_STORAGE_SECRET_KEY ?? 'minioadmin';
+// Required — no 'minioadmin' fallback (SMU checklist items 1/4).
+const ACCESS_KEY = requireEnv('BLOB_STORAGE_ACCESS_KEY');
+const SECRET_KEY = requireEnv('BLOB_STORAGE_SECRET_KEY');
 const REGION = process.env.BLOB_STORAGE_REGION ?? 'us-east-1';
 
 const prisma = new PrismaClient();

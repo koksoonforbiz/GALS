@@ -5,6 +5,8 @@ node_modules/
 
 # Build outputs
 dist/
+dist-student/
+dist-admin/
 build/
 *.tsbuildinfo
 .turbo/
@@ -80,3 +82,8 @@ gals-studio/**/*.tsbuildinfo
 # apps/web's postinstall script (scripts/copy-pyodide-assets.mjs),
 # regenerated on every install, never committed.
 apps/web/public/pyodide/
+# Two-door local certs / env (deploy/scripts/mkcert-local.sh output, filled-in env files)
+deploy/certs/*
+!deploy/certs/.gitkeep
+deploy/.env.twodoor.local
+deploy/.env.twodoor.l40

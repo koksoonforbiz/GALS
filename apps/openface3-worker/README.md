@@ -15,8 +15,8 @@ Processes webcam recording segments to extract per-frame universal emotion proba
 | `DATABASE_URL`         | (required)               | PostgreSQL connection URL |
 | `MINIO_ENDPOINT`       | `localhost`              | MinIO host                |
 | `MINIO_PORT`           | `9000`                   | MinIO port                |
-| `MINIO_ACCESS_KEY`     | `minioadmin`             | MinIO access key          |
-| `MINIO_SECRET_KEY`     | `minioadmin`             | MinIO secret key          |
+| `MINIO_ACCESS_KEY`     | _(required)_             | MinIO access key          |
+| `MINIO_SECRET_KEY`     | _(required)_             | MinIO secret key          |
 | `MINIO_BUCKET`         | `ats-blobs`              | MinIO bucket name         |
 | `OPENFACE3_MODEL_PATH` | `/models/openface3`      | Path to model weights     |
 | `OPENFACE3_DEVICE`     | `cpu`                    | `cpu` or `cuda`           |

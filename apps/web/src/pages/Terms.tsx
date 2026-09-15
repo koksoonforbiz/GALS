@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { DOOR } from '../door';
 
 /**
  * Data-collection notice shown at registration (SMU cybersecurity
@@ -59,8 +60,12 @@ export function Terms() {
         </section>
 
         <div className="pt-4 border-t">
-          <Link to="/register" className="text-blue-600 hover:text-blue-500 text-sm">
-            &larr; Back to sign up
+          {/* The public student door has no /register route. */}
+          <Link
+            to={DOOR === 'admin' ? '/register' : '/login'}
+            className="text-blue-600 hover:text-blue-500 text-sm"
+          >
+            &larr; Back to {DOOR === 'admin' ? 'sign up' : 'sign in'}
           </Link>
         </div>
       </div>

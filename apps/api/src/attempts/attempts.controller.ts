@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { AttemptsService } from './attempts.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
-import { ZodValidationPipe, SessionId } from '../common';
+import { ZodValidationPipe, SessionId, PublicDoor } from '../common';
 import {
   CreateAttemptSchema,
   UpdateAttemptSchema,
@@ -55,6 +55,8 @@ export class AttemptsController {
   }
 
   @Get(':id')
+  // Two-door: a student reads their own attempt (BOTH) — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findOne(@Param('id') id: string) {
     return this.attemptsService.findOne(id);
   }

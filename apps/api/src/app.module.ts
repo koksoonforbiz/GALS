@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
-import { GlobalExceptionFilter } from './common';
+import { GlobalExceptionFilter, DoorGuard } from './common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma';
@@ -109,6 +109,11 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     // this pass to rag/question-generation/activity-log/jobs — had NO
     // rate limiting in effect at all.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Two-door split (docs/two-door/, Phase 4) — refuses PRIVATE routes
+    // that arrive through the public student door (X-GALS-Door: public,
+    // set by nginx). Defence in depth behind the nginx allowlist; a no-op
+    // for requests that did not come through a door (dev on :3000, tests).
+    { provide: APP_GUARD, useClass: DoorGuard },
     // Checklist item 25 — moved from a manual `app.useGlobalFilters(new
     // GlobalExceptionFilter())` in main.ts to APP_FILTER so it's
     // DI-managed and can inject SecurityEventService (AuthModule is

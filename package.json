@@ -21,7 +21,9 @@
     "db:reset": "pnpm --filter @ats/api prisma:migrate:reset",
     "db:studio": "pnpm --filter @ats/api prisma:studio",
     "bom": "node scripts/generate-bom.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:two-door": "node scripts/two-door/check-route-coverage.mjs && node scripts/two-door/check-student-bundle.mjs",
+    "build:two-door": "pnpm --filter @ats/web build:student && pnpm --filter @ats/web build:admin"
   },
   "devDependencies": {
     "@ats/config": "workspace:*",
@@ -95,7 +97,7 @@
     }
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",

@@ -3,6 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { createTestApp, cleanDatabase } from '../test/setup';
 
+// Satisfies CreateUserSchema's PASSWORD_COMPLEXITY (12+ chars, upper,
+// lower, digit, special) — the checklist hardening tightened it from the
+// old password123 these fixtures were written against.
+const TEST_PASSWORD = 'Test-Passw0rd!';
+
 describe('Questions Integration', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -17,14 +22,13 @@ describe('Questions Integration', () => {
     await cleanDatabase(prisma);
 
     // Register a teacher
-    const registerRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'teacher@test.com',
-        password: 'password123',
-        name: 'Teacher',
-        role: 'teacher',
-      });
+    const registerRes = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'teacher@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Teacher',
+      role: 'teacher',
+    });
     teacherToken = registerRes.body.accessToken;
     const teacherId = registerRes.body.user.id;
 
@@ -62,14 +66,13 @@ describe('Questions Integration', () => {
   });
 
   it('student should not be able to create a question', async () => {
-    const studentRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'student@test.com',
-        password: 'password123',
-        name: 'Student',
-        role: 'student',
-      });
+    const studentRes = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'student@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Student',
+      role: 'student',
+    });
 
     await request(app.getHttpServer())
       .post('/api/questions')

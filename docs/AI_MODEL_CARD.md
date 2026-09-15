@@ -67,18 +67,21 @@ selections are steered to current models.
   contract and faithfulness checks lower the rate of ungrounded claims but
   cannot guarantee zero — students are explicitly warned (see disclaimer
   above), and this is exactly why item 64 exists on the checklist.
-- **No output moderation runs today.** The previous OpenAI Moderation API
-  check was removed along with OpenAI as a selectable generation provider
-  (Bedrock-only now, product decision) — it had no code path left that
-  could ever run once teachers could no longer hold an OpenAI key. The
-  Bedrock-native option, AWS Bedrock Guardrails, needs an AWS resource
-  provisioned before it can be wired in — this is a real, current gap.
-- **No PII/confidential-data filtering on output.** If a teacher's uploaded
-  document contains personal information, the grounding contract's own
-  instruction to "answer only from the supplied sources" means the model may
-  faithfully reproduce it. This is an open, unresolved tension flagged in the
-  checklist audit (item 63) — not something this model card can resolve by
-  itself, since fixing it either way is a product decision.
+- **Output moderation depends on a Guardrail being provisioned.** The
+  previous OpenAI Moderation API check was removed along with OpenAI as a
+  selectable generation provider (Bedrock-only now). The replacement is AWS
+  Bedrock Guardrails: the API attaches `guardrailConfig` to every Converse
+  call once `BEDROCK_GUARDRAIL_ID` is set, and a flagged reply is replaced by
+  the guardrail's blocked message (logged with the policy that fired). Until
+  the Guardrail resource exists in the SMU AWS account, **no moderation
+  runs** — the deployment must not be described as moderated before then.
+- **PII/confidential-data filtering on output is detection-only in-app.**
+  `pii-detection.ts` flags likely PII in every reply and logs it but does not
+  redact, because the grounding contract's "answer only from the supplied
+  sources" instruction means a teacher's document may legitimately contain
+  it. Blocking/anonymising is intended to come from the same Bedrock
+  Guardrail's sensitive-information policy (item 63) — a PDPA policy
+  decision to make when the Guardrail is configured.
 - **No adversarial/red-team testing performed.** The existing automated tests
   (`grounded-prompt.spec.ts`, `grounded-contract-integration.spec.ts`) verify
   citation and grounding _correctness_, not resistance to adversarial prompt

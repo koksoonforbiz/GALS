@@ -1,0 +1,112 @@
+# ============================================================================
+# GALS two-door nginx — rendered by the nginx image's envsubst step from
+# /etc/nginx/templates/*.template into /etc/nginx/conf.d/gals.conf.
+#
+# Only ${GALS_*} variables are substituted (NGINX_ENVSUBST_FILTER=^GALS_ in
+# docker-compose.twodoor.yml), so nginx's own $host/$request_uri/... are
+# untouched. Values come from deploy/.env.twodoor.<env>; nothing real is
+# hardcoded here.
+#
+#   GALS_STUDENT_HOST   public door hostname   (local: student.gals.test)
+#   GALS_ADMIN_HOST     private door hostname  (local: admin.gals.test)
+#   GALS_STUDENT_PORT   container port for the public door  (8443)
+#   GALS_ADMIN_PORT     container port for the private door (9443)
+#   GALS_HTTP_PORT      plain-HTTP port: ACME challenge + redirect (8080)
+#
+# Ports are >1024 because the image runs unprivileged (checklist item 50);
+# the compose file maps them to whatever the host should expose. The two
+# doors are separate `server`s on SEPARATE ports, each the default for
+# its port, so they cannot be confused by a spoofed Host header — and on
+# a real host the private port simply isn't published to the internet
+# (see deploy/.env.twodoor.l40.example).
+# ============================================================================
+
+# Compose service names (docker-compose.yml). `resolve` (nginx >= 1.27.3,
+# needs a shared `zone`) re-resolves them through Docker's embedded DNS at
+# runtime instead of once at startup — without it, `up -d --build api`
+# handing the API a new container IP left nginx serving 502s until a
+# manual reload (reproduced during the local rehearsal). 127.0.0.11 is
+# the embedded resolver on every user-defined compose network.
+resolver 127.0.0.11 valid=10s ipv6=off;
+upstream gals_api   { zone gals_upstreams 64k; server api:3000   resolve; keepalive 32; }
+upstream gals_minio { zone gals_upstreams 64k; server minio:9000 resolve; keepalive 16; }
+
+# ---------------------------------------------------------------------------
+# Plain HTTP: Let's Encrypt HTTP-01 challenge + redirect everything else.
+# Locally this port is not published, so the block is inert.
+# ---------------------------------------------------------------------------
+server {
+    listen ${GALS_HTTP_PORT} default_server;
+    server_name _;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type "text/plain";
+    }
+
+    # Container liveness only (docker-compose healthcheck). Says nothing
+    # about the API; on a real host this port is only reachable for ACME.
+    location = /healthz {
+        default_type "text/plain";
+        return 200 "ok
+";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ---------------------------------------------------------------------------
+# PUBLIC door — student bundle + API allowlist (default deny).
+# ---------------------------------------------------------------------------
+server {
+    listen ${GALS_STUDENT_PORT} ssl default_server;
+    http2 on;
+    server_name ${GALS_STUDENT_HOST};
+    set $gals_door public;
+
+    ssl_certificate     /etc/nginx/certs/student.crt;
+    ssl_certificate_key /etc/nginx/certs/student.key;
+    include /etc/nginx/gals/snippets/tls.conf;
+    include /etc/nginx/gals/snippets/security-headers.conf;
+
+    access_log /dev/stdout combined;
+
+    root /usr/share/nginx/html/student;
+
+    include /etc/nginx/gals/snippets/public-api-allowlist.conf;
+    include /etc/nginx/gals/snippets/socket-io.conf;
+    include /etc/nginx/gals/snippets/s3-proxy.conf;
+    include /etc/nginx/gals/snippets/spa-static.conf;
+}
+
+# ---------------------------------------------------------------------------
+# PRIVATE door — full admin bundle + every API route.
+# Access restriction (allow/deny by CIDR) lives in a bind-mounted file so
+# the L40 host can tighten it without rebuilding the image; the local
+# default allows everything (the port is bound to 127.0.0.1 anyway).
+# ---------------------------------------------------------------------------
+server {
+    listen ${GALS_ADMIN_PORT} ssl default_server;
+    http2 on;
+    server_name ${GALS_ADMIN_HOST};
+    set $gals_door private;
+
+    ssl_certificate     /etc/nginx/certs/admin.crt;
+    ssl_certificate_key /etc/nginx/certs/admin.key;
+    include /etc/nginx/gals/snippets/tls.conf;
+    include /etc/nginx/gals/snippets/security-headers.conf;
+    include /etc/nginx/gals/admin-access.conf;
+
+    access_log /dev/stdout combined;
+
+    root /usr/share/nginx/html/admin;
+
+    location /api/ {
+        include /etc/nginx/gals/snippets/proxy-api.conf;
+    }
+    include /etc/nginx/gals/snippets/socket-io.conf;
+    include /etc/nginx/gals/snippets/s3-proxy.conf;
+    include /etc/nginx/gals/snippets/spa-static.conf;
+}

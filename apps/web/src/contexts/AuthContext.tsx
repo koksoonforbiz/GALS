@@ -22,6 +22,11 @@ interface User {
   // password has passed the 180-day expiry window. ProtectedRoute
   // redirects to /change-password whenever this is true.
   mustChangePassword: boolean;
+  // Checklist item 12 — set when MFA_REQUIRED_ROLES (server env) covers
+  // this role and no factor is enrolled yet. ProtectedRoute redirects
+  // to /account/security whenever this is true (after any pending
+  // password change).
+  mustEnrolMfa: boolean;
 }
 
 interface AuthResponse {
@@ -63,13 +68,6 @@ interface AuthContextValue {
   verifyTwoFactor: (code: string) => Promise<void>;
   resendTwoFactorCode: () => Promise<void>;
   cancelTwoFactor: () => void;
-  register: (
-    email: string,
-    password: string,
-    name: string,
-    role: UserRole,
-    termsAccepted: boolean,
-  ) => Promise<void>;
   // Re-fetches the current user from /auth/me and updates context +
   // localStorage. Used after enabling/disabling 2FA (or any other
   // account-setting change) so the rest of the app reflects it without
@@ -241,26 +239,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refreshUser],
   );
 
-  const register = useCallback(
-    async (
-      email: string,
-      password: string,
-      name: string,
-      role: UserRole,
-      termsAccepted: boolean,
-    ) => {
-      await api.post<AuthResponse>('/auth/register', {
-        email,
-        password,
-        name,
-        role,
-        termsAccepted,
-      });
-      // Account created — do NOT auto-login; caller navigates to /login
-    },
-    [],
-  );
-
   // Stop the webcam/session immediately. Callable independently of
   // finishLogout so a UI gate (e.g. the student exit survey in Layout.tsx)
   // can't leave recording running while it waits on the user.
@@ -330,7 +308,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         verifyTwoFactor,
         resendTwoFactorCode,
         cancelTwoFactor,
-        register,
         refreshUser,
         startTotpSetup,
         confirmTotpSetup,

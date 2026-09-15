@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { TopicsService } from './topics.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
-import { ZodValidationPipe } from '../common';
+import { ZodValidationPipe, PublicDoor } from '../common';
 import { CreateTopicSchema, UpdateTopicSchema } from '@ats/shared';
 import type { CreateTopic, UpdateTopic, UserRole } from '@ats/shared';
 
@@ -35,11 +35,15 @@ export class TopicsController {
   }
 
   @Get()
+  // Two-door: read-only topic access is BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findByCourse(@Query('courseId') courseId: string) {
     return this.topicsService.findByCourse(courseId);
   }
 
   @Get(':id')
+  // Two-door: BOTH — see docs/two-door/api-classification.md.
+  @PublicDoor()
   findOne(@Param('id') id: string) {
     return this.topicsService.findOne(id);
   }

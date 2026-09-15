@@ -1,8 +1,21 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { ApiError } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import type { UserRole } from '@ats/shared';
+
+// Two-door split: registration lives on this page rather than in
+// AuthContext so the shared context (and therefore the public student
+// bundle) carries no reference to the /auth/register endpoint. Account
+// created — do NOT auto-login; the caller navigates to /login.
+async function register(
+  email: string,
+  password: string,
+  name: string,
+  role: UserRole,
+  termsAccepted: boolean,
+): Promise<void> {
+  await api.post('/auth/register', { email, password, name, role, termsAccepted });
+}
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -13,7 +26,6 @@ export function Register() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {

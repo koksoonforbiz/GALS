@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ItemsService } from './items.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
+import { PublicDoor } from '../common';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -96,6 +97,8 @@ export class ItemActionsController {
   }
 
   @Get(':id/download-url')
+  // Two-door: the one item route students need — the PDF download URL (BOTH) — see docs/two-door/api-classification.md.
+  @PublicDoor()
   getDownloadUrl(@Param('id') id: string) {
     return this.itemsService.getDownloadUrl(id);
   }

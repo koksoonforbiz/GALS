@@ -4,3 +4,4 @@
 **/.env.*
 .git
 .turbo
+**/dist-*

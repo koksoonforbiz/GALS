@@ -3,6 +3,11 @@ import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../prisma';
 import { createTestApp, cleanDatabase } from '../test/setup';
 
+// Satisfies CreateUserSchema's PASSWORD_COMPLEXITY (12+ chars, upper,
+// lower, digit, special) — the checklist hardening tightened it from the
+// old password123 these fixtures were written against.
+const TEST_PASSWORD = 'Test-Passw0rd!';
+
 describe('Attempts Integration — submit triggers event', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -21,24 +26,22 @@ describe('Attempts Integration — submit triggers event', () => {
 
   it('submitting an attempt creates a grade_submission event', async () => {
     // Setup: teacher, course, topic, question, student, enrollment
-    const teacherRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'teacher@test.com',
-        password: 'password123',
-        name: 'Teacher',
-        role: 'teacher',
-      });
+    const teacherRes = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'teacher@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Teacher',
+      role: 'teacher',
+    });
     const teacherId = teacherRes.body.user.id;
 
-    const studentRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'student@test.com',
-        password: 'password123',
-        name: 'Student',
-        role: 'student',
-      });
+    const studentRes = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'student@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Student',
+      role: 'student',
+    });
     const studentToken = studentRes.body.accessToken;
     const studentId = studentRes.body.user.id;
 
@@ -85,37 +88,34 @@ describe('Attempts Integration — submit triggers event', () => {
     expect((events[0]!.payload as Record<string, unknown>).attemptId).toBe(attemptId);
   });
 
-  it('should not allow submitting someone else\'s attempt', async () => {
+  it("should not allow submitting someone else's attempt", async () => {
     // Setup two students
-    const teacherRes = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'teacher2@test.com',
-        password: 'password123',
-        name: 'Teacher',
-        role: 'teacher',
-      });
+    const teacherRes = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'teacher2@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Teacher',
+      role: 'teacher',
+    });
     const teacherId = teacherRes.body.user.id;
 
-    const student1Res = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'student1@test.com',
-        password: 'password123',
-        name: 'Student1',
-        role: 'student',
-      });
+    const student1Res = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'student1@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Student1',
+      role: 'student',
+    });
     const student1Token = student1Res.body.accessToken;
     const student1Id = student1Res.body.user.id;
 
-    const student2Res = await request(app.getHttpServer())
-      .post('/api/auth/register')
-      .send({
-        email: 'student2@test.com',
-        password: 'password123',
-        name: 'Student2',
-        role: 'student',
-      });
+    const student2Res = await request(app.getHttpServer()).post('/api/auth/register').send({
+      email: 'student2@test.com',
+      password: TEST_PASSWORD,
+      termsAccepted: true,
+      name: 'Student2',
+      role: 'student',
+    });
     const student2Token = student2Res.body.accessToken;
     const student2Id = student2Res.body.user.id;
 

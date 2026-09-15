@@ -134,6 +134,10 @@ interface FunnelResult {
   content: string;
   promptTokens: number;
   completionTokens: number;
+  /** True when a Bedrock Guardrail replaced the model's output with its
+   *  configured blocked-message (checklist items 62/63). The `content`
+   *  is then the guardrail's message, not the model's answer. */
+  guardrailIntervened?: boolean;
 }
 
 // Simple symmetric encryption for storing API keys at rest
@@ -372,14 +376,34 @@ export class LlmService {
     }
   }
 
-  // Checklist item 62 (output moderation) — `moderateText()` (OpenAI
-  // Moderation API) was removed along with OpenAI as a selectable
-  // generation provider (Bedrock-only now, product decision): it had no
-  // remaining code path that could ever run, since the only key source
-  // was a teacher's own OpenAI key. No moderation runs today — tracked
-  // as an open gap pending a Bedrock-native option (AWS Bedrock
-  // Guardrails), which needs an AWS resource provisioned first, not
-  // just code.
+  // Checklist items 62/63 (output moderation, PII filtering) — the old
+  // `moderateText()` (OpenAI Moderation API) went away with OpenAI as a
+  // provider. The Bedrock-native replacement is AWS Bedrock Guardrails,
+  // attached to every Converse call by `bedrockGuardrailConfig()` below
+  // once `BEDROCK_GUARDRAIL_ID` is set. The Guardrail resource itself
+  // (content filters, PII policy, blocked message) is configured in the
+  // AWS account, not here — until it exists, this stays a no-op and the
+  // gap remains open (docs/PRODUCTION_DEPLOYMENT_TODO.md).
+
+  /**
+   * Converse `guardrailConfig` block, or null when no guardrail is
+   * configured. `trace: 'enabled'` makes Bedrock return the assessment
+   * so an intervention is logged with *which* policy fired rather than
+   * looking like an ordinary short answer.
+   */
+  private bedrockGuardrailConfig(): {
+    guardrailIdentifier: string;
+    guardrailVersion: string;
+    trace: 'enabled';
+  } | null {
+    const id = this.config.get<string>('BEDROCK_GUARDRAIL_ID');
+    if (!id) return null;
+    return {
+      guardrailIdentifier: id,
+      guardrailVersion: this.config.get<string>('BEDROCK_GUARDRAIL_VERSION') || 'DRAFT',
+      trace: 'enabled',
+    };
+  }
 
   // ─── Read-time guard + validation helpers ─────────────────
   //
@@ -1336,6 +1360,8 @@ export class LlmService {
       inferenceConfig.temperature = request.temperature;
     }
 
+    const guardrailConfig = this.bedrockGuardrailConfig();
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -1346,6 +1372,7 @@ export class LlmService {
         system: [{ text: systemText }],
         messages,
         inferenceConfig,
+        ...(guardrailConfig ? { guardrailConfig } : {}),
       }),
     });
 
@@ -1358,11 +1385,26 @@ export class LlmService {
     const data = (await response.json()) as {
       output?: { message?: { content?: Array<{ text?: string }> } };
       usage?: { inputTokens?: number; outputTokens?: number };
+      stopReason?: string;
+      trace?: { guardrail?: unknown };
     };
 
     const content = (data.output?.message?.content ?? []).map((c) => c.text ?? '').join('');
     const promptTokens = data.usage?.inputTokens || 0;
     const completionTokens = data.usage?.outputTokens || 0;
+
+    // Guardrail intervention (checklist items 62/63): Bedrock has already
+    // swapped the model output for the guardrail's blocked message, so
+    // `content` is safe to return as-is — we only need to make the event
+    // visible. The trace names the policy that fired (content filter,
+    // PII entity, denied topic…); it never contains the blocked text.
+    const guardrailIntervened = data.stopReason === 'guardrail_intervened';
+    if (guardrailIntervened) {
+      this.logger.warn(
+        `[Bedrock] guardrail intervened — model:${model} guardrail:${guardrailConfig?.guardrailIdentifier} ` +
+          `trace:${JSON.stringify(data.trace?.guardrail ?? null)}`,
+      );
+    }
 
     // Loud on purpose — this is the easiest way to confirm from
     // `docker compose logs api` that a call actually reached Bedrock
@@ -1372,7 +1414,7 @@ export class LlmService {
       `[Bedrock] chat call succeeded — model:${model} promptTokens:${promptTokens} completionTokens:${completionTokens}`,
     );
 
-    return { content, promptTokens, completionTokens };
+    return { content, promptTokens, completionTokens, guardrailIntervened };
   }
 
   // ─── Gemini: registry-driven request shape ──────────────
