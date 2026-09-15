@@ -51,6 +51,10 @@ services:
       # don't touch Bedrock work fine with this unset.
       AWS_BEARER_TOKEN: ${AWS_BEARER_TOKEN:-}
       AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      # Bedrock Guardrails (checklist items 62/63) — optional; see
+      # BEDROCK_GUARDRAIL_ID's comment in .env.example. Unset = no guardrail.
+      BEDROCK_GUARDRAIL_ID: ${BEDROCK_GUARDRAIL_ID:-}
+      BEDROCK_GUARDRAIL_VERSION: ${BEDROCK_GUARDRAIL_VERSION:-}
       # Malware scanning on uploaded files (checklist item 49). Not in
       # `depends_on` below — ClamAV's virus-database download can take
       # several minutes on first boot, and MalwareScanService already
