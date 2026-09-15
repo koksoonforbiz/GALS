@@ -17,9 +17,12 @@ export class LogExportService {
   ) {
     const internalEndpoint = config.get<string>('BLOB_STORAGE_ENDPOINT', 'http://localhost:9000');
     const region = config.get<string>('BLOB_STORAGE_REGION', 'us-east-1');
+    // No 'minioadmin' fallback (SMU checklist items 1/4): env.ts already
+    // requires both keys at boot, so getOrThrow just keeps this call site
+    // honest if that validation is ever loosened.
     const credentials = {
-      accessKeyId: config.get<string>('BLOB_STORAGE_ACCESS_KEY', 'minioadmin'),
-      secretAccessKey: config.get<string>('BLOB_STORAGE_SECRET_KEY', 'minioadmin'),
+      accessKeyId: config.getOrThrow<string>('BLOB_STORAGE_ACCESS_KEY'),
+      secretAccessKey: config.getOrThrow<string>('BLOB_STORAGE_SECRET_KEY'),
     };
     this.s3 = new S3Client({
       endpoint: internalEndpoint,

@@ -43,8 +43,11 @@ CONCURRENCY = int(os.environ.get('WORKER_CONCURRENCY', '2'))
 
 MINIO_ENDPOINT = os.environ.get('MINIO_ENDPOINT', 'minio')
 MINIO_PORT = os.environ.get('MINIO_PORT', '9000')
-MINIO_ACCESS_KEY = os.environ.get('MINIO_ACCESS_KEY', 'minioadmin')
-MINIO_SECRET_KEY = os.environ.get('MINIO_SECRET_KEY', 'minioadmin')
+# Required — no 'minioadmin' fallback (SMU checklist items 1/4). A KeyError
+# here at import time is the intended failure mode: fail loudly rather than
+# run against a well-known default credential.
+MINIO_ACCESS_KEY = os.environ['MINIO_ACCESS_KEY']
+MINIO_SECRET_KEY = os.environ['MINIO_SECRET_KEY']
 MINIO_BUCKET = os.environ.get('MINIO_BUCKET', 'ats-blobs')
 MINIO_SECURE = os.environ.get('MINIO_SECURE', 'false').lower() == 'true'
 

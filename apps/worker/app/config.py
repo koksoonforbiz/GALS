@@ -9,8 +9,10 @@ class Settings(BaseSettings):
     redis_url: str
     blob_storage_endpoint: str = "http://localhost:9000"
     blob_storage_bucket: str = "ats-blobs"
-    blob_storage_access_key: str = "minioadmin"
-    blob_storage_secret_key: str = "minioadmin"
+    # Required (no 'minioadmin' default — SMU checklist items 1/4); the
+    # validation error below is the intended failure mode when unset.
+    blob_storage_access_key: str
+    blob_storage_secret_key: str
 
     model_config = {"env_file": ".env"}
 

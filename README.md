@@ -56,15 +56,15 @@ cp .env.example .env
 
 **Required environment variables:**
 
-| Variable                    | Description                            | Default                                             |
-| --------------------------- | -------------------------------------- | --------------------------------------------------- |
-| `DATABASE_URL`              | PostgreSQL connection string           | `postgresql://ats_user:ats_password@localhost:5432/ats_db` |
-| `REDIS_URL`                 | Redis connection string                | `redis://localhost:6379`                            |
-| `JWT_SECRET`                | JWT signing secret (min 16 chars)      | *(must be set)*                                     |
-| `BLOB_STORAGE_ENDPOINT`     | MinIO/S3 endpoint                      | `http://localhost:9000`                             |
-| `BLOB_STORAGE_BUCKET`       | Blob storage bucket name               | `ats-blobs`                                         |
-| `BLOB_STORAGE_ACCESS_KEY`   | MinIO/S3 access key                    | `minioadmin`                                        |
-| `BLOB_STORAGE_SECRET_KEY`   | MinIO/S3 secret key                    | `minioadmin`                                        |
+| Variable                  | Description                       | Default                                                    |
+| ------------------------- | --------------------------------- | ---------------------------------------------------------- |
+| `DATABASE_URL`            | PostgreSQL connection string      | `postgresql://ats_user:ats_password@localhost:5432/ats_db` |
+| `REDIS_URL`               | Redis connection string           | `redis://localhost:6379`                                   |
+| `JWT_SECRET`              | JWT signing secret (min 16 chars) | _(must be set)_                                            |
+| `BLOB_STORAGE_ENDPOINT`   | MinIO/S3 endpoint                 | `http://localhost:9000`                                    |
+| `BLOB_STORAGE_BUCKET`     | Blob storage bucket name          | `ats-blobs`                                                |
+| `BLOB_STORAGE_ACCESS_KEY` | MinIO/S3 access key               | _(required — no default)_                                  |
+| `BLOB_STORAGE_SECRET_KEY` | MinIO/S3 secret key               | _(required — no default)_                                  |
 
 ### 4. Run database migrations
 
@@ -158,23 +158,23 @@ pnpm test:e2e          # Run Playwright E2E tests
 
 ## Scripts
 
-| Command              | Description                                  |
-| -------------------- | -------------------------------------------- |
-| `pnpm dev`           | Start web + api in dev mode (TurboRepo)      |
-| `pnpm build`         | Build all packages                           |
-| `pnpm lint`          | Lint all packages                            |
-| `pnpm typecheck`     | Type-check all packages                      |
-| `pnpm test`          | Run all unit/integration tests               |
-| `pnpm test:e2e`      | Run Playwright E2E tests                     |
-| `pnpm format`        | Format all files with Prettier               |
-| `pnpm format:check`  | Check formatting                             |
-| `pnpm docker:up`     | Start all services via Docker Compose        |
-| `pnpm docker:down`   | Stop Docker Compose services                 |
-| `pnpm infra:up`      | Start infrastructure only (DB, Redis, MinIO) |
-| `pnpm infra:down`    | Stop infrastructure services                 |
-| `pnpm db:migrate`    | Run Prisma migrations (dev)                  |
-| `pnpm db:reset`      | Reset database and re-run migrations         |
-| `pnpm db:studio`     | Open Prisma Studio (DB browser)              |
+| Command             | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `pnpm dev`          | Start web + api in dev mode (TurboRepo)      |
+| `pnpm build`        | Build all packages                           |
+| `pnpm lint`         | Lint all packages                            |
+| `pnpm typecheck`    | Type-check all packages                      |
+| `pnpm test`         | Run all unit/integration tests               |
+| `pnpm test:e2e`     | Run Playwright E2E tests                     |
+| `pnpm format`       | Format all files with Prettier               |
+| `pnpm format:check` | Check formatting                             |
+| `pnpm docker:up`    | Start all services via Docker Compose        |
+| `pnpm docker:down`  | Stop Docker Compose services                 |
+| `pnpm infra:up`     | Start infrastructure only (DB, Redis, MinIO) |
+| `pnpm infra:down`   | Stop infrastructure services                 |
+| `pnpm db:migrate`   | Run Prisma migrations (dev)                  |
+| `pnpm db:reset`     | Reset database and re-run migrations         |
+| `pnpm db:studio`    | Open Prisma Studio (DB browser)              |
 
 ## CI Pipeline
 
