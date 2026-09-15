@@ -35,6 +35,33 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+  # ─── Dependency Audit ─────────────────────────────────────────────
+  # SMU checklist items 46/51: fail the pipeline on any high/critical
+  # advisory in production dependencies. Moderate findings are reported
+  # in the job log but do not block — the three known moderates need the
+  # NestJS 10→11 / React Router 6→7 major migrations tracked in
+  # docs/PRODUCTION_DEPLOYMENT_TODO.md §5. Dependabot (.github/dependabot.yml)
+  # raises PRs for the rest.
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies (fails on high/critical)
+        run: pnpm audit --prod --audit-level=high
+
   # ─── API Integration Tests ────────────────────────────────────────
   test-api:
     name: API Integration Tests
