@@ -27,15 +27,15 @@
   },
   "devDependencies": {
     "@ats/config": "workspace:*",
-    "@playwright/test": "^1.58.0",
+    "@playwright/test": "^1.63.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
     "husky": "^9.1.0",
     "lint-staged": "^15.2.0",
-    "prettier": "^3.3.0",
+    "prettier": "^3.9.8",
     "ts-node": "^10.9.2",
-    "turbo": "^2.3.0",
+    "turbo": "^2.11.2",
     "typescript": "^5.5.0"
   },
   "lint-staged": {
@@ -101,6 +101,6 @@
   },
   "dependencies": {
     "@nestjs/event-emitter": "^3.0.1",
-    "mammoth": "^1.11.0"
+    "mammoth": "^1.12.3"
   }
 }
