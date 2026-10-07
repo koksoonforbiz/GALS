@@ -1,10 +1,11 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '../../prisma';
 import { LIBRARY_VERSION } from '../engine/params';
 import { prepareActions } from '../engine/prepare';
 import type { RawAction } from '../engine/types';
 import { csvCell } from '../validation/validation.service';
+import { TextConsentService } from '../../governance/text-consent.service';
 
 export type EventLogActivity = 'raw' | 'learning_event';
 export type EventLogCase = 'item' | 'session';
@@ -20,7 +21,21 @@ export type EventLogCase = 'item' | 'session';
  */
 @Injectable()
 export class ResearchExportsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly consent?: TextConsentService,
+  ) {}
+
+  /**
+   * Phase 6.2 #1(c): research exports include only learners whose latest
+   * decision for the course allows research use. (No consent service wired
+   * = unit-test context, no filter.)
+   */
+  private async researchFilter(courseId: string): Promise<(studentId: string) => boolean> {
+    if (!this.consent) return () => true;
+    const ok = await this.consent.researchConsenting(courseId);
+    return (id) => ok.has(id);
+  }
 
   private salt(): string {
     const s = process.env.RESEARCH_EXPORT_SALT;
@@ -64,8 +79,12 @@ export class ResearchExportsService {
         metadata: true,
       },
     });
+    const allowed = await this.researchFilter(courseId);
     const bySession = new Map<string, typeof rows>();
-    for (const r of rows) bySession.set(r.sessionId, [...(bySession.get(r.sessionId) ?? []), r]);
+    for (const r of rows) {
+      if (!allowed(r.userId)) continue;
+      bySession.set(r.sessionId, [...(bySession.get(r.sessionId) ?? []), r]);
+    }
     const out: Array<RawAction & { sessionId: string; userId: string }> = [];
     for (const [sessionId, list] of bySession) {
       const userId = list[0]!.userId;
@@ -150,7 +169,8 @@ export class ResearchExportsService {
         where: { sessionId: { in: sessionIds } },
         orderBy: { startAt: 'asc' },
       });
-      for (const e of events) {
+      const allowed = await this.researchFilter(courseId);
+      for (const e of events.filter((x) => allowed(x.studentId))) {
         lines.push(
           [
             caseId(e.studentId, e.sessionId, e.moduleItemId),
@@ -202,9 +222,10 @@ export class ResearchExportsService {
       }),
     ]);
 
+    const allowed = await this.researchFilter(courseId);
     const students = [
       ...new Set([...actions.map((a) => a.userId), ...transfer.map((t) => t.studentId)]),
-    ];
+    ].filter(allowed);
     const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null);
     const round = (v: number | null) => (v == null ? '' : (Math.round(v * 1000) / 1000).toString());
 

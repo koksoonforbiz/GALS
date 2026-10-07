@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { Prisma, PromptLabRun } from '@prisma/client';
 import type {
@@ -20,6 +21,7 @@ import { PrismaService } from '../prisma';
 import { LlmService } from '../rag/llm.service';
 import { isSelectable, listChatModels, type LlmProvider } from '../llm/model-registry';
 import { approxTokens, wordDiffStats } from './text-diff';
+import { TextConsentService } from '../governance/text-consent.service';
 
 /** Slide types whose lab work runs in the Prompt Lab (external AI tool in the HTML). */
 const LAB_SLIDE_TYPES = new Set(['exercise', 'task', 'stretch']);
@@ -49,6 +51,7 @@ export class PromptLabService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
+    @Optional() private readonly consent?: TextConsentService,
   ) {}
 
   // ── access ──────────────────────────────────────────────────────────────
@@ -185,6 +188,11 @@ export class PromptLabService {
     }
 
     const systemText = dto.systemText?.trim() ? dto.systemText : PROMPT_LAB_DEFAULT_SYSTEM;
+    // Consent (b): without it the text is a working copy for this session
+    // only and is scrubbed when the session closes (TextConsentService).
+    const retainText = this.consent
+      ? ((await this.consent.current(studentId, courseId))?.promptsAndOutputs ?? false)
+      : true;
     // A test case is appended to the prompt version as the question it is
     // tested on (course labs: "test each version on both questions").
     const userText = caseInput ? `${dto.promptText}\n\n---\n${caseInput}` : dto.promptText;
@@ -227,6 +235,7 @@ export class PromptLabService {
           completionTokens: result.completionTokens,
           responseText: result.content,
           latencyMs: Date.now() - started,
+          retainText,
         },
       });
       if (i === 1) firstRunId = created.id;

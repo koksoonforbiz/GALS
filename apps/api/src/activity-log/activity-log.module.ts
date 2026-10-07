@@ -5,9 +5,10 @@ import { SessionService } from './session.service';
 import { LogExportService } from './log-export.service';
 import { ActivityLogController } from './activity-log.controller';
 import { LogsModule } from '../logs/logs.module';
+import { GovernanceModule } from '../governance/governance.module';
 
 @Module({
-  imports: [ConfigModule, LogsModule],
+  imports: [ConfigModule, LogsModule, GovernanceModule],
   controllers: [ActivityLogController],
   providers: [ActivityLogService, SessionService, LogExportService],
   exports: [ActivityLogService, SessionService],

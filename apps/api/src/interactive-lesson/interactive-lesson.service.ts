@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
@@ -13,6 +14,7 @@ import {
   type UserRole,
 } from '@ats/shared';
 import { PrismaService } from '../prisma';
+import { TextConsentService } from '../governance/text-consent.service';
 
 export interface LessonViewer {
   id: string;
@@ -21,7 +23,10 @@ export interface LessonViewer {
 
 @Injectable()
 export class InteractiveLessonService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly consent?: TextConsentService,
+  ) {}
 
   /**
    * Loads an INTERACTIVE_LESSON item and checks the caller may see it:
@@ -70,10 +75,17 @@ export class InteractiveLessonService {
         rows.map((r) => [r.slideKey, r.state as unknown as LessonSlideState]),
       );
     }
+    // Students get their text-capture decision (Phase 6): null = not asked
+    // yet → the client shows the notice and captures no free text.
+    const consent =
+      viewer.role === 'student' && this.consent
+        ? await this.consent.current(viewer.id, courseId)
+        : null;
     return {
       item: { id: item.id, title: item.title, moduleId: item.moduleId, courseId },
       lesson,
       state,
+      consent,
     };
   }
 

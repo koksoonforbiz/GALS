@@ -422,6 +422,9 @@ model User {
   // Phase 5
   aiPromptClassifications AiPromptClassification[] @relation("AiPromptClassificationStudent")
   transferTaskScores      TransferTaskScore[]      @relation("TransferTaskScoreStudent")
+  // Phase 6
+  textCaptureConsents     TextCaptureConsent[]     @relation("TextCaptureConsentStudent")
+  ruleNudges              RuleNudge[]              @relation("RuleNudgeStudent")
 
   @@map("users")
 }
@@ -2513,30 +2516,34 @@ model VlmConfig {
 // status as ChatbotMessage; text-capture consent arrives in Phase 6.
 
 model PromptLabRun {
-  id                 String   @id @default(uuid()) @db.Uuid
-  studentId          String   @map("student_id") @db.Uuid
-  studentSessionId   String?  @map("student_session_id") @db.Uuid
-  courseId           String   @map("course_id") @db.Uuid
-  moduleItemId       String   @map("module_item_id") @db.Uuid
-  slideKey           String   @map("slide_key")
-  versionId          String?  @map("version_id") @db.Uuid
-  versionNo          Int?     @map("version_no")
-  parentRunId        String?  @map("parent_run_id") @db.Uuid
-  testCaseKey        String?  @map("test_case_key")
-  declaredExperiment Boolean  @default(false) @map("declared_experiment")
-  sampleNo           Int      @default(1) @map("sample_no")
-  promptText         String   @map("prompt_text") @db.Text
-  systemText         String?  @map("system_text") @db.Text
+  id                 String    @id @default(uuid()) @db.Uuid
+  studentId          String    @map("student_id") @db.Uuid
+  studentSessionId   String?   @map("student_session_id") @db.Uuid
+  courseId           String    @map("course_id") @db.Uuid
+  moduleItemId       String    @map("module_item_id") @db.Uuid
+  slideKey           String    @map("slide_key")
+  versionId          String?   @map("version_id") @db.Uuid
+  versionNo          Int?      @map("version_no")
+  parentRunId        String?   @map("parent_run_id") @db.Uuid
+  testCaseKey        String?   @map("test_case_key")
+  declaredExperiment Boolean   @default(false) @map("declared_experiment")
+  sampleNo           Int       @default(1) @map("sample_no")
+  promptText         String    @map("prompt_text") @db.Text
+  systemText         String?   @map("system_text") @db.Text
   model              String
   provider           String
   temperature        Float?
-  maxTokens          Int?     @map("max_tokens")
-  toolsEnabled       Boolean  @default(false) @map("tools_enabled")
-  promptTokens       Int      @default(0) @map("prompt_tokens")
-  completionTokens   Int      @default(0) @map("completion_tokens")
-  responseText       String   @map("response_text") @db.Text
-  latencyMs          Int      @map("latency_ms")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  maxTokens          Int?      @map("max_tokens")
+  toolsEnabled       Boolean   @default(false) @map("tools_enabled")
+  /// Phase 6: false when the learner has not consented to storing prompts and
+  /// outputs — text is then scrubbed when the session closes.
+  retainText         Boolean   @default(true) @map("retain_text")
+  textScrubbedAt     DateTime? @map("text_scrubbed_at") @db.Timestamptz
+  promptTokens       Int       @default(0) @map("prompt_tokens")
+  completionTokens   Int       @default(0) @map("completion_tokens")
+  responseText       String    @map("response_text") @db.Text
+  latencyMs          Int       @map("latency_ms")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
 
   student    User                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
   moduleItem ModuleItem              @relation(fields: [moduleItemId], references: [id], onDelete: Cascade)
@@ -2752,4 +2759,80 @@ model TransferTaskScore {
 
   @@unique([studentId, moduleItemId, slideKey, scorerId])
   @@map("transfer_task_scores")
+}
+
+// ─── Interventions and governance (prompting course, Phase 6) ──────────
+
+/// Rule-triggered nudge policy, per course (plan Phase 6.1). Created
+/// DISABLED; enabling requires the rule to be validated unless a researcher
+/// explicitly sets requiresValidated = false (test courses).
+model InterventionPolicy {
+  id                String   @id @default(uuid()) @db.Uuid
+  courseId          String   @map("course_id") @db.Uuid
+  ruleId            String   @map("rule_id")
+  enabled           Boolean  @default(false)
+  requiresValidated Boolean  @default(true) @map("requires_validated")
+  messageTemplate   String   @map("message_template") @db.Text
+  /// Shown with the nudge: why it appeared.
+  rationale         String   @db.Text
+  maxPerActivity    Int      @default(1) @map("max_per_activity")
+  cooldownMinutes   Int      @default(30) @map("cooldown_minutes")
+  /// Share of learners in the treatment arm (0–1); null = no A/B (all treatment).
+  abTreatmentShare  Float?   @map("ab_treatment_share")
+  updatedBy         String?  @map("updated_by") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  nudges RuleNudge[]
+
+  @@unique([courseId, ruleId])
+  @@map("intervention_policies")
+}
+
+/// Every nudge decision, including control-arm withholds.
+model RuleNudge {
+  id            String    @id @default(uuid()) @db.Uuid
+  policyId      String    @map("policy_id") @db.Uuid
+  courseId      String    @map("course_id") @db.Uuid
+  studentId     String    @map("student_id") @db.Uuid
+  sessionId     String?   @map("session_id") @db.Uuid
+  moduleItemId  String    @map("module_item_id") @db.Uuid
+  slideKey      String?   @map("slide_key")
+  ruleId        String    @map("rule_id")
+  /// treatment | control
+  arm           String
+  /// shown | withheld | accepted | dismissed
+  status        String
+  triggerDetail Json?     @map("trigger_detail")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  respondedAt   DateTime? @map("responded_at") @db.Timestamptz
+
+  policy  InterventionPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  student User               @relation("RuleNudgeStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, moduleItemId, ruleId])
+  @@index([courseId, createdAt])
+  @@map("rule_nudges")
+}
+
+/// Text-capture consent per learner per course (plan Phase 6.2 #1).
+/// Append-only: the latest row is the current decision, so every change
+/// (including revocation) stays auditable.
+model TextCaptureConsent {
+  id                String   @id @default(uuid()) @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  courseId          String   @map("course_id") @db.Uuid
+  /// (a) store submitted answer text in the activity log
+  answerText        Boolean  @map("answer_text")
+  /// (b) keep Prompt Lab prompts and AI outputs beyond the session
+  promptsAndOutputs Boolean  @map("prompts_and_outputs")
+  /// (c) use my data for research (exports, coding samples)
+  researchUse       Boolean  @map("research_use")
+  noticeVersion     String   @map("notice_version")
+  decidedAt         DateTime @default(now()) @map("decided_at") @db.Timestamptz
+
+  student User @relation("TextCaptureConsentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, courseId, decidedAt])
+  @@map("text_capture_consents")
 }

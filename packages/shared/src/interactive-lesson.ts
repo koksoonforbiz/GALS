@@ -125,3 +125,25 @@ export const SaveLessonSlideStateSchema = z.object({
 });
 
 export type SaveLessonSlideState = z.infer<typeof SaveLessonSlideStateSchema>;
+
+// ── Text-capture consent (prompting course, Phase 6) ──────────────────────
+
+/** Bump when the learner notice text changes; stored with every decision. */
+export const TEXT_CONSENT_NOTICE_VERSION = 'prompting-course-notice-v1';
+
+export interface TextConsentDecision {
+  /** (a) keep submitted answer text in the activity log */
+  answerText: boolean;
+  /** (b) keep Prompt Lab prompts and AI outputs beyond the session */
+  promptsAndOutputs: boolean;
+  /** (c) include my data in research exports and coding samples */
+  researchUse: boolean;
+  noticeVersion: string;
+  decidedAt: string;
+}
+
+export const TextConsentDecisionSchema = z.object({
+  answerText: z.boolean(),
+  promptsAndOutputs: z.boolean(),
+  researchUse: z.boolean(),
+});

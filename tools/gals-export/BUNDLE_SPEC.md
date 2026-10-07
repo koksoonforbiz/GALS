@@ -156,6 +156,8 @@ Server-derived learning events for the prompting course
 session has none. `wallMs` = `startAt`; native fields: `endWallMs`, `ruleId`,
 `eventFamily`, `outcome`, `moduleItemId`, `slideKey`, `confidence`
 (`candidate`|`validated`), `libraryVersion`, `parameterSetVersion`.
+Only rows of learners whose latest `text_capture_consents` decision for the
+course allows research use are exported.
 
 ## `snapshots/`
 

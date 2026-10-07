@@ -219,6 +219,15 @@ export class ActivityLogService {
         tx.sessionSummary.deleteMany({ where: { sessionId } }),
       ]);
 
+      // Prompting course (Phase 6, decision #9): Prompt Lab runs and nudge
+      // decisions logged in this session go with it, like chatbot messages.
+      // (learning_events cascade via FK; lesson state and saved versions are
+      // the learner's cross-session work and stay with the student.)
+      const promptLabRuns = await tx.promptLabRun.deleteMany({
+        where: { studentSessionId: sessionId },
+      });
+      const ruleNudges = await tx.ruleNudge.deleteMany({ where: { sessionId } });
+
       await tx.studentSession.delete({ where: { id: sessionId } });
 
       return {
@@ -228,6 +237,8 @@ export class ActivityLogService {
         blobObjectsDeleted: blobKeys.size,
         counts: {
           chatbotMessages: chatbotMessages.count,
+          promptLabRuns: promptLabRuns.count,
+          ruleNudges: ruleNudges.count,
           cursorLogs: cursorLogs.count,
           clickLogs: clickLogs.count,
           scrollLogs: scrollLogs.count,

@@ -60,6 +60,7 @@ export interface PrismaLike {
   viewport_logs: any;
   activityLog: any;
   learningEvent: any;
+  $queryRawUnsafe: any;
   chatbotMessage: any;
   dialogueMessage: any;
   learningIntervention: any;
@@ -493,7 +494,24 @@ export class PrismaDataSource implements SessionDataSource {
           where: { sessionId },
           orderBy: { startAt: 'asc' },
         });
+        // Prompting-course research use (text_capture_consents, latest row per
+        // learner and course): without consent (c) the stream is omitted.
+        const consentByCourse = new Map<string, boolean>();
+        const researchOk = async (studentId: string, courseId: string | null) => {
+          if (!courseId) return false;
+          const key = `${studentId}|${courseId}`;
+          if (!consentByCourse.has(key)) {
+            const res = (await this.prisma.$queryRawUnsafe(
+              'SELECT research_use FROM text_capture_consents WHERE student_id = $1::uuid AND course_id = $2::uuid ORDER BY decided_at DESC LIMIT 1',
+              studentId,
+              courseId,
+            )) as Array<{ research_use: boolean }>;
+            consentByCourse.set(key, res[0]?.research_use === true);
+          }
+          return consentByCourse.get(key)!;
+        };
         for (const r of rows) {
+          if (!(await researchOk(r.studentId, r.courseId ?? null))) continue;
           yield {
             wallMs: r.startAt.getTime(),
             endWallMs: r.endAt.getTime(),

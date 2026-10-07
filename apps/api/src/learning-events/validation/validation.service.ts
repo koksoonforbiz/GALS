@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma';
 import library from '../config/library.v2.json';
 import { VALIDATION_CODEBOOK, rulesForLabel } from './codebook';
+import { TextConsentService } from '../../governance/text-consent.service';
 import {
   type Confusion,
   type Interval,
@@ -33,7 +34,21 @@ const VALIDATED = 'validated';
  */
 @Injectable()
 export class ValidationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly consent?: TextConsentService,
+  ) {}
+
+  /** Validation is research use: only sessions of research-consenting learners. */
+  private async consentingSessions(courseId: string, sessionIds: string[]): Promise<string[]> {
+    if (!this.consent || sessionIds.length === 0) return sessionIds;
+    const ok = await this.consent.researchConsenting(courseId);
+    const rows = await this.prisma.studentSession.findMany({
+      where: { id: { in: sessionIds } },
+      select: { id: true, userId: true },
+    });
+    return rows.filter((r) => ok.has(r.userId)).map((r) => r.id);
+  }
 
   // ── codebook ────────────────────────────────────────────────────────────
 
@@ -148,13 +163,14 @@ export class ValidationService {
   async report(courseId: string, opts: ValidationOptions) {
     const segmentMs = opts.segmentMs ?? 30_000;
     const toleranceMs = opts.toleranceMs ?? 5_000;
-    const sessionIds = [
+    const annotated = [
       ...new Set(
         (await this.annotatedSessions(courseId, [opts.researcherId], opts.sessionIds)).map(
           (r) => r.sessionId,
         ),
       ),
     ];
+    const sessionIds = await this.consentingSessions(courseId, annotated);
     const mapped = new Set(VALIDATION_CODEBOOK.flatMap((c) => c.rules));
     const totals = new Map<string, Confusion>();
 
@@ -281,9 +297,10 @@ export class ValidationService {
     const byS = new Map<string, Set<string>>();
     for (const r of rows)
       byS.set(r.sessionId, (byS.get(r.sessionId) ?? new Set()).add(r.researcherId));
-    const shared = [...byS]
+    const sharedAll = [...byS]
       .filter(([, set]) => set.has(coderA) && set.has(coderB))
       .map(([id]) => id);
+    const shared = await this.consentingSessions(courseId, sharedAll);
     const vectors = new Map<string, { a: number[]; b: number[] }>();
     for (const sessionId of shared) {
       const { start, end, anns } = await this.sessionData(sessionId, [coderA, coderB]);

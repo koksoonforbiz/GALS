@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma';
 import { LlmService } from '../../rag/llm.service';
 import { cohenKappa } from '../validation/metrics';
 import { csvCell } from '../validation/validation.service';
 import { redactText } from './redact';
+import { TextConsentService } from '../../governance/text-consent.service';
 
 export const HELP_LABELS = [
   'instrumental',
@@ -78,9 +79,38 @@ export class PromptClassifierService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
+    @Optional() private readonly consent?: TextConsentService,
   ) {}
 
+  /**
+   * Terms redacted before any LLM classification or coding export (plan
+   * Phase 6.2 #3): the course roster's names and email local parts, plus
+   * REDACTION_TERMS (comma-separated organisation/product terms).
+   */
+  private async redactionTerms(courseId: string): Promise<string[]> {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        teacher: { select: { name: true, email: true } },
+        enrollments: { select: { student: { select: { name: true, email: true } } } },
+      },
+    });
+    const people = course ? [course.teacher, ...course.enrollments.map((e) => e.student)] : [];
+    const fromEnv = (process.env.REDACTION_TERMS ?? '').split(',').map((t) => t.trim());
+    const terms = people.flatMap((p) => [
+      p.name,
+      ...p.name.split(/\s+/).filter((part) => part.length >= 3),
+      p.email.split('@')[0] ?? '',
+    ]);
+    return [...new Set([...terms, ...fromEnv].filter((t) => t && t.length >= 3))].sort(
+      (a, b) => b.length - a.length,
+    );
+  }
+
   private async sources(courseId: string): Promise<Source[]> {
+    // Research use only (consent c); scrubbed (empty) prompts are skipped.
+    const ok = this.consent ? await this.consent.researchConsenting(courseId) : null;
+    const allowed = (s: Source) => (ok ? ok.has(s.studentId) : true) && s.text.trim().length > 0;
     const [runs, chats] = await Promise.all([
       this.prisma.promptLabRun.findMany({
         where: { courseId, sampleNo: 1 },
@@ -108,7 +138,7 @@ export class PromptClassifierService {
         occurredAt: c.createdAt,
         text: c.content,
       })),
-    ];
+    ].filter(allowed);
   }
 
   /** Classifies not-yet-labelled prompts for the current classifier version. */
@@ -123,6 +153,7 @@ export class PromptClassifierService {
       select: { sourceType: true, sourceId: true },
     });
     const seen = new Set(done.map((d) => `${d.sourceType}:${d.sourceId}`));
+    const terms = await this.redactionTerms(courseId);
     const todo = (await this.sources(courseId))
       .filter((s) => !seen.has(`${s.sourceType}:${s.sourceId}`))
       .slice(0, limit);
@@ -134,7 +165,7 @@ export class PromptClassifierService {
           course.teacherId,
           {
             systemPrompt: CODEBOOK_PROMPT,
-            messages: [{ role: 'user', content: s.text.slice(0, 8_000) }],
+            messages: [{ role: 'user', content: redactText(s.text, terms).slice(0, 8_000) }],
             jsonMode: true,
             temperature: 0,
             maxTokens: 50,
@@ -180,10 +211,13 @@ export class PromptClassifierService {
    * file (coders must be blind to it). Text is redacted.
    */
   async codingSampleCsv(courseId: string, n = 200): Promise<string> {
-    const rows = await this.prisma.aiPromptClassification.findMany({
-      where: { courseId, classifierVersion: CLASSIFIER_VERSION },
-      orderBy: { sourceId: 'asc' },
-    });
+    const ok = this.consent ? await this.consent.researchConsenting(courseId) : null;
+    const rows = (
+      await this.prisma.aiPromptClassification.findMany({
+        where: { courseId, classifierVersion: CLASSIFIER_VERSION },
+        orderBy: { sourceId: 'asc' },
+      })
+    ).filter((r) => (ok ? ok.has(r.studentId) : true));
     const byLabel = new Map<string, typeof rows>();
     for (const r of rows) byLabel.set(r.label, [...(byLabel.get(r.label) ?? []), r]);
     const sample: typeof rows = [];
@@ -197,6 +231,7 @@ export class PromptClassifierService {
     const texts = new Map(
       (await this.sources(courseId)).map((s) => [`${s.sourceType}:${s.sourceId}`, s.text]),
     );
+    const terms = await this.redactionTerms(courseId);
     const lines = [
       '# Prompt help-type coding sample — classifier ' +
         CLASSIFIER_VERSION +
@@ -205,7 +240,9 @@ export class PromptClassifierService {
     ];
     for (const r of sample) {
       const key = `${r.sourceType}:${r.sourceId}`;
-      lines.push([key, r.sourceType, redactText(texts.get(key) ?? ''), ''].map(csvCell).join(','));
+      lines.push(
+        [key, r.sourceType, redactText(texts.get(key) ?? '', terms), ''].map(csvCell).join(','),
+      );
     }
     return lines.join('\n') + '\n';
   }

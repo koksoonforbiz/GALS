@@ -12,6 +12,7 @@ import {
   ParseUUIDPipe,
   Query,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
@@ -25,6 +26,7 @@ import { LogExportService } from './log-export.service';
 import { LogsService } from '../logs/logs.service';
 import { BatchLogEventsSchema, BatchLogEventsDto } from './dto/log-event.dto';
 import { ActivityAction } from './activity-action.enum';
+import { TextConsentService } from '../governance/text-consent.service';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -42,6 +44,9 @@ export class ActivityLogController {
     private readonly sessionService: SessionService,
     private readonly logExportService: LogExportService,
     private readonly logsService: LogsService,
+    // Prompting-course text-capture consent (Phase 6). Optional so the
+    // controller still constructs where governance isn't wired.
+    @Optional() private readonly textConsent?: TextConsentService,
   ) {}
 
   // ─── STUDENT ENDPOINTS ────────────────────────────────────────────────────
@@ -70,8 +75,13 @@ export class ActivityLogController {
     @Request() req: { user: RequestUser },
   ) {
     await this.sessionService.assertOwnsSession(dto.sessionId, req.user.id);
+    // Course (interactive-lesson) events keep free text only with consent (a);
+    // every other action passes through untouched.
+    const events = this.textConsent
+      ? await this.textConsent.stripUnconsentedText(req.user.id, dto.events)
+      : dto.events;
     await this.activityLogService.recordBatch(
-      dto.events.map((e) => ({
+      events.map((e) => ({
         sessionId: dto.sessionId,
         userId: req.user.id,
         action: e.action as ActivityAction,
