@@ -146,6 +146,22 @@ const ACTIVITY_ACTIONS = [
   'CONFIDENCE_RATED',
   'IDLE_STARTED',
   'IDLE_ENDED',
+  // Prompt Lab (Phase 3)
+  'RUN_SETTINGS_RECORDED',
+  'PROMPT_GOAL_DECLARED',
+  'PROMPT_SUBMITTED',
+  'OUTPUT_REGENERATED',
+  'AI_OUTPUT_VIEWED',
+  'PROMPT_VERSION_SAVED',
+  'PROMPT_REVISION_TAGGED',
+  'TOKEN_COUNT_CHECKED',
+  'TEST_CASE_RUN',
+  'TEST_RESULT_RECORDED',
+  'OUTPUT_RATED',
+  'OUTPUT_VERIFIED',
+  'OUTPUT_COPIED',
+  'OUTPUT_PASTED',
+  'OUTPUT_EDITED',
 ];
 
 /** Compact cell text for interactive-lesson events (slide + key fields). */
@@ -170,6 +186,12 @@ function lessonEventDetail(meta: Record<string, unknown>): string {
   pick('visitNo', 'visit');
   pick('dwellMs', 'dwell_ms');
   pick('idleMs', 'idle_ms');
+  pick('runId', 'run');
+  pick('versionNo', 'v');
+  pick('testCaseKey', 'case');
+  pick('pass');
+  pick('matchesAiOutput', 'ai_paste');
+  pick('editRatio', 'edit');
   return parts.join(' ');
 }
 

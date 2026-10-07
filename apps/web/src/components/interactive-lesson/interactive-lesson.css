@@ -759,3 +759,156 @@
   color: var(--ink-2);
   margin: 12px 0 4px;
 }
+
+/* Phase 3: Prompt Lab */
+.il-root .prompt-lab {
+  margin: 16px 0;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font-size: 15px;
+}
+.il-root .prompt-lab .box-title {
+  color: var(--moss);
+}
+.il-root .prompt-lab h4 {
+  margin: 14px 0 6px;
+}
+.il-root .prompt-lab .pl-step:first-of-type h4 {
+  margin-top: 4px;
+}
+.il-root .prompt-lab textarea {
+  min-height: 120px;
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.il-root .pl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .pl-row label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.il-root .pl-row select,
+.il-root .pl-cell select {
+  font-family: var(--sans);
+  font-size: 13px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #fff;
+}
+.il-root .pl-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: var(--serif);
+  font-size: 15px;
+  width: 100%;
+}
+.il-root .pl-short {
+  flex: 0 1 200px;
+  min-width: 140px;
+}
+.il-root .pl-num {
+  width: 84px;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .pl-muted {
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+}
+.il-root .pl-note {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 0;
+}
+.il-root .pl-error {
+  color: var(--red);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .pl-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.il-root .pl-tags button,
+.il-root .pl-cell button:not(.btn) {
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+  color: var(--ink);
+}
+.il-root .pl-tags button.sel,
+.il-root .pl-cell button.sel {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.il-root .pl-table {
+  font-size: 13px;
+  margin-top: 10px;
+}
+.il-root .pl-table td,
+.il-root .pl-table th {
+  padding: 5px 6px;
+}
+.il-root .pl-table .btn,
+.il-root .pl-cell .btn {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.il-root .pl-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.il-root .pl-output {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: var(--slate-bg);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  font-size: 15px;
+  max-height: 360px;
+  overflow: auto;
+}
+.il-root .pl-rating label {
+  font-size: 13px;
+}
+.il-root .pl-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.il-root .pl-row select {
+  max-width: 100%;
+}
+.il-root .prompt-lab {
+  overflow-wrap: anywhere;
+}
+.il-root .pl-input {
+  min-width: 0;
+}

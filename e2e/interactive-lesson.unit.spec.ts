@@ -202,3 +202,115 @@ test.describe('mcqOrder — parity with the course HTML', () => {
     });
   }
 });
+
+// ── Phase 3: Prompt Lab client helpers ─────────────────────────────────────
+import {
+  _resetOutputs,
+  matchPaste,
+  notePaste,
+  rememberOutput,
+  takePaste,
+} from '../apps/web/src/components/interactive-lesson/prompt-lab/aiOutputs';
+import { editRatio } from '../apps/web/src/components/interactive-lesson/prompt-lab/wordDiff';
+
+test.describe('Prompt Lab — paste matching (client-side only)', () => {
+  test.beforeEach(() => _resetOutputs());
+
+  test('an exact excerpt of a recent output matches that run', () => {
+    rememberOutput('run-1', 'The warranty covers parts and labour for two years from purchase.');
+    expect(matchPaste('covers parts and labour for two years')).toEqual({
+      runId: 'run-1',
+      kind: 'exact',
+    });
+  });
+
+  test('punctuation edits still match exactly; a one-word change is a near match', () => {
+    rememberOutput(
+      'run-2',
+      'Answer in three bullet points, each under twelve words, citing the brief and naming the product line for every point.',
+    );
+    expect(
+      matchPaste('Answer in three bullet points each under twelve words citing the brief!')?.kind,
+    ).toBe('exact');
+    expect(
+      matchPaste(
+        'Answer in three bullet points, each under twelve words, citing the brief and naming the product range for every point.',
+      ),
+    ).toEqual({ runId: 'run-2', kind: 'near' });
+    expect(matchPaste('Completely different text about something else entirely.')).toBeNull();
+  });
+
+  test('very short pastes are ignored', () => {
+    rememberOutput('run-3', 'yes');
+    expect(matchPaste('yes')).toBeNull();
+  });
+
+  test('paste memory is consumed once per field', () => {
+    notePaste('results', 'pasted', 'run-9');
+    expect(takePaste('results')).toEqual({ text: 'pasted', runId: 'run-9' });
+    expect(takePaste('results')).toBeNull();
+  });
+
+  test('editRatio mirrors the API word-level measure', () => {
+    expect(editRatio('a b c d', 'a b c d')).toBe(0);
+    expect(editRatio('a b c d', 'a x c d e')).toBe(0.75);
+    expect(editRatio('', 'x')).toBe(1);
+  });
+});
+
+test.describe('Prompt Lab — event mapping', () => {
+  test('lab events map to the v2 AI-interaction actions without any text', () => {
+    const c = ctx({ slideKey: 's1-21', slideType: 'task' });
+    const cases: Array<[LessonEventName, Record<string, unknown>, string]> = [
+      ['run_settings_recorded', { model: 'm', temperature: 0.7 }, 'RUN_SETTINGS_RECORDED'],
+      ['prompt_goal_declared', { chars: 30, text: 'goal' }, 'PROMPT_GOAL_DECLARED'],
+      ['prompt_submitted', { runId: 'r1', promptTokens: 400 }, 'PROMPT_SUBMITTED'],
+      ['output_regenerated', { runId: 'r2', parentRunId: 'r1' }, 'OUTPUT_REGENERATED'],
+      ['ai_output_viewed', { runId: 'r1', dwellMs: 9000, responseWords: 120 }, 'AI_OUTPUT_VIEWED'],
+      [
+        'prompt_version_saved',
+        { versionId: 'v1', versionNo: 1, tokenCount: 380 },
+        'PROMPT_VERSION_SAVED',
+      ],
+      [
+        'prompt_revision_tagged',
+        { versionId: 'v1', tags: ['compression'] },
+        'PROMPT_REVISION_TAGGED',
+      ],
+      [
+        'token_count_checked',
+        { chars: 1600, tokens: 400, learnerGuess: 350 },
+        'TOKEN_COUNT_CHECKED',
+      ],
+      ['test_case_run', { versionId: 'v1', testCaseKey: 'c1', runId: 'r3' }, 'TEST_CASE_RUN'],
+      [
+        'test_result_recorded',
+        { versionId: 'v1', testCaseKey: 'c1', pass: false, failureReason: 'missing_fact' },
+        'TEST_RESULT_RECORDED',
+      ],
+      ['output_rated', { runId: 'r1', criteria: { correct: 4 } }, 'OUTPUT_RATED'],
+      ['output_verified', { runId: 'r1', verdict: 'supported', claimChars: 40 }, 'OUTPUT_VERIFIED'],
+      ['output_copied', { runId: 'r1', chars: 200 }, 'OUTPUT_COPIED'],
+      [
+        'output_pasted',
+        { targetField: 'results', chars: 200, matchesAiOutput: true, runId: 'r1' },
+        'OUTPUT_PASTED',
+      ],
+      ['output_edited', { targetField: 'results', editRatio: 0.2, runId: 'r1' }, 'OUTPUT_EDITED'],
+    ];
+    for (const [name, data, action] of cases) {
+      const m = mapLessonEvent(name, data, c);
+      expect(m?.action, name).toBe(action);
+      expect(m!.metadata, name).not.toHaveProperty('text');
+      expect(m!.metadata).toMatchObject({ slideKey: 's1-21', libraryVersion: 'v2' });
+    }
+    expect(
+      mapLessonEvent('output_regenerated', { runId: 'r', declaredExperiment: true }, c)!.metadata,
+    ).toMatchObject({
+      declaredExperiment: true,
+    });
+    expect(mapLessonEvent('run_settings_recorded', { model: 'm' }, c)!.metadata).toMatchObject({
+      toolsEnabled: false,
+    });
+  });
+});

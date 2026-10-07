@@ -20,12 +20,7 @@ import type {
 
 // ───── Public types ──────────────────────────────────────
 
-export type AoiRegion =
-  | 'sidebar'
-  | 'lesson'
-  | 'pdf-viewer'
-  | 'chatbot'
-  | 'header';
+export type AoiRegion = 'sidebar' | 'lesson' | 'pdf-viewer' | 'chatbot' | 'header';
 
 export const KNOWN_AOI_REGIONS: AoiRegion[] = [
   'sidebar',
@@ -192,13 +187,10 @@ function pickBucketForGaze(
   // Smaller-area rect wins when nested (e.g. pdf-viewer ⊂ lesson).
   const sorted = [...aois].sort((a, b) => a.width * a.height - b.width * b.height);
   for (const r of sorted) {
-    if (
-      gazeX >= r.x &&
-      gazeX < r.x + r.width &&
-      gazeY >= r.y &&
-      gazeY < r.y + r.height
-    ) {
-      const region = r.region as AoiRegion;
+    if (gazeX >= r.x && gazeX < r.x + r.width && gazeY >= r.y && gazeY < r.y + r.height) {
+      // The Prompt Lab output panel (prompting course) sits inside the
+      // lesson column; score it as lesson content.
+      const region = (r.region === 'ai-output' ? 'lesson' : r.region) as AoiRegion;
       const bucket: AoiBucket =
         region === 'lesson' || region === 'pdf-viewer' ? 'lesson+pdf' : region;
       // Caller may want the raw region too (for granular reporting).
@@ -357,15 +349,9 @@ export function segmentEpochs(
       push(m.t, 'reading_lesson', m.t);
     }
 
-    if (
-      m.action === 'INTERVENTION_TRIGGERED' ||
-      m.action === 'INTERVENTION_VIEWED'
-    ) {
+    if (m.action === 'INTERVENTION_TRIGGERED' || m.action === 'INTERVENTION_VIEWED') {
       push(m.t, 'intervention_active', m.t);
-    } else if (
-      m.action === 'INTERVENTION_COMPLETED' ||
-      m.action === 'INTERVENTION_DISMISSED'
-    ) {
+    } else if (m.action === 'INTERVENTION_COMPLETED' || m.action === 'INTERVENTION_DISMISSED') {
       push(m.t, 'reading_lesson', m.t);
     } else if (
       (m.action === 'CHATBOT_MESSAGE_SENT' ||
@@ -380,10 +366,7 @@ export function segmentEpochs(
       if (cur.type !== 'chatbot_dialogue') {
         push(m.t, 'chatbot_dialogue', m.t);
       }
-    } else if (
-      m.action === 'MODULE_OPENED' ||
-      m.action === 'MODULE_ITEM_VIEWED'
-    ) {
+    } else if (m.action === 'MODULE_OPENED' || m.action === 'MODULE_ITEM_VIEWED') {
       push(m.t, 'navigating_modules', m.t);
       push(m.t + transitionSettleMs, 'reading_lesson', m.t + transitionSettleMs);
     } else if (m.action === 'SESSION_START') {
@@ -429,18 +412,14 @@ export function computeAoiScoring(input: AoiScoringInput): AoiScoringResult {
   };
   const expectedWeights = input.expectedWeights ?? DEFAULT_EXPECTED_WEIGHTS;
 
-  const windowStartAbs =
-    input.baseWallClockMs + (params.windowStartMs ?? 0);
-  const windowEndAbs =
-    input.baseWallClockMs + (params.windowEndMs ?? input.durationMs);
+  const windowStartAbs = input.baseWallClockMs + (params.windowStartMs ?? 0);
+  const windowEndAbs = input.baseWallClockMs + (params.windowEndMs ?? input.durationMs);
 
   // Pre-sort streams once.
   const gaze = [...input.gazeLogs]
     .map((g) => ({ ...g, _ms: new Date(g.timestamp).getTime() }))
     .sort((a, b) => a._ms - b._ms);
-  const snapshots = [...input.snapshots].sort(
-    (a, b) => a.capturedAt - b.capturedAt,
-  );
+  const snapshots = [...input.snapshots].sort((a, b) => a.capturedAt - b.capturedAt);
 
   // Build exclusion-interval indexes.
   const hiddenIntervals = buildHiddenIntervals(input.visibilityLogs, windowEndAbs);
@@ -530,10 +509,7 @@ export function computeAoiScoring(input: AoiScoringInput): AoiScoringResult {
       continue;
     }
     // Advance snapshot pointer to the nearest-snapshot ≤ t.
-    while (
-      snapIdx + 1 < snapshots.length &&
-      snapshots[snapIdx + 1]!.capturedAt <= t
-    ) {
+    while (snapIdx + 1 < snapshots.length && snapshots[snapIdx + 1]!.capturedAt <= t) {
       snapIdx += 1;
     }
     const snap = snapshots[snapIdx];

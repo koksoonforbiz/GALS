@@ -3,6 +3,8 @@ import type { LessonSlide } from '@ats/shared';
 import { useLessonData } from './useLessonData';
 import { useLessonTracking } from './useLessonTracking';
 import { Slide, type LessonEmit } from './slides';
+import { matchPaste, notePaste, takePaste } from './prompt-lab/aiOutputs';
+import { editRatio } from './prompt-lab/wordDiff';
 import './interactive-lesson.css';
 
 /**
@@ -121,7 +123,21 @@ export function InteractiveLesson({
   }
 
   const pos = Math.min(index, total - 1);
-  const slideEmit: LessonEmit = (name, data) => tracking.emit(current, name, data);
+  const slideEmit: LessonEmit = (name, data) => {
+    tracking.emit(current, name, data);
+    // OUTPUT_EDITED: a field that received an AI-output paste is now saved.
+    const fieldKey = data?.fieldKey;
+    if (typeof fieldKey === 'string' && typeof data?.text === 'string') {
+      const pasted = takePaste(fieldKey);
+      if (pasted) {
+        tracking.emit(current, 'output_edited', {
+          targetField: fieldKey,
+          editRatio: editRatio(pasted.text, data.text),
+          runId: pasted.runId,
+        });
+      }
+    }
+  };
 
   return (
     <div
@@ -129,6 +145,24 @@ export function InteractiveLesson({
       className="il-root"
       data-interactive-lesson={itemId}
       tabIndex={-1}
+      onPasteCapture={(e) => {
+        // OUTPUT_PASTED: compared client-side with recent AI outputs; the
+        // clipboard text itself is never sent (plan rule 5).
+        const field = (e.target as HTMLElement).closest<HTMLElement>('[data-field-key]');
+        if (!field || readOnly) return;
+        const text = e.clipboardData.getData('text');
+        if (!text) return;
+        const fieldKey = field.dataset.fieldKey!;
+        const match = matchPaste(text);
+        if (match) notePaste(fieldKey, text, match.runId);
+        tracking.emit(current, 'output_pasted', {
+          targetField: fieldKey,
+          chars: text.length,
+          matchesAiOutput: Boolean(match),
+          matchKind: match?.kind ?? null,
+          runId: match?.runId ?? null,
+        });
+      }}
       onKeyDown={(e) => {
         const tag = (e.target as HTMLElement).tagName;
         if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return;
@@ -183,6 +217,9 @@ export function InteractiveLesson({
         save={(patch) => saveFields(current.key, patch)}
         emit={slideEmit}
         sessionCriteria={sessionCriteria}
+        itemId={itemId}
+        sessionId={sessionId}
+        readOnly={readOnly}
         onAdvance={() => go(pos + 1)}
       />
     </div>

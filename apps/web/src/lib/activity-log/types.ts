@@ -68,7 +68,23 @@ export type ActivityAction =
   | 'REFLECTION_SUBMITTED'
   | 'CONFIDENCE_RATED'
   | 'IDLE_STARTED'
-  | 'IDLE_ENDED';
+  | 'IDLE_ENDED'
+  // Prompt Lab — AI-interaction layer (prompting course, Phase 3)
+  | 'RUN_SETTINGS_RECORDED'
+  | 'PROMPT_GOAL_DECLARED'
+  | 'PROMPT_SUBMITTED'
+  | 'OUTPUT_REGENERATED'
+  | 'AI_OUTPUT_VIEWED'
+  | 'PROMPT_VERSION_SAVED'
+  | 'PROMPT_REVISION_TAGGED'
+  | 'TOKEN_COUNT_CHECKED'
+  | 'TEST_CASE_RUN'
+  | 'TEST_RESULT_RECORDED'
+  | 'OUTPUT_RATED'
+  | 'OUTPUT_VERIFIED'
+  | 'OUTPUT_COPIED'
+  | 'OUTPUT_PASTED'
+  | 'OUTPUT_EDITED';
 
 export interface ActivityEvent {
   action: ActivityAction;

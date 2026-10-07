@@ -33,7 +33,23 @@ export type LessonEventName =
   | 'expect_revealed'
   | 'selfscore_set'
   | 'attempt_started'
-  | 'confidence_rated';
+  | 'confidence_rated'
+  // Prompt Lab (Phase 3) — AI-interaction layer
+  | 'run_settings_recorded'
+  | 'prompt_goal_declared'
+  | 'prompt_submitted'
+  | 'output_regenerated'
+  | 'ai_output_viewed'
+  | 'prompt_version_saved'
+  | 'prompt_revision_tagged'
+  | 'token_count_checked'
+  | 'test_case_run'
+  | 'test_result_recorded'
+  | 'output_rated'
+  | 'output_verified'
+  | 'output_copied'
+  | 'output_pasted'
+  | 'output_edited';
 
 export interface LessonEventContext {
   slideKey: string;
@@ -241,6 +257,147 @@ export function mapLessonEvent(
           ...base,
           fieldKey: data.fieldKey,
           msFromSlideEnter: Math.round(ctx.msSinceEnter),
+        },
+      };
+    // ── Prompt Lab (Phase 3). Prompt and output text live in the
+    // prompt_lab_* tables; events carry ids and counts only.
+    case 'run_settings_recorded':
+      return {
+        action: 'RUN_SETTINGS_RECORDED',
+        metadata: {
+          ...base,
+          model: data.model,
+          temperature: data.temperature ?? null,
+          toolsEnabled: false,
+        },
+      };
+    case 'prompt_goal_declared':
+      return {
+        action: 'PROMPT_GOAL_DECLARED',
+        metadata: { ...base, ...textFields(data, ctx.captureText) },
+      };
+    case 'prompt_submitted':
+      return {
+        action: 'PROMPT_SUBMITTED',
+        metadata: {
+          ...base,
+          runId: data.runId,
+          versionNo: data.versionNo ?? null,
+          promptTokens: data.promptTokens ?? null,
+          model: data.model ?? null,
+          testCaseKey: data.testCaseKey ?? null,
+          sampleNo: data.sampleNo ?? 1,
+          declaredExperiment: data.declaredExperiment === true,
+        },
+      };
+    case 'output_regenerated':
+      return {
+        action: 'OUTPUT_REGENERATED',
+        metadata: {
+          ...base,
+          runId: data.runId,
+          parentRunId: data.parentRunId ?? null,
+          declaredExperiment: data.declaredExperiment === true,
+        },
+      };
+    case 'ai_output_viewed':
+      return {
+        action: 'AI_OUTPUT_VIEWED',
+        metadata: {
+          ...base,
+          runId: data.runId,
+          dwellMs: data.dwellMs,
+          responseWords: data.responseWords,
+        },
+      };
+    case 'prompt_version_saved':
+      return {
+        action: 'PROMPT_VERSION_SAVED',
+        metadata: {
+          ...base,
+          versionId: data.versionId,
+          versionNo: data.versionNo,
+          tokenCount: data.tokenCount,
+          editRatioFromPrev: data.editRatioFromPrev ?? null,
+        },
+      };
+    case 'prompt_revision_tagged':
+      return {
+        action: 'PROMPT_REVISION_TAGGED',
+        metadata: { ...base, versionId: data.versionId, tags: data.tags },
+      };
+    case 'token_count_checked':
+      return {
+        action: 'TOKEN_COUNT_CHECKED',
+        metadata: {
+          ...base,
+          chars: data.chars,
+          tokens: data.tokens,
+          learnerGuess: data.learnerGuess ?? null,
+        },
+      };
+    case 'test_case_run':
+      return {
+        action: 'TEST_CASE_RUN',
+        metadata: {
+          ...base,
+          versionId: data.versionId ?? null,
+          testCaseKey: data.testCaseKey,
+          runId: data.runId,
+        },
+      };
+    case 'test_result_recorded':
+      return {
+        action: 'TEST_RESULT_RECORDED',
+        metadata: {
+          ...base,
+          versionId: data.versionId,
+          testCaseKey: data.testCaseKey,
+          pass: data.pass,
+          failureReason: data.failureReason ?? null,
+        },
+      };
+    case 'output_rated':
+      return {
+        action: 'OUTPUT_RATED',
+        metadata: { ...base, runId: data.runId, criteria: data.criteria },
+      };
+    case 'output_verified':
+      return {
+        action: 'OUTPUT_VERIFIED',
+        metadata: {
+          ...base,
+          runId: data.runId,
+          verdict: data.verdict,
+          claimChars: data.claimChars ?? 0,
+        },
+      };
+    case 'output_copied':
+      // Never the copied text — length only (plan rule 5).
+      return {
+        action: 'OUTPUT_COPIED',
+        metadata: { ...base, runId: data.runId, chars: data.chars },
+      };
+    case 'output_pasted':
+      return {
+        action: 'OUTPUT_PASTED',
+        metadata: {
+          ...base,
+          targetField: data.targetField,
+          chars: data.chars,
+          matchesAiOutput: data.matchesAiOutput === true,
+          matchKind: data.matchKind ?? null,
+          runId: data.runId ?? null,
+        },
+      };
+    case 'output_edited':
+      return {
+        action: 'OUTPUT_EDITED',
+        metadata: {
+          ...base,
+          targetField: data.targetField,
+          editRatio: data.editRatio,
+          runId: data.runId ?? null,
         },
       };
     default:

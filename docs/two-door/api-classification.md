@@ -107,6 +107,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /api/learning-interventions/**  EXCEPT  /api/learning-interventions/prompt-config/**  (PRIVATE)
 /api/student-rag/**
 /api/interactive-lessons/**   (prompting course — added 2026-10-07)
+/api/prompt-lab/**  EXCEPT  /api/prompt-lab/courses/**  (PRIVATE)   (prompting course — added 2026-10-07)
 /api/pre-generation/{match-document,ready}
 /api/vlm/config/course/:x  GET     /api/vlm/describe-page  POST
 /socket.io/            (dialogue + default namespaces; text-mining refused at handshake)
@@ -268,6 +269,21 @@ Columns: `@Roles` as declared (`(none)` = any authenticated), effective guards (
 | PATCH  | `/api/courses/:id/enrollment-policy` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
 | GET    | `/api/courses/:id/dialogue-settings` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
 | PUT    | `/api/courses/:id/dialogue-settings` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
+
+### PromptLabController (`prompt-lab/prompt-lab.controller.ts`)
+
+Added 2026-10-07 for the prompting-course Prompt Lab (`docs/process-mining/`).
+
+| Method | Path                                                    | @Roles         | Guards                  | Door        | Note                                                         |
+| ------ | ------------------------------------------------------- | -------------- | ----------------------- | ----------- | ------------------------------------------------------------ |
+| GET    | `/api/prompt-lab/me`                                    | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  | Own runs/versions/test cases for one lab slide.              |
+| POST   | `/api/prompt-lab/run`                                   | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  | Calls the LLM funnel; @Throttle 20/min + per-student limits. |
+| POST   | `/api/prompt-lab/versions`                              | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
+| PATCH  | `/api/prompt-lab/versions/:id/tags`                     | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
+| POST   | `/api/prompt-lab/test-cases`                            | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
+| POST   | `/api/prompt-lab/test-results`                          | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
+| POST   | `/api/prompt-lab/ratings`                               | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
+| GET    | `/api/prompt-lab/courses/:courseId/students/:studentId` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit 404 in the public allowlist.                        |
 
 ### InteractiveLessonController (`interactive-lesson/interactive-lesson.controller.ts`)
 

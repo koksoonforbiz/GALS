@@ -274,6 +274,23 @@ enum ActivityAction {
   CONFIDENCE_RATED
   IDLE_STARTED
   IDLE_ENDED
+
+  // Prompt Lab — AI-interaction layer (prompting course, Phase 3)
+  RUN_SETTINGS_RECORDED
+  PROMPT_GOAL_DECLARED
+  PROMPT_SUBMITTED
+  OUTPUT_REGENERATED
+  AI_OUTPUT_VIEWED
+  PROMPT_VERSION_SAVED
+  PROMPT_REVISION_TAGGED
+  TOKEN_COUNT_CHECKED
+  TEST_CASE_RUN
+  TEST_RESULT_RECORDED
+  OUTPUT_RATED
+  OUTPUT_VERIFIED
+  OUTPUT_COPIED
+  OUTPUT_PASTED
+  OUTPUT_EDITED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -392,7 +409,13 @@ model User {
   vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
   // Interactive-lesson working state (prompting course)
-  lessonSlideStates LessonSlideState[]
+  lessonSlideStates    LessonSlideState[]
+  // Prompt Lab (prompting course, Phase 3)
+  promptLabRuns        PromptLabRun[]
+  promptLabVersions    PromptLabVersion[]
+  promptLabTestCases   PromptLabTestCase[]
+  promptLabTestResults PromptLabTestResult[]
+  promptLabRatings     PromptLabOutputRating[]
 
   @@map("users")
 }
@@ -790,6 +813,9 @@ model ModuleItem {
   module            CourseModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   versions          PageContentVersion[]
   lessonSlideStates LessonSlideState[]
+  promptLabRuns     PromptLabRun[]
+  promptLabVersions PromptLabVersion[]
+  promptLabCases    PromptLabTestCase[]
 
   @@index([moduleId])
   @@map("module_items")
@@ -2469,4 +2495,127 @@ model VlmConfig {
   teacher User @relation("teacherVlmConfig", fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@map("vlm_configs")
+}
+
+// ─── Prompt Lab (prompting course, Phase 3) ─────────────────────────────
+// In-GALS replacement for the external AI tool on exercise/task slides of
+// INTERACTIVE_LESSON items, so prompting behaviour is observable
+// (docs/process-mining/PHASE0_DISCOVERY.md; plan Phase 3). All rows cascade
+// with the student and the item; studentSessionId is provenance only
+// (SetNull). Free text is the learner's deliberate submitted work, the same
+// status as ChatbotMessage; text-capture consent arrives in Phase 6.
+
+model PromptLabRun {
+  id                 String   @id @default(uuid()) @db.Uuid
+  studentId          String   @map("student_id") @db.Uuid
+  studentSessionId   String?  @map("student_session_id") @db.Uuid
+  courseId           String   @map("course_id") @db.Uuid
+  moduleItemId       String   @map("module_item_id") @db.Uuid
+  slideKey           String   @map("slide_key")
+  versionId          String?  @map("version_id") @db.Uuid
+  versionNo          Int?     @map("version_no")
+  parentRunId        String?  @map("parent_run_id") @db.Uuid
+  testCaseKey        String?  @map("test_case_key")
+  declaredExperiment Boolean  @default(false) @map("declared_experiment")
+  sampleNo           Int      @default(1) @map("sample_no")
+  promptText         String   @map("prompt_text") @db.Text
+  systemText         String?  @map("system_text") @db.Text
+  model              String
+  provider           String
+  temperature        Float?
+  maxTokens          Int?     @map("max_tokens")
+  toolsEnabled       Boolean  @default(false) @map("tools_enabled")
+  promptTokens       Int      @default(0) @map("prompt_tokens")
+  completionTokens   Int      @default(0) @map("completion_tokens")
+  responseText       String   @map("response_text") @db.Text
+  latencyMs          Int      @map("latency_ms")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student    User                    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleItem ModuleItem              @relation(fields: [moduleItemId], references: [id], onDelete: Cascade)
+  ratings    PromptLabOutputRating[]
+
+  @@index([studentId, moduleItemId, slideKey])
+  @@index([studentId, createdAt])
+  @@index([courseId, createdAt])
+  @@map("prompt_lab_runs")
+}
+
+model PromptLabVersion {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentId        String   @map("student_id") @db.Uuid
+  moduleItemId     String   @map("module_item_id") @db.Uuid
+  slideKey         String   @map("slide_key")
+  versionNo        Int      @map("version_no")
+  promptText       String   @map("prompt_text") @db.Text
+  /// Approximate (chars ÷ 4) unless a run on this version reported provider tokens.
+  tokenCount       Int      @map("token_count")
+  tokenCountSource String   @default("approx_chars4") @map("token_count_source")
+  /// context | constraint | example | format | role | compression | reasoning | other
+  revisionTags     String[] @default([]) @map("revision_tags")
+  /// { addedWords, removedWords, editRatio } vs the previous version — stats only, no text.
+  diffFromPrev     Json?    @map("diff_from_prev")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student     User                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleItem  ModuleItem            @relation(fields: [moduleItemId], references: [id], onDelete: Cascade)
+  testResults PromptLabTestResult[]
+
+  @@unique([studentId, moduleItemId, slideKey, versionNo])
+  @@map("prompt_lab_versions")
+}
+
+/// Learner-defined test cases (e.g. Lab 1C's two customer questions, which
+/// live in the course's external Materials pack, not in the slide JSON).
+model PromptLabTestCase {
+  id           String   @id @default(uuid()) @db.Uuid
+  studentId    String   @map("student_id") @db.Uuid
+  moduleItemId String   @map("module_item_id") @db.Uuid
+  slideKey     String   @map("slide_key")
+  caseKey      String   @map("case_key")
+  label        String
+  inputText    String   @map("input_text") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleItem ModuleItem @relation(fields: [moduleItemId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleItemId, slideKey, caseKey])
+  @@map("prompt_lab_test_cases")
+}
+
+model PromptLabTestResult {
+  id            String   @id @default(uuid()) @db.Uuid
+  studentId     String   @map("student_id") @db.Uuid
+  versionId     String   @map("version_id") @db.Uuid
+  runId         String?  @map("run_id") @db.Uuid
+  testCaseKey   String   @map("test_case_key")
+  pass          Boolean
+  /// missing_fact | ambiguity | instruction_dropped | format | other
+  failureReason String?  @map("failure_reason")
+  note          String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  version PromptLabVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, testCaseKey])
+  @@map("prompt_lab_test_results")
+}
+
+model PromptLabOutputRating {
+  id            String   @id @default(uuid()) @db.Uuid
+  studentId     String   @map("student_id") @db.Uuid
+  runId         String   @map("run_id") @db.Uuid
+  /// { correct: 1-5, complete: 1-5, format: 1-5 }
+  criteria      Json
+  verifiedClaim String?  @map("verified_claim") @db.Text
+  /// supported | unsupported | unsure
+  verifyVerdict String?  @map("verify_verdict")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  run     PromptLabRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@map("prompt_lab_output_ratings")
 }

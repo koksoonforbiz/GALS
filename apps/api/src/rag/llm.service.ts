@@ -925,6 +925,12 @@ export class LlmService {
       jsonSchema?: Record<string, unknown>;
       maxTokens?: number;
       temperature?: number;
+      /**
+       * Optional per-call model (Prompt Lab run settings). Must be a
+       * selectable registry model of the credential owner's provider;
+       * omitted → the owner's configured model, exactly as before.
+       */
+      model?: string;
     },
     usageContext?: {
       feature: string;
@@ -946,7 +952,14 @@ export class LlmService {
     // the question, billed against their teacher's key). The quota must
     // track whoever's key/bill this actually is.
     await this.usageQuota.assertNotExceeded(userId);
-    const credentials = await this.getUserApiKey(userId);
+    let credentials = await this.getUserApiKey(userId);
+    if (request.model && credentials && request.model !== credentials.model) {
+      const spec = getChatModel(request.model);
+      if (!spec || spec.provider !== credentials.provider || !isSelectable(request.model)) {
+        throw new BadRequestException(`Model "${request.model}" is not available for this course`);
+      }
+      credentials = { ...credentials, model: request.model };
+    }
     const result = await this.callLlm(request, credentials);
 
     const cost = await calculateCost(this.prisma, {

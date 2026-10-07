@@ -43,6 +43,7 @@ import { LlmModelsModule } from './llm';
 import { PreGenerationModule } from './pre-generation/pre-generation.module';
 import { VlmModule } from './vlm/vlm.module';
 import { InteractiveLessonModule } from './interactive-lesson';
+import { PromptLabModule } from './prompt-lab';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -102,6 +103,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     PreGenerationModule,
     VlmModule,
     InteractiveLessonModule,
+    PromptLabModule,
   ],
   controllers: [HealthController],
   providers: [

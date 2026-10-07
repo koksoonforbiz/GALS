@@ -13,6 +13,7 @@ import { LESSON_GATES } from './gates';
 import type { SlideFields } from './useLessonData';
 import { mcqOrder } from './mcqOrder';
 import type { LessonEventName } from './lessonEvents';
+import { PromptLab } from './prompt-lab/PromptLab';
 
 export type { LessonEventName };
 
@@ -29,6 +30,24 @@ export interface SlideProps {
   onAdvance: () => void;
   /** The session's self-score criteria, shown early on the Objectives slide. */
   sessionCriteria?: string[];
+  /** For the Prompt Lab on exercise/task/stretch slides. */
+  itemId: string;
+  sessionId: string | null;
+  readOnly?: boolean;
+}
+
+function Lab(p: SlideProps) {
+  return (
+    <PromptLab
+      itemId={p.itemId}
+      slide={p.slide}
+      fields={p.fields}
+      save={p.save}
+      emit={p.emit}
+      sessionId={p.sessionId}
+      readOnly={p.readOnly}
+    />
+  );
 }
 
 const PHASE: Record<string, string> = {
@@ -160,13 +179,14 @@ function TextGate({
       return;
     }
     save({ text: value });
-    emit(`${kind}_submitted`, { chars: value.length, text: value });
+    emit(`${kind}_submitted`, { chars: value.length, text: value, fieldKey: kind });
     setStatus({ text: 'Saved', ok: true });
     onSaved?.();
   };
   return (
     <div data-replay-redact="">
       <textarea
+        data-field-key={kind}
         placeholder={placeholder}
         value={value}
         onChange={(e) => {
@@ -220,7 +240,12 @@ function ReflectSlide(p: SlideProps) {
     }
     const nextParts = { appraisal, implementationIntention: intention };
     p.save({ text, parts: nextParts });
-    p.emit('reflect_submitted', { chars: text.length, text, parts: nextParts });
+    p.emit('reflect_submitted', {
+      chars: text.length,
+      text,
+      parts: nextParts,
+      fieldKey: 'reflect',
+    });
     setStatus({ text: 'Saved', ok: true });
   };
   return (
@@ -230,6 +255,7 @@ function ReflectSlide(p: SlideProps) {
       <div data-replay-redact="">
         <label className="part-label">Your reflection</label>
         <textarea
+          data-field-key="reflect"
           placeholder="Write your reflection…"
           value={appraisal}
           onChange={(e) => {
@@ -243,6 +269,7 @@ function ReflectSlide(p: SlideProps) {
         </label>
         <textarea
           className="mini"
+          data-field-key="reflect-intention"
           placeholder="In my next real task, I will…"
           value={intention}
           onChange={(e) => {
@@ -313,6 +340,7 @@ function CheckItem({ k, item, p }: { k: number; item: { q: string; a: string }; 
       </div>
       <textarea
         className="mini"
+        data-field-key={qk}
         placeholder="Your answer…"
         value={value}
         onChange={(e) => {
@@ -330,7 +358,12 @@ function CheckItem({ k, item, p }: { k: number; item: { q: string; a: string }; 
               return;
             }
             p.save({ [qk]: value });
-            p.emit('check_answered', { question: k + 1, chars: value.length, text: value });
+            p.emit('check_answered', {
+              question: k + 1,
+              chars: value.length,
+              text: value,
+              fieldKey: qk,
+            });
             setIsSaved(true);
             setStatus('Saved');
           }}
@@ -357,6 +390,7 @@ function CheckItem({ k, item, p }: { k: number; item: { q: string; a: string }; 
           <label>What I missed or would change:</label>
           <textarea
             className="mini short"
+            data-field-key={`${qk}-miss`}
             placeholder="One sentence…"
             value={miss}
             onChange={(e) => setMiss(e.target.value)}
@@ -366,7 +400,12 @@ function CheckItem({ k, item, p }: { k: number; item: { q: string; a: string }; 
             className="btn secondary savemiss"
             onClick={() => {
               p.save({ [`${qk}-miss`]: miss });
-              p.emit('check_missed_noted', { question: k + 1, chars: miss.length, text: miss });
+              p.emit('check_missed_noted', {
+                question: k + 1,
+                chars: miss.length,
+                text: miss,
+                fieldKey: `${qk}-miss`,
+              });
             }}
           >
             Save
@@ -413,6 +452,7 @@ function McqSlide(p: SlideProps) {
         <div data-replay-redact="">
           <textarea
             className="mini"
+            data-field-key="why"
             placeholder="Before choosing: in one sentence, what principle decides this?"
             value={why}
             onChange={(e) => {
@@ -431,7 +471,7 @@ function McqSlide(p: SlideProps) {
                 return;
               }
               p.save({ why });
-              p.emit('mcq_rationale', { chars: why.length, text: why });
+              p.emit('mcq_rationale', { chars: why.length, text: why, fieldKey: 'why' });
               setUnlocked(true);
               setStatus('Options unlocked');
             }}
@@ -534,6 +574,7 @@ function MiscItem({
         ))}
         <input
           type="text"
+          data-field-key={ik}
           placeholder="because…"
           value={because}
           onChange={(e) => {
@@ -553,6 +594,7 @@ function MiscItem({
               choice,
               chars: because.length,
               text: because,
+              fieldKey: ik,
             });
             setOpen(true);
             p.emit('misconception_opened', { item: k + 1, auto: true });
@@ -605,6 +647,56 @@ function MisconceptionsSlide(p: SlideProps) {
 
 // ── Exercise (results box + analysis template) ───────────────────────────
 
+/**
+ * Task and stretch slides: in the HTML these only described work done in
+ * an external AI tool and captured nothing. Here they get the Prompt Lab
+ * plus a short "what I learned" box (RESULTS_RECORDED), as in plan §3.2 #6.
+ */
+function LabTaskSlide(p: SlideProps) {
+  const saved = str(p.fields.text);
+  const [value, setValue] = useState(saved);
+  const [status, setStatus] = useState(saved ? 'Saved' : '');
+  const firstInput = useFirstInput(p.emit, 'results');
+  return (
+    <div className={`box ${p.slide.t}`}>
+      <div className="box-title">{p.slide.box}</div>
+      <div dangerouslySetInnerHTML={html(p.slide.html)} />
+      <Lab {...p} />
+      <div className="res-label">What I learned (results, numbers, what failed and why).</div>
+      <div data-replay-redact="">
+        <textarea
+          className="mini"
+          data-field-key="results"
+          placeholder="What I learned…"
+          value={value}
+          onChange={(e) => {
+            firstInput();
+            setValue(e.target.value);
+          }}
+        />
+      </div>
+      <div className="actions">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            if (value.trim().length < LESSON_GATES.results) {
+              setStatus('Record your results first (a few lines).');
+              return;
+            }
+            p.save({ text: value });
+            p.emit('results_submitted', { chars: value.length, text: value, fieldKey: 'results' });
+            setStatus('Saved');
+          }}
+        >
+          Save
+        </button>
+        <span className="status">{status}</span>
+      </div>
+    </div>
+  );
+}
+
 function ExerciseSlide(p: SlideProps) {
   const saved = str(p.fields.text);
   const [value, setValue] = useState(saved);
@@ -616,12 +708,14 @@ function ExerciseSlide(p: SlideProps) {
     <div className="box ai">
       <div className="box-title">{p.slide.box}</div>
       <div dangerouslySetInnerHTML={html(p.slide.html)} />
+      <Lab {...p} />
       <div className="res-label">
         Record your results here (numbers, run counts, model/version) before opening the analysis
         template.
       </div>
       <div data-replay-redact="">
         <textarea
+          data-field-key="results"
           placeholder="Results…"
           value={value}
           onChange={(e) => {
@@ -640,7 +734,7 @@ function ExerciseSlide(p: SlideProps) {
               return;
             }
             p.save({ text: value });
-            p.emit('results_submitted', { chars: value.length, text: value });
+            p.emit('results_submitted', { chars: value.length, text: value, fieldKey: 'results' });
             setStatus('Saved');
             setIsSaved(true);
           }}
@@ -835,15 +929,16 @@ function SlideBody(p: SlideProps) {
     case 'figure':
       return <FigureSlide {...p} />;
     case 'example':
-    case 'task':
     case 'ai':
-    case 'stretch':
       return (
         <div className={`box ${slide.t}`}>
           <div className="box-title">{slide.box}</div>
           <div dangerouslySetInnerHTML={html(slide.html)} />
         </div>
       );
+    case 'task':
+    case 'stretch':
+      return <LabTaskSlide {...p} />;
     case 'concept':
       return (
         <>
