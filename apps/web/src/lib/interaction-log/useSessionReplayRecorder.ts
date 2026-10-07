@@ -240,6 +240,12 @@ function splitIntoSizedChunks(
   return chunks;
 }
 
+// Opt-in redaction for learner free text (prompting course, decision (f)
+// in docs/process-mining/PHASE0_DISCOVERY.md): any field inside an
+// element marked `data-replay-redact` is stored like a password field, so
+// DOM snapshots never carry text the learner has not consented to share.
+const REDACT_SELECTOR = '[data-replay-redact]';
+
 function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
   const inputs = Array.from(sourceRoot.querySelectorAll('input'));
   const cloneInputs = Array.from(cloneRoot.querySelectorAll('input'));
@@ -247,7 +253,11 @@ function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
     const clone = cloneInputs[index];
     if (!clone) return;
 
-    if (input.type === 'password' || input.autocomplete.includes('password')) {
+    if (
+      input.type === 'password' ||
+      input.autocomplete.includes('password') ||
+      (input.type === 'text' && input.closest(REDACT_SELECTOR))
+    ) {
       clone.setAttribute('value', '[REDACTED]');
     } else if (input.type !== 'file') {
       clone.setAttribute('value', input.value);
@@ -265,7 +275,7 @@ function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
   textareas.forEach((textarea, index) => {
     const clone = cloneTextareas[index];
     if (!clone) return;
-    clone.textContent = textarea.value;
+    clone.textContent = textarea.closest(REDACT_SELECTOR) ? '[REDACTED]' : textarea.value;
   });
 
   const selects = Array.from(sourceRoot.querySelectorAll('select'));

@@ -8,6 +8,7 @@ import { useActivityLog } from '../../lib/activity-log';
 import BlockRenderer from '../../components/editor/BlockRenderer';
 import PdfReader from '../../components/PdfReader';
 import { DockedChatbot } from '../../components/FloatingChatbot';
+import { InteractiveLesson, slidePlainText } from '../../components/interactive-lesson';
 
 const CodePlayground = lazy(() =>
   import('../../components/code-practice/CodePlayground').then((m) => ({
@@ -17,7 +18,7 @@ const CodePlayground = lazy(() =>
 
 interface ModuleItem {
   id: string;
-  type: 'PAGE' | 'PDF' | 'LINK' | 'ASSESSMENT';
+  type: 'PAGE' | 'PDF' | 'LINK' | 'ASSESSMENT' | 'INTERACTIVE_LESSON';
   title: string;
   orderIndex: number;
   contentMdx: string | null;
@@ -142,7 +143,7 @@ export function StudentCourseViewPage() {
     clearSelectedText,
     codePlaygroundCollapsed,
   } = usePageContext();
-  const { track } = useActivityLog();
+  const { track, sessionId } = useActivityLog();
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -739,11 +740,13 @@ export function StudentCourseViewPage() {
                           className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                             item.type === 'PAGE'
                               ? 'bg-blue-400'
-                              : item.type === 'PDF'
-                                ? 'bg-red-400'
-                                : item.type === 'LINK'
-                                  ? 'bg-purple-400'
-                                  : 'bg-green-400'
+                              : item.type === 'INTERACTIVE_LESSON'
+                                ? 'bg-amber-400'
+                                : item.type === 'PDF'
+                                  ? 'bg-red-400'
+                                  : item.type === 'LINK'
+                                    ? 'bg-purple-400'
+                                    : 'bg-green-400'
                           }`}
                         />
                         <span className="truncate">{item.title}</span>
@@ -804,6 +807,19 @@ export function StudentCourseViewPage() {
               {!selectedItem ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                   <p className="text-gray-400">Select an item from the left.</p>
+                </div>
+              ) : selectedItem.type === 'INTERACTIVE_LESSON' ? (
+                // Imported slide lesson (prompting course): takes the place
+                // of the PDF/PAGE viewport; sidebar and chatbot unchanged.
+                // This div is the lesson's inner scroll host.
+                <div className="flex-1 min-h-0 overflow-y-auto" data-lesson-scroll-host="">
+                  <InteractiveLesson
+                    itemId={selectedItem.id}
+                    sessionId={sessionId}
+                    onSlideChange={(slide) =>
+                      setPageContext({ contentText: slidePlainText(slide) || null })
+                    }
+                  />
                 </div>
               ) : selectedItem.type === 'PAGE' ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">

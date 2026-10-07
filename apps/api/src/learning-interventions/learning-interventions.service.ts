@@ -30,6 +30,8 @@ import {
 } from '../rag/shared/faithfulness-check.service';
 import { faithfulnessCheckEnabled } from '../rag/shared/multimodal-generation.flags';
 import { detectPii } from '../rag/shared/pii-detection';
+import type { LessonDocument } from '@ats/shared';
+import { lessonToPlainText } from '../interactive-lesson/course-html-parser';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 import { CodePracticeService } from '../code-practice/code-practice.service';
 import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
@@ -1342,6 +1344,7 @@ export class LearningInterventionsService {
         type: true,
         pdfFilename: true,
         contentMdx: true,
+        lessonJson: true,
         module: { select: { courseId: true } },
       },
     });
@@ -1368,6 +1371,14 @@ export class LearningInterventionsService {
       const text = extractTextFromBlockDocumentOrMdx(item.contentMdx);
       if (!text) return null;
       return text.length > 50_000 ? text.slice(0, 50_000) : text;
+    }
+
+    // Imported slide lessons: ground on the slide text, deliberately
+    // WITHOUT reference answers/reveals so the chatbot can't pre-empt the
+    // course's commit-before-reveal design.
+    if (item.type === 'INTERACTIVE_LESSON' && item.lessonJson) {
+      const text = lessonToPlainText(item.lessonJson as unknown as LessonDocument);
+      return text || null;
     }
 
     return null;

@@ -75,6 +75,9 @@ enum ModuleItemType {
   PDF
   LINK
   ASSESSMENT
+  // Imported slide-based lesson (prompting course) — see
+  // docs/process-mining/PHASE0_DISCOVERY.md. Content lives in lessonJson.
+  INTERACTIVE_LESSON
 }
 
 enum EnrollmentStatus {
@@ -368,6 +371,9 @@ model User {
   replayAnnotations ReplayAnnotation[]
   vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
+  // Interactive-lesson working state (prompting course)
+  lessonSlideStates LessonSlideState[]
+
   @@map("users")
 }
 
@@ -558,9 +564,9 @@ model Topic {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  course              Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  questions           Question[]
-  modules             CourseModule[]
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[]
+  modules   CourseModule[]
 
   @@index([courseId])
   @@map("topics")
@@ -652,8 +658,8 @@ model GradingResult {
   aiFeedbackJson Json?    @map("ai_feedback_json") // Structured Hattie feedback levels
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
 
-  attempt    Attempt      @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  grader     User?        @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
+  attempt Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  grader  User?   @relation("GraderResults", fields: [graderId], references: [id], onDelete: SetNull)
 
   @@index([attemptId])
   @@index([graderId])
@@ -719,9 +725,9 @@ model CourseModule {
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  course      Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  topic       Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  items       ModuleItem[]
+  course Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic  Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  items  ModuleItem[]
 
   @@index([courseId])
   @@index([topicId])
@@ -749,6 +755,10 @@ model ModuleItem {
   // ASSESSMENT type
   assessmentId String? @map("assessment_id") @db.Uuid
 
+  // INTERACTIVE_LESSON type — imported slide deck (see
+  // prisma/scripts/import-prompting-course.ts). Read-only in the builder.
+  lessonJson Json? @map("lesson_json")
+
   // AI-generated metadata
   learningOutcomes Json?   @map("learning_outcomes") // string[]
   estimatedMinutes Int?    @map("estimated_minutes")
@@ -757,11 +767,36 @@ model ModuleItem {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  module   CourseModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  versions PageContentVersion[]
+  module            CourseModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  versions          PageContentVersion[]
+  lessonSlideStates LessonSlideState[]
 
   @@index([moduleId])
   @@map("module_items")
+}
+
+/// A student's saved work on one slide of an INTERACTIVE_LESSON item —
+/// the server-side replacement for the course HTML's localStorage state.
+/// Working copy only: the analysable record is the activity_logs stream.
+/// Cascades with the student and the item; deliberately NOT deleted by a
+/// single-session purge (it spans sessions, like the student's progress).
+model LessonSlideState {
+  id            String   @id @default(uuid()) @db.Uuid
+  studentId     String   @map("student_id") @db.Uuid
+  moduleItemId  String   @map("module_item_id") @db.Uuid
+  slideKey      String   @map("slide_key")
+  /// { fields: Record<string, unknown> } — answers, reveals, self-scores.
+  state         Json
+  lastSessionId String?  @map("last_session_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  student    User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  moduleItem ModuleItem @relation(fields: [moduleItemId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleItemId, slideKey])
+  @@index([moduleItemId])
+  @@map("lesson_slide_states")
 }
 
 model PageContentVersion {

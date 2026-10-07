@@ -20,6 +20,7 @@ import { PyfeatSettings } from '../../components/teacher/biometrics/PyfeatSettin
 import { Openface3Settings } from '../../components/teacher/biometrics/Openface3Settings';
 import { TextMiningTeacherSettings } from '../../components/teacher/biometrics/TextMiningTeacherSettings';
 import { PreGenerationSettings } from '../../components/teacher/PreGenerationSettings';
+import { InteractiveLesson } from '../../components/interactive-lesson';
 
 // ─── Tab Types ──────────────────────────────────────────
 
@@ -37,7 +38,7 @@ type TopTabKey =
 interface ModuleItem {
   id: string;
   moduleId: string;
-  type: 'PAGE' | 'PDF' | 'LINK' | 'ASSESSMENT';
+  type: 'PAGE' | 'PDF' | 'LINK' | 'ASSESSMENT' | 'INTERACTIVE_LESSON';
   title: string;
   orderIndex: number;
   contentMdx: string | null;
@@ -127,6 +128,8 @@ export function CourseBuilderPage() {
 
   // Edit item state
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  // Read-only preview of an imported INTERACTIVE_LESSON (not editable in v1).
+  const [previewLessonId, setPreviewLessonId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const [historyItemId, setHistoryItemId] = useState<string | null>(null);
 
@@ -1248,14 +1251,16 @@ export function CourseBuilderPage() {
                                 className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                                   item.type === 'PAGE'
                                     ? 'bg-blue-100 text-blue-700'
-                                    : item.type === 'PDF'
-                                      ? 'bg-red-100 text-red-700'
-                                      : item.type === 'LINK'
-                                        ? 'bg-purple-100 text-purple-700'
-                                        : 'bg-green-100 text-green-700'
+                                    : item.type === 'INTERACTIVE_LESSON'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : item.type === 'PDF'
+                                        ? 'bg-red-100 text-red-700'
+                                        : item.type === 'LINK'
+                                          ? 'bg-purple-100 text-purple-700'
+                                          : 'bg-green-100 text-green-700'
                                 }`}
                               >
-                                {item.type}
+                                {item.type === 'INTERACTIVE_LESSON' ? 'INTERACTIVE' : item.type}
                               </span>
                               <span className="text-sm font-medium text-gray-800">
                                 {item.title}
@@ -1361,6 +1366,32 @@ export function CourseBuilderPage() {
                           {/* LINK info */}
                           {item.type === 'LINK' && item.url && (
                             <p className="text-xs text-gray-500 mt-1 truncate">{item.url}</p>
+                          )}
+
+                          {/* INTERACTIVE_LESSON: imported slide deck, read-only in v1
+                            (decision #2, docs/process-mining/PHASE0_DISCOVERY.md).
+                            Change it by re-running import-prompting-course. */}
+                          {item.type === 'INTERACTIVE_LESSON' && (
+                            <div className="mt-1">
+                              <p className="text-xs text-gray-500">
+                                Imported interactive lesson — read-only. Re-import the course to
+                                change its slides.{' '}
+                                <button
+                                  type="button"
+                                  className="text-amber-700 hover:underline"
+                                  onClick={() =>
+                                    setPreviewLessonId((cur) => (cur === item.id ? null : item.id))
+                                  }
+                                >
+                                  {previewLessonId === item.id ? 'Close preview' : 'Preview'}
+                                </button>
+                              </p>
+                              {previewLessonId === item.id && (
+                                <div className="mt-2 h-[560px] overflow-y-auto border border-gray-200 rounded-lg">
+                                  <InteractiveLesson itemId={item.id} readOnly />
+                                </div>
+                              )}
+                            </div>
                           )}
 
                           {/* PAGE editor. Wrap in ErrorBoundary so a

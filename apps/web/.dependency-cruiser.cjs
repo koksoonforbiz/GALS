@@ -56,7 +56,7 @@ module.exports = {
       comment: 'Direct import of a teacher-only module from student-side code.',
       from: {
         path:
-          '^src/(pages/student|components/(FloatingChatbot|dialogue|code-practice|student))/' +
+          '^src/(pages/student|components/(FloatingChatbot|dialogue|code-practice|student|interactive-lesson))/' +
           '|^src/(app/StudentApp|routes/studentRoutes|routes/authRoutes|routes/shell|nav/studentNav)\\.tsx$',
       },
       to: { path: TEACHER_ONLY, pathNot: SHARED_EXCEPTIONS },

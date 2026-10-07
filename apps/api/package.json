@@ -18,6 +18,8 @@
     "prisma:studio": "prisma studio",
     "rag:eval": "ts-node --transpile-only -P tsconfig.json src/rag/eval/runner.ts",
     "reindex": "ts-node --transpile-only -P tsconfig.json prisma/scripts/reindex-embeddings.ts",
+    "import:prompting-course": "ts-node --transpile-only -P tsconfig.json prisma/scripts/import-prompting-course.ts",
+    "seed:prompting-course-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-prompting-course-local.ts",
     "seed:twodoor": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-twodoor-local.ts"
   },
   "dependencies": {

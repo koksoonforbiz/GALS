@@ -28,7 +28,11 @@ export interface DoorBuildOptions {
   input?: string;
 }
 
-const apiTarget = process.env.DOCKER_ENV === '1' ? 'http://api:3000' : 'http://localhost:3000';
+// GALS_API_TARGET: optional dev-only override, e.g. when 3000 is taken by a
+// WSL portproxy and the API runs natively on another port.
+const apiTarget =
+  process.env.GALS_API_TARGET ??
+  (process.env.DOCKER_ENV === '1' ? 'http://api:3000' : 'http://localhost:3000');
 const minioTarget = process.env.DOCKER_ENV === '1' ? 'http://minio:9000' : 'http://localhost:9000';
 
 /** Rename the built HTML entry (e.g. student.html) to index.html. */

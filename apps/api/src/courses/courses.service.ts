@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma';
+import type { Prisma } from '@prisma/client';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UserRole } from '@ats/shared';
 import { getChatModel, isSelectable, type LlmProvider } from '../llm/model-registry';
@@ -166,7 +167,9 @@ export class CoursesService {
         modules: {
           orderBy: { orderIndex: 'asc' },
           include: {
-            items: { orderBy: { orderIndex: 'asc' } },
+            // lessonJson (INTERACTIVE_LESSON slide decks, ~40 KB each) is
+            // fetched per item from /interactive-lessons instead.
+            items: { orderBy: { orderIndex: 'asc' }, omit: { lessonJson: true } },
           },
         },
         _count: { select: { enrollments: true, topics: true, modules: true } },
@@ -264,6 +267,7 @@ export class CoursesService {
                 pdfSize: item.pdfSize,
                 url: item.url,
                 assessmentId: item.assessmentId,
+                lessonJson: (item.lessonJson ?? undefined) as Prisma.InputJsonValue | undefined,
               })),
             },
           })),

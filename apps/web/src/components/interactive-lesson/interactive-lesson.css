@@ -1,0 +1,724 @@
+/*
+ * Interactive lesson styles — ported from the prompting course's own
+ * stylesheet (docs/process-mining/course_slides.html) so slides look the
+ * same as the study edition. Everything is scoped under .il-root so none
+ * of it leaks into the GALS shell; the course's own rail/deck/progress
+ * chrome is NOT ported (GALS's sidebar + lesson column replace it).
+ */
+.il-root {
+  --paper: #f5f6f8;
+  --ink: #1b2431;
+  --ink-2: #4a5563;
+  --rule: #d9dee5;
+  --blue: #2c5a8a;
+  --blue-bg: #eef3f9;
+  --moss: #3f7a57;
+  --moss-bg: #edf4ef;
+  --amber: #b0741e;
+  --amber-bg: #fbf3e4;
+  --plum: #6b4c8a;
+  --plum-bg: #f2edf7;
+  --red: #a63d3d;
+  --red-bg: #fbeded;
+  --slate: #5b6672;
+  --slate-bg: #f0f2f4;
+  --serif: 'Charter', 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --sans: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.55;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.il-root *,
+.il-root *::before,
+.il-root *::after {
+  box-sizing: border-box;
+}
+.il-root a {
+  color: var(--blue);
+}
+.il-root button {
+  font-family: var(--sans);
+}
+.il-root :focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* ── GALS chrome for the lesson: top bar with progress + prev/next ───── */
+.il-root .il-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.il-root .il-bar .il-progress {
+  flex: 1;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.il-root .il-bar .il-progress i {
+  display: block;
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.2s;
+}
+.il-root .il-bar button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+}
+.il-root .il-bar button:hover:not(:disabled) {
+  background: var(--slate-bg);
+}
+.il-root .il-bar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.il-root .il-bar select {
+  font-family: var(--sans);
+  font-size: 13px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 3px 6px;
+  max-width: 45%;
+  background: #fff;
+}
+.il-root .il-readonly {
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--plum);
+  font-weight: 600;
+}
+
+/* ── Slides (one at a time, sized to the lesson column, not 100vh) ───── */
+.il-root .slide {
+  flex: 1;
+  padding: 40px clamp(16px, 6%, 72px) 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.il-root .slide-inner {
+  max-width: 72ch;
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0 auto;
+}
+.il-root .slide-label {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-bottom: 18px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.il-root .slide-label b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.il-root .slide-label .num {
+  border: 1px solid var(--rule);
+  border-radius: 20px;
+  padding: 1px 9px;
+  background: #fff;
+}
+.il-root h2 {
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 0 0 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.il-root h3 {
+  font-size: 21px;
+  margin: 22px 0 8px;
+  font-weight: 600;
+}
+.il-root h4 {
+  font-family: var(--sans);
+  font-size: 15px;
+  margin: 20px 0 6px;
+  font-weight: 600;
+}
+.il-root p {
+  margin: 0 0 13px;
+}
+.il-root ul,
+.il-root ol {
+  margin: 0 0 13px;
+  padding-left: 1.3em;
+}
+.il-root ul {
+  list-style: disc;
+}
+.il-root ol {
+  list-style: decimal;
+}
+.il-root li {
+  margin-bottom: 6px;
+}
+.il-root li > ul,
+.il-root li > ol {
+  margin-top: 6px;
+}
+.il-root strong,
+.il-root b {
+  font-weight: 600;
+}
+.il-root em,
+.il-root i {
+  font-style: italic;
+}
+.il-root code,
+.il-root pre {
+  font-family: var(--mono);
+  font-size: 14px;
+}
+.il-root code {
+  background: var(--slate-bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.il-root pre {
+  background: #f7f8fa;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  margin: 0 0 13px;
+}
+.il-root pre code {
+  background: none;
+  padding: 0;
+}
+.il-root table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+.il-root th,
+.il-root td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.il-root th {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.il-root .sec-title .slide-inner {
+  max-width: 80ch;
+}
+.il-root .sec-title h2 {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+.il-root .sec-title .covers {
+  font-family: var(--sans);
+  color: var(--ink-2);
+  font-size: 15px;
+  margin-bottom: 24px;
+}
+.il-root .sec-title .big-q {
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0 0 28px;
+  padding-left: 16px;
+  border-left: 3px solid var(--amber);
+}
+.il-root .sec-title .rhythm {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .sec-title .rhythm div {
+  border-top: 2px solid var(--ink);
+  padding-top: 8px;
+}
+.il-root .sec-title .rhythm b {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+.il-root .sec-title .rhythm i {
+  color: var(--ink-2);
+  font-style: normal;
+}
+
+.il-root .box {
+  border-left: 4px solid var(--slate);
+  background: var(--slate-bg);
+  border-radius: 0 8px 8px 0;
+  padding: 18px 22px;
+  margin: 0 0 16px;
+}
+.il-root .box .box-title {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--slate);
+}
+.il-root .box > *:last-child {
+  margin-bottom: 0;
+}
+.il-root .box.think {
+  border-color: var(--amber);
+  background: var(--amber-bg);
+}
+.il-root .box.think .box-title {
+  color: var(--amber);
+}
+.il-root .box.task {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+}
+.il-root .box.task .box-title {
+  color: var(--blue);
+}
+.il-root .box.ai {
+  border-color: var(--moss);
+  background: var(--moss-bg);
+}
+.il-root .box.ai .box-title {
+  color: var(--moss);
+}
+.il-root .box.example {
+  border-color: var(--plum);
+  background: var(--plum-bg);
+}
+.il-root .box.example .box-title {
+  color: var(--plum);
+}
+.il-root .box.stretch {
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+.il-root .box.stretch .box-title {
+  color: var(--red);
+}
+.il-root .box.concept {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--ink);
+}
+.il-root .box.concept .box-title {
+  color: var(--ink);
+}
+.il-root .box.check,
+.il-root .box.predict {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--amber);
+}
+.il-root .box.check .box-title,
+.il-root .box.predict .box-title {
+  color: var(--amber);
+}
+
+.il-root textarea {
+  width: 100%;
+  min-height: 110px;
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: #fff;
+  resize: vertical;
+  color: var(--ink);
+}
+.il-root .actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  font-family: var(--sans);
+  font-size: 14px;
+}
+.il-root .btn {
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.il-root .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.il-root .btn.secondary {
+  background: #fff;
+  color: var(--ink);
+}
+.il-root .btn.secondary:hover:not(:disabled) {
+  background: var(--slate-bg);
+}
+.il-root .status {
+  color: var(--ink-2);
+}
+.il-root .status.ok {
+  color: var(--moss);
+}
+.il-root .locked-note {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--amber);
+  margin-top: 8px;
+}
+.il-root .reveal {
+  display: none;
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--slate-bg);
+  border-radius: 8px;
+  font-size: 15.5px;
+}
+.il-root .reveal.open {
+  display: block;
+}
+.il-root .reveal > *:last-child {
+  margin-bottom: 0;
+}
+.il-root .qa {
+  margin: 0 0 12px;
+  padding: 0 0 12px;
+  border-bottom: 1px dashed var(--rule);
+}
+.il-root .qa:last-of-type {
+  border-bottom: 0;
+}
+.il-root .qa .q {
+  margin-bottom: 6px;
+}
+.il-root .qa .a {
+  display: none;
+  background: var(--slate-bg);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+.il-root .qa.open .a {
+  display: block;
+}
+.il-root .qa button {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+}
+.il-root .qa button:hover:not(:disabled) {
+  background: var(--slate-bg);
+}
+.il-root .mcq .opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--serif);
+  font-size: 16px;
+  padding: 10px 14px;
+  margin: 0 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  color: var(--ink);
+}
+.il-root .mcq .opt:hover:not(:disabled) {
+  background: var(--slate-bg);
+}
+.il-root .mcq .opt.right {
+  border-color: var(--moss);
+  background: var(--moss-bg);
+}
+.il-root .mcq .opt.wrong {
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+.il-root .mcq .opt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.il-root .mcq .opt.right:disabled,
+.il-root .mcq .opt.wrong:disabled {
+  opacity: 1;
+}
+.il-root .mcq .fb {
+  display: none;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--slate-bg);
+  font-size: 15.5px;
+}
+.il-root .mcq .fb.show {
+  display: block;
+}
+.il-root .misc .item {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.il-root .misc .item .claim {
+  font-weight: 600;
+}
+.il-root .misc .item .claim::before {
+  content: 'Claim: ';
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--red);
+  font-size: 13px;
+}
+.il-root .misc .item .truth {
+  display: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+}
+.il-root .misc .item .truth::before {
+  content: 'Reality: ';
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--moss);
+  font-size: 13px;
+}
+.il-root .misc .item.open .truth {
+  display: block;
+}
+.il-root .misc .hint {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.il-root .score table td:first-child {
+  width: 60%;
+}
+.il-root .score label {
+  margin-right: 10px;
+  font-family: var(--sans);
+  font-size: 14px;
+}
+.il-root .score .total {
+  font-family: var(--sans);
+  font-weight: 600;
+  margin-top: 10px;
+}
+.il-root .fig {
+  margin: 0 0 16px;
+}
+.il-root .fig-svg {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px;
+}
+.il-root .fig-svg svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.il-root figcaption {
+  font-family: var(--sans);
+  font-size: 13.5px;
+  color: var(--ink-2);
+  margin: 10px 4px 0;
+  line-height: 1.45;
+}
+.il-root .fig-notice {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--slate-bg);
+  border-radius: 8px;
+  font-size: 15px;
+}
+.il-root .fig-notice b {
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .fig-notice ul {
+  margin: 6px 0 0;
+}
+.il-root .fig-slide .slide-inner {
+  max-width: 86ch;
+}
+.il-root .lab-tag {
+  color: var(--plum);
+  font-weight: 600;
+}
+.il-root .materials {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+  border-top: 1px dashed var(--rule);
+  padding-top: 8px;
+  margin-top: 10px;
+}
+.il-root textarea.mini {
+  min-height: 64px;
+  font-size: 15px;
+  margin-top: 6px;
+}
+.il-root textarea.short {
+  min-height: 44px;
+}
+.il-root .qa .show {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+}
+.il-root .qa .show:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.il-root .qa .after,
+.il-root .misc .after {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rule);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+.il-root .qa .after label,
+.il-root .misc .after label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-2);
+}
+.il-root .misc .commit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-family: var(--sans);
+}
+.il-root .misc .commit input {
+  flex: 1;
+  min-width: 160px;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-family: var(--serif);
+  font-size: 15px;
+}
+.il-root .misc .commit button,
+.il-root .misc .after button {
+  font-family: var(--sans);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+  margin-right: 6px;
+}
+.il-root .misc .commit button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.il-root .misc button.sel {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.il-root .res-label {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 12px;
+}
+.il-root .core {
+  margin-top: 22px;
+  font-family: var(--sans);
+  font-size: 13px;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+.il-root .core b {
+  display: block;
+  margin-bottom: 4px;
+}
+.il-root .core ol {
+  margin: 0 0 6px;
+  padding-left: 1.4em;
+}
+.il-root .core li {
+  margin-bottom: 2px;
+}
+.il-root .core span {
+  color: var(--ink-2);
+}
+.il-root .fig-alt {
+  font-family: var(--sans);
+  font-size: 13px;
+  margin-top: 8px;
+  color: var(--ink-2);
+}
+.il-root .fig-alt summary {
+  cursor: pointer;
+}
+.il-root .fig-alt p {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+@media (max-width: 900px) {
+  .il-root h2 {
+    font-size: 24px;
+  }
+  .il-root .sec-title h2 {
+    font-size: 30px;
+  }
+  .il-root .sec-title .rhythm {
+    grid-template-columns: 1fr 1fr;
+  }
+}

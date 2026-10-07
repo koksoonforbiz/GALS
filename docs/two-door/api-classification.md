@@ -106,6 +106,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /api/dialogue/**   /api/dialogue-notes/**   /api/chat-history/**   /api/code-decomposition/**
 /api/learning-interventions/**  EXCEPT  /api/learning-interventions/prompt-config/**  (PRIVATE)
 /api/student-rag/**
+/api/interactive-lessons/**   (prompting course — added 2026-10-07)
 /api/pre-generation/{match-document,ready}
 /api/vlm/config/course/:x  GET     /api/vlm/describe-page  POST
 /socket.io/            (dialogue + default namespaces; text-mining refused at handshake)
@@ -267,6 +268,15 @@ Columns: `@Roles` as declared (`(none)` = any authenticated), effective guards (
 | PATCH  | `/api/courses/:id/enrollment-policy` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
 | GET    | `/api/courses/:id/dialogue-settings` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
 | PUT    | `/api/courses/:id/dialogue-settings` | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin).                                                         |
+
+### InteractiveLessonController (`interactive-lesson/interactive-lesson.controller.ts`)
+
+Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
+
+| Method | Path                                                            | @Roles                  | Guards                  | Door       | Note                                       |
+| ------ | --------------------------------------------------------------- | ----------------------- | ----------------------- | ---------- | ------------------------------------------ |
+| GET    | `/api/interactive-lessons/items/:itemId`                        | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service. |
+| PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.          |
 
 ### DialogueNotesController (`dialogue-notes/dialogue-notes.controller.ts`)
 
