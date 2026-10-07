@@ -1,0 +1,43 @@
+{
+  "_readme": "Transfer tasks for the prompting course (plan Phase 5.3). One per session: a NEW scenario the learner writes a prompt for, with no AI access, graded on the rubric below (0 = not done, 1 = partly, 2 = fully per criterion). Fill in scenario (HTML allowed) and criteria, save as transfer_tasks.json, then re-run import-prompting-course with --transfer-tasks. Sessions with an empty scenario are skipped. These are teaching content to be written by the course team; nothing here is a placeholder answer.",
+  "1": {
+    "box": "Transfer task — session 1",
+    "scenario": "",
+    "criteria": []
+  },
+  "2": {
+    "box": "Transfer task — session 2",
+    "scenario": "",
+    "criteria": []
+  },
+  "3": {
+    "box": "Transfer task — session 3",
+    "scenario": "",
+    "criteria": []
+  },
+  "4": {
+    "box": "Transfer task — session 4",
+    "scenario": "",
+    "criteria": []
+  },
+  "5": {
+    "box": "Transfer task — session 5",
+    "scenario": "",
+    "criteria": []
+  },
+  "6": {
+    "box": "Transfer task — session 6",
+    "scenario": "",
+    "criteria": []
+  },
+  "7": {
+    "box": "Transfer task — session 7",
+    "scenario": "",
+    "criteria": []
+  },
+  "8": {
+    "box": "Transfer task — session 8",
+    "scenario": "",
+    "criteria": []
+  }
+}

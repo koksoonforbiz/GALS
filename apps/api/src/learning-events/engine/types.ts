@@ -55,11 +55,20 @@ export interface Draft {
   detail?: Record<string, unknown>;
 }
 
+/** Help-type labels from the prompt classifier (rule M33; types M08). */
+export interface PromptClassification {
+  sourceType: string;
+  sourceId: string;
+  at: number;
+  label: string;
+}
+
 export interface EngineInput {
   actions: RawAction[];
   visibility: VisibilitySignal[];
   prior: PriorHistory;
   params: Params;
+  classifications?: PromptClassification[];
 }
 
 export interface RuleDef {

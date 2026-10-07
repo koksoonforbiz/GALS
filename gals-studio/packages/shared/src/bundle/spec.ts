@@ -28,6 +28,8 @@ export const STREAM_FILES = {
   questionnaires: 'questionnaires/questionnaires.jsonl',
   annotations: 'annotations/annotations.jsonl',
   codes: 'annotations/codes.jsonl',
+  // Prompting course: server-derived learning events (optional stream)
+  learning_events: 'derived/learning_events.jsonl',
 } as const;
 
 export type StreamKey = keyof typeof STREAM_FILES;

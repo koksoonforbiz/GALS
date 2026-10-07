@@ -84,7 +84,9 @@ export type ActivityAction =
   | 'OUTPUT_VERIFIED'
   | 'OUTPUT_COPIED'
   | 'OUTPUT_PASTED'
-  | 'OUTPUT_EDITED';
+  | 'OUTPUT_EDITED'
+  // Transfer task (prompting course, Phase 5)
+  | 'TRANSFER_TASK_SUBMITTED';
 
 export interface ActivityEvent {
   action: ActivityAction;

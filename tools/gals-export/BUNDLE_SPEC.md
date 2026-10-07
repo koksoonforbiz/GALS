@@ -148,6 +148,15 @@ are converted to numbers; `Timestamptz` columns are converted to epoch ms.
 > (`au01,au02,au04…au28`). The bundle writes whichever AU columns are present
 > as an `au<NN>` keyed map; absent AUs are simply not emitted for that row.
 
+## `derived/learning_events.jsonl` (optional)
+
+Server-derived learning events for the prompting course
+(`apps/api/src/learning-events`, rules M01–M35 + M03b of
+`docs/process-mining/Process_Mining_Library_v2.xlsx`). Omitted when the
+session has none. `wallMs` = `startAt`; native fields: `endWallMs`, `ruleId`,
+`eventFamily`, `outcome`, `moduleItemId`, `slideKey`, `confidence`
+(`candidate`|`validated`), `libraryVersion`, `parameterSetVersion`.
+
 ## `snapshots/`
 
 `index.json` is an array **ordered by `capturedAt`**:
@@ -238,6 +247,10 @@ These are **reference only**. GALS Studio imports them into a separate
   the raw streams, so duplicating that logic here is intentionally avoided.
 
 ## Changelog
+
+- **2026-10-07** — Added the optional `derived/learning_events.jsonl` stream
+  (prompting course). Optional, so `bundleVersion` stays 1; importers that do
+  not know it skip it via the manifest.
 
 - **2026-09-07** — Removed the `kc/mastery.jsonl` stream and its `mastery`
   count field. Source: the `user_mastery` table (and the rest of the KC

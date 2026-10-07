@@ -831,6 +831,126 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
         }),
       );
 
+      // ── Prompting course (process mining) ──────────────────────────────────
+      // process-mining-eventlog.csv: one row per learning event (rules M01–M35,
+      // derived by the GALS API), bupaR::activitylog-ready. outcomes.csv: per
+      // learner MCQ accuracy, confidence calibration and self-scores, from the
+      // raw lesson actions. Both honour the session-trim window. The API's own
+      // exports (/api/learning-events/courses/:id/export/*) add pseudonymised
+      // ids and transfer scores; these use the studio's user label.
+      const learningEvents = (
+        await prisma.learningEvent.findMany({
+          where: { sessionId: { in: sessionIds } },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        })
+      ).filter(keepRow);
+      const iso = (ms: number) => new Date(ms).toISOString();
+      const eventLogCsv = toCsv(
+        [
+          'case_id',
+          'activity',
+          'activity_instance',
+          'timestamp_start',
+          'timestamp_end',
+          'resource',
+          'session_id',
+          'rule_id',
+          'outcome',
+          'slide_key',
+          'confidence',
+          'library_version',
+          'parameter_set_version',
+        ],
+        learningEvents.map((e) => [
+          `${user(e.sessionId)}_${(e.moduleItemId ?? 'none').slice(0, 8)}`,
+          e.eventFamily,
+          e.id,
+          iso(e.wallMs),
+          iso(e.endWallMs),
+          user(e.sessionId),
+          e.sessionId,
+          e.ruleId,
+          e.outcome ?? '',
+          e.slideKey ?? '',
+          e.confidence,
+          e.libraryVersion,
+          e.parameterSetVersion,
+        ]),
+      );
+
+      const lessonActions = (
+        await prisma.activityEvent.findMany({
+          where: {
+            sessionId: { in: sessionIds },
+            action: { in: ['MCQ_ANSWERED', 'CONFIDENCE_RATED', 'CRITERION_SELF_SCORED'] },
+          },
+          orderBy: [{ sessionId: 'asc' }, { wallMs: 'asc' }],
+        })
+      ).filter(keepRow);
+      type LessonMeta = {
+        slideKey?: string;
+        correct?: boolean;
+        value?: number;
+        timing?: string;
+        criterion?: number;
+      };
+      const byUser = new Map<string, Array<(typeof lessonActions)[number] & { m: LessonMeta }>>();
+      for (const a of lessonActions) {
+        const u = user(a.sessionId);
+        byUser.set(u, [...(byUser.get(u) ?? []), { ...a, m: parse<LessonMeta>(a.metadata, {}) }]);
+      }
+      const mean = (xs: number[]) => (xs.length ? xs.reduce((x, y) => x + y, 0) / xs.length : null);
+      const r3 = (v: number | null) => (v == null ? '' : Math.round(v * 1000) / 1000);
+      const outcomesCsv = toCsv(
+        [
+          'user',
+          'sessions',
+          'mcq_answered',
+          'mcq_accuracy',
+          'confidence_pairs',
+          'calibration_bias',
+          'calibration_absolute',
+          'self_score_mean_0_2',
+          'self_score_criteria',
+        ],
+        [...byUser].map(([u, acts]) => {
+          const mcq = acts.filter((a) => a.action === 'MCQ_ANSWERED');
+          const pairs = mcq.flatMap((ans) => {
+            const conf = acts
+              .filter(
+                (a) =>
+                  a.action === 'CONFIDENCE_RATED' &&
+                  a.m.timing === 'before' &&
+                  a.m.slideKey === ans.m.slideKey &&
+                  a.moduleItemId === ans.moduleItemId &&
+                  a.wallMs <= ans.wallMs,
+              )
+              .pop();
+            return conf
+              ? [{ p: ((conf.m.value ?? 1) - 1) / 4, c: ans.m.correct === true ? 1 : 0 }]
+              : [];
+          });
+          const latest = new Map<string, number>();
+          for (const a of acts.filter((x) => x.action === 'CRITERION_SELF_SCORED')) {
+            latest.set(`${a.moduleItemId}|${a.m.slideKey}|${a.m.criterion}`, Number(a.m.value));
+          }
+          const bias = pairs.length
+            ? mean(pairs.map((x) => x.p))! - mean(pairs.map((x) => x.c))!
+            : null;
+          return [
+            u,
+            new Set(acts.map((a) => a.sessionId)).size,
+            mcq.length,
+            r3(mean(mcq.map((a) => (a.m.correct === true ? 1 : 0)))),
+            pairs.length,
+            r3(bias),
+            r3(mean(pairs.map((x) => Math.abs(x.p - x.c)))),
+            r3(mean([...latest.values()])),
+            latest.size,
+          ];
+        }),
+      );
+
       const zip = new AdmZip();
       zip.addFile('free-dialogue.csv', Buffer.from(freeDialogueCsv, 'utf8'));
       zip.addFile('learning-strategy-utterances.csv', Buffer.from(strategyCsv, 'utf8'));
@@ -839,6 +959,8 @@ export async function analysisSummaryRoutes(app: FastifyInstance): Promise<void>
       zip.addFile('self-report-survey.csv', Buffer.from(surveyCsv, 'utf8'));
       zip.addFile('ef-text-mining.csv', Buffer.from(efCsv, 'utf8'));
       zip.addFile('summary.csv', Buffer.from(summaryCsv, 'utf8'));
+      zip.addFile('process-mining-eventlog.csv', Buffer.from(eventLogCsv, 'utf8'));
+      zip.addFile('outcomes.csv', Buffer.from(outcomesCsv, 'utf8'));
       return reply
         .header('Content-Type', 'application/zip')
         .header('Content-Disposition', 'attachment; filename="cohort-export.zip"')

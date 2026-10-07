@@ -279,6 +279,7 @@ function streamFile(key: StreamKey): string {
     questionnaires: 'questionnaires/questionnaires.jsonl',
     annotations: 'annotations/annotations.jsonl',
     codes: 'annotations/codes.jsonl',
+    learning_events: 'derived/learning_events.jsonl',
   };
   return map[key];
 }
@@ -492,6 +493,28 @@ const streamInserters: Record<StreamKey, (dir: string, sessionId: string) => Pro
               orientation: s(r.orientation),
             },
       (rows) => prisma.viewport.createMany({ data: rows as never }),
+    ),
+  learning_events: (d, sid) =>
+    insertStream(
+      d,
+      'learning_events',
+      (r) =>
+        n(r.wallMs) == null || s(r.ruleId) == null
+          ? null
+          : {
+              sessionId: sid,
+              wallMs: r.wallMs as number,
+              endWallMs: n(r.endWallMs) ?? (r.wallMs as number),
+              ruleId: s(r.ruleId)!,
+              eventFamily: s(r.eventFamily) ?? '',
+              outcome: s(r.outcome),
+              moduleItemId: s(r.moduleItemId),
+              slideKey: s(r.slideKey),
+              confidence: s(r.confidence) ?? 'candidate',
+              libraryVersion: s(r.libraryVersion) ?? '',
+              parameterSetVersion: i(r.parameterSetVersion) ?? 0,
+            },
+      (rows) => prisma.learningEvent.createMany({ data: rows as never }),
     ),
   activity: (d, sid) =>
     insertStream(

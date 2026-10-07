@@ -49,7 +49,9 @@ export type LessonEventName =
   | 'output_verified'
   | 'output_copied'
   | 'output_pasted'
-  | 'output_edited';
+  | 'output_edited'
+  // Phase 5
+  | 'transfer_task_submitted';
 
 export interface LessonEventContext {
   slideKey: string;
@@ -389,6 +391,13 @@ export function mapLessonEvent(
           matchKind: data.matchKind ?? null,
           runId: data.runId ?? null,
         },
+      };
+    case 'transfer_task_submitted':
+      return {
+        action: 'TRANSFER_TASK_SUBMITTED',
+        // Done without the Prompt Lab (workbook #82: ai_access none); a paste
+        // from an AI output on this slide still shows up as OUTPUT_PASTED.
+        metadata: { ...base, ...textFields(data, ctx.captureText), msOnSlide, aiAccess: 'none' },
       };
     case 'output_edited':
       return {

@@ -291,6 +291,9 @@ enum ActivityAction {
   OUTPUT_COPIED
   OUTPUT_PASTED
   OUTPUT_EDITED
+
+  // Transfer task (prompting course, Phase 5): unassisted prompt writing
+  TRANSFER_TASK_SUBMITTED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -409,13 +412,16 @@ model User {
   vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
   // Interactive-lesson working state (prompting course)
-  lessonSlideStates    LessonSlideState[]
+  lessonSlideStates       LessonSlideState[]
   // Prompt Lab (prompting course, Phase 3)
-  promptLabRuns        PromptLabRun[]
-  promptLabVersions    PromptLabVersion[]
-  promptLabTestCases   PromptLabTestCase[]
-  promptLabTestResults PromptLabTestResult[]
-  promptLabRatings     PromptLabOutputRating[]
+  promptLabRuns           PromptLabRun[]
+  promptLabVersions       PromptLabVersion[]
+  promptLabTestCases      PromptLabTestCase[]
+  promptLabTestResults    PromptLabTestResult[]
+  promptLabRatings        PromptLabOutputRating[]
+  // Phase 5
+  aiPromptClassifications AiPromptClassification[] @relation("AiPromptClassificationStudent")
+  transferTaskScores      TransferTaskScore[]      @relation("TransferTaskScoreStudent")
 
   @@map("users")
 }
@@ -2668,4 +2674,82 @@ model LearningEventParameterSet {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("learning_event_parameter_sets")
+}
+
+// ─── Validation, classification, transfer (prompting course, Phase 5) ──
+
+/// Append-only log of rule status changes ('candidate' ⇄ 'validated'). The
+/// latest row per rule is the current status; nothing is ever edited, so
+/// every change is logged and reversible (plan Phase 5.1 #5).
+model LearningEventRuleStatusChange {
+  id        String   @id @default(uuid()) @db.Uuid
+  ruleId    String   @map("rule_id")
+  status    String
+  note      String?  @db.Text
+  /// e.g. the validation report figures the decision was based on
+  evidence  Json?
+  changedBy String   @map("changed_by") @db.Uuid
+  changedAt DateTime @default(now()) @map("changed_at") @db.Timestamptz
+
+  @@index([ruleId, changedAt])
+  @@map("learning_event_rule_status_changes")
+}
+
+/// LLM help-type label for a learner prompt (workbook AI_HELP_PROMPT_CLASSIFIED,
+/// rule M33). Sources: Prompt Lab runs and chatbot USER messages. Unvalidated
+/// until human–LLM κ reaches the agreed threshold.
+model AiPromptClassification {
+  id                String   @id @default(uuid()) @db.Uuid
+  /// prompt_lab_run | chatbot_message
+  sourceType        String   @map("source_type")
+  sourceId          String   @map("source_id") @db.Uuid
+  studentId         String   @map("student_id") @db.Uuid
+  courseId          String?  @map("course_id") @db.Uuid
+  occurredAt        DateTime @map("occurred_at") @db.Timestamptz
+  /// instrumental | executive | conceptual | verification | off_topic | task_prompt
+  label             String
+  classifierVersion String   @map("classifier_version")
+  model             String
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student User @relation("AiPromptClassificationStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId, classifierVersion])
+  @@index([studentId, occurredAt])
+  @@index([courseId])
+  @@map("ai_prompt_classifications")
+}
+
+/// Human codes on the same prompts, for human–human and human–LLM κ.
+model AiPromptHumanLabel {
+  id         String   @id @default(uuid()) @db.Uuid
+  sourceType String   @map("source_type")
+  sourceId   String   @map("source_id") @db.Uuid
+  coderId    String   @map("coder_id") @db.Uuid
+  label      String
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([sourceType, sourceId, coderId])
+  @@map("ai_prompt_human_labels")
+}
+
+/// Teacher/researcher score for an unassisted transfer task (outcome measure,
+/// plan Phase 5.3). The learner's prompt is in lesson_slide_states.
+model TransferTaskScore {
+  id           String   @id @default(uuid()) @db.Uuid
+  studentId    String   @map("student_id") @db.Uuid
+  moduleItemId String   @map("module_item_id") @db.Uuid
+  slideKey     String   @map("slide_key")
+  scorerId     String   @map("scorer_id") @db.Uuid
+  /// per-criterion scores, same 0–2 scale as the session self-score
+  scores       Json
+  total        Float
+  maxTotal     Float    @map("max_total")
+  note         String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  student User @relation("TransferTaskScoreStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, moduleItemId, slideKey, scorerId])
+  @@map("transfer_task_scores")
 }

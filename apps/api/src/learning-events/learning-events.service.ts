@@ -164,7 +164,27 @@ export class LearningEventsService {
     }));
 
     const prior = await this.priorHistory(session.userId, actions);
-    const drafts = runRules({ actions, visibility, prior, params });
+    const validated = await this.validatedRules();
+    const span = actions.length
+      ? {
+          gte: new Date(actions[0]!.at - 60_000),
+          lte: new Date(actions[actions.length - 1]!.at + 60_000),
+        }
+      : null;
+    const classifications = span
+      ? (
+          await this.prisma.aiPromptClassification.findMany({
+            where: { studentId: session.userId, occurredAt: span },
+            select: { sourceType: true, sourceId: true, occurredAt: true, label: true },
+          })
+        ).map((c) => ({
+          sourceType: c.sourceType,
+          sourceId: c.sourceId,
+          at: c.occurredAt.getTime(),
+          label: c.label,
+        }))
+      : [];
+    const drafts = runRules({ actions, visibility, prior, params, classifications });
 
     const courseId = session.courseId ?? actions.find((a) => a.courseId)?.courseId ?? null;
     const data: Prisma.LearningEventCreateManyInput[] = drafts.map((d) => ({
@@ -179,7 +199,7 @@ export class LearningEventsService {
       startAt: new Date(d.start),
       endAt: new Date(d.end),
       sourceActionIds: d.sources.map((s) => s.id),
-      confidence: 'candidate',
+      confidence: validated.has(d.ruleId) ? 'validated' : 'candidate',
       libraryVersion: LIBRARY_VERSION,
       parameterSetVersion: set.version,
       detail: (d.detail ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -200,6 +220,17 @@ export class LearningEventsService {
         {},
       ),
     };
+  }
+
+  /** Rules whose latest status change (Phase 5 validation) is 'validated'. */
+  private async validatedRules(): Promise<Set<string>> {
+    const changes = await this.prisma.learningEventRuleStatusChange.findMany({
+      orderBy: { changedAt: 'asc' },
+      select: { ruleId: true, status: true },
+    });
+    const latest = new Map<string, string>();
+    for (const c of changes) latest.set(c.ruleId, c.status);
+    return new Set([...latest].filter(([, st]) => st === 'validated').map(([id]) => id));
   }
 
   /** Visits and commits from the learner's earlier sessions on the same items. */

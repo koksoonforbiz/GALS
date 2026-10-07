@@ -233,3 +233,45 @@ export function lessonToPlainText(doc: LessonDocument, maxChars = 50_000): strin
   }
   return parts.join('\n\n').slice(0, maxChars);
 }
+
+/**
+ * Transfer tasks (plan Phase 5.3): one unassisted prompt-writing task per
+ * session, authored separately from the course HTML and appended as the
+ * session's LAST slide, so no existing key shifts (re-import reports it as
+ * `added`, which is non-breaking). File shape, keyed by session id:
+ *   { "1": { "box": "Transfer task 1", "scenario": "<p>…</p>", "criteria": ["…"] }, … }
+ * Entries with an empty scenario are skipped.
+ */
+export interface TransferTaskSpec {
+  box?: string;
+  scenario: string;
+  criteria: string[];
+}
+
+export function appendTransferTasks(
+  sessions: LessonDocument[],
+  tasks: Record<string, TransferTaskSpec>,
+): { added: string[] } {
+  const added: string[] = [];
+  for (const doc of sessions) {
+    const spec = tasks[String(doc.session.id)];
+    if (!spec || !spec.scenario?.trim()) continue;
+    if (!Array.isArray(spec.criteria) || spec.criteria.length === 0) {
+      throw new CourseHtmlParseError(
+        `Transfer task for session ${doc.session.id} needs rubric criteria`,
+      );
+    }
+    const key = `s${doc.session.id}-${doc.slides.length}`;
+    const slide = {
+      key,
+      t: 'transfer' as const,
+      box: spec.box ?? `Transfer task — session ${doc.session.id}`,
+      scenario: spec.scenario,
+      criteria: spec.criteria,
+      contentHash: sha256(JSON.stringify(spec)),
+    };
+    doc.slides.push(slide);
+    added.push(key);
+  }
+  return { added };
+}

@@ -291,17 +291,43 @@ const M07: RuleDef = {
 const M08: RuleDef = {
   id: 'M08',
   inputs: ['CHATBOT_MESSAGE_SENT'],
-  // The docked chatbot stays beside the lesson (decision #8). Help type
-  // (instrumental/executive/…) needs the M33 classifier; until then untyped.
-  run: ({ actions }) =>
+  // The docked chatbot stays beside the lesson (decision #8). The help type
+  // comes from the M33 classifier when available, otherwise 'untyped'. The
+  // activity row has no message id, so classifications match by time.
+  run: ({ actions, classifications = [] }) =>
     actions
       .filter((a) => a.action === 'CHATBOT_MESSAGE_SENT')
-      .map((a) =>
-        draft('M08', [a], {
-          outcome: 'untyped',
-          detail: { hasSelection: a.meta.hasSelection ?? null },
-        }),
-      ),
+      .map((a) => {
+        const c = classifications
+          .filter(
+            (x) =>
+              x.sourceType === 'chatbot_message' &&
+              Math.abs(x.at - a.at) <= CLASSIFICATION_MATCH_MS,
+          )
+          .sort((x, y) => Math.abs(x.at - a.at) - Math.abs(y.at - a.at))[0];
+        return draft('M08', [a], {
+          outcome: c?.label ?? 'untyped',
+          detail: { hasSelection: a.meta.hasSelection ?? null, classified: Boolean(c) },
+        });
+      }),
+};
+
+const CLASSIFICATION_MATCH_MS = 10_000;
+
+const M33: RuleDef = {
+  id: 'M33',
+  inputs: ['PROMPT_SUBMITTED', 'CHATBOT_MESSAGE_SENT'],
+  // One event per classified prompt in the session. Stays a candidate until
+  // human–LLM κ passes and a researcher marks M33 validated.
+  run: ({ classifications = [] }) =>
+    classifications.map((c) => ({
+      ruleId: 'M33',
+      outcome: c.label,
+      start: c.at,
+      end: c.at,
+      sources: [],
+      detail: { sourceType: c.sourceType, sourceId: c.sourceId },
+    })),
 };
 
 const M13: RuleDef = {
@@ -887,6 +913,19 @@ const M34: RuleDef = {
   },
 };
 
+const M35: RuleDef = {
+  id: 'M35',
+  inputs: ['TRANSFER_TASK_SUBMITTED'],
+  // Independent outcome (no AI access). The score itself lives in
+  // transfer_task_scores and is joined in the outcomes export.
+  run: ({ actions }) =>
+    actions
+      .filter((a) => a.action === 'TRANSFER_TASK_SUBMITTED')
+      .map((a) =>
+        draft('M35', [a], { outcome: 'transfer_submitted', detail: { chars: a.meta.chars } }),
+      ),
+};
+
 // Rules with no input in this course (registered for the coverage report).
 const na = (id: string, inputs: string[], why: string): RuleDef => ({
   id,
@@ -937,17 +976,9 @@ export const RULES: RuleDef[] = [
   M30,
   M31,
   M32,
-  na(
-    'M33',
-    ['AI_HELP_PROMPT_CLASSIFIED'],
-    'Prompt classifier not built yet (needs the Phase 5 κ check before use).',
-  ),
+  M33,
   M34,
-  na(
-    'M35',
-    ['TRANSFER_TASK_SUBMITTED', 'DELAYED_TEST_SUBMITTED'],
-    'Transfer task arrives in Phase 5.',
-  ),
+  M35,
 ];
 
 export function runRules(input: EngineInput): Draft[] {

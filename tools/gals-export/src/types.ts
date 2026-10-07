@@ -115,6 +115,8 @@ export const STREAM_FILES = {
   questionnaires: 'questionnaires/questionnaires.jsonl',
   annotations: 'annotations/annotations.jsonl',
   codes: 'annotations/codes.jsonl',
+  // Prompting course: server-derived learning events (apps/api learning-events)
+  learning_events: 'derived/learning_events.jsonl',
 } as const;
 
 export type StreamKey = keyof typeof STREAM_FILES;
@@ -123,7 +125,13 @@ export type StreamKey = keyof typeof STREAM_FILES;
 export const LARGE_STREAMS: StreamKey[] = ['webgazer', 'cursors', 'au_results', 'emotion_frames'];
 
 /** Optional streams whose file is omitted entirely when empty. */
-export const OPTIONAL_STREAMS: StreamKey[] = ['probes', 'questionnaires', 'annotations', 'codes'];
+export const OPTIONAL_STREAMS: StreamKey[] = [
+  'probes',
+  'questionnaires',
+  'annotations',
+  'codes',
+  'learning_events',
+];
 
 export interface SessionMeta {
   sessionId: string;

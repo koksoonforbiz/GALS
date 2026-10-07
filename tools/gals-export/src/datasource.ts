@@ -59,6 +59,7 @@ export interface PrismaLike {
   visibility_logs: any;
   viewport_logs: any;
   activityLog: any;
+  learningEvent: any;
   chatbotMessage: any;
   dialogueMessage: any;
   learningIntervention: any;
@@ -487,6 +488,27 @@ export class PrismaDataSource implements SessionDataSource {
       // probes / questionnaires / annotations / codes are optional and only
       // present when the live platform has those tables. Yield nothing by
       // default; a future schema can wire them in here.
+      case 'learning_events': {
+        const rows = await this.prisma.learningEvent.findMany({
+          where: { sessionId },
+          orderBy: { startAt: 'asc' },
+        });
+        for (const r of rows) {
+          yield {
+            wallMs: r.startAt.getTime(),
+            endWallMs: r.endAt.getTime(),
+            ruleId: r.ruleId,
+            eventFamily: r.eventFamily,
+            outcome: r.outcome ?? null,
+            moduleItemId: r.moduleItemId ?? null,
+            slideKey: r.slideKey ?? null,
+            confidence: r.confidence,
+            libraryVersion: r.libraryVersion,
+            parameterSetVersion: r.parameterSetVersion,
+          };
+        }
+        return;
+      }
       case 'probes':
       case 'questionnaires':
       case 'annotations':

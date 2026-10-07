@@ -234,6 +234,48 @@ enum ActivityAction {
   PYFEAT_JOB_ENQUEUED
   PYFEAT_JOB_COMPLETED
   PYFEAT_JOB_FAILED
+
+  // Synced from apps/api/prisma/schema.prisma (2026-10-07). Prisma throws when
+  // it reads an enum value it does not know, so this must track the API.
+  EMOTION_SELF_REPORT
+  CODE_DECOMP_TREE_CHECKED
+  CODE_DECOMP_NODE_HINT_VIEWED
+  CODE_DECOMP_NODE_REVEALED
+  CODE_DECOMP_STAGE_ADVANCED
+  CODE_DECOMP_MATCH_CHECKED
+  SLIDE_ENTERED
+  SLIDE_EXITED
+  ATTEMPT_STARTED
+  PREDICTION_COMMITTED
+  REFERENCE_REVEALED
+  GAP_NOTED
+  BELIEF_COMMITTED
+  BELIEF_REVISED
+  MCQ_ANSWERED
+  RATIONALE_SUBMITTED
+  SELF_CHECK_SUBMITTED
+  RESULTS_RECORDED
+  CRITERION_SELF_SCORED
+  REFLECTION_SUBMITTED
+  CONFIDENCE_RATED
+  IDLE_STARTED
+  IDLE_ENDED
+  RUN_SETTINGS_RECORDED
+  PROMPT_GOAL_DECLARED
+  PROMPT_SUBMITTED
+  OUTPUT_REGENERATED
+  AI_OUTPUT_VIEWED
+  PROMPT_VERSION_SAVED
+  PROMPT_REVISION_TAGGED
+  TOKEN_COUNT_CHECKED
+  TEST_CASE_RUN
+  TEST_RESULT_RECORDED
+  OUTPUT_RATED
+  OUTPUT_VERIFIED
+  OUTPUT_COPIED
+  OUTPUT_PASTED
+  OUTPUT_EDITED
+  TRANSFER_TASK_SUBMITTED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -2265,4 +2307,29 @@ model VlmConfig {
   teacher User @relation("teacherVlmConfig", fields: [teacherId], references: [id], onDelete: Cascade)
 
   @@map("vlm_configs")
+}
+
+// Prompting course (apps/api learning-events). Read-only here; exported as
+// the optional derived/learning_events.jsonl stream (BUNDLE_SPEC.md).
+model LearningEvent {
+  id                  String   @id @db.Uuid
+  studentId           String   @map("student_id") @db.Uuid
+  sessionId           String   @map("session_id") @db.Uuid
+  courseId            String?  @map("course_id") @db.Uuid
+  moduleItemId        String?  @map("module_item_id") @db.Uuid
+  slideKey            String?  @map("slide_key")
+  ruleId              String   @map("rule_id")
+  eventFamily         String   @map("event_family")
+  outcome             String?
+  startAt             DateTime @map("start_at") @db.Timestamptz
+  endAt               DateTime @map("end_at") @db.Timestamptz
+  sourceActionIds     String[] @map("source_action_ids") @db.Uuid
+  confidence          String
+  libraryVersion      String   @map("library_version")
+  parameterSetVersion Int      @map("parameter_set_version")
+  detail              Json?
+  computedAt          DateTime @map("computed_at") @db.Timestamptz
+
+  @@index([sessionId])
+  @@map("learning_events")
 }

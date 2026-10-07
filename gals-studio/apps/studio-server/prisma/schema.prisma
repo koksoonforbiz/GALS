@@ -47,6 +47,7 @@ model Session {
   visibilities    Visibility[]
   viewports       Viewport[]
   activityEvents  ActivityEvent[]
+  learningEvents   LearningEvent[]
   snapshots       Snapshot[]
   webcamSegments  WebcamSegment[]
   chatbotMessages ChatbotMessage[]
@@ -498,4 +499,24 @@ model UtteranceCoding {
 
   @@unique([sessionId, coderId, source, refWallMs])
   @@index([sessionId, coderId])
+}
+
+/// Prompting course: server-derived learning events (bundle stream
+/// derived/learning_events.jsonl, optional). Source of the process-mining
+/// event log in the cohort export.
+model LearningEvent {
+  id                  Int     @id @default(autoincrement())
+  sessionId           String
+  session             Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  wallMs              Float
+  endWallMs           Float
+  ruleId              String
+  eventFamily         String
+  outcome             String?
+  moduleItemId        String?
+  slideKey            String?
+  confidence          String
+  libraryVersion      String
+  parameterSetVersion Int
+  @@index([sessionId, wallMs])
 }

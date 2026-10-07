@@ -15,6 +15,7 @@
  *   pnpm run import:prompting-course -- --teacher-email t@example.edu \
  *     [--file ../../docs/process-mining/course_slides.html] \
  *     [--course-id <uuid>] [--publish] [--enroll <email|loginId> ...] \
+ *     [--transfer-tasks docs/process-mining/transfer_tasks.json] \
  *     [--force-key-drift] [--dry-run]
  *
  * Creates no accounts. The teacher (and any --enroll students) must exist.
@@ -28,6 +29,8 @@ import {
   diffLessonKeys,
   isBreakingDrift,
   parseCourseHtml,
+  appendTransferTasks,
+  type TransferTaskSpec,
 } from '../../src/interactive-lesson/course-html-parser';
 
 interface Options {
@@ -38,6 +41,7 @@ interface Options {
   enroll: string[];
   forceKeyDrift: boolean;
   dryRun: boolean;
+  transferTasks?: string;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -63,6 +67,7 @@ function parseArgs(argv: string[]): Options {
     else if (a === '--enroll') opts.enroll.push(next());
     else if (a === '--force-key-drift') opts.forceKeyDrift = true;
     else if (a === '--dry-run') opts.dryRun = true;
+    else if (a === '--transfer-tasks') opts.transferTasks = path.resolve(next());
     else if (a === '--') continue;
     else throw new Error(`Unknown argument: ${a}`);
   }
@@ -90,6 +95,16 @@ async function main() {
     console.log(
       `Parsed "${parsed.title}": ${parsed.sessions.length} sessions, sha256 ${parsed.sourceSha256.slice(0, 12)}…`,
     );
+    if (opts.transferTasks) {
+      const tasks = JSON.parse(fs.readFileSync(opts.transferTasks, 'utf8')) as Record<
+        string,
+        TransferTaskSpec
+      >;
+      const { added } = appendTransferTasks(parsed.sessions, tasks);
+      console.log(
+        `Transfer tasks appended: ${added.join(', ') || 'none (no scenarios filled in)'}`,
+      );
+    }
 
     const teacher = await prisma.user.findUnique({ where: { email: opts.teacherEmail } });
     if (!teacher || (teacher.role !== 'teacher' && teacher.role !== 'admin')) {

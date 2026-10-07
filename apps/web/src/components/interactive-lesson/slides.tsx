@@ -67,6 +67,7 @@ const PHASE: Record<string, string> = {
   stretch: 'Stretch · optional',
   selfscore: 'Reflect',
   reflect: 'Reflect',
+  transfer: 'Transfer · no AI',
 };
 
 const html = (h: string | undefined) => ({ __html: h ?? '' });
@@ -648,6 +649,70 @@ function MisconceptionsSlide(p: SlideProps) {
 // ── Exercise (results box + analysis template) ───────────────────────────
 
 /**
+ * Transfer task (plan Phase 5.3): write a prompt for a new scenario without
+ * any AI access — no Prompt Lab here. It is the outcome measure process
+ * indicators are judged against, scored later by the teacher on the rubric.
+ */
+function TransferSlide(p: SlideProps) {
+  const saved = str(p.fields.text);
+  const [value, setValue] = useState(saved);
+  const [status, setStatus] = useState(saved ? 'Submitted' : '');
+  const firstInput = useFirstInput(p.emit, 'transfer');
+  return (
+    <div className="box task">
+      <div className="box-title">{p.slide.box}</div>
+      <div dangerouslySetInnerHTML={html(p.slide.scenario)} />
+      <p className="locked-note">
+        No AI tools for this one: write the prompt yourself, as you would send it.
+      </p>
+      {p.slide.criteria && p.slide.criteria.length > 0 && (
+        <div className="res-label">
+          It will be scored on:
+          <ul>
+            {p.slide.criteria.map((c, i) => (
+              <li key={i} dangerouslySetInnerHTML={html(c)} />
+            ))}
+          </ul>
+        </div>
+      )}
+      <div data-replay-redact="">
+        <textarea
+          data-field-key="transfer"
+          placeholder="Your prompt…"
+          value={value}
+          onChange={(e) => {
+            firstInput();
+            setValue(e.target.value);
+          }}
+        />
+      </div>
+      <div className="actions">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            if (value.trim().length < LESSON_GATES.think) {
+              setStatus('Write at least a sentence first.');
+              return;
+            }
+            p.save({ text: value });
+            p.emit('transfer_task_submitted', {
+              chars: value.length,
+              text: value,
+              fieldKey: 'transfer',
+            });
+            setStatus('Submitted');
+          }}
+        >
+          Submit prompt
+        </button>
+        <span className="status">{status}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Task and stretch slides: in the HTML these only described work done in
  * an external AI tool and captured nothing. Here they get the Prompt Lab
  * plus a short "what I learned" box (RESULTS_RECORDED), as in plan §3.2 #6.
@@ -964,6 +1029,8 @@ function SlideBody(p: SlideProps) {
       return <ExerciseSlide {...p} />;
     case 'selfscore':
       return <SelfScoreSlide {...p} />;
+    case 'transfer':
+      return <TransferSlide {...p} />;
     default:
       return null;
   }

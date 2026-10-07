@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import {
+  appendTransferTasks,
   CourseHtmlParseError,
   diffLessonKeys,
   extractCourseJson,
@@ -131,5 +132,31 @@ describe('diffLessonKeys — frozen keys', () => {
       ]),
     );
     expect(isBreakingDrift(drift)).toBe(true);
+  });
+});
+
+describe('appendTransferTasks', () => {
+  const html =
+    'const COURSE=[{"id":1,"title":"t","slides":[{"t":"theory","html":"a"}]},{"id":2,"title":"u","slides":[]}];';
+
+  it('appends one transfer slide per session with a scenario, after the existing keys', () => {
+    const parsed = parseCourseHtml(html);
+    const before = parsed.sessions[0]!.slides.map((s) => s.key);
+    const { added } = appendTransferTasks(parsed.sessions, {
+      '1': { scenario: '<p>New scenario</p>', criteria: ['Gives context'] },
+      '2': { scenario: '   ', criteria: ['x'] },
+    });
+    expect(added).toEqual(['s1-2']);
+    expect(parsed.sessions[0]!.slides.map((s) => s.key)).toEqual([...before, 's1-2']);
+    expect(parsed.sessions[1]!.slides.some((s) => s.t === 'transfer')).toBe(false);
+    const fresh = parseCourseHtml(html).sessions[0]!;
+    const drift = diffLessonKeys(fresh, parsed.sessions[0]!);
+    expect(isBreakingDrift(drift)).toBe(false);
+  });
+
+  it('requires rubric criteria', () => {
+    expect(() =>
+      appendTransferTasks(parseCourseHtml(html).sessions, { '1': { scenario: 'x', criteria: [] } }),
+    ).toThrow(/criteria/);
   });
 });

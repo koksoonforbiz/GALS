@@ -33,7 +33,9 @@ export type LessonSlideType =
   | 'ai'
   | 'stretch'
   | 'selfscore'
-  | 'reflect';
+  | 'reflect'
+  /** Phase 5: unassisted transfer prompt-writing task (appended at import). */
+  | 'transfer';
 
 /**
  * Minimum trimmed lengths the course HTML enforces before a save/reveal
@@ -85,6 +87,8 @@ export interface LessonSlide {
   alt?: string;
   notice?: string[];
   gated?: boolean;
+  /** transfer slides: the new scenario the learner writes a prompt for. */
+  scenario?: string;
 }
 
 export interface LessonSessionMeta {

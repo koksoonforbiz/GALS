@@ -46,6 +46,8 @@ function createPrisma(rows: ReturnType<typeof row>[]) {
       ]),
     },
     visibility_logs: { findMany: jest.fn().mockResolvedValue([]) },
+    learningEventRuleStatusChange: { findMany: jest.fn().mockResolvedValue([]) },
+    aiPromptClassification: { findMany: jest.fn().mockResolvedValue([]) },
     learningEvent,
     $transaction: jest.fn().mockResolvedValue([]),
   };
