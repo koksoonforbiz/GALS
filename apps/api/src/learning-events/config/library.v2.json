@@ -1,0 +1,1133 @@
+{
+  "libraryVersion": "v2",
+  "source": "Process_Mining_Library_v2.xlsx",
+  "actionCount": 83,
+  "ruleCount": 36,
+  "actions": [
+    {
+      "no": 1,
+      "action": "TASK_OPENED",
+      "observable": "Learner opens a task, lesson",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "session_id, task_id, ts",
+      "status": "v1"
+    },
+    {
+      "no": 2,
+      "action": "INSTRUCTIONS_VIEWED",
+      "observable": "Learner opens or views task instructions",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "task_id, slide_type, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 3,
+      "action": "REQUIREMENTS_VIEWED",
+      "observable": "Learner views task requirements or success criteria",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "task_id, criteria_set_id, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 4,
+      "action": "RUBRIC_VIEWED",
+      "observable": "Learner opens a rubric or evaluation standard",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "rubric_id, dwell_ms, before_or_after_attempt",
+      "status": "v1"
+    },
+    {
+      "no": 5,
+      "action": "GOAL_ENTERED",
+      "observable": "Learner enters or selects a learning or task goal",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "goal_text, scope (session|work)",
+      "status": "v1"
+    },
+    {
+      "no": 6,
+      "action": "PLAN_CREATED",
+      "observable": "Learner creates a plan or sequence of activities",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "plan_id, steps",
+      "status": "v1"
+    },
+    {
+      "no": 7,
+      "action": "PLAN_EDITED",
+      "observable": "Learner changes an existing plan",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "plan_id, change_type",
+      "status": "v1"
+    },
+    {
+      "no": 8,
+      "action": "RESOURCE_SELECTED",
+      "observable": "Learner selects content, a tool, or another learning resource",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "resource_id, origin",
+      "status": "v1"
+    },
+    {
+      "no": 9,
+      "action": "CONTENT_OPENED",
+      "observable": "Learner opens learning content",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "slide_id, slide_type",
+      "status": "v1"
+    },
+    {
+      "no": 10,
+      "action": "CONTENT_VIEWED",
+      "observable": "Learner views or reads content for a measurable interval",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "slide_id, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 11,
+      "action": "CONTENT_REVISITED",
+      "observable": "Learner returns to previously viewed content",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "slide_id, visit_no",
+      "status": "v1"
+    },
+    {
+      "no": 12,
+      "action": "SEARCH_SUBMITTED",
+      "observable": "Learner submits a search query",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "query",
+      "status": "v1"
+    },
+    {
+      "no": 13,
+      "action": "EXAMPLE_OPENED",
+      "observable": "Learner opens a worked example or demonstration",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "slide_id, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 14,
+      "action": "NOTE_CREATED",
+      "observable": "Learner creates a note",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "note_text, anchor",
+      "status": "v1"
+    },
+    {
+      "no": 15,
+      "action": "NOTE_EDITED",
+      "observable": "Learner edits or expands a note",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "note_id, diff",
+      "status": "v1"
+    },
+    {
+      "no": 16,
+      "action": "EXPLANATION_REQUESTED",
+      "observable": "Learner requests an explanation",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "request_text",
+      "status": "v1"
+    },
+    {
+      "no": 17,
+      "action": "EXPLANATION_VIEWED",
+      "observable": "Learner views an explanation",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "explanation_id, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 18,
+      "action": "PROBLEM_OPENED",
+      "observable": "Learner opens a problem or practice item",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "slide_id, slide_type",
+      "status": "v1"
+    },
+    {
+      "no": 19,
+      "action": "ATTEMPT_STARTED",
+      "observable": "Learner begins an attempt",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, ts_first_input",
+      "status": "v1"
+    },
+    {
+      "no": 20,
+      "action": "STEP_SUBMITTED",
+      "observable": "Learner submits an intermediate step",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "step_no",
+      "status": "v1"
+    },
+    {
+      "no": 21,
+      "action": "ANSWER_SUBMITTED",
+      "observable": "Learner submits an answer",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, chars, text (consented)",
+      "status": "v1"
+    },
+    {
+      "no": 22,
+      "action": "CORRECT_RECORDED",
+      "observable": "System records a correct answer",
+      "layer": "System",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id",
+      "status": "v1"
+    },
+    {
+      "no": 23,
+      "action": "INCORRECT_RECORDED",
+      "observable": "System records an incorrect answer",
+      "layer": "System",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, option",
+      "status": "v1"
+    },
+    {
+      "no": 24,
+      "action": "ERROR_TYPE_RECORDED",
+      "observable": "System classifies the error type",
+      "layer": "System",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, misconception_id",
+      "status": "v1"
+    },
+    {
+      "no": 25,
+      "action": "CONFIDENCE_RATED",
+      "observable": "Learner reports confidence in an answer",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, confidence (1–5), before_or_after",
+      "status": "v1"
+    },
+    {
+      "no": 26,
+      "action": "ANSWER_REVISED",
+      "observable": "Learner changes and resubmits an answer",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, attempt_no",
+      "status": "v1"
+    },
+    {
+      "no": 27,
+      "action": "HINT_REQUESTED",
+      "observable": "Learner requests a hint",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "hint_level",
+      "status": "v1"
+    },
+    {
+      "no": 28,
+      "action": "HINT_OPENED",
+      "observable": "Learner opens or reads a hint",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "hint_level, dwell_ms",
+      "status": "v1"
+    },
+    {
+      "no": 29,
+      "action": "FEEDBACK_OPENED",
+      "observable": "Learner opens feedback",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id",
+      "status": "v1"
+    },
+    {
+      "no": 30,
+      "action": "ERROR_REVIEWED",
+      "observable": "Learner opens or reviews an error explanation",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id",
+      "status": "v1"
+    },
+    {
+      "no": 31,
+      "action": "SOLUTION_REQUESTED",
+      "observable": "Learner requests or reveals a full solution",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, prior_attempt (y/n)",
+      "status": "v1"
+    },
+    {
+      "no": 32,
+      "action": "TUTOR_MESSAGE_SENT",
+      "observable": "Learner sends a message or question to the tutor",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "message_text, classification",
+      "status": "v1"
+    },
+    {
+      "no": 33,
+      "action": "PEER_HELP_REQUESTED",
+      "observable": "Learner requests help from a peer, mentor, or manager",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "channel",
+      "status": "v1"
+    },
+    {
+      "no": 34,
+      "action": "HELP_DISMISSED",
+      "observable": "Learner closes or dismisses help",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "help_id",
+      "status": "v1"
+    },
+    {
+      "no": 35,
+      "action": "PROGRESS_VIEWED",
+      "observable": "Learner views progress information",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "—",
+      "status": "v1"
+    },
+    {
+      "no": 36,
+      "action": "SCORE_VIEWED",
+      "observable": "Learner views a score or performance result",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "rubric_id",
+      "status": "v1"
+    },
+    {
+      "no": 37,
+      "action": "RUBRIC_COMPARED",
+      "observable": "Learner actively compares work with a rubric",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "criterion, value",
+      "status": "v1"
+    },
+    {
+      "no": 38,
+      "action": "SELF_CHECK_SUBMITTED",
+      "observable": "Learner submits a self-check or self-assessment",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, chars",
+      "status": "v1"
+    },
+    {
+      "no": 39,
+      "action": "ANSWER_COMPARED",
+      "observable": "Learner compares an answer with a reference",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id",
+      "status": "v1"
+    },
+    {
+      "no": 40,
+      "action": "REFLECTION_SUBMITTED",
+      "observable": "Learner submits a reflection or explanation of their process",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "text, chars",
+      "status": "v1"
+    },
+    {
+      "no": 41,
+      "action": "RETRY_STARTED",
+      "observable": "Learner begins another attempt after feedback or failure",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "item_id, attempt_no",
+      "status": "v1"
+    },
+    {
+      "no": 42,
+      "action": "RETURN_TO_CONTENT",
+      "observable": "Learner returns from a problem to learning content",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "from_slide, to_slide",
+      "status": "v1"
+    },
+    {
+      "no": 43,
+      "action": "RESOURCE_CHANGED",
+      "observable": "Learner switches to another resource or strategy option",
+      "layer": "Raw",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "from, to",
+      "status": "v1"
+    },
+    {
+      "no": 44,
+      "action": "TASK_ABANDONED",
+      "observable": "Learner exits or abandons a task",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "task_id, last_event, focus_state",
+      "status": "v1"
+    },
+    {
+      "no": 45,
+      "action": "TASK_RESUMED",
+      "observable": "Learner returns to an abandoned or interrupted task",
+      "layer": "Derived",
+      "group": "v1 (SRL/ITS core)",
+      "payload": "task_id, gap_ms",
+      "status": "v1"
+    },
+    {
+      "no": 46,
+      "action": "PREDICTION_COMMITTED",
+      "observable": "Learner saves a prediction before seeing theory or results",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "slide_id, chars, text, ms_on_slide",
+      "status": "New (v2)"
+    },
+    {
+      "no": 47,
+      "action": "REFERENCE_REVEALED",
+      "observable": "Learner opens a reference answer or analysis after committing",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "item_id, ms_since_commit",
+      "status": "New (v2)"
+    },
+    {
+      "no": 48,
+      "action": "GAP_NOTED",
+      "observable": "Learner records what they missed or would change after the reveal",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "item_id, chars, text",
+      "status": "New (v2)"
+    },
+    {
+      "no": 49,
+      "action": "BELIEF_COMMITTED",
+      "observable": "Learner commits to true/false on a misconception with a reason",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "item_id, choice, chars",
+      "status": "New (v2)"
+    },
+    {
+      "no": 50,
+      "action": "BELIEF_REVISED",
+      "observable": "Learner states whether their view changed after the explanation",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "item_id, changed",
+      "status": "New (v2)"
+    },
+    {
+      "no": 51,
+      "action": "RATIONALE_SUBMITTED",
+      "observable": "Learner explains the reasoning behind an MCQ choice",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "item_id, chars, text",
+      "status": "New (v2)"
+    },
+    {
+      "no": 52,
+      "action": "CRITERION_SELF_SCORED",
+      "observable": "Learner rates own work on one success criterion",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "criterion, value (0–2)",
+      "status": "New (v2)"
+    },
+    {
+      "no": 53,
+      "action": "RESULTS_RECORDED",
+      "observable": "Learner submits results of an exercise or lab",
+      "layer": "Raw",
+      "group": "Course-native",
+      "payload": "slide_id, chars, text",
+      "status": "New (v2)"
+    },
+    {
+      "no": 54,
+      "action": "SLIDE_EXITED",
+      "observable": "Slide leaves the viewport (gives dwell time)",
+      "layer": "Raw",
+      "group": "Timing & engagement",
+      "payload": "slide_id, dwell_ms",
+      "status": "New (v2)"
+    },
+    {
+      "no": 55,
+      "action": "FOCUS_LOST",
+      "observable": "Browser tab/window loses focus",
+      "layer": "Raw",
+      "group": "Timing & engagement",
+      "payload": "ts",
+      "status": "New (v2)"
+    },
+    {
+      "no": 56,
+      "action": "FOCUS_RETURNED",
+      "observable": "Browser tab/window regains focus",
+      "layer": "Raw",
+      "group": "Timing & engagement",
+      "payload": "ts, away_ms",
+      "status": "New (v2)"
+    },
+    {
+      "no": 57,
+      "action": "IDLE_STARTED",
+      "observable": "No input or scroll for longer than T_idle",
+      "layer": "Derived",
+      "group": "Timing & engagement",
+      "payload": "ts, idle_ms",
+      "status": "New (v2)"
+    },
+    {
+      "no": 58,
+      "action": "SESSION_STARTED",
+      "observable": "Learner begins a study session (course load or resume)",
+      "layer": "Raw",
+      "group": "Timing & engagement",
+      "payload": "session_id, device",
+      "status": "New (v2)"
+    },
+    {
+      "no": 59,
+      "action": "SESSION_ENDED",
+      "observable": "Session closes (unload or idle timeout)",
+      "layer": "Raw",
+      "group": "Timing & engagement",
+      "payload": "session_id, duration_ms",
+      "status": "New (v2)"
+    },
+    {
+      "no": 60,
+      "action": "RUN_SETTINGS_RECORDED",
+      "observable": "Learner records model name, version, sampling settings, tools on/off before an experiment",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "model, version, temperature, tools",
+      "status": "New (v2)"
+    },
+    {
+      "no": 61,
+      "action": "PROMPT_GOAL_DECLARED",
+      "observable": "Learner states goal, audience and output format before the first prompt",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "goal, audience, format",
+      "status": "New (v2)"
+    },
+    {
+      "no": 62,
+      "action": "PROMPT_SUBMITTED",
+      "observable": "Learner sends a prompt to the AI",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "prompt_text, tokens, version_no",
+      "status": "New (v2)"
+    },
+    {
+      "no": 63,
+      "action": "PROMPT_VERSION_SAVED",
+      "observable": "Learner saves a named prompt version",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "version_no, prompt_text, tokens, diff_vs_prev",
+      "status": "New (v2)"
+    },
+    {
+      "no": 64,
+      "action": "PROMPT_REVISION_TAGGED",
+      "observable": "Learner tags what changed: context, constraint, example, format, role, compression, reasoning",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "tags[]",
+      "status": "New (v2)"
+    },
+    {
+      "no": 65,
+      "action": "TOKEN_COUNT_CHECKED",
+      "observable": "Learner uses the course token counter",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "string_len, tokens, guess",
+      "status": "New (v2)"
+    },
+    {
+      "no": 66,
+      "action": "AI_OUTPUT_VIEWED",
+      "observable": "Learner reads an AI reply for a measurable interval",
+      "layer": "Derived",
+      "group": "AI interaction",
+      "payload": "response_id, dwell_ms, words",
+      "status": "New (v2)"
+    },
+    {
+      "no": 67,
+      "action": "OUTPUT_REGENERATED",
+      "observable": "Learner resamples the same prompt",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "prompt_version, sample_no, declared_experiment (y/n)",
+      "status": "New (v2)"
+    },
+    {
+      "no": 68,
+      "action": "TEST_CASE_RUN",
+      "observable": "Learner runs a prompt version against a test question or case",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "version_no, case_id",
+      "status": "New (v2)"
+    },
+    {
+      "no": 69,
+      "action": "TEST_RESULT_RECORDED",
+      "observable": "Learner records pass/fail and failure reason per test case",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "case_id, pass, reason",
+      "status": "New (v2)"
+    },
+    {
+      "no": 70,
+      "action": "OUTPUT_RATED",
+      "observable": "Learner rates an AI output against rubric criteria",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "response_id, criteria scores",
+      "status": "New (v2)"
+    },
+    {
+      "no": 71,
+      "action": "OUTPUT_VERIFIED",
+      "observable": "Learner checks a claim in the output against the source material",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "response_id, claim, verdict",
+      "status": "New (v2)"
+    },
+    {
+      "no": 72,
+      "action": "OUTPUT_COPIED",
+      "observable": "Learner copies AI output",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "response_id, chars",
+      "status": "New (v2)"
+    },
+    {
+      "no": 73,
+      "action": "OUTPUT_PASTED",
+      "observable": "Learner pastes AI text into a deliverable or answer box",
+      "layer": "Raw",
+      "group": "AI interaction",
+      "payload": "target_field, chars, source_match",
+      "status": "New (v2)"
+    },
+    {
+      "no": 74,
+      "action": "OUTPUT_EDITED",
+      "observable": "Learner edits pasted AI text",
+      "layer": "Derived",
+      "group": "AI interaction",
+      "payload": "edit_ratio",
+      "status": "New (v2)"
+    },
+    {
+      "no": 75,
+      "action": "AI_HELP_PROMPT_CLASSIFIED",
+      "observable": "System classifies a learner prompt to a tutor/LLM: instrumental, executive, conceptual, verification, off-topic",
+      "layer": "System",
+      "group": "AI interaction",
+      "payload": "message_id, label, model_version",
+      "status": "New (v2)"
+    },
+    {
+      "no": 76,
+      "action": "RAPID_RESPONSE_FLAGGED",
+      "observable": "System flags a commit near the minimum length within T_rapid of slide entry",
+      "layer": "Derived",
+      "group": "Disengagement",
+      "payload": "item_id, chars, ms_on_slide",
+      "status": "New (v2)"
+    },
+    {
+      "no": 77,
+      "action": "NEXT_ITEM_OPENED",
+      "observable": "Learner moves on to the next item or slide",
+      "layer": "Derived",
+      "group": "Definitions for v1 references",
+      "payload": "from_item, to_item",
+      "status": "New (v2)"
+    },
+    {
+      "no": 78,
+      "action": "INTERVENTION_DISPLAYED",
+      "observable": "System shows a nudge, scaffold or prompt",
+      "layer": "System",
+      "group": "Definitions for v1 references",
+      "payload": "intervention_id, policy_version, trigger_rule",
+      "status": "New (v2)"
+    },
+    {
+      "no": 79,
+      "action": "INTERVENTION_ACCEPTED",
+      "observable": "Learner acts on an intervention",
+      "layer": "Raw",
+      "group": "Definitions for v1 references",
+      "payload": "intervention_id",
+      "status": "New (v2)"
+    },
+    {
+      "no": 80,
+      "action": "INTERVENTION_DISMISSED",
+      "observable": "Learner closes or snoozes an intervention",
+      "layer": "Raw",
+      "group": "Definitions for v1 references",
+      "payload": "intervention_id, snooze",
+      "status": "New (v2)"
+    },
+    {
+      "no": 81,
+      "action": "DELAYED_TEST_SUBMITTED",
+      "observable": "Learner completes a delayed retention test",
+      "layer": "Raw",
+      "group": "Definitions for v1 references",
+      "payload": "test_id, delay_days, score",
+      "status": "New (v2)"
+    },
+    {
+      "no": 82,
+      "action": "TRANSFER_TASK_SUBMITTED",
+      "observable": "Learner completes an unassisted transfer prompt-writing task",
+      "layer": "Raw",
+      "group": "Definitions for v1 references",
+      "payload": "task_id, score, ai_access (none)",
+      "status": "New (v2)"
+    },
+    {
+      "no": 83,
+      "action": "WORK_ARTIFACT_SUBMITTED",
+      "observable": "Learner submits an authentic work product or a report of applying the skill at work",
+      "layer": "Raw",
+      "group": "Definitions for v1 references",
+      "payload": "artifact_id, context",
+      "status": "New (v2)"
+    }
+  ],
+  "rules": [
+    {
+      "id": "M01",
+      "inputs": "INSTRUCTIONS_VIEWED, REQUIREMENTS_VIEWED, RUBRIC_VIEWED (before first attempt)",
+      "family": "Orientation",
+      "rule": "Map to orientation when task conditions or standards are viewed with dwell ≥ T_orient before the first ATTEMPT_STARTED in the task. TASK_OPENED alone is navigation.",
+      "parameters": ["T_orient"],
+      "evidenceClass": "Adopted (FLoRA/Bannert); not yet validated in GALS"
+    },
+    {
+      "id": "M02",
+      "inputs": "GOAL_ENTERED, PLAN_CREATED, PLAN_EDITED, PROMPT_GOAL_DECLARED; RESOURCE_SELECTED only within W_plan after a goal/plan",
+      "family": "Planning",
+      "rule": "Map to planning when the learner explicitly sets a goal or organizes future actions. A resource selection without a prior goal/plan is Information access.",
+      "parameters": ["W_plan"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M03",
+      "inputs": "CONTENT_OPENED, CONTENT_VIEWED (dwell ≥ T_read), SEARCH_SUBMITTED, EXAMPLE_OPENED, EXPLANATION_VIEWED",
+      "family": "Information access (first reading)",
+      "rule": "Map to information access. Do not automatically call it learning or comprehension.",
+      "parameters": ["T_read"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M03b",
+      "inputs": "CONTENT_REVISITED not followed by a changed answer within W_seq",
+      "family": "Re-reading",
+      "rule": "Map to re-reading. If followed by ANSWER_REVISED, use M21 instead.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M04",
+      "inputs": "NOTE_CREATED, NOTE_EDITED, RATIONALE_SUBMITTED",
+      "family": "Knowledge building / elaboration / self-explanation",
+      "rule": "Map to knowledge building when the learner produces or explains something. Weight by length/quality, not presence.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M05",
+      "inputs": "PREDICTION_COMMITTED (before the related theory slide)",
+      "family": "Forethought / prediction",
+      "rule": "Map to forethought when a prediction is committed before the related content is viewed. Low-effort commits go to M24.",
+      "parameters": ["T_rapid", "ε_chars"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M06",
+      "inputs": "PROBLEM_OPENED, ATTEMPT_STARTED, STEP_SUBMITTED, ANSWER_SUBMITTED, RESULTS_RECORDED",
+      "family": "Active performance",
+      "rule": "Map to active performance when the learner applies knowledge to produce an answer, decision or work product.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M07",
+      "inputs": "CORRECT_RECORDED, INCORRECT_RECORDED, ERROR_TYPE_RECORDED",
+      "family": "Performance evaluation (system)",
+      "rule": "Treat correctness as immediate performance evidence, not proof of durable learning or understanding.",
+      "parameters": [],
+      "evidenceClass": "—"
+    },
+    {
+      "id": "M08",
+      "inputs": "HINT_REQUESTED, HINT_OPENED, EXPLANATION_REQUESTED, TUTOR_MESSAGE_SENT (+ AI_HELP_PROMPT_CLASSIFIED), PEER_HELP_REQUESTED",
+      "family": "Help-seeking or co-regulation",
+      "rule": "Map to help-seeking when assistance is requested. Type it: instrumental vs executive (from classifier and context). A request with no prior attempt in the item is a candidate help-abuse/executive request.",
+      "parameters": [],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M09",
+      "inputs": "HINT_OPENED → RETRY_STARTED → CORRECT_RECORDED (within W_recover)",
+      "family": "Instrumental help-seeking and recovery",
+      "rule": "Stronger evidence of productive help-seeking: help is followed by changed action and improved performance.",
+      "parameters": ["W_recover"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M10",
+      "inputs": "INCORRECT_RECORDED → SOLUTION_REQUESTED → NEXT_ITEM_OPENED (within W_seq)",
+      "family": "Possible answer dependence",
+      "rule": "Flag as a candidate maladaptive pattern, not a diagnosis. Check later independent performance. Exception: in this course reveals are gated behind the learner's own attempt, so they go to M15, not here.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M11",
+      "inputs": "≥ N_fail INCORRECT_RECORDED on the same item/skill with no HINT, EXPLANATION or RETURN_TO_CONTENT",
+      "family": "Help avoidance (candidate)",
+      "rule": "Flag as candidate help avoidance. Consider prior mastery before intervening.",
+      "parameters": ["N_fail", "W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M12",
+      "inputs": "HELP_DISMISSED, INTERVENTION_DISMISSED",
+      "family": "Support declined",
+      "rule": "Treat as preference or burden, not disengagement. Feeds intervention cooldown.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M13",
+      "inputs": "CONFIDENCE_RATED; PROGRESS_VIEWED / SCORE_VIEWED only if followed by a changed action within W_mon",
+      "family": "Monitoring",
+      "rule": "Confidence ratings are direct monitoring evidence. Status views alone are 'status check', not monitoring.",
+      "parameters": ["W_mon"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M14",
+      "inputs": "RUBRIC_COMPARED, ANSWER_COMPARED, SELF_CHECK_SUBMITTED, CRITERION_SELF_SCORED; RUBRIC_VIEWED after an attempt",
+      "family": "Evaluation",
+      "rule": "Map to evaluation when the learner compares performance against a standard or criterion.",
+      "parameters": [],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M15",
+      "inputs": "PREDICTION_COMMITTED or ANSWER_SUBMITTED → REFERENCE_REVEALED → GAP_NOTED (chars > 0)",
+      "family": "Evaluation with self-identified gap",
+      "rule": "Strongest course evidence of evaluation. Without GAP_NOTED, code as 'reference exposure' only.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M16",
+      "inputs": "BELIEF_COMMITTED → REFERENCE_REVEALED → BELIEF_REVISED",
+      "family": "Belief revision (monitoring → regulation)",
+      "rule": "changed = yes after a wrong commit → regulation. changed = no after a correct commit → confirmation. changed = no after a wrong commit → candidate persistent misconception.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M17",
+      "inputs": "RUBRIC_VIEWED → PLAN_EDITED → ANSWER_REVISED",
+      "family": "Monitoring followed by regulation",
+      "rule": "Use the sequence to distinguish purposeful monitoring from accidental rubric access.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M18",
+      "inputs": "INCORRECT_RECORDED → RETURN_TO_CONTENT → RETRY_STARTED",
+      "family": "Recovery or adaptive regulation",
+      "rule": "Map to recovery when the learner changes activity after difficulty and attempts the task again.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M19",
+      "inputs": "RESOURCE_CHANGED → RETRY_STARTED; PLAN_EDITED",
+      "family": "Strategy adaptation",
+      "rule": "Map to adaptation when a change of resource or plan is followed by a new attempt. RESOURCE_CHANGED alone is navigation.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M20",
+      "inputs": "TASK_ABANDONED, TASK_RESUMED, FOCUS_LOST, IDLE_STARTED",
+      "family": "Persistence, interruption, or disengagement candidate",
+      "rule": "Abandonment is ambiguous. Use focus, idle and resumption data to distinguish interruption from disengagement.",
+      "parameters": ["T_idle"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M21",
+      "inputs": "CONTENT_REVISITED → ANSWER_REVISED",
+      "family": "Knowledge-based regulation",
+      "rule": "Map to regulation or recovery when returning to content is followed by a changed answer or work product.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M22",
+      "inputs": "REFLECTION_SUBMITTED (incl. implementation intention)",
+      "family": "Self-appraisal; forward planning",
+      "rule": "Map to appraisal when the learner evaluates result, difficulty or strategy. The 'next real task I will…' clause also counts as forward planning.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M23",
+      "inputs": "CONFIDENCE_RATED vs CORRECT/INCORRECT; CRITERION_SELF_SCORED vs external score",
+      "family": "Calibration (monitoring accuracy)",
+      "rule": "Compute bias (over/under-confidence) and absolute accuracy per learner over a module, not per item.",
+      "parameters": [],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M24",
+      "inputs": "PREDICTION_COMMITTED or ANSWER_SUBMITTED with chars ≤ min + ε_chars and ms_on_slide < T_rapid, then REFERENCE_REVEALED",
+      "family": "Low-effort commitment / gaming candidate",
+      "rule": "Flag as a candidate, never a diagnosis. Fast + short can also be genuine prior knowledge: check later performance.",
+      "parameters": ["T_rapid", "ε_chars"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M25",
+      "inputs": "FOCUS_LOST or IDLE_STARTED > T_idle",
+      "family": "Off-task / idle time",
+      "rule": "Exclude from time-on-task. Do not treat as disengagement without other evidence (adults are interrupted by work).",
+      "parameters": ["T_idle"],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M26",
+      "inputs": "RUN_SETTINGS_RECORDED and PROMPT_GOAL_DECLARED before first PROMPT_SUBMITTED",
+      "family": "Planning (AI task)",
+      "rule": "Map to planning for an AI experiment.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M27",
+      "inputs": "AI_OUTPUT_VIEWED (dwell ≥ T_out) → OUTPUT_RATED or TEST_RESULT_RECORDED → PROMPT_VERSION_SAVED (diff > 0)",
+      "family": "Evaluation-driven prompt revision",
+      "rule": "Strongest evidence of regulated prompting: the learner read, judged, then revised.",
+      "parameters": ["T_out", "W_seq"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M28",
+      "inputs": "PROMPT_SUBMITTED → output dwell < T_out → OUTPUT_REGENERATED or new PROMPT_SUBMITTED, no rating",
+      "family": "Unreflective regeneration (candidate)",
+      "rule": "Candidate. Exclude when declared_experiment = yes (the course asks for multiple samples on purpose).",
+      "parameters": ["T_out"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M29",
+      "inputs": "TEST_CASE_RUN on ≥ 2 cases per version + TEST_RESULT_RECORDED",
+      "family": "Systematic testing",
+      "rule": "Map to systematic evaluation. Count versions tested, not prompts sent.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M30",
+      "inputs": "AI_OUTPUT_VIEWED → OUTPUT_VERIFIED",
+      "family": "Verification / critical evaluation",
+      "rule": "Map to evaluation of AI output. Track rate per module: verification is rare by default.",
+      "parameters": [],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M31",
+      "inputs": "OUTPUT_COPIED → OUTPUT_PASTED with no OUTPUT_EDITED or OUTPUT_VERIFIED within W_seq",
+      "family": "Passive reliance (candidate)",
+      "rule": "Candidate passive use. Check against unassisted transfer performance before acting.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M32",
+      "inputs": "OUTPUT_PASTED → OUTPUT_EDITED (edit_ratio ≥ E_edit)",
+      "family": "Active / constructive use of AI output",
+      "rule": "Map to active use; constructive if the learner adds new reasoning or content.",
+      "parameters": ["E_edit"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M33",
+      "inputs": "AI_HELP_PROMPT_CLASSIFIED",
+      "family": "Help-seeking type with an LLM",
+      "rule": "Executive = asking for the finished product; instrumental = hint/explanation; conceptual = why/how; verification = checking. Report human–LLM κ before use.",
+      "parameters": [],
+      "evidenceClass": "Adopted"
+    },
+    {
+      "id": "M34",
+      "inputs": "INTERVENTION_DISPLAYED → INTERVENTION_ACCEPTED → target action",
+      "family": "Intervention uptake",
+      "rule": "Record that the intervention was used and followed by the intended action; do not assume learning occurred.",
+      "parameters": ["W_seq"],
+      "evidenceClass": "Theory-only"
+    },
+    {
+      "id": "M35",
+      "inputs": "DELAYED_TEST_SUBMITTED, TRANSFER_TASK_SUBMITTED, WORK_ARTIFACT_SUBMITTED",
+      "family": "Retention, transfer, or authentic performance",
+      "rule": "Independent outcomes for validating whether an inferred process mattered. Transfer task must be done without AI access.",
+      "parameters": [],
+      "evidenceClass": "—"
+    }
+  ],
+  "parameters": {
+    "T_read": {
+      "kind": "ms",
+      "value": 10000,
+      "unit": "seconds",
+      "usedIn": "M03",
+      "rationale": "Shortest dwell that plausibly counts as reading a slide. Scale by slide word count once dwell is logged."
+    },
+    "T_orient": {
+      "kind": "ms",
+      "value": 15000,
+      "unit": "seconds",
+      "usedIn": "M01",
+      "rationale": "Minimum dwell on objectives/criteria to count as orientation."
+    },
+    "T_out": {
+      "kind": "t_out",
+      "minSeconds": 5,
+      "wordsPerSecond": 4,
+      "unit": "seconds",
+      "usedIn": "M27, M28",
+      "rationale": "~4 words/s skim speed for an AI reply."
+    },
+    "T_idle": {
+      "kind": "ms",
+      "value": 120000,
+      "unit": "seconds",
+      "usedIn": "M20, M25",
+      "rationale": "No input/scroll before a gap is treated as idle. Fixed cut-offs change results (Kovanović et al. 2015)."
+    },
+    "T_rapid": {
+      "kind": "ms",
+      "value": 15000,
+      "unit": "seconds on slide",
+      "usedIn": "M24",
+      "rationale": "Time too short to read the prompt and write a considered answer."
+    },
+    "ε_chars": {
+      "kind": "number",
+      "value": 10,
+      "unit": "characters above the minimum",
+      "usedIn": "M05, M24",
+      "rationale": "Course gates require ≥ 20 chars (≥ 8 for misconception reasons)."
+    },
+    "W_seq": {
+      "kind": "ms",
+      "value": 600000,
+      "scope": "same activity",
+      "unit": "minutes",
+      "usedIn": "Most sequences",
+      "rationale": "Default window for A → B sequences."
+    },
+    "W_plan": {
+      "kind": "ms",
+      "value": 300000,
+      "unit": "minutes",
+      "usedIn": "M02",
+      "rationale": "Resource choice must follow a goal/plan this closely to count as planning."
+    },
+    "W_mon": {
+      "kind": "ms",
+      "value": 300000,
+      "unit": "minutes",
+      "usedIn": "M13",
+      "rationale": "Status view must be followed by a changed action this closely."
+    },
+    "W_recover": {
+      "kind": "ms",
+      "value": 900000,
+      "unit": "minutes",
+      "usedIn": "M09",
+      "rationale": "Help → retry → correct window."
+    },
+    "N_fail": {
+      "kind": "number",
+      "value": 2,
+      "unit": "incorrect attempts",
+      "usedIn": "M11",
+      "rationale": "Repeated failure threshold for help avoidance."
+    },
+    "E_edit": {
+      "kind": "number",
+      "value": 0.15,
+      "unit": "edit ratio (changed chars ÷ pasted chars)",
+      "usedIn": "M32",
+      "rationale": "Distinguishes real editing from trivial touch-ups."
+    }
+  }
+}

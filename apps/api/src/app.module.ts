@@ -44,6 +44,7 @@ import { PreGenerationModule } from './pre-generation/pre-generation.module';
 import { VlmModule } from './vlm/vlm.module';
 import { InteractiveLessonModule } from './interactive-lesson';
 import { PromptLabModule } from './prompt-lab';
+import { LearningEventsModule } from './learning-events';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -104,6 +105,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     VlmModule,
     InteractiveLessonModule,
     PromptLabModule,
+    LearningEventsModule,
   ],
   controllers: [HealthController],
   providers: [

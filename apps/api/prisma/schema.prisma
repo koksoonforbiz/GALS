@@ -1568,6 +1568,7 @@ model StudentSession {
   webgazerCalibrations WebgazerCalibrationEvent[]
   pyfeatJobs           PyfeatJob[]
   replaySnapshots      SessionReplaySnapshot[]
+  learningEvents       LearningEvent[]
   replayAnnotations    ReplayAnnotation[]
 
   // Sync anchor relation
@@ -2618,4 +2619,53 @@ model PromptLabOutputRating {
   run     PromptLabRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@map("prompt_lab_output_ratings")
+}
+
+// ─── Learning events (prompting course, Phase 4) ────────────────────────
+// Derived, never decided in the browser: computed server-side from raw
+// actions by apps/api/src/learning-events (rules M01–M35 + M03b of the
+// Process Mining Library v2), so they can be recomputed when parameters or
+// the library change. Rows for a session are replaced on each recompute.
+
+model LearningEvent {
+  id                  String   @id @default(uuid()) @db.Uuid
+  studentId           String   @map("student_id") @db.Uuid
+  sessionId           String   @map("session_id") @db.Uuid
+  courseId            String?  @map("course_id") @db.Uuid
+  moduleItemId        String?  @map("module_item_id") @db.Uuid
+  slideKey            String?  @map("slide_key")
+  /// Mapping-sheet id: M01 … M35, M03b
+  ruleId              String   @map("rule_id")
+  eventFamily         String   @map("event_family")
+  /// Rule-specific outcome, e.g. M16 "regulation" | "confirmation" | "persistent_misconception"
+  outcome             String?
+  startAt             DateTime @map("start_at") @db.Timestamptz
+  endAt               DateTime @map("end_at") @db.Timestamptz
+  sourceActionIds     String[] @map("source_action_ids") @db.Uuid
+  /// 'candidate' until validated against think-aloud coding (Phase 5)
+  confidence          String   @default("candidate")
+  libraryVersion      String   @map("library_version")
+  parameterSetVersion Int      @map("parameter_set_version")
+  detail              Json?
+  computedAt          DateTime @default(now()) @map("computed_at") @db.Timestamptz
+
+  session StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([studentId, startAt])
+  @@index([courseId, ruleId])
+  @@map("learning_events")
+}
+
+/// Versioned parameter sets for the parser (workbook Parameters sheet
+/// defaults = version 1). Researchers add a new version to recalibrate;
+/// rows are never edited, so every learning_events row stays reproducible.
+model LearningEventParameterSet {
+  version   Int      @id
+  values    Json
+  note      String?
+  createdBy String?  @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("learning_event_parameter_sets")
 }

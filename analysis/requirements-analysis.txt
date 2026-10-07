@@ -7,3 +7,4 @@ redis>=4.6
 fastparquet>=2023.10
 tqdm>=4.66
 orjson>=3.9
+openpyxl>=3.1

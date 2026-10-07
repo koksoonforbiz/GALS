@@ -1,4 +1,11 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityLogService } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
@@ -25,6 +32,8 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    // Optional so existing two-argument construction (specs) keeps working.
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   /** Throws ForbiddenException unless `teacherId` teaches the course this session belongs to. */
@@ -150,6 +159,10 @@ export class SessionService {
 
     await this.buildSummary(sessionId);
     this.logger.log(`Session closed: ${sessionId} — ${durationSecs}s`);
+
+    // Learning-event parser (prompting course, Phase 4) recomputes the
+    // session's derived events; listeners must never throw back here.
+    this.events?.emit('session.closed', { sessionId });
 
     // Fire-and-forget export trigger
     this.triggerExport(sessionId);
