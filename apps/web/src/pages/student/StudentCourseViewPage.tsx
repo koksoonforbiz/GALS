@@ -816,6 +816,8 @@ export function StudentCourseViewPage() {
                   <InteractiveLesson
                     itemId={selectedItem.id}
                     sessionId={sessionId}
+                    courseId={course.id}
+                    moduleId={selectedModule?.id}
                     onSlideChange={(slide) =>
                       setPageContext({ contentText: slidePlainText(slide) || null })
                     }

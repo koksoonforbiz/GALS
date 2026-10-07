@@ -318,6 +318,45 @@ export function useInteractionLogger({
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
 
+    // Window focus loss while the tab stays visible (e.g. working side by
+    // side with an external AI tool) never fires visibilitychange. Record it
+    // as visibleState 'blurred', which aoiScoring.ts already treats as an
+    // inattention interval; the next 'visible' row closes it.
+    // (Prompting-course plan, PHASE0_DISCOVERY.md §9 #55.)
+    const blurredAt = { current: null as number | null };
+    const postVisibility = (
+      visibleState: string,
+      timestamp: number,
+      hiddenDurationMs: number | null,
+    ) =>
+      api
+        .post('/logs/visibility', {
+          sessionId,
+          userId,
+          events: [
+            { visibleState, pageUrl: window.location.pathname, timestamp, hiddenDurationMs },
+          ],
+        })
+        .catch(() => {});
+    const onWindowBlur = () => {
+      // Defer: focus moving into an in-page iframe also blurs the window.
+      window.setTimeout(() => {
+        if (document.visibilityState !== 'visible' || document.hasFocus()) return;
+        if (document.activeElement?.tagName === 'IFRAME') return;
+        blurredAt.current = Date.now();
+        postVisibility('blurred', blurredAt.current, null);
+      }, 0);
+    };
+    const onWindowFocus = () => {
+      if (blurredAt.current == null) return;
+      const now = Date.now();
+      const away = now - blurredAt.current;
+      blurredAt.current = null;
+      postVisibility('visible', now, away);
+    };
+    window.addEventListener('blur', onWindowBlur);
+    window.addEventListener('focus', onWindowFocus);
+
     // ─── Collector 6: Clipboard Tracker ───────────────
 
     const onCopy = (e: ClipboardEvent) => {
@@ -458,6 +497,8 @@ export function useInteractionLogger({
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('blur', onBlur, true);
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onWindowBlur);
+      window.removeEventListener('focus', onWindowFocus);
       window.removeEventListener('copy', onCopy);
       window.removeEventListener('cut', onCut);
       window.removeEventListener('paste', onPaste);

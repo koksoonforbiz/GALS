@@ -12,6 +12,9 @@
  *   pnpm run import:prompting-course -- --teacher-email prompting-teacher@gals.test \
  *     --publish --enroll prompting-student
  *
+ * --reset-state  also deletes the fixture student's interactive-lesson
+ *                 working state (lesson_slide_states), so e2e runs start clean.
+ *
  * Refuses to run when NODE_ENV=production.
  */
 
@@ -55,6 +58,17 @@ async function upsertUser(
 }
 
 async function main() {
+  if (process.argv.includes('--reset-state')) {
+    const student = await prisma.user.findUnique({
+      where: { email: 'prompting-student@gals.test' },
+    });
+    if (student) {
+      const { count } = await prisma.lessonSlideState.deleteMany({
+        where: { studentId: student.id },
+      });
+      console.log(`Cleared ${count} lesson slide state row(s) for the fixture student`);
+    }
+  }
   const teacherPassword = generatePassword();
   const studentPassword = generatePassword();
   await upsertUser(

@@ -722,3 +722,40 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Phase 2 additions: confidence rating, reflection parts */
+.il-root .confidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 12px 0 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.il-root .confidence button {
+  min-width: 30px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+}
+.il-root .confidence button.sel {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+.il-root .confidence .scale {
+  font-size: 12px;
+}
+.il-root .part-label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin: 12px 0 4px;
+}

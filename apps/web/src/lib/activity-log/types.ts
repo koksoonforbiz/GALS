@@ -49,7 +49,26 @@ export type ActivityAction =
   | 'PYFEAT_JOB_COMPLETED'
   | 'PYFEAT_JOB_FAILED'
   // Self-report emotion survey
-  | 'EMOTION_SELF_REPORT';
+  | 'EMOTION_SELF_REPORT'
+  // Interactive lessons — prompting course (Process Mining Library v2;
+  // docs/process-mining/PHASE0_DISCOVERY.md §9)
+  | 'SLIDE_ENTERED'
+  | 'SLIDE_EXITED'
+  | 'ATTEMPT_STARTED'
+  | 'PREDICTION_COMMITTED'
+  | 'REFERENCE_REVEALED'
+  | 'GAP_NOTED'
+  | 'BELIEF_COMMITTED'
+  | 'BELIEF_REVISED'
+  | 'MCQ_ANSWERED'
+  | 'RATIONALE_SUBMITTED'
+  | 'SELF_CHECK_SUBMITTED'
+  | 'RESULTS_RECORDED'
+  | 'CRITERION_SELF_SCORED'
+  | 'REFLECTION_SUBMITTED'
+  | 'CONFIDENCE_RATED'
+  | 'IDLE_STARTED'
+  | 'IDLE_ENDED';
 
 export interface ActivityEvent {
   action: ActivityAction;

@@ -127,7 +127,51 @@ const ACTIVITY_ACTIONS = [
   'SPACED_REP_CARD_VIEWED',
   'SPACED_REP_CARD_RATED',
   'EMOTION_SELF_REPORT',
+  // Interactive lessons — prompting course (docs/process-mining/). Own rows
+  // so they don't collapse into activity_other.
+  'SLIDE_ENTERED',
+  'SLIDE_EXITED',
+  'ATTEMPT_STARTED',
+  'PREDICTION_COMMITTED',
+  'REFERENCE_REVEALED',
+  'GAP_NOTED',
+  'BELIEF_COMMITTED',
+  'BELIEF_REVISED',
+  'MCQ_ANSWERED',
+  'RATIONALE_SUBMITTED',
+  'SELF_CHECK_SUBMITTED',
+  'RESULTS_RECORDED',
+  'CRITERION_SELF_SCORED',
+  'REFLECTION_SUBMITTED',
+  'CONFIDENCE_RATED',
+  'IDLE_STARTED',
+  'IDLE_ENDED',
 ];
+
+/** Compact cell text for interactive-lesson events (slide + key fields). */
+function lessonEventDetail(meta: Record<string, unknown>): string {
+  if (typeof meta.slideKey !== 'string') return '';
+  const parts: string[] = [meta.slideKey];
+  const pick = (k: string, label = k) => {
+    const v = meta[k];
+    if (v !== undefined && v !== null && v !== '') parts.push(`${label}=${String(v)}`);
+  };
+  pick('kind');
+  pick('revealKind', 'reveal');
+  pick('item');
+  pick('option');
+  pick('correct');
+  pick('choice');
+  pick('changed');
+  pick('criterion');
+  pick('value');
+  pick('timing');
+  pick('chars');
+  pick('visitNo', 'visit');
+  pick('dwellMs', 'dwell_ms');
+  pick('idleMs', 'idle_ms');
+  return parts.join(' ');
+}
 
 export interface CsvExportData {
   session: {
@@ -580,7 +624,8 @@ export function exportReplayCsv(
       const latency =
         typeof meta.latencyMs === 'number' ? `${Math.round(meta.latencyMs / 100) / 10}s` : '';
       const emotion = typeof meta.emotion === 'string' ? meta.emotion : '';
-      const detail = [itype, title, correct, latency, emotion].filter(Boolean).join(' · ');
+      const lesson = lessonEventDetail(meta);
+      const detail = [itype, title, correct, latency, emotion, lesson].filter(Boolean).join(' · ');
       const cell = detail || '1';
       const existing = values[b];
       values[b] = existing ? `${existing} | ${cell}` : cell;

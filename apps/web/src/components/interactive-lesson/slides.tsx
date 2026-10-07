@@ -12,25 +12,9 @@ import type { LessonMcqOption, LessonSessionMeta, LessonSlide } from '@ats/share
 import { LESSON_GATES } from './gates';
 import type { SlideFields } from './useLessonData';
 import { mcqOrder } from './mcqOrder';
+import type { LessonEventName } from './lessonEvents';
 
-/** Learning-event hook points; Phase 2 wires these to track(). */
-export type LessonEventName =
-  | 'think_submitted'
-  | 'predict_submitted'
-  | 'reflect_submitted'
-  | 'predict_revealed'
-  | 'check_answered'
-  | 'check_revealed'
-  | 'check_missed_noted'
-  | 'mcq_rationale'
-  | 'mcq_answered'
-  | 'misconception_committed'
-  | 'misconception_opened'
-  | 'misconception_changed'
-  | 'results_submitted'
-  | 'expect_revealed'
-  | 'selfscore_set'
-  | 'attempt_started';
+export type { LessonEventName };
 
 export type LessonEmit = (name: LessonEventName, data?: Record<string, unknown>) => void;
 
@@ -43,6 +27,8 @@ export interface SlideProps {
   save: (patch: SlideFields) => void;
   emit: LessonEmit;
   onAdvance: () => void;
+  /** The session's self-score criteria, shown early on the Objectives slide. */
+  sessionCriteria?: string[];
 }
 
 const PHASE: Record<string, string> = {
@@ -97,6 +83,42 @@ function useFirstInput(emit: LessonEmit, fieldKey: string) {
     setStarted(true);
     emit('attempt_started', { fieldKey });
   };
+}
+
+/**
+ * Optional 1–5 confidence rating (Phase 2.2 #3; workbook CONFIDENCE_RATED,
+ * enables calibration M23). One tap, can be changed, never required.
+ */
+function ConfidenceRating({
+  value,
+  timing,
+  onRate,
+}: {
+  value: number | undefined;
+  timing: 'before' | 'after';
+  onRate: (v: number) => void;
+}) {
+  return (
+    <div className="confidence" role="group" aria-label="Confidence rating">
+      <span>
+        {timing === 'before'
+          ? 'How confident are you in your reasoning? (optional)'
+          : 'How confident were you in your prediction? (optional)'}
+      </span>
+      {[1, 2, 3, 4, 5].map((v) => (
+        <button
+          key={v}
+          type="button"
+          className={value === v ? 'sel' : ''}
+          aria-pressed={value === v}
+          onClick={() => onRate(v)}
+        >
+          {v}
+        </button>
+      ))}
+      <span className="scale">1 = guessing · 5 = certain</span>
+    </div>
+  );
 }
 
 // ── text-gated boxes: think / predict / reflect ──────────────────────────
@@ -162,24 +184,79 @@ function TextGate({
   );
 }
 
-function ThinkOrReflectSlide(p: SlideProps) {
-  const isThink = p.slide.t === 'think';
+function ThinkSlide(p: SlideProps) {
   return (
-    <div className={`box ${isThink ? 'think' : 'task'}`}>
+    <div className="box think">
       <div className="box-title">{p.slide.box}</div>
       <div dangerouslySetInnerHTML={html(p.slide.prompt)} />
-      <TextGate
-        kind={isThink ? 'think' : 'reflect'}
-        fields={p.fields}
-        save={p.save}
-        emit={p.emit}
-        onSaved={isThink ? p.onAdvance : undefined}
-      />
-      {isThink && (
-        <div className="locked-note">
-          The theory that follows is more useful once you have committed to a prediction.
-        </div>
-      )}
+      <TextGate kind="think" fields={p.fields} save={p.save} emit={p.emit} onSaved={p.onAdvance} />
+      <div className="locked-note">
+        The theory that follows is more useful once you have committed to a prediction.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Reflection, split into the two parts every session's prompt has: the
+ * session-specific appraisal, then the fixed implementation intention
+ * ("In my next real task, I will …"). The split feeds rule M22; the
+ * course's gate (≥ 20 characters in total) is unchanged.
+ */
+function ReflectSlide(p: SlideProps) {
+  const parts = (p.fields.parts ?? {}) as { appraisal?: string; implementationIntention?: string };
+  const [appraisal, setAppraisal] = useState(parts.appraisal ?? str(p.fields.text));
+  const [intention, setIntention] = useState(parts.implementationIntention ?? '');
+  const saved = Boolean(p.fields.text);
+  const [status, setStatus] = useState<{ text: string; ok: boolean }>(
+    saved ? { text: 'Saved', ok: true } : { text: '', ok: false },
+  );
+  const firstInput = useFirstInput(p.emit, 'reflect');
+  const onClick = () => {
+    const text = [appraisal, intention].filter((x) => x.trim()).join('\n\n');
+    if (text.trim().length < LESSON_GATES.reflect) {
+      setStatus({ text: 'Write at least a sentence first.', ok: false });
+      return;
+    }
+    const nextParts = { appraisal, implementationIntention: intention };
+    p.save({ text, parts: nextParts });
+    p.emit('reflect_submitted', { chars: text.length, text, parts: nextParts });
+    setStatus({ text: 'Saved', ok: true });
+  };
+  return (
+    <div className="box task">
+      <div className="box-title">{p.slide.box}</div>
+      <div dangerouslySetInnerHTML={html(p.slide.prompt)} />
+      <div data-replay-redact="">
+        <label className="part-label">Your reflection</label>
+        <textarea
+          placeholder="Write your reflection…"
+          value={appraisal}
+          onChange={(e) => {
+            firstInput();
+            setAppraisal(e.target.value);
+          }}
+        />
+        <label className="part-label">
+          In my next real task, I will [specific behaviour] when [trigger], and I will judge it by
+          [observable measure].
+        </label>
+        <textarea
+          className="mini"
+          placeholder="In my next real task, I will…"
+          value={intention}
+          onChange={(e) => {
+            firstInput();
+            setIntention(e.target.value);
+          }}
+        />
+      </div>
+      <div className="actions">
+        <button type="button" className="btn" onClick={onClick}>
+          Save reflection
+        </button>
+        <span className={`status${status.ok ? ' ok' : ''}`}>{status.text}</span>
+      </div>
     </div>
   );
 }
@@ -204,6 +281,16 @@ function PredictSlide(p: SlideProps) {
         className={`reveal${open ? ' open' : ''}`}
         dangerouslySetInnerHTML={html(p.slide.reveal)}
       />
+      {open && (
+        <ConfidenceRating
+          value={p.fields.confidenceAfter as number | undefined}
+          timing="after"
+          onRate={(v) => {
+            p.save({ confidenceAfter: v });
+            p.emit('confidence_rated', { value: v, timing: 'after' });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -353,6 +440,17 @@ function McqSlide(p: SlideProps) {
           </button>
           <span className="status">{status}</span>
         </div>
+        {unlocked && (choice == null || p.fields.confidence != null) && (
+          <ConfidenceRating
+            value={p.fields.confidence as number | undefined}
+            timing="before"
+            onRate={(v) => {
+              if (choice != null) return; // "before answering" only
+              p.save({ confidence: v });
+              p.emit('confidence_rated', { value: v, timing: 'before' });
+            }}
+          />
+        )}
         {order.map((k) => {
           const o = options[k]!;
           let cls = 'opt';
@@ -371,7 +469,10 @@ function McqSlide(p: SlideProps) {
                 p.emit('mcq_answered', {
                   option: k + 1,
                   correct: o.ok,
+                  attemptNo: 1,
                   misconceptionId: o.misconceptionId ?? null,
+                  misconceptionTagStatus: o.misconceptionTagStatus ?? null,
+                  confidence: typeof p.fields.confidence === 'number' ? p.fields.confidence : null,
                 });
               }}
               dangerouslySetInnerHTML={html(o.t)}
@@ -707,6 +808,21 @@ function SlideBody(p: SlideProps) {
               <li key={i} dangerouslySetInnerHTML={html(x)} />
             ))}
           </ul>
+          {/* Phase 2.2 #5: the session's self-score criteria shown up front,
+              so REQUIREMENTS_VIEWED is observable (dwell on this slide). */}
+          {p.sessionCriteria && p.sessionCriteria.length > 0 && (
+            <div className="box concept success-criteria">
+              <div className="box-title">What counts as success in this session</div>
+              <p>
+                You will score yourself on these at the end (0 = not done · 1 = partly · 2 = fully):
+              </p>
+              <ul>
+                {p.sessionCriteria.map((c, i) => (
+                  <li key={i} dangerouslySetInnerHTML={html(c)} />
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       );
     case 'theory':
@@ -740,8 +856,9 @@ function SlideBody(p: SlideProps) {
     case 'check':
       return <CheckSlide {...p} />;
     case 'think':
+      return <ThinkSlide {...p} />;
     case 'reflect':
-      return <ThinkOrReflectSlide {...p} />;
+      return <ReflectSlide {...p} />;
     case 'predict':
       return <PredictSlide {...p} />;
     case 'mcq':

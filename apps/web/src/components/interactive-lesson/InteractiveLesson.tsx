@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LessonSlide } from '@ats/shared';
 import { useLessonData } from './useLessonData';
+import { useLessonTracking } from './useLessonTracking';
 import { Slide, type LessonEmit } from './slides';
 import './interactive-lesson.css';
 
@@ -16,8 +17,9 @@ export interface InteractiveLessonProps {
   /** Teacher preview: everything works locally but nothing is saved. */
   readOnly?: boolean;
   sessionId?: string | null;
-  /** Learning-event sink (Phase 2 wires this to the activity log). */
-  emit?: (slide: LessonSlide, ...args: Parameters<LessonEmit>) => void;
+  /** Ids stamped on every activity-log row (ActivityLog columns). */
+  courseId?: string;
+  moduleId?: string;
   onSlideChange?: (slide: LessonSlide, index: number) => void;
 }
 
@@ -44,7 +46,8 @@ export function InteractiveLesson({
   itemId,
   readOnly = false,
   sessionId = null,
-  emit,
+  courseId,
+  moduleId,
   onSlideChange,
 }: InteractiveLessonProps) {
   const { lesson, fieldsBySlide, saveFields, error } = useLessonData(itemId, {
@@ -56,6 +59,10 @@ export function InteractiveLesson({
 
   const total = lesson?.slides.length ?? 0;
   const current = lesson ? lesson.slides[Math.min(index, total - 1)] : undefined;
+  // Teacher previews are never logged.
+  const tracking = useLessonTracking({ enabled: !readOnly, itemId, courseId, moduleId });
+  const { enterSlide, reportVisible } = tracking;
+  const sessionCriteria = lesson?.slides.find((s) => s.t === 'selfscore')?.criteria ?? [];
 
   useEffect(() => {
     setIndex(loadPosition(itemId));
@@ -77,9 +84,34 @@ export function InteractiveLesson({
   );
 
   useEffect(() => {
-    if (current) onSlideChange?.(current, Math.min(index, total - 1));
+    if (!current) return;
+    enterSlide(current);
+    onSlideChange?.(current, Math.min(index, total - 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.key]);
+
+  // Page restored from the back/forward cache after a pagehide exit.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted && current) enterSlide(current);
+    };
+    window.addEventListener('pageshow', onShow);
+    return () => window.removeEventListener('pageshow', onShow);
+  }, [current, enterSlide]);
+
+  // maxVisiblePct: the lesson scrolls inside the docked layout's inner
+  // container, so that container — not the viewport — is the root.
+  useEffect(() => {
+    const el = rootRef.current?.querySelector<HTMLElement>('[data-slide-key]');
+    if (!el || !current || typeof IntersectionObserver === 'undefined') return;
+    const root = rootRef.current?.closest<HTMLElement>('[data-lesson-scroll-host]') ?? null;
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((en) => reportVisible(current.key, en.intersectionRatio * 100)),
+      { root, threshold: [0, 0.1, 0.25, 0.5, 0.6, 0.75, 0.9, 1] },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [current, reportVisible]);
 
   if (error) {
     return <div className="p-6 text-sm text-red-600">Could not load this lesson: {error}</div>;
@@ -89,7 +121,7 @@ export function InteractiveLesson({
   }
 
   const pos = Math.min(index, total - 1);
-  const slideEmit: LessonEmit = (name, data) => emit?.(current, name, data);
+  const slideEmit: LessonEmit = (name, data) => tracking.emit(current, name, data);
 
   return (
     <div
@@ -150,6 +182,7 @@ export function InteractiveLesson({
         fields={fieldsBySlide[current.key] ?? {}}
         save={(patch) => saveFields(current.key, patch)}
         emit={slideEmit}
+        sessionCriteria={sessionCriteria}
         onAdvance={() => go(pos + 1)}
       />
     </div>
