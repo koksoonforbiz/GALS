@@ -28,6 +28,8 @@ export interface LessonTrackingOptions {
   moduleId?: string;
   idleMs?: number;
   captureText?: boolean;
+  /** Called when the learner returns from idle (nudge evaluation, Phase 6). */
+  onIdleEnded?: () => void;
 }
 
 interface CurrentSlide {
@@ -64,6 +66,7 @@ export function useLessonTracking({
   moduleId,
   idleMs = 120_000,
   captureText = false,
+  onIdleEnded,
 }: LessonTrackingOptions) {
   const { track } = useActivityLog();
   const current = useRef<CurrentSlide | null>(null);
@@ -74,8 +77,8 @@ export function useLessonTracking({
   // Exit/enter pairs often share a millisecond; `seq` (monotonic per page
   // load) gives the parser an unambiguous order within a session.
   const seq = useRef(0);
-  const opts = useRef({ enabled, itemId, courseId, moduleId, captureText });
-  opts.current = { enabled, itemId, courseId, moduleId, captureText };
+  const opts = useRef({ enabled, itemId, courseId, moduleId, captureText, onIdleEnded });
+  opts.current = { enabled, itemId, courseId, moduleId, captureText, onIdleEnded };
 
   const send = useCallback(
     (action: ActivityAction, metadata: Record<string, unknown>) => {
@@ -219,6 +222,7 @@ export function useLessonTracking({
           idleMs: Math.round(idleFor),
         });
         resume();
+        opts.current.onIdleEnded?.();
       }
     };
     const timer = window.setInterval(() => {

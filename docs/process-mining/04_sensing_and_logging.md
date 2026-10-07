@@ -224,6 +224,8 @@ Captured once at session init (`useInteractionLogger.ts:137-149`): `wallClockMs 
 - **`ReplayAnnotation` → CASCADE** — annotations are deleted with the session. Codes themselves survive (researcher-owned).
 - **`ChatbotMessage` → SetNull** — chatbot turns **outlive a session purge** (FK nulled, row kept); only deleted when the student is deleted (`schema.prisma:912-919`).
 - Cascaded with the session: `ActivityLog`, `SessionReplaySnapshot`, `RecordingSegment`, `PyfeatJob`(→`PyfeatAuResult`), `EmotionFrame` (via `Openface3Job`), `SessionSummary`.
+- **Prompting course (2026-10-07):** `LessonSlideState` and `LearningEvent` cascade with the session; the session purge (`ActivityLogService.deleteSession`) also deletes that session's `PromptLabRun` and `RuleNudge` rows explicitly. Prompt Lab versions/test cases and `TextCaptureConsent` are per learner and go with the student.
+- **Text scrub on session close (Phase 6.2):** without consent (b), Prompt Lab prompt/output text is blanked when the session closes (`session.closed` → `TextConsentService.scrubForSession`); counts, tokens, diffs, tags and results are kept. Without consent (a), the activity-log batch endpoint drops `text`/`parts` from lesson events server-side, so only `chars` is stored.
 - **No scheduled purge job exists** — purge is DB-cascade-driven off session/user deletion, not a background sweep. (This is why the replay query re-unions chatbot messages by a student+time-window fallback rather than session id alone, `logs.service.ts:680-708`.)
 
 ### 7.3 CSV exporter — full column set + sampling strategy

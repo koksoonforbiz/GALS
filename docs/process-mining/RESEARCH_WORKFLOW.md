@@ -1,4 +1,4 @@
-# Prompting course — research workflow (Phases 4–5)
+# Prompting course — research workflow (Phases 4–6)
 
 How to get from raw learner actions to validated learning events and
 process-mining files. All endpoints below are **teacher/admin only** (PRIVATE
@@ -12,6 +12,7 @@ door) and scoped to courses the caller teaches. Base path: `/api/learning-events
 | `PROMPT_CLASSIFIER_HUMAN_LLM_KAPPA_MIN`                  | M33 validation  | default 0.6 (decision #6)                                                                                                                                      |
 | `PROMPT_CLASSIFIER_HUMAN_HUMAN_KAPPA_MIN`                | M33 validation  | default 0.7                                                                                                                                                    |
 | `PROMPT_LAB_RUNS_PER_HOUR` / `PROMPT_LAB_TOKENS_PER_DAY` | Prompt Lab      | defaults 60 / 200 000 per student per course                                                                                                                   |
+| `REDACTION_TERMS`                                        | classifier      | Comma-separated organisation/product terms redacted before LLM classification and coding export, in addition to the course roster's names and emails.          |
 
 ## 1. Learning events (Phase 4)
 
@@ -113,3 +114,39 @@ scenarios and rubrics:**
 4. To score, read `GET /courses/:id/transfer`, then submit
    `POST /courses/:id/transfer/scores { studentId, moduleItemId, slideKey, scores: [0|1|2, …] }`.
    Scores feed `outcomes.csv`.
+
+## 6. Consent and data governance (Phase 6.2)
+
+On first opening a lesson, each learner sees a plain-language notice and three choices.
+Nothing is pre-ticked; no decision means no consent. Learners can change a choice at any
+time from **Privacy & data** in the lesson bar. Decisions are append-only
+(`text_capture_consents`), and the latest one wins.
+
+| Choice                  | Given                                              | Not given                                                                      |
+| ----------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| (a) answer text         | answer/prediction/reflection text in activity log  | only `chars` is stored (enforced in the client and again on the server)        |
+| (b) prompts and outputs | Prompt Lab text kept after the session             | blanked when the session closes; counts, tokens, diffs and ratings are kept    |
+| (c) research use        | included in exports, validation and classification | excluded from all research exports, coding samples, validation and gals-export |
+
+Before LLM classification and in the coding sample, the course roster's names and email
+local parts, emails, phone numbers and `REDACTION_TERMS` are replaced with placeholders.
+Purging a session also deletes its Prompt Lab runs and nudges.
+
+## 7. Rule-triggered nudges (Phase 6.1)
+
+**Off by default. Keep them off until the rule is validated (section 2).** Base path
+`/api/nudges`.
+
+- `GET /policies/courses/:courseId` lists the starter policies (M31, M28, M15, M16, M24, M25).
+  It creates them disabled on first call and shows `ruleValidated`.
+- `PATCH /policies/courses/:courseId/:ruleId { enabled, messageTemplate, rationale, maxPerActivity, cooldownMinutes, abTreatmentShare }`.
+  Enabling a rule that is not validated is refused unless `requiresValidated: false` is sent.
+  Use that only in test courses.
+- `abTreatmentShare` (0–1) assigns each learner deterministically to treatment or control
+  per policy. Control learners are evaluated and logged (`status: withheld`) but see nothing.
+- `GET /courses/:courseId/log` lists nudges with arm, status and trigger detail.
+
+Every decision is logged as `INTERVENTION_TRIGGERED` (`triggerReason: rule_triggered`,
+`interventionId` = nudge id). The learner's response is logged as `INTERVENTION_VIEWED`,
+`INTERVENTION_COMPLETED` (OK) or `INTERVENTION_DISMISSED`. By default there is at most one
+nudge per rule per activity, with a 30-minute cooldown per rule.

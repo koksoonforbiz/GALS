@@ -912,3 +912,58 @@
 .il-root .pl-input {
   min-width: 0;
 }
+
+/* Phase 6: consent notice and nudges */
+.il-root .il-consent {
+  margin: 16px clamp(16px, 6%, 72px) 0;
+  font-size: 15px;
+}
+.il-root .il-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0;
+  font-size: 15px;
+}
+.il-root .il-check input {
+  margin-top: 4px;
+}
+.il-root .il-bar .il-privacy {
+  width: auto;
+  height: auto;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.il-root .il-nudge {
+  margin: 12px clamp(16px, 6%, 72px) 0;
+  padding: 12px 14px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  font-family: var(--sans);
+  font-size: 14px;
+}
+.il-root .il-nudge-msg {
+  font-weight: 600;
+  color: var(--ink);
+}
+.il-root .il-nudge-why {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.il-root .il-nudge-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.il-root .il-nudge-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  cursor: pointer;
+}

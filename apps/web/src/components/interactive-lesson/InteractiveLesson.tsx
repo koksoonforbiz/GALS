@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LessonSlide } from '@ats/shared';
+import { api } from '../../lib/api';
+import { useActivityLog } from '../../lib/activity-log';
+import { ConsentPanel, NudgeCard, type ConsentChoice, type Nudge } from './governance';
 import { useLessonData } from './useLessonData';
 import { useLessonTracking } from './useLessonTracking';
 import { Slide, type LessonEmit } from './slides';
@@ -44,6 +47,17 @@ function slideTitle(s: LessonSlide, i: number): string {
   return `${i + 1}. ${label}`;
 }
 
+/** Moments after which the server may have a nudge (starter rules M16/M24/M28/M31). */
+const NUDGE_MOMENTS = new Set([
+  'misconception_changed',
+  'predict_revealed',
+  'check_revealed',
+  'expect_revealed',
+  'prompt_submitted',
+  'output_regenerated',
+  'output_edited',
+]);
+
 export function InteractiveLesson({
   itemId,
   readOnly = false,
@@ -52,23 +66,106 @@ export function InteractiveLesson({
   moduleId,
   onSlideChange,
 }: InteractiveLessonProps) {
-  const { lesson, fieldsBySlide, saveFields, error } = useLessonData(itemId, {
+  const {
+    lesson,
+    fieldsBySlide,
+    saveFields,
+    error,
+    consent,
+    setConsent,
+    courseId: lessonCourseId,
+  } = useLessonData(itemId, {
     readOnly,
     sessionId,
   });
+  const { track, flush } = useActivityLog();
+  const [showConsent, setShowConsent] = useState(false);
+  const [nudge, setNudge] = useState<Nudge | null>(null);
+  const evalTimer = useRef<number | null>(null);
+
+  // Phase 6.1: ask the server for a rule-triggered nudge after key moments.
+  // The activity buffer is flushed first so the server sees the latest
+  // actions. Off unless a researcher enabled a policy for this course.
+  const scheduleNudgeCheck = useCallback(
+    (slideKey?: string) => {
+      if (readOnly || !sessionId) return;
+      if (evalTimer.current) window.clearTimeout(evalTimer.current);
+      evalTimer.current = window.setTimeout(async () => {
+        try {
+          await flush();
+          const res = await api.post<{ nudge: Nudge | null }>('/nudges/evaluate', {
+            moduleItemId: itemId,
+            sessionId,
+            ...(slideKey ? { slideKey } : {}),
+          });
+          if (res.nudge) {
+            setNudge(res.nudge);
+            track('INTERVENTION_VIEWED', {
+              courseId,
+              moduleId,
+              moduleItemId: itemId,
+              interventionId: res.nudge.id,
+              metadata: {
+                triggerReason: 'rule_triggered',
+                ruleId: res.nudge.ruleId,
+                slideKey: res.nudge.slideKey,
+              },
+            });
+          }
+        } catch {
+          // A nudge is optional; never block the learner.
+        }
+      }, 1500);
+    },
+    [readOnly, sessionId, flush, itemId, track, courseId, moduleId],
+  );
   const [index, setIndex] = useState(() => loadPosition(itemId));
   const rootRef = useRef<HTMLDivElement>(null);
 
   const total = lesson?.slides.length ?? 0;
   const current = lesson ? lesson.slides[Math.min(index, total - 1)] : undefined;
   // Teacher previews are never logged.
-  const tracking = useLessonTracking({ enabled: !readOnly, itemId, courseId, moduleId });
+  const tracking = useLessonTracking({
+    enabled: !readOnly,
+    itemId,
+    courseId,
+    moduleId,
+    // Phase 6.2: free text only with consent (a); otherwise chars only.
+    captureText: consent?.answerText === true,
+    onIdleEnded: () => scheduleNudgeCheck(),
+  });
   const { enterSlide, reportVisible } = tracking;
   const sessionCriteria = lesson?.slides.find((s) => s.t === 'selfscore')?.criteria ?? [];
 
   useEffect(() => {
     setIndex(loadPosition(itemId));
   }, [itemId]);
+
+  // First visit: show the notice until the learner has made a decision.
+  useEffect(() => {
+    if (!readOnly && lesson && consent === null) setShowConsent(true);
+  }, [readOnly, lesson, consent]);
+
+  const saveConsent = async (choice: ConsentChoice) => {
+    const cid = lessonCourseId ?? courseId;
+    if (!cid) return;
+    const res = await api.put<{ decision: typeof consent }>(`/text-consent/courses/${cid}`, choice);
+    setConsent(res.decision);
+    setShowConsent(false);
+  };
+
+  const respondToNudge = (status: 'accepted' | 'dismissed') => {
+    if (!nudge) return;
+    track(status === 'accepted' ? 'INTERVENTION_COMPLETED' : 'INTERVENTION_DISMISSED', {
+      courseId,
+      moduleId,
+      moduleItemId: itemId,
+      interventionId: nudge.id,
+      metadata: { triggerReason: 'rule_triggered', ruleId: nudge.ruleId },
+    });
+    api.post(`/nudges/${nudge.id}/respond`, { status }).catch(() => {});
+    setNudge(null);
+  };
 
   const go = useCallback(
     (i: number) => {
@@ -85,8 +182,12 @@ export function InteractiveLesson({
     [itemId, total],
   );
 
+  // Leaving a slide is when "revealed but noted nothing" (M15) becomes visible.
+  const prevKey = useRef<string | null>(null);
   useEffect(() => {
     if (!current) return;
+    if (prevKey.current && prevKey.current !== current.key) scheduleNudgeCheck(prevKey.current);
+    prevKey.current = current.key;
     enterSlide(current);
     onSlideChange?.(current, Math.min(index, total - 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,6 +226,7 @@ export function InteractiveLesson({
   const pos = Math.min(index, total - 1);
   const slideEmit: LessonEmit = (name, data) => {
     tracking.emit(current, name, data);
+    if (NUDGE_MOMENTS.has(name)) scheduleNudgeCheck(current.key);
     // OUTPUT_EDITED: a field that received an AI-output paste is now saved.
     const fieldKey = data?.fieldKey;
     if (typeof fieldKey === 'string' && typeof data?.text === 'string') {
@@ -155,6 +257,7 @@ export function InteractiveLesson({
         const fieldKey = field.dataset.fieldKey!;
         const match = matchPaste(text);
         if (match) notePaste(fieldKey, text, match.runId);
+        scheduleNudgeCheck(current.key);
         tracking.emit(current, 'output_pasted', {
           targetField: fieldKey,
           chars: text.length,
@@ -199,6 +302,11 @@ export function InteractiveLesson({
           <i style={{ width: `${((pos + 1) / total) * 100}%` }} />
         </div>
         {readOnly && <span className="il-readonly">Preview · nothing is saved</span>}
+        {!readOnly && (
+          <button type="button" className="il-privacy" onClick={() => setShowConsent((v) => !v)}>
+            Privacy &amp; data
+          </button>
+        )}
         <select aria-label="Jump to slide" value={pos} onChange={(e) => go(Number(e.target.value))}>
           {lesson.slides.map((s, i) => (
             <option key={s.key} value={i}>
@@ -207,6 +315,28 @@ export function InteractiveLesson({
           ))}
         </select>
       </div>
+      {showConsent && !readOnly && (
+        <ConsentPanel
+          current={consent}
+          onSave={saveConsent}
+          onClose={consent ? () => setShowConsent(false) : undefined}
+        />
+      )}
+      {nudge && (
+        <NudgeCard
+          nudge={nudge}
+          onAccept={() => respondToNudge('accepted')}
+          onDismiss={() => respondToNudge('dismissed')}
+          onGoToSlide={
+            nudge.slideKey && nudge.slideKey !== current.key
+              ? () => {
+                  const i = lesson.slides.findIndex((s) => s.key === nudge.slideKey);
+                  if (i >= 0) go(i);
+                }
+              : undefined
+          }
+        />
+      )}
       <Slide
         key={current.key}
         slide={current}

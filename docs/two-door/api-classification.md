@@ -285,6 +285,27 @@ Added 2026-10-07 for the prompting-course Prompt Lab (`docs/process-mining/`).
 | POST   | `/api/prompt-lab/ratings`                               | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  |                                                              |
 | GET    | `/api/prompt-lab/courses/:courseId/students/:studentId` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit 404 in the public allowlist.                        |
 
+### TextConsentController (`governance/text-consent.controller.ts`)
+
+Added 2026-10-07 (prompting course, Phase 6.2).
+
+| Method | Path                                  | @Roles  | Guards                  | Door       | Note                                       |
+| ------ | ------------------------------------- | ------- | ----------------------- | ---------- | ------------------------------------------ |
+| GET    | `/api/text-consent/courses/:courseId` | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Own latest decision.                       |
+| PUT    | `/api/text-consent/courses/:courseId` | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Append a decision; ACTIVE enrollment only. |
+
+### NudgeController (`learning-events/nudges/nudge.controller.ts`)
+
+Added 2026-10-07 (prompting course, Phase 6.1).
+
+| Method | Path                                             | @Roles         | Guards                  | Door        | Note                                  |
+| ------ | ------------------------------------------------ | -------------- | ----------------------- | ----------- | ------------------------------------- |
+| POST   | `/api/nudges/evaluate`                           | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  | Own session only; @Throttle 30/min.   |
+| POST   | `/api/nudges/:id/respond`                        | student        | JwtAuthGuard,RolesGuard | **PUBLIC**  | Own nudge only.                       |
+| GET    | `/api/nudges/policies/courses/:courseId`         | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Not in the public allowlist.          |
+| PATCH  | `/api/nudges/policies/courses/:courseId/:ruleId` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Refuses unvalidated rules by default. |
+| GET    | `/api/nudges/courses/:courseId/log`              | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** |                                       |
+
 ### InteractiveLessonController (`interactive-lesson/interactive-lesson.controller.ts`)
 
 Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
