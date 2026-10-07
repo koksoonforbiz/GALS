@@ -245,6 +245,15 @@ test.describe('Prompt Lab — paste matching (client-side only)', () => {
     expect(matchPaste('yes')).toBeNull();
   });
 
+  test('identical outputs: the most recently remembered (or copied) run wins', () => {
+    const same = 'The warranty covers parts and labour for two years.';
+    rememberOutput('old', same);
+    rememberOutput('new', same);
+    expect(matchPaste(same)?.runId).toBe('new');
+    rememberOutput('old', same); // copied again from the older run
+    expect(matchPaste(same)?.runId).toBe('old');
+  });
+
   test('paste memory is consumed once per field', () => {
     notePaste('results', 'pasted', 'run-9');
     expect(takePaste('results')).toEqual({ text: 'pasted', runId: 'run-9' });
@@ -312,5 +321,49 @@ test.describe('Prompt Lab — event mapping', () => {
     expect(mapLessonEvent('run_settings_recorded', { model: 'm' }, c)!.metadata).toMatchObject({
       toolsEnabled: false,
     });
+  });
+});
+
+test.describe('Replay CSV — lesson actions as named rows (Phase 7 #2)', () => {
+  test('lesson and Prompt Lab actions fill their own rows, without free text', async () => {
+    const { exportReplayCsv } =
+      await import('../apps/web/src/pages/teacher/student-logs/lib/exportReplayCsv');
+    const base = Date.UTC(2026, 9, 7, 9);
+    const log = (action: string, sec: number, metadata: Record<string, unknown>) => ({
+      id: `${action}-${sec}`,
+      action,
+      occurredAt: new Date(base + sec * 1000).toISOString(),
+      metadata: { libraryVersion: 'v2', ...metadata },
+    });
+    const csv = exportReplayCsv(
+      {
+        session: { startedAt: new Date(base).toISOString() },
+        snapshots: [],
+        clickLogs: [],
+        scrollLogs: [],
+        gazeLogs: [],
+        pupilLogs: [],
+        emotionFrames: [],
+        auResults: [],
+        activityLogs: [
+          log('PREDICTION_COMMITTED', 2, {
+            slideKey: 's1-6',
+            kind: 'predict',
+            chars: 26,
+            text: 'it sees tokens not letters',
+          }),
+          log('REFERENCE_REVEALED', 2, { slideKey: 's1-6', revealKind: 'predict' }),
+          log('OUTPUT_PASTED', 4, { slideKey: 's1-18', chars: 107, matchesAiOutput: true }),
+        ],
+      },
+      base,
+      6_000,
+    );
+    const row = (name: string) => csv.split('\n').find((l) => l.startsWith(`${name},`)) ?? '';
+    expect(row('prediction_committed')).toContain('s1-6');
+    expect(row('prediction_committed')).toContain('chars=26');
+    expect(row('reference_revealed')).toContain('reveal=predict');
+    expect(row('output_pasted')).toContain('s1-18');
+    expect(csv).not.toContain('it sees tokens not letters');
   });
 });

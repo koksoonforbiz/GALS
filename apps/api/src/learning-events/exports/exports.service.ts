@@ -9,6 +9,8 @@ import { TextConsentService } from '../../governance/text-consent.service';
 
 export type EventLogActivity = 'raw' | 'learning_event';
 export type EventLogCase = 'item' | 'session';
+/** activitylog: one row per instance (start/end); eventlog: start + complete lifecycle rows. */
+export type EventLogFormat = 'activitylog' | 'eventlog';
 
 /**
  * Research exports (plan Phase 5.2). Analysis runs in R/Python on these
@@ -111,8 +113,24 @@ export class ResearchExportsService {
    *   resource, rule_id, outcome, slide_key, library_version, parameter_set_version
    * In R: bupaR::activitylog(df, case_id = "case_id", activity_id = "activity",
    *   resource_id = "resource", timestamps = c("timestamp_start", "timestamp_end"))
+   *
+   * format 'eventlog' writes the same instances as two rows each (lifecycle
+   * start/complete) with a single `timestamp` column, for bupaR::eventlog():
+   *   eventlog(df, case_id = "case_id", activity_id = "activity",
+   *     activity_instance_id = "activity_instance", lifecycle_id = "lifecycle",
+   *     timestamp = "timestamp", resource_id = "resource")
    */
   async eventLogCsv(
+    courseId: string,
+    activity: EventLogActivity,
+    caseBy: EventLogCase,
+    format: EventLogFormat = 'activitylog',
+  ): Promise<string> {
+    const csv = await this.activityLogCsv(courseId, activity, caseBy);
+    return format === 'eventlog' ? toLifecycleRows(csv) : csv;
+  }
+
+  private async activityLogCsv(
     courseId: string,
     activity: EventLogActivity,
     caseBy: EventLogCase,
@@ -302,4 +320,56 @@ export class ResearchExportsService {
     }
     return lines.join('\n') + '\n';
   }
+}
+
+/** Minimal CSV line splitter for rows this service wrote (csvCell quoting). */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]!;
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cur += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') {
+      out.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * Activity-log CSV → event-log CSV: each instance becomes a `start` and a
+ * `complete` row (bupaR's standard lifecycle), ordered by timestamp.
+ */
+export function toLifecycleRows(activityCsv: string): string {
+  const [headLine, ...body] = activityCsv.trimEnd().split('\n');
+  const head = splitCsvLine(headLine!);
+  const iStart = head.indexOf('timestamp_start');
+  const iEnd = head.indexOf('timestamp_end');
+  const rest = head.filter((_, i) => i !== iStart && i !== iEnd);
+  const outHead = [...rest.slice(0, 3), 'lifecycle', 'timestamp', ...rest.slice(3)];
+  const rows: Array<{ ts: string; order: number; cells: string[] }> = [];
+  for (const line of body) {
+    if (!line) continue;
+    const cells = splitCsvLine(line);
+    const keep = cells.filter((_, i) => i !== iStart && i !== iEnd);
+    const mk = (lifecycle: string, ts: string, order: number) => ({
+      ts,
+      order,
+      cells: [...keep.slice(0, 3), lifecycle, ts, ...keep.slice(3)],
+    });
+    rows.push(mk('start', cells[iStart]!, 0), mk('complete', cells[iEnd]!, 1));
+  }
+  rows.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.order - b.order));
+  return (
+    [outHead, ...rows.map((r) => r.cells)].map((c) => c.map(csvCell).join(',')).join('\n') + '\n'
+  );
 }

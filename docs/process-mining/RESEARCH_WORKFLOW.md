@@ -79,7 +79,10 @@ Re-generating the library after a workbook edit:
 
 ## 4. Exports (Phase 5.2)
 
-- `GET /courses/:id/export/event-log.csv?activity=learning_event|raw&case=item|session`
+- `GET /courses/:id/export/event-log.csv?activity=learning_event|raw&case=item|session&format=activitylog|eventlog`.
+  The default `activitylog` format writes one row per instance with start and end times.
+  `eventlog` writes a `start` and a `complete` row per instance with a single `timestamp`,
+  for `bupaR::eventlog()`. See `load_eventlog.R`.
 - `GET /courses/:id/export/outcomes.csv`: per learner: MCQ accuracy, calibration
   bias and absolute accuracy, self-scores, transfer score share, Prompt Lab runs and versions
 - The gals-studio cohort ZIP (`/api/analysis/export.zip`) also contains

@@ -26,6 +26,7 @@ import {
   ResearchExportsService,
   type EventLogActivity,
   type EventLogCase,
+  type EventLogFormat,
 } from './exports/exports.service';
 import { PromptClassifierService } from './classifier/classifier.service';
 import { TransferTaskService } from './transfer/transfer.service';
@@ -300,11 +301,13 @@ export class LearningEventsController {
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
     @Query('activity') activity?: string,
     @Query('case') caseBy?: string,
+    @Query('format') format?: string,
   ) {
     await this.assertCourse(req.user, courseId);
     const a: EventLogActivity = activity === 'raw' ? 'raw' : 'learning_event';
     const c: EventLogCase = caseBy === 'session' ? 'session' : 'item';
-    return this.exportsService.eventLogCsv(courseId, a, c);
+    const f: EventLogFormat = format === 'eventlog' ? 'eventlog' : 'activitylog';
+    return this.exportsService.eventLogCsv(courseId, a, c, f);
   }
 
   @Get('courses/:courseId/export/outcomes.csv')

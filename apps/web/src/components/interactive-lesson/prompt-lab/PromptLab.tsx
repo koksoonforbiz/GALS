@@ -139,7 +139,9 @@ export function PromptLab({
         `/prompt-lab/me?moduleItemId=${itemId}&slideKey=${encodeURIComponent(slide.key)}`,
       );
       setSnap(data);
-      data.runs.forEach((r) => rememberOutput(r.id, r.responseText));
+      // Runs arrive newest first; remember oldest → newest so the newest
+      // output is matched first when a paste is compared.
+      [...data.runs].reverse().forEach((r) => rememberOutput(r.id, r.responseText));
       setModel((m) => m || data.defaultModel);
       setError(null);
     } catch (err) {
@@ -582,7 +584,11 @@ export function PromptLab({
                 data-replay-redact=""
                 onCopy={() => {
                   const chars = window.getSelection()?.toString().length ?? 0;
-                  if (chars > 0) emit('output_copied', { runId: shownRun.id, chars });
+                  if (chars > 0) {
+                    // The copied run wins a later paste match over identical older outputs.
+                    rememberOutput(shownRun.id, shownRun.responseText);
+                    emit('output_copied', { runId: shownRun.id, chars });
+                  }
                 }}
               >
                 {shownRun.responseText}
