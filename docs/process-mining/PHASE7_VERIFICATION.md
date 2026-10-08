@@ -6,12 +6,12 @@ fixture accounts from `seed-prompting-course-local.ts` (`--reset-state` before t
 
 ## How to re-run
 
-| What                                    | Command                                                                                                  |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| API checks (#2 data, #4–#10), test DB   | `pnpm --filter @ats/api exec dotenv -e .env.test -- jest --runInBand src/learning-events/phase7`         |
-| Client checks (event mapping, CSV rows) | `pnpm exec playwright test e2e/interactive-lesson.unit.spec.ts`                                          |
-| bupaR load (#8), needs R + bupaR        | export `event-log.csv?format=eventlog`, then `Rscript docs/process-mining/load_eventlog.R event-log.csv` |
-| Browser click-through (#1, #3)          | `e2e/interactive-lesson.e2e.spec.ts` (needs `playwright install chromium`) or by hand as below           |
+| What                                    | Command                                                                                                                                                                                                                      |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API checks (#2 data, #4–#10), test DB   | `pnpm --filter @ats/api exec dotenv -e .env.test -- jest --runInBand src/learning-events/phase7`                                                                                                                             |
+| Client checks (event mapping, CSV rows) | `pnpm exec playwright test e2e/interactive-lesson.unit.spec.ts`                                                                                                                                                              |
+| bupaR load (#8), needs R + bupaR        | export `event-log.csv?format=eventlog`, then `Rscript docs/process-mining/load_eventlog.R event-log.csv`                                                                                                                     |
+| Browser e2e (#1), Playwright Chromium   | `pnpm --filter @ats/api run seed:prompting-course-local -- --reset-state`, then `E2E_BASE_URL=http://localhost:5174 E2E_STUDENT_LOGIN=… E2E_STUDENT_PASSWORD=… pnpm exec playwright test e2e/interactive-lesson.e2e.spec.ts` |
 
 `phase7.integration.spec.ts` drives the real HTTP routes. It registers a teacher and a
 student, logs a scripted Session 1 run through `/activity-log/batch`, closes the session,
@@ -51,8 +51,11 @@ events. It is part of `pnpm test`.
    `sync-anchor.integration.spec.ts`). Sessions recorded before the fix keep their last
    anchor. A real session with continuous screen recording should still be checked once
    before the pilot.
-2. **Browser automation.** The click-through ran in the desktop app's browser pane, with a
-   stand-in camera/screen stream to pass the capture gate. Typing into fields went through
-   React's value setter; real keyboard typing was not exercised. Install Playwright Chromium
-   to run `interactive-lesson.e2e.spec.ts` unattended.
+2. **Browser automation.** The Prompt Lab and copy/paste checks (#3, #4) ran in the desktop
+   app's browser pane, with a stand-in camera/screen stream and values set through React.
+   **Update 2026-10-08:** with Playwright Chromium installed, `interactive-lesson.e2e.spec.ts`
+   passes unattended (3 runs, ~8 s each). It uses real typing and clicks through the
+   think, mcq, misconceptions, check, exercise, selfscore and reflect slides, and checks
+   the logged actions and that no answer text is sent without consent. The capture gate
+   is bypassed by the spec, not exercised.
 3. **LLM.** Prompt Lab runs used the local model fallback, not Bedrock.

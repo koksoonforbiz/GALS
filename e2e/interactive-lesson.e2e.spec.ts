@@ -58,6 +58,20 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
     return rows.find((r) => r.course.title.startsWith(title))?.course.id;
   }, COURSE_TITLE);
   expect(courseId).toBeTruthy();
+  // Phase 6: decide text consent up front (none given), so the notice does
+  // not cover the lesson and the "no text without consent" check holds.
+  const consent = await page.evaluate(async (id) => {
+    const res = await fetch(`/api/text-consent/courses/${id}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ answerText: false, promptsAndOutputs: false, researchUse: false }),
+    });
+    return res.status;
+  }, courseId);
+  expect(consent).toBe(200);
   await page.goto(`/student/courses/${courseId}`);
   await page.getByRole('button', { name: 'How Language Models See Text' }).click();
   await expect(page.locator('.il-root')).toBeVisible();
@@ -98,12 +112,12 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
   // misconceptions (s1-16): reveal needs a choice and an 8-char reason
   await jumpTo(page, 's1-16');
   const item = page.locator('.il-root .misc .item').first();
-  await item.getByRole('button', { name: 'Agree' }).click();
+  await item.getByRole('button', { name: 'Agree', exact: true }).click();
   await expect(item.getByRole('button', { name: 'Reveal' })).toBeDisabled();
   await item.getByPlaceholder('because…').fill('more is better');
   await item.getByRole('button', { name: 'Reveal' }).click();
   await expect(item).toHaveClass(/open/);
-  await item.getByRole('button', { name: 'Yes' }).click();
+  await item.getByRole('button', { name: 'Yes', exact: true }).click();
 
   // check (s1-18): answer → show → what I missed
   await jumpTo(page, 's1-18');
@@ -113,7 +127,7 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
   await qa.getByRole('button', { name: 'Save answer' }).click();
   await qa.getByRole('button', { name: 'Show answer' }).click();
   await qa.getByPlaceholder('One sentence…').fill('I forgot position effects.');
-  await qa.getByRole('button', { name: 'Save' }).last().click();
+  await qa.getByRole('button', { name: 'Save', exact: true }).click();
 
   // exercise (s1-19): results gate, then analysis template
   await jumpTo(page, 's1-19');
