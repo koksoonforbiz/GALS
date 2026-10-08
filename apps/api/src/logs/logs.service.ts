@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -361,26 +362,28 @@ export class LogsService {
     }
     const serverReceiveMs = Date.now();
     try {
-      await this.prisma.session_sync_anchors.upsert({
-        where: { sessionId: dto.sessionId },
-        update: {
-          userId: dto.userId,
-          wallClockMs: BigInt(dto.wallClockMs),
-          monotonicMs: BigInt(dto.monotonicMs),
-          serverReceiveMs: BigInt(serverReceiveMs),
-          timezone: dto.timezone,
-          userAgent: dto.userAgent,
-        },
-        create: {
-          sessionId: dto.sessionId,
-          userId: dto.userId,
-          wallClockMs: BigInt(dto.wallClockMs),
-          monotonicMs: BigInt(dto.monotonicMs),
-          serverReceiveMs: BigInt(serverReceiveMs),
-          timezone: dto.timezone,
-          userAgent: dto.userAgent,
-        },
-      });
+      // The anchor is the replay's t = 0 and the base of every annotation
+      // offset, and the client posts one on every page load. Keep the
+      // earliest: a later reload must not move t = 0 (that hid everything
+      // before the reload and shifted existing annotations). An earlier
+      // anchor arriving late still wins. One statement, so concurrent
+      // first-load posts cannot race on the unique sessionId.
+      await this.prisma.$executeRaw`
+        INSERT INTO "session_sync_anchors"
+          ("id", "sessionId", "userId", "wallClockMs", "monotonicMs",
+           "serverReceiveMs", "timezone", "userAgent", "createdAt")
+        VALUES
+          (${randomUUID()}, ${dto.sessionId}::uuid, ${dto.userId}, ${BigInt(dto.wallClockMs)},
+           ${BigInt(dto.monotonicMs)}, ${BigInt(serverReceiveMs)}, ${dto.timezone},
+           ${dto.userAgent}, NOW())
+        ON CONFLICT ("sessionId") DO UPDATE SET
+          "userId" = EXCLUDED."userId",
+          "wallClockMs" = EXCLUDED."wallClockMs",
+          "monotonicMs" = EXCLUDED."monotonicMs",
+          "serverReceiveMs" = EXCLUDED."serverReceiveMs",
+          "timezone" = EXCLUDED."timezone",
+          "userAgent" = EXCLUDED."userAgent"
+        WHERE "session_sync_anchors"."wallClockMs" > EXCLUDED."wallClockMs"`;
       return { success: true, serverReceiveMs };
     } catch (error: unknown) {
       throw new InternalServerErrorException(

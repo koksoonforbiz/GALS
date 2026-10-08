@@ -44,12 +44,13 @@ events. It is part of `pnpm test`.
 
 ## Caveats
 
-1. **Replay window after a reload.** The Replay tab and its CSV start at the session's
-   sync anchor, which is re-set on every page load. If a learner reloads mid-session,
-   the replay (not the Timeline tab or the exports) only covers time after the reload.
-   This is the pre-existing anchor issue (spin-off task "keep the first sync anchor").
-   In this run, the replay covered 14 s after a reload. A real session with continuous
-   screen recording should be checked once before the pilot.
+1. **Replay window after a reload — fixed 2026-10-08.** The Replay tab and its CSV start
+   at the session's sync anchor, which every page load used to overwrite, so after a
+   mid-session reload the replay only covered time after the reload (14 s in this run).
+   The earliest anchor is now kept (`LogsService.upsertSyncAnchor`, test
+   `sync-anchor.integration.spec.ts`). Sessions recorded before the fix keep their last
+   anchor. A real session with continuous screen recording should still be checked once
+   before the pilot.
 2. **Browser automation.** The click-through ran in the desktop app's browser pane, with a
    stand-in camera/screen stream to pass the capture gate. Typing into fields went through
    React's value setter; real keyboard typing was not exercised. Install Playwright Chromium

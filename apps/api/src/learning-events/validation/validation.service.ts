@@ -128,9 +128,10 @@ export class ValidationService {
         start: base + Number(a.startMs),
         end: base + Number(a.endMs ?? a.startMs),
       }));
-    // The anchor is the replay's t = 0, but session_sync_anchors is upserted
-    // on every page load, so earlier activity can precede it (negative
-    // offsets). Segment the whole span, not just from the anchor.
+    // The anchor is the replay's t = 0. It is now the session's first page
+    // load, but sessions logged before 2026-10-08 kept the latest one, so
+    // earlier activity can precede it (negative offsets). Segment the whole
+    // span, not just from the anchor.
     const start = Math.min(
       base,
       firstAction?.occurredAt.getTime() ?? base,
