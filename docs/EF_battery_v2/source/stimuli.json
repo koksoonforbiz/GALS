@@ -1,2730 +1,4762 @@
 {
-  "meta": {
-    "version": "2.0",
-    "date": "20 October 2026",
-    "seeds": {
-      "A": 4101,
-      "B": 4102,
-      "C": 4103
-    },
-    "pool_seed": 4100,
-    "lns_patterns": [
-      "dld",
-      "ldl",
-      "dlld",
-      "lddl",
-      "ddldl",
-      "lldld",
-      "dlddll",
-      "lddlld",
-      "dldlldd",
-      "lddlldl",
-      "ddllldld",
-      "ldldddll"
+ "meta": {
+  "version": "2.0",
+  "date": "20 October 2026",
+  "seeds": {
+   "A": 4101,
+   "B": 4102,
+   "C": 4103
+  },
+  "pool_seed": 4100,
+  "lns_patterns": [
+   "dld",
+   "ldl",
+   "dlld",
+   "lddl",
+   "ddldl",
+   "lldld",
+   "dlddll",
+   "lddlld",
+   "dldlldd",
+   "lddlldl",
+   "ddllldld",
+   "ldldddll"
+  ],
+  "tmt_target": {
+   "path_mm": 1260.3,
+   "turning_deg": 2149.4,
+   "mean_nearest_distractor_mm": 17.23,
+   "near_distractors_15mm": 13.0
+  },
+  "tmt_samples": {
+   "A": [
+    [
+     80.9,
+     44.9
     ],
-    "tmt_target": {
-      "path_mm": 1260.3,
-      "turning_deg": 2149.4,
-      "mean_nearest_distractor_mm": 17.23,
-      "near_distractors_15mm": 13.0
-    },
-    "tmt_samples": {
-      "A": [
-        [80.9, 44.9],
-        [111.2, 59.2],
-        [51.5, 53.2],
-        [18.9, 17.7],
-        [99.7, 28.4],
-        [49.3, 9.7],
-        [92.3, 11.7],
-        [111.0, 12.6]
-      ],
-      "B": [
-        [71.4, 14.3],
-        [30.1, 18.3],
-        [54.6, 50.4],
-        [104.4, 54.0],
-        [109.3, 21.4],
-        [91.8, 27.1],
-        [79.3, 40.1],
-        [54.4, 30.6]
-      ],
-      "A_labels": ["1", "2", "3", "4", "5", "6", "7", "8"],
-      "B_labels": ["1", "A", "2", "B", "3", "C", "4", "D"]
-    },
-    "code_sha256": "b8ee0113f223dfeff54bc1d2348364b04817cb43c793af8cf5650d7e86641bb2",
-    "constraints": [
-      [
-        "W1",
-        "Digits 1-9, no repeated digit within a trial at ANY length (length 9 = a permutation of 1-9), no adjacent pair differing by 1, two trials per length with different first and last digits, no sequence reused across forms or between forward/backward; one unscored practice trial each."
-      ],
-      [
-        "W2",
-        "Length 2 used only for 2 practice trials; scored lengths 3-8 x 2 trials. Digit/letter composition, first-item category and position pattern are identical by slot in all forms; within-category inversions fixed at ceil(n(n-1)/4); letters from FHJKLMRSXY; no trial reused across forms."
-      ],
-      [
-        "W3",
-        "Numbers 13-96. Lists 1 and 2: each final digit exactly 3 times (9/30 tens-crossings each); List 3: 15 '+' items with 4 crossings and 15 '-' items with 4 crossings. Identical tens/units multisets in every form, so list means are identical. No duplicates within a list, no adjacent equal or consecutive numbers, no more than 2 crossing items in a row. Each list on its own page with practice items."
-      ],
-      [
-        "W4",
-        "No letter shared across forms (FAS / BHR / PMT); 'animals' at every occasion; alternating pairs contain common nouns only; fixed English response language."
-      ],
-      [
-        "W5",
-        "90 study-written sentences + 4 shared practice items; all gaps sentence-final; one expected word per sentence; no expected word repeated in the battery; no stem contains another same-form item's expected word; length and target frequency balanced across the six form x part cells. Pending cloze norming."
-      ],
-      [
-        "W6",
-        "100 items per page in 5 x 20 columns; exact 34/33/33 colour counts; no immediate word or ink repetition in reading order; CW ink never equals word (0% congruent); CW words follow the W-page word order; 5-item practice row per page; colour-naming check before the task; restart-from-top rule removes the ceiling."
-      ],
-      [
-        "W7",
-        "Part A 1-25, Part B 1-A-...-L-13 (no 'End' target; 'Begin'/'End' printed as small labels under the first and last circles). No path crossings, circle centres >= 20 mm apart, every path segment >= 8 mm from other circle centres; six test layouts selected from a seeded pool to match path length (+/-2%), turning, distractor proximity; sample trails for A and B."
-      ],
-      [
-        "W8",
-        "Official 14-item ADEXI, unchanged wording, official 1-5 scale and scoring (WM 9 items, Inhibition 5 items); administered at T0 (optional T2), not at every occasion."
-      ]
+    [
+     111.2,
+     59.2
+    ],
+    [
+     51.5,
+     53.2
+    ],
+    [
+     18.9,
+     17.7
+    ],
+    [
+     99.7,
+     28.4
+    ],
+    [
+     49.3,
+     9.7
+    ],
+    [
+     92.3,
+     11.7
+    ],
+    [
+     111.0,
+     12.6
     ]
-  },
-  "forms": {
-    "A": {
-      "form": "A",
-      "seed": 4101,
-      "dsf": {
-        "practice": [[9, 3]],
-        "trials": [
-          [4, 6],
-          [1, 3],
-          [6, 2, 4],
-          [9, 3, 7],
-          [8, 6, 4, 9],
-          [2, 6, 9, 5],
-          [5, 1, 3, 8, 2],
-          [6, 2, 4, 8, 3],
-          [8, 3, 6, 4, 7, 2],
-          [7, 2, 6, 9, 4, 1],
-          [8, 2, 5, 3, 7, 1, 4],
-          [9, 3, 5, 1, 7, 4, 6],
-          [8, 5, 9, 4, 6, 3, 7, 2],
-          [6, 1, 5, 3, 7, 4, 2, 8],
-          [9, 5, 2, 7, 1, 4, 8, 3, 6],
-          [3, 1, 5, 9, 7, 2, 4, 6, 8]
-        ]
-      },
-      "dsb": {
-        "practice": [[7, 3]],
-        "trials": [
-          [1, 4],
-          [8, 2],
-          [4, 9, 2],
-          [5, 2, 7],
-          [2, 9, 6, 1],
-          [9, 7, 4, 8],
-          [8, 4, 6, 9, 3],
-          [5, 8, 1, 7, 2],
-          [6, 8, 2, 5, 1, 7],
-          [1, 7, 2, 6, 8, 4],
-          [3, 5, 2, 4, 9, 6, 8],
-          [5, 9, 1, 4, 8, 2, 7],
-          [1, 3, 8, 5, 2, 7, 4, 9],
-          [6, 9, 7, 4, 2, 8, 3, 1]
-        ]
-      },
-      "lns": {
-        "practice": [
-          ["6", "J"],
-          ["Y", "7"]
-        ],
-        "trials": [
-          ["8", "J", "4"],
-          ["M", "4", "J"],
-          ["9", "L", "K", "7"],
-          ["Y", "7", "6", "K"],
-          ["7", "1", "L", "6", "K"],
-          ["L", "Y", "9", "J", "1"],
-          ["5", "L", "6", "3", "F", "H"],
-          ["X", "7", "9", "K", "R", "2"],
-          ["5", "L", "2", "F", "J", "1", "7"],
-          ["M", "8", "9", "J", "S", "3", "L"],
-          ["8", "1", "M", "X", "Y", "3", "K", "4"],
-          ["Y", "4", "F", "5", "7", "2", "M", "R"]
-        ]
-      },
-      "pm": {
-        "lists": [
-          {
-            "op": "+",
-            "items": [
-              23, 61, 96, 77, 50, 42, 17, 81, 93, 18, 36, 84, 80, 25, 67, 45, 59, 32, 40, 63, 19,
-              51, 46, 94, 39, 74, 62, 78, 28, 55
-            ],
-            "ops": [
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+"
-            ]
-          },
-          {
-            "op": "-",
-            "items": [
-              40, 46, 13, 69, 82, 93, 64, 33, 17, 55, 58, 21, 84, 89, 36, 78, 92, 34, 71, 27, 67,
-              18, 50, 45, 61, 25, 70, 52, 96, 49
-            ],
-            "ops": [
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-"
-            ]
-          },
-          {
-            "op": "+/-",
-            "items": [
-              36, 95, 78, 85, 15, 69, 49, 71, 22, 41, 53, 73, 84, 52, 68, 43, 83, 34, 75, 56, 64,
-              18, 30, 37, 46, 86, 57, 24, 91, 60
-            ],
-            "ops": [
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-"
-            ]
-          }
-        ],
-        "practice": {
-          "plus": [5, 11, 8],
-          "minus": [10, 6, 12],
-          "alt": [9, 7, 11, 4]
-        }
-      },
-      "flu": {
-        "letters": ["F", "A", "S"],
-        "cat": "animals",
-        "alt": ["fruits", "pieces of furniture"]
-      },
-      "hay": {
-        "A": [
-          ["The Earth travels once a year around the ___.", "sun"],
-          ["Hot air balloons float high up into the ___.", "sky"],
-          ["The thief ran away but was caught by the ___.", "police"],
-          ["Babies often drink milk from a ___.", "bottle"],
-          ["She went to the front door and rang the ___.", "bell"],
-          ["The plants died because nobody gave them any ___.", "water"],
-          ["The tennis player hit the ball with her ___.", "racket"],
-          ["A rainbow has seven ___.", "colours"],
-          ["He sliced the bread with a sharp ___.", "knife"],
-          ["The snake slowly shed its old ___.", "skin"],
-          ["To unlock the door he needed the right ___.", "key"],
-          ["She cut the paper with a pair of ___.", "scissors"],
-          ["The tired baby fell asleep in its mother's ___.", "arms"],
-          ["The lion is known as the king of the ___.", "jungle"],
-          ["He took off his shoes and ___.", "socks"]
-        ],
-        "B": [
-          ["The carpenter cut the wood with a ___.", "saw"],
-          ["After the long race the runner stopped to catch his ___.", "breath"],
-          ["Elephants are famous for their long ___.", "trunks"],
-          ["Every morning at dawn the rooster begins to ___.", "crow"],
-          ["A spider caught the fly in its ___.", "web"],
-          ["She looked up the meaning of the word in a ___.", "dictionary"],
-          ["Stop the car when the traffic light turns ___.", "red"],
-          ["The bread was baked in a hot ___.", "oven"],
-          ["In winter the lake turned into solid ___.", "ice"],
-          ["The birthday girl blew out all the ___.", "candles"],
-          ["The teacher wrote the date on the ___.", "board"],
-          ["The doctor rolled up his sleeve and gave him an ___.", "injection"],
-          ["A comb is used to tidy your ___.", "hair"],
-          ["A triangle has three ___.", "sides"],
-          ["The singer walked out onto the ___.", "stage"]
-        ]
-      },
-      "stroop": {
-        "words": [
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue"
-        ],
-        "colours": [
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green"
-        ],
-        "cw_words": [
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue"
-        ],
-        "cw_ink": [
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red"
-        ],
-        "practice": {
-          "words": ["red", "blue", "green", "red", "green"],
-          "colours": ["blue", "green", "red", "blue", "green"],
-          "cw_words": ["red", "green", "blue", "red", "blue"],
-          "cw_ink": ["blue", "red", "green", "blue", "green"]
-        }
-      },
-      "tmtA": [
-        [47.9, 143.2],
-        [123.6, 141.9],
-        [95.6, 163.8],
-        [53.3, 167.3],
-        [25.4, 143.7],
-        [104.6, 54.5],
-        [137.5, 93.7],
-        [119.4, 8.6],
-        [61.6, 24.1],
-        [111.4, 32.2],
-        [33.3, 72.8],
-        [28.9, 18.8],
-        [20.9, 106.3],
-        [18.1, 45.8],
-        [9.9, 123.2],
-        [15.8, 162.1],
-        [33.8, 176.1],
-        [123.0, 173.9],
-        [136.4, 158.4],
-        [140.3, 122.1],
-        [120.0, 109.1],
-        [102.1, 92.2],
-        [98.0, 119.8],
-        [73.9, 120.4],
-        [77.4, 99.2]
-      ],
-      "tmtB": [
-        [85.7, 126.6],
-        [50.5, 105.4],
-        [15.8, 157.1],
-        [57.0, 130.5],
-        [104.0, 146.7],
-        [118.8, 67.1],
-        [86.0, 83.9],
-        [45.0, 72.4],
-        [66.1, 26.6],
-        [14.2, 100.3],
-        [26.5, 62.6],
-        [20.7, 28.5],
-        [37.2, 45.0],
-        [41.2, 22.5],
-        [105.7, 10.4],
-        [130.9, 26.4],
-        [73.8, 51.6],
-        [141.8, 45.0],
-        [121.4, 131.8],
-        [119.6, 162.2],
-        [40.0, 159.0],
-        [73.9, 174.8],
-        [140.7, 169.4],
-        [137.4, 108.7],
-        [141.0, 85.0]
-      ]
-    },
-    "B": {
-      "form": "B",
-      "seed": 4102,
-      "dsf": {
-        "practice": [[5, 9]],
-        "trials": [
-          [5, 2],
-          [2, 6],
-          [9, 2, 6],
-          [3, 8, 2],
-          [4, 7, 2, 6],
-          [1, 4, 8, 2],
-          [4, 2, 5, 3, 8],
-          [5, 7, 4, 9, 2],
-          [7, 9, 2, 4, 6, 1],
-          [8, 4, 2, 7, 9, 5],
-          [4, 1, 6, 9, 2, 5, 8],
-          [2, 5, 7, 3, 1, 9, 4],
-          [8, 6, 2, 4, 9, 5, 7, 1],
-          [6, 4, 2, 8, 5, 1, 9, 3],
-          [7, 1, 4, 2, 5, 3, 8, 6, 9],
-          [9, 3, 6, 2, 8, 4, 1, 7, 5]
-        ]
-      },
-      "dsb": {
-        "practice": [[5, 1]],
-        "trials": [
-          [1, 9],
-          [9, 1],
-          [6, 2, 8],
-          [2, 5, 1],
-          [3, 8, 2, 6],
-          [5, 3, 1, 7],
-          [6, 1, 4, 8, 5],
-          [9, 2, 7, 1, 6],
-          [9, 3, 6, 1, 8, 2],
-          [7, 5, 1, 8, 6, 9],
-          [2, 8, 4, 7, 5, 9, 6],
-          [4, 7, 9, 5, 2, 8, 1],
-          [4, 7, 5, 9, 6, 1, 8, 2],
-          [1, 4, 8, 5, 7, 9, 6, 3]
-        ]
-      },
-      "lns": {
-        "practice": [
-          ["2", "J"],
-          ["K", "4"]
-        ],
-        "trials": [
-          ["3", "R", "2"],
-          ["L", "6", "J"],
-          ["9", "S", "H", "4"],
-          ["M", "5", "2", "H"],
-          ["5", "8", "R", "2", "F"],
-          ["K", "Y", "9", "H", "4"],
-          ["4", "M", "7", "2", "J", "L"],
-          ["K", "6", "8", "Y", "J", "5"],
-          ["7", "S", "2", "Y", "J", "9", "4"],
-          ["J", "6", "7", "L", "X", "2", "F"],
-          ["4", "1", "H", "Y", "R", "6", "K", "2"],
-          ["K", "6", "Y", "2", "3", "5", "F", "M"]
-        ]
-      },
-      "pm": {
-        "lists": [
-          {
-            "op": "+",
-            "items": [
-              80, 49, 78, 53, 50, 41, 94, 77, 62, 91, 14, 42, 81, 70, 86, 68, 35, 32, 27, 96, 47,
-              65, 33, 55, 13, 29, 64, 26, 19, 58
-            ],
-            "ops": [
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+"
-            ]
-          },
-          {
-            "op": "-",
-            "items": [
-              92, 76, 59, 68, 50, 85, 74, 43, 15, 31, 58, 89, 40, 66, 33, 21, 78, 47, 80, 27, 91,
-              42, 95, 69, 24, 16, 32, 54, 67, 13
-            ],
-            "ops": [
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-"
-            ]
-          },
-          {
-            "op": "+/-",
-            "items": [
-              44, 86, 18, 55, 38, 71, 40, 88, 63, 33, 59, 47, 76, 65, 56, 73, 85, 34, 77, 60, 25,
-              14, 61, 52, 83, 29, 94, 41, 32, 96
-            ],
-            "ops": [
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-"
-            ]
-          }
-        ],
-        "practice": {
-          "plus": [5, 11, 8],
-          "minus": [10, 6, 12],
-          "alt": [9, 7, 11, 4]
-        }
-      },
-      "flu": {
-        "letters": ["B", "H", "R"],
-        "cat": "animals",
-        "alt": ["vegetables", "items of clothing"]
-      },
-      "hay": {
-        "A": [
-          ["The bees flew back to their ___.", "hive"],
-          ["The ice cream melted because the day was so ___.", "hot"],
-          ["On her head the queen wore a golden ___.", "crown"],
-          ["She glanced at her watch to check the ___.", "time"],
-          ["She stirred the soup with a wooden ___.", "spoon"],
-          ["The old film was shown in black and ___.", "white"],
-          ["The old empty house was full of dust and ___.", "cobwebs"],
-          ["The prisoner was locked in a small ___.", "cell"],
-          ["At the end of the race the winner received a gold ___.", "medal"],
-          ["At the library you can borrow ___.", "books"],
-          ["After every meal he brushed his ___.", "teeth"],
-          ["The rain stopped and the sun began to ___.", "shine"],
-          ["The happy dog wagged its ___.", "tail"],
-          ["The fisherman hoped to catch a big ___.", "fish"],
-          ["The pirates dug up the buried ___.", "treasure"]
-        ],
-        "B": [
-          ["Please knock before you open the ___.", "door"],
-          ["She put on her coat because it was very ___.", "cold"],
-          ["He paid for the meal with his credit ___.", "card"],
-          ["He hit the nail with a ___.", "hammer"],
-          ["Owls sleep in the day and hunt at ___.", "night"],
-          ["He wrapped the present in colourful ___.", "paper"],
-          ["Before the drawing lesson he sharpened his ___.", "pencil"],
-          ["She wrote the address on the front of the ___.", "envelope"],
-          ["He called the wrong person because he dialled the wrong ___.", "number"],
-          ["The orchestra was led by the ___.", "conductor"],
-          ["During the storm there was thunder and ___.", "lightning"],
-          ["He tied up the parcel with a piece of ___.", "string"],
-          ["To hide his face, the robber wore a ___.", "mask"],
-          ["The mouse was caught in a ___.", "trap"],
-          ["Monkeys love to peel and eat ___.", "bananas"]
-        ]
-      },
-      "stroop": {
-        "words": [
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red"
-        ],
-        "colours": [
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green"
-        ],
-        "cw_words": [
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red"
-        ],
-        "cw_ink": [
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green"
-        ],
-        "practice": {
-          "words": ["red", "blue", "green", "red", "green"],
-          "colours": ["blue", "green", "blue", "red", "green"],
-          "cw_words": ["blue", "green", "red", "blue", "red"],
-          "cw_ink": ["green", "red", "blue", "green", "blue"]
-        }
-      },
-      "tmtA": [
-        [123.2, 35.9],
-        [22.6, 83.4],
-        [61.3, 19.7],
-        [82.7, 34.3],
-        [49.7, 57.6],
-        [136.6, 19.6],
-        [133.1, 79.1],
-        [33.2, 137.7],
-        [116.7, 117.8],
-        [77.3, 148.0],
-        [129.1, 137.5],
-        [71.7, 167.7],
-        [50.6, 156.5],
-        [16.1, 154.3],
-        [10.9, 134.5],
-        [46.1, 103.6],
-        [79.3, 86.4],
-        [110.4, 81.1],
-        [118.9, 62.1],
-        [52.0, 83.9],
-        [9.4, 111.4],
-        [9.4, 32.9],
-        [32.1, 43.1],
-        [40.2, 12.7],
-        [9.2, 12.1]
-      ],
-      "tmtB": [
-        [12.8, 56.5],
-        [35.3, 94.8],
-        [47.4, 140.7],
-        [126.5, 25.5],
-        [113.3, 71.7],
-        [125.3, 154.9],
-        [99.0, 96.7],
-        [37.6, 172.1],
-        [78.6, 168.7],
-        [86.9, 137.7],
-        [103.7, 168.4],
-        [139.3, 174.0],
-        [131.7, 111.5],
-        [141.2, 79.2],
-        [139.3, 58.9],
-        [137.9, 8.5],
-        [60.4, 51.7],
-        [48.5, 30.0],
-        [71.6, 12.3],
-        [17.9, 33.4],
-        [71.1, 73.9],
-        [83.2, 51.0],
-        [101.8, 43.2],
-        [62.8, 101.7],
-        [33.1, 56.0]
-      ]
-    },
-    "C": {
-      "form": "C",
-      "seed": 4103,
-      "dsf": {
-        "practice": [[8, 3]],
-        "trials": [
-          [3, 8],
-          [1, 7],
-          [2, 9, 5],
-          [3, 6, 4],
-          [4, 1, 5, 3],
-          [1, 7, 4, 9],
-          [1, 6, 2, 7, 5],
-          [7, 9, 1, 6, 4],
-          [2, 9, 6, 3, 5, 7],
-          [9, 5, 3, 1, 4, 6],
-          [2, 6, 3, 1, 4, 7, 5],
-          [1, 7, 4, 9, 2, 6, 8],
-          [1, 4, 7, 2, 5, 3, 6, 9],
-          [7, 1, 8, 6, 3, 9, 2, 4],
-          [6, 2, 4, 9, 3, 7, 1, 8, 5],
-          [8, 2, 6, 4, 9, 1, 5, 7, 3]
-        ]
-      },
-      "dsb": {
-        "practice": [[8, 6]],
-        "trials": [
-          [2, 5],
-          [8, 4],
-          [6, 3, 7],
-          [5, 9, 6],
-          [5, 9, 6, 2],
-          [1, 3, 6, 4],
-          [6, 4, 7, 1, 9],
-          [4, 9, 7, 5, 8],
-          [5, 3, 1, 6, 2, 9],
-          [8, 3, 9, 4, 6, 2],
-          [1, 8, 4, 7, 3, 5, 2],
-          [7, 2, 9, 1, 3, 8, 6],
-          [9, 3, 7, 5, 8, 6, 1, 4],
-          [4, 8, 5, 3, 7, 2, 6, 1]
-        ]
-      },
-      "lns": {
-        "practice": [
-          ["5", "L"],
-          ["H", "6"]
-        ],
-        "trials": [
-          ["3", "F", "1"],
-          ["X", "3", "R"],
-          ["3", "R", "F", "1"],
-          ["X", "9", "2", "S"],
-          ["5", "8", "Y", "2", "X"],
-          ["M", "F", "8", "K", "7"],
-          ["6", "M", "7", "4", "X", "L"],
-          ["S", "5", "3", "H", "M", "4"],
-          ["9", "Y", "1", "R", "X", "3", "8"],
-          ["X", "9", "2", "H", "L", "3", "S"],
-          ["4", "6", "M", "S", "X", "7", "L", "2"],
-          ["K", "9", "Y", "1", "3", "7", "X", "S"]
-        ]
-      },
-      "pm": {
-        "lists": [
-          {
-            "op": "+",
-            "items": [
-              60, 53, 71, 47, 66, 91, 38, 33, 15, 18, 55, 42, 22, 68, 80, 57, 14, 44, 21, 73, 86,
-              69, 52, 96, 79, 20, 37, 84, 49, 95
-            ],
-            "ops": [
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+",
-              "+"
-            ]
-          },
-          {
-            "op": "-",
-            "items": [
-              41, 39, 15, 58, 92, 47, 16, 33, 29, 63, 20, 96, 62, 66, 72, 80, 93, 88, 27, 54, 37,
-              48, 71, 14, 49, 65, 51, 84, 70, 55
-            ],
-            "ops": [
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-",
-              "-"
-            ]
-          },
-          {
-            "op": "+/-",
-            "items": [
-              58, 71, 35, 40, 93, 52, 31, 37, 54, 74, 29, 36, 60, 85, 76, 15, 88, 28, 45, 53, 86,
-              84, 62, 91, 17, 66, 73, 63, 44, 49
-            ],
-            "ops": [
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-",
-              "+",
-              "-"
-            ]
-          }
-        ],
-        "practice": {
-          "plus": [5, 11, 8],
-          "minus": [10, 6, 12],
-          "alt": [9, 7, 11, 4]
-        }
-      },
-      "flu": {
-        "letters": ["P", "M", "T"],
-        "cat": "animals",
-        "alt": ["jobs (occupations)", "vehicles"]
-      },
-      "hay": {
-        "A": [
-          ["The kitten drank a saucer of ___.", "milk"],
-          ["After her shower she dried herself with a ___.", "towel"],
-          ["The bride wore a long white ___.", "dress"],
-          ["In the field the cows were eating ___.", "grass"],
-          ["He wore a helmet to protect his ___.", "head"],
-          ["The speaker greeted the audience: ladies and ___.", "gentlemen"],
-          ["To find north, the hikers used a ___.", "compass"],
-          ["There are seven days in a ___.", "week"],
-          ["At night we turn off the lights and go to ___.", "bed"],
-          ["She sewed on the button with a needle and ___.", "thread"],
-          ["The sun rises in the east and sets in the ___.", "west"],
-          ["Fish breathe through their ___.", "gills"],
-          ["He opened his umbrella because it started to ___.", "rain"],
-          ["The wedding guests threw rice at the bride and ___.", "groom"],
-          ["The firefighters rushed to put out the ___.", "fire"]
-        ],
-        "B": [
-          ["The soldiers marched in a long straight ___.", "line"],
-          ["The volcano poured out rivers of red-hot ___.", "lava"],
-          ["For the party he blew up lots of ___.", "balloons"],
-          ["The jury decided that the man was not ___.", "guilty"],
-          ["At the beach, children built castles out of ___.", "sand"],
-          ["Planes take off and land at the ___.", "airport"],
-          ["The football flew into the back of the ___.", "net"],
-          ["He wore a wedding ring on his left ___.", "hand"],
-          ["The cat climbed to the top of the tall ___.", "tree"],
-          ["The baby could not walk yet, so it began to ___.", "crawl"],
-          ["The children built a snowman out of fresh ___.", "snow"],
-          ["The cowboy jumped onto his ___.", "horse"],
-          ["He was so tired that he soon fell ___.", "asleep"],
-          ["He combed his hair in front of the ___.", "mirror"],
-          ["Bees make sweet ___.", "honey"]
-        ]
-      },
-      "stroop": {
-        "words": [
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue"
-        ],
-        "colours": [
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green"
-        ],
-        "cw_words": [
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue"
-        ],
-        "cw_ink": [
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "blue",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "red",
-          "green",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red",
-          "blue",
-          "red",
-          "blue",
-          "red",
-          "green",
-          "red"
-        ],
-        "practice": {
-          "words": ["red", "green", "blue", "green", "red"],
-          "colours": ["blue", "red", "green", "blue", "green"],
-          "cw_words": ["blue", "red", "green", "red", "blue"],
-          "cw_ink": ["green", "blue", "red", "blue", "green"]
-        }
-      },
-      "tmtA": [
-        [71.3, 163.4],
-        [30.4, 168.4],
-        [123.0, 37.1],
-        [72.9, 76.2],
-        [29.7, 31.3],
-        [29.3, 51.8],
-        [35.5, 100.3],
-        [49.8, 69.6],
-        [46.4, 119.5],
-        [8.7, 166.4],
-        [10.6, 105.7],
-        [8.6, 47.8],
-        [11.8, 16.3],
-        [103.0, 20.0],
-        [76.2, 28.1],
-        [98.1, 44.2],
-        [135.4, 13.1],
-        [128.0, 63.5],
-        [131.3, 157.8],
-        [119.4, 136.9],
-        [81.1, 137.0],
-        [109.9, 165.3],
-        [58.0, 144.8],
-        [79.2, 113.7],
-        [106.9, 109.3]
-      ],
-      "tmtB": [
-        [33.0, 18.5],
-        [90.4, 37.1],
-        [60.4, 14.4],
-        [89.0, 10.7],
-        [133.8, 22.7],
-        [30.2, 127.0],
-        [50.2, 70.9],
-        [81.7, 63.4],
-        [25.6, 57.6],
-        [8.3, 159.6],
-        [50.9, 153.9],
-        [111.2, 107.2],
-        [127.7, 157.6],
-        [103.8, 153.4],
-        [71.6, 171.4],
-        [114.8, 173.6],
-        [138.3, 176.1],
-        [141.4, 99.8],
-        [107.1, 85.1],
-        [136.0, 79.3],
-        [121.1, 52.8],
-        [81.0, 94.6],
-        [25.4, 148.5],
-        [65.6, 121.4],
-        [86.3, 114.7]
-      ]
-    }
-  },
-  "adexi": {
-    "items": [
-      "I have difficulty remembering lengthy instructions.",
-      "I sometimes have difficulty remembering what I am doing in the middle of an activity.",
-      "I have a tendency to do things without first thinking about what could happen.",
-      "I sometimes have difficulty stopping myself from doing something that I like even though someone tells me that it is not allowed.",
-      "When someone asks me to do several things, I sometimes remember only the first or last.",
-      "I sometimes have difficulty refraining from smiling or laughing in situations where it is inappropriate.",
-      "I have difficulty coming up with a different way of solving a problem when I get stuck.",
-      "When someone asks me to fetch something, I sometimes forget what I am supposed to fetch.",
-      "I have difficulty planning for an activity (e.g., remembering to bring everything necessary when going on a trip/to work/to school).",
-      "I sometimes have difficulty stopping an activity that I like (e.g., I watch TV or sit in front of the computer in the evening even though it is time to go to bed).",
-      "I sometimes have difficulty understanding verbal instructions unless I am also shown how to do something.",
-      "I have difficulties with tasks or activities that involve several steps.",
-      "I have difficulty thinking ahead or learning from experience.",
-      "People that I meet sometimes seem to think that I am more lively/wilder compared to other people my age."
+   ],
+   "B": [
+    [
+     71.4,
+     14.3
     ],
-    "key": {
-      "WM": [1, 2, 5, 7, 8, 9, 11, 12, 13],
-      "INH": [3, 4, 6, 10, 14]
-    }
+    [
+     30.1,
+     18.3
+    ],
+    [
+     54.6,
+     50.4
+    ],
+    [
+     104.4,
+     54.0
+    ],
+    [
+     109.3,
+     21.4
+    ],
+    [
+     91.8,
+     27.1
+    ],
+    [
+     79.3,
+     40.1
+    ],
+    [
+     54.4,
+     30.6
+    ]
+   ],
+   "A_labels": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8"
+   ],
+   "B_labels": [
+    "1",
+    "A",
+    "2",
+    "B",
+    "3",
+    "C",
+    "4",
+    "D"
+   ]
   },
-  "cloze_order": [
-    {
-      "n": 1,
-      "sentence": "The detective searched the room for ___.",
-      "expected": "clues"
-    },
-    {
-      "n": 2,
-      "sentence": "The speaker greeted the audience: ladies and ___.",
-      "expected": "gentlemen"
-    },
-    {
-      "n": 3,
-      "sentence": "The plants died because nobody gave them any ___.",
-      "expected": "water"
-    },
-    {
-      "n": 4,
-      "sentence": "The bees flew back to their ___.",
-      "expected": "hive"
-    },
-    {
-      "n": 5,
-      "sentence": "She went to the front door and rang the ___.",
-      "expected": "bell"
-    },
-    {
-      "n": 6,
-      "sentence": "At night we turn off the lights and go to ___.",
-      "expected": "bed"
-    },
-    {
-      "n": 7,
-      "sentence": "The jury decided that the man was not ___.",
-      "expected": "guilty"
-    },
-    {
-      "n": 8,
-      "sentence": "He wore a helmet to protect his ___.",
-      "expected": "head"
-    },
-    {
-      "n": 9,
-      "sentence": "A spider has eight ___.",
-      "expected": "legs"
-    },
-    {
-      "n": 10,
-      "sentence": "Monkeys love to peel and eat ___.",
-      "expected": "bananas"
-    },
-    {
-      "n": 11,
-      "sentence": "Owls sleep in the day and hunt at ___.",
-      "expected": "night"
-    },
-    {
-      "n": 12,
-      "sentence": "The bride wore a long white ___.",
-      "expected": "dress"
-    },
-    {
-      "n": 13,
-      "sentence": "Rain falls from the dark grey ___.",
-      "expected": "clouds"
-    },
-    {
-      "n": 14,
-      "sentence": "She looked up the meaning of the word in a ___.",
-      "expected": "dictionary"
-    },
-    {
-      "n": 15,
-      "sentence": "Every morning the hens lay fresh ___.",
-      "expected": "eggs"
-    },
-    {
-      "n": 16,
-      "sentence": "He opened his umbrella because it started to ___.",
-      "expected": "rain"
-    },
-    {
-      "n": 17,
-      "sentence": "She put on her coat because it was very ___.",
-      "expected": "cold"
-    },
-    {
-      "n": 18,
-      "sentence": "The dentist asked him to open his ___.",
-      "expected": "mouth"
-    },
-    {
-      "n": 19,
-      "sentence": "The Earth travels once a year around the ___.",
-      "expected": "sun"
-    },
-    {
-      "n": 20,
-      "sentence": "The kitten drank a saucer of ___.",
-      "expected": "milk"
-    },
-    {
-      "n": 21,
-      "sentence": "The doctor rolled up his sleeve and gave him an ___.",
-      "expected": "injection"
-    },
-    {
-      "n": 22,
-      "sentence": "He took off his shoes and ___.",
-      "expected": "socks"
-    },
-    {
-      "n": 23,
-      "sentence": "She cut the paper with a pair of ___.",
-      "expected": "scissors"
-    },
-    {
-      "n": 24,
-      "sentence": "He scored a goal and the crowd began to ___.",
-      "expected": "cheer"
-    },
-    {
-      "n": 25,
-      "sentence": "He wrapped the present in colourful ___.",
-      "expected": "paper"
-    },
-    {
-      "n": 26,
-      "sentence": "He paid for the meal with his credit ___.",
-      "expected": "card"
-    },
-    {
-      "n": 27,
-      "sentence": "The firefighters rushed to put out the ___.",
-      "expected": "fire"
-    },
-    {
-      "n": 28,
-      "sentence": "Every morning at dawn the rooster begins to ___.",
-      "expected": "crow"
-    },
-    {
-      "n": 29,
-      "sentence": "Before the drawing lesson he sharpened his ___.",
-      "expected": "pencil"
-    },
-    {
-      "n": 30,
-      "sentence": "A rainbow has seven ___.",
-      "expected": "colours"
-    },
-    {
-      "n": 31,
-      "sentence": "After every meal he brushed his ___.",
-      "expected": "teeth"
-    },
-    {
-      "n": 32,
-      "sentence": "Please knock before you open the ___.",
-      "expected": "door"
-    },
-    {
-      "n": 33,
-      "sentence": "At the end of the race the winner received a gold ___.",
-      "expected": "medal"
-    },
-    {
-      "n": 34,
-      "sentence": "She glanced at her watch to check the ___.",
-      "expected": "time"
-    },
-    {
-      "n": 35,
-      "sentence": "On her head the queen wore a golden ___.",
-      "expected": "crown"
-    },
-    {
-      "n": 36,
-      "sentence": "In winter the lake turned into solid ___.",
-      "expected": "ice"
-    },
-    {
-      "n": 37,
-      "sentence": "The thief ran away but was caught by the ___.",
-      "expected": "police"
-    },
-    {
-      "n": 38,
-      "sentence": "She sewed on the button with a needle and ___.",
-      "expected": "thread"
-    },
-    {
-      "n": 39,
-      "sentence": "The happy dog wagged its ___.",
-      "expected": "tail"
-    },
-    {
-      "n": 40,
-      "sentence": "The baby could not walk yet, so it began to ___.",
-      "expected": "crawl"
-    },
-    {
-      "n": 41,
-      "sentence": "During the storm there was thunder and ___.",
-      "expected": "lightning"
-    },
-    {
-      "n": 42,
-      "sentence": "She stirred the soup with a wooden ___.",
-      "expected": "spoon"
-    },
-    {
-      "n": 43,
-      "sentence": "She wrote the address on the front of the ___.",
-      "expected": "envelope"
-    },
-    {
-      "n": 44,
-      "sentence": "To unlock the door he needed the right ___.",
-      "expected": "key"
-    },
-    {
-      "n": 45,
-      "sentence": "A spider caught the fly in its ___.",
-      "expected": "web"
-    },
-    {
-      "n": 46,
-      "sentence": "The cowboy jumped onto his ___.",
-      "expected": "horse"
-    },
-    {
-      "n": 47,
-      "sentence": "The birthday girl blew out all the ___.",
-      "expected": "candles"
-    },
-    {
-      "n": 48,
-      "sentence": "After her shower she dried herself with a ___.",
-      "expected": "towel"
-    },
-    {
-      "n": 49,
-      "sentence": "The tired baby fell asleep in its mother's ___.",
-      "expected": "arms"
-    },
-    {
-      "n": 50,
-      "sentence": "To hide his face, the robber wore a ___.",
-      "expected": "mask"
-    },
-    {
-      "n": 51,
-      "sentence": "The children built a snowman out of fresh ___.",
-      "expected": "snow"
-    },
-    {
-      "n": 52,
-      "sentence": "The bread was baked in a hot ___.",
-      "expected": "oven"
-    },
-    {
-      "n": 53,
-      "sentence": "The volcano poured out rivers of red-hot ___.",
-      "expected": "lava"
-    },
-    {
-      "n": 54,
-      "sentence": "In football, the players try to kick the ___.",
-      "expected": "ball"
-    },
-    {
-      "n": 55,
-      "sentence": "Before posting the letter, she stuck on a ___.",
-      "expected": "stamp"
-    },
-    {
-      "n": 56,
-      "sentence": "The teacher wrote the date on the ___.",
-      "expected": "board"
-    },
-    {
-      "n": 57,
-      "sentence": "The wedding guests threw rice at the bride and ___.",
-      "expected": "groom"
-    },
-    {
-      "n": 58,
-      "sentence": "The sun rises in the east and sets in the ___.",
-      "expected": "west"
-    },
-    {
-      "n": 59,
-      "sentence": "There are seven days in a ___.",
-      "expected": "week"
-    },
-    {
-      "n": 60,
-      "sentence": "The snake slowly shed its old ___.",
-      "expected": "skin"
-    },
-    {
-      "n": 61,
-      "sentence": "She paid the taxi driver and waited for her ___.",
-      "expected": "change"
-    },
-    {
-      "n": 62,
-      "sentence": "Stop the car when the traffic light turns ___.",
-      "expected": "red"
-    },
-    {
-      "n": 63,
-      "sentence": "The football flew into the back of the ___.",
-      "expected": "net"
-    },
-    {
-      "n": 64,
-      "sentence": "He hit the nail with a ___.",
-      "expected": "hammer"
-    },
-    {
-      "n": 65,
-      "sentence": "He tied up the parcel with a piece of ___.",
-      "expected": "string"
-    },
-    {
-      "n": 66,
-      "sentence": "The fisherman hoped to catch a big ___.",
-      "expected": "fish"
-    },
-    {
-      "n": 67,
-      "sentence": "Babies often drink milk from a ___.",
-      "expected": "bottle"
-    },
-    {
-      "n": 68,
-      "sentence": "The pirates dug up the buried ___.",
-      "expected": "treasure"
-    },
-    {
-      "n": 69,
-      "sentence": "Elephants are famous for their long ___.",
-      "expected": "trunks"
-    },
-    {
-      "n": 70,
-      "sentence": "The old empty house was full of dust and ___.",
-      "expected": "cobwebs"
-    },
-    {
-      "n": 71,
-      "sentence": "The carpenter cut the wood with a ___.",
-      "expected": "saw"
-    },
-    {
-      "n": 72,
-      "sentence": "Please pass me the salt and ___.",
-      "expected": "pepper"
-    },
-    {
-      "n": 73,
-      "sentence": "A triangle has three ___.",
-      "expected": "sides"
-    },
-    {
-      "n": 74,
-      "sentence": "The singer walked out onto the ___.",
-      "expected": "stage"
-    },
-    {
-      "n": 75,
-      "sentence": "The lion is known as the king of the ___.",
-      "expected": "jungle"
-    },
-    {
-      "n": 76,
-      "sentence": "At the library you can borrow ___.",
-      "expected": "books"
-    },
-    {
-      "n": 77,
-      "sentence": "At the beach, children built castles out of ___.",
-      "expected": "sand"
-    },
-    {
-      "n": 78,
-      "sentence": "The orchestra was led by the ___.",
-      "expected": "conductor"
-    },
-    {
-      "n": 79,
-      "sentence": "He called the wrong person because he dialled the wrong ___.",
-      "expected": "number"
-    },
-    {
-      "n": 80,
-      "sentence": "The rain stopped and the sun began to ___.",
-      "expected": "shine"
-    },
-    {
-      "n": 81,
-      "sentence": "After the long race the runner stopped to catch his ___.",
-      "expected": "breath"
-    },
-    {
-      "n": 82,
-      "sentence": "Fish breathe through their ___.",
-      "expected": "gills"
-    },
-    {
-      "n": 83,
-      "sentence": "In the field the cows were eating ___.",
-      "expected": "grass"
-    },
-    {
-      "n": 84,
-      "sentence": "He wore a wedding ring on his left ___.",
-      "expected": "hand"
-    },
-    {
-      "n": 85,
-      "sentence": "Hot air balloons float high up into the ___.",
-      "expected": "sky"
-    },
-    {
-      "n": 86,
-      "sentence": "The soldiers marched in a long straight ___.",
-      "expected": "line"
-    },
-    {
-      "n": 87,
-      "sentence": "He combed his hair in front of the ___.",
-      "expected": "mirror"
-    },
-    {
-      "n": 88,
-      "sentence": "To find north, the hikers used a ___.",
-      "expected": "compass"
-    },
-    {
-      "n": 89,
-      "sentence": "For the party he blew up lots of ___.",
-      "expected": "balloons"
-    },
-    {
-      "n": 90,
-      "sentence": "The bird flapped its ___.",
-      "expected": "wings"
-    },
-    {
-      "n": 91,
-      "sentence": "The tennis player hit the ball with her ___.",
-      "expected": "racket"
-    },
-    {
-      "n": 92,
-      "sentence": "He sliced the bread with a sharp ___.",
-      "expected": "knife"
-    },
-    {
-      "n": 93,
-      "sentence": "Planes take off and land at the ___.",
-      "expected": "airport"
-    },
-    {
-      "n": 94,
-      "sentence": "The ice cream melted because the day was so ___.",
-      "expected": "hot"
-    },
-    {
-      "n": 95,
-      "sentence": "The prisoner was locked in a small ___.",
-      "expected": "cell"
-    },
-    {
-      "n": 96,
-      "sentence": "The cat climbed to the top of the tall ___.",
-      "expected": "tree"
-    },
-    {
-      "n": 97,
-      "sentence": "A comb is used to tidy your ___.",
-      "expected": "hair"
-    },
-    {
-      "n": 98,
-      "sentence": "The old film was shown in black and ___.",
-      "expected": "white"
-    },
-    {
-      "n": 99,
-      "sentence": "The mouse was caught in a ___.",
-      "expected": "trap"
-    },
-    {
-      "n": 100,
-      "sentence": "Bees make sweet ___.",
-      "expected": "honey"
-    },
-    {
-      "n": 101,
-      "sentence": "He was so tired that he soon fell ___.",
-      "expected": "asleep"
-    },
-    {
-      "n": 102,
-      "sentence": "Water freezes at zero ___.",
-      "expected": "degrees"
-    }
+  "code_sha256": "b8ee0113f223dfeff54bc1d2348364b04817cb43c793af8cf5650d7e86641bb2",
+  "constraints": [
+   [
+    "W1",
+    "Digits 1-9, no repeated digit within a trial at ANY length (length 9 = a permutation of 1-9), no adjacent pair differing by 1, two trials per length with different first and last digits, no sequence reused across forms or between forward/backward; one unscored practice trial each."
+   ],
+   [
+    "W2",
+    "Length 2 used only for 2 practice trials; scored lengths 3-8 x 2 trials. Digit/letter composition, first-item category and position pattern are identical by slot in all forms; within-category inversions fixed at ceil(n(n-1)/4); letters from FHJKLMRSXY; no trial reused across forms."
+   ],
+   [
+    "W3",
+    "Numbers 13-96. Lists 1 and 2: each final digit exactly 3 times (9/30 tens-crossings each); List 3: 15 '+' items with 4 crossings and 15 '-' items with 4 crossings. Identical tens/units multisets in every form, so list means are identical. No duplicates within a list, no adjacent equal or consecutive numbers, no more than 2 crossing items in a row. Each list on its own page with practice items."
+   ],
+   [
+    "W4",
+    "No letter shared across forms (FAS / BHR / PMT); 'animals' at every occasion; alternating pairs contain common nouns only; fixed English response language."
+   ],
+   [
+    "W5",
+    "90 study-written sentences + 4 shared practice items; all gaps sentence-final; one expected word per sentence; no expected word repeated in the battery; no stem contains another same-form item's expected word; length and target frequency balanced across the six form x part cells. Pending cloze norming."
+   ],
+   [
+    "W6",
+    "100 items per page in 5 x 20 columns; exact 34/33/33 colour counts; no immediate word or ink repetition in reading order; CW ink never equals word (0% congruent); CW words follow the W-page word order; 5-item practice row per page; colour-naming check before the task; restart-from-top rule removes the ceiling."
+   ],
+   [
+    "W7",
+    "Part A 1-25, Part B 1-A-...-L-13 (no 'End' target; 'Begin'/'End' printed as small labels under the first and last circles). No path crossings, circle centres >= 20 mm apart, every path segment >= 8 mm from other circle centres; six test layouts selected from a seeded pool to match path length (+/-2%), turning, distractor proximity; sample trails for A and B."
+   ],
+   [
+    "W8",
+    "Official 14-item ADEXI, unchanged wording, official 1-5 scale and scoring (WM 9 items, Inhibition 5 items); administered at T0 (optional T2), not at every occasion."
+   ]
   ]
+ },
+ "forms": {
+  "A": {
+   "form": "A",
+   "seed": 4101,
+   "dsf": {
+    "practice": [
+     [
+      9,
+      3
+     ]
+    ],
+    "trials": [
+     [
+      4,
+      6
+     ],
+     [
+      1,
+      3
+     ],
+     [
+      6,
+      2,
+      4
+     ],
+     [
+      9,
+      3,
+      7
+     ],
+     [
+      8,
+      6,
+      4,
+      9
+     ],
+     [
+      2,
+      6,
+      9,
+      5
+     ],
+     [
+      5,
+      1,
+      3,
+      8,
+      2
+     ],
+     [
+      6,
+      2,
+      4,
+      8,
+      3
+     ],
+     [
+      8,
+      3,
+      6,
+      4,
+      7,
+      2
+     ],
+     [
+      7,
+      2,
+      6,
+      9,
+      4,
+      1
+     ],
+     [
+      8,
+      2,
+      5,
+      3,
+      7,
+      1,
+      4
+     ],
+     [
+      9,
+      3,
+      5,
+      1,
+      7,
+      4,
+      6
+     ],
+     [
+      8,
+      5,
+      9,
+      4,
+      6,
+      3,
+      7,
+      2
+     ],
+     [
+      6,
+      1,
+      5,
+      3,
+      7,
+      4,
+      2,
+      8
+     ],
+     [
+      9,
+      5,
+      2,
+      7,
+      1,
+      4,
+      8,
+      3,
+      6
+     ],
+     [
+      3,
+      1,
+      5,
+      9,
+      7,
+      2,
+      4,
+      6,
+      8
+     ]
+    ]
+   },
+   "dsb": {
+    "practice": [
+     [
+      7,
+      3
+     ]
+    ],
+    "trials": [
+     [
+      1,
+      4
+     ],
+     [
+      8,
+      2
+     ],
+     [
+      4,
+      9,
+      2
+     ],
+     [
+      5,
+      2,
+      7
+     ],
+     [
+      2,
+      9,
+      6,
+      1
+     ],
+     [
+      9,
+      7,
+      4,
+      8
+     ],
+     [
+      8,
+      4,
+      6,
+      9,
+      3
+     ],
+     [
+      5,
+      8,
+      1,
+      7,
+      2
+     ],
+     [
+      6,
+      8,
+      2,
+      5,
+      1,
+      7
+     ],
+     [
+      1,
+      7,
+      2,
+      6,
+      8,
+      4
+     ],
+     [
+      3,
+      5,
+      2,
+      4,
+      9,
+      6,
+      8
+     ],
+     [
+      5,
+      9,
+      1,
+      4,
+      8,
+      2,
+      7
+     ],
+     [
+      1,
+      3,
+      8,
+      5,
+      2,
+      7,
+      4,
+      9
+     ],
+     [
+      6,
+      9,
+      7,
+      4,
+      2,
+      8,
+      3,
+      1
+     ]
+    ]
+   },
+   "lns": {
+    "practice": [
+     [
+      "6",
+      "J"
+     ],
+     [
+      "Y",
+      "7"
+     ]
+    ],
+    "trials": [
+     [
+      "8",
+      "J",
+      "4"
+     ],
+     [
+      "M",
+      "4",
+      "J"
+     ],
+     [
+      "9",
+      "L",
+      "K",
+      "7"
+     ],
+     [
+      "Y",
+      "7",
+      "6",
+      "K"
+     ],
+     [
+      "7",
+      "1",
+      "L",
+      "6",
+      "K"
+     ],
+     [
+      "L",
+      "Y",
+      "9",
+      "J",
+      "1"
+     ],
+     [
+      "5",
+      "L",
+      "6",
+      "3",
+      "F",
+      "H"
+     ],
+     [
+      "X",
+      "7",
+      "9",
+      "K",
+      "R",
+      "2"
+     ],
+     [
+      "5",
+      "L",
+      "2",
+      "F",
+      "J",
+      "1",
+      "7"
+     ],
+     [
+      "M",
+      "8",
+      "9",
+      "J",
+      "S",
+      "3",
+      "L"
+     ],
+     [
+      "8",
+      "1",
+      "M",
+      "X",
+      "Y",
+      "3",
+      "K",
+      "4"
+     ],
+     [
+      "Y",
+      "4",
+      "F",
+      "5",
+      "7",
+      "2",
+      "M",
+      "R"
+     ]
+    ]
+   },
+   "pm": {
+    "lists": [
+     {
+      "op": "+",
+      "items": [
+       23,
+       61,
+       96,
+       77,
+       50,
+       42,
+       17,
+       81,
+       93,
+       18,
+       36,
+       84,
+       80,
+       25,
+       67,
+       45,
+       59,
+       32,
+       40,
+       63,
+       19,
+       51,
+       46,
+       94,
+       39,
+       74,
+       62,
+       78,
+       28,
+       55
+      ],
+      "ops": [
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+"
+      ]
+     },
+     {
+      "op": "-",
+      "items": [
+       40,
+       46,
+       13,
+       69,
+       82,
+       93,
+       64,
+       33,
+       17,
+       55,
+       58,
+       21,
+       84,
+       89,
+       36,
+       78,
+       92,
+       34,
+       71,
+       27,
+       67,
+       18,
+       50,
+       45,
+       61,
+       25,
+       70,
+       52,
+       96,
+       49
+      ],
+      "ops": [
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-"
+      ]
+     },
+     {
+      "op": "+/-",
+      "items": [
+       36,
+       95,
+       78,
+       85,
+       15,
+       69,
+       49,
+       71,
+       22,
+       41,
+       53,
+       73,
+       84,
+       52,
+       68,
+       43,
+       83,
+       34,
+       75,
+       56,
+       64,
+       18,
+       30,
+       37,
+       46,
+       86,
+       57,
+       24,
+       91,
+       60
+      ],
+      "ops": [
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-"
+      ]
+     }
+    ],
+    "practice": {
+     "plus": [
+      5,
+      11,
+      8
+     ],
+     "minus": [
+      10,
+      6,
+      12
+     ],
+     "alt": [
+      9,
+      7,
+      11,
+      4
+     ]
+    }
+   },
+   "flu": {
+    "letters": [
+     "F",
+     "A",
+     "S"
+    ],
+    "cat": "animals",
+    "alt": [
+     "fruits",
+     "pieces of furniture"
+    ]
+   },
+   "hay": {
+    "A": [
+     [
+      "The Earth travels once a year around the ___.",
+      "sun"
+     ],
+     [
+      "Hot air balloons float high up into the ___.",
+      "sky"
+     ],
+     [
+      "The thief ran away but was caught by the ___.",
+      "police"
+     ],
+     [
+      "Babies often drink milk from a ___.",
+      "bottle"
+     ],
+     [
+      "She went to the front door and rang the ___.",
+      "bell"
+     ],
+     [
+      "The plants died because nobody gave them any ___.",
+      "water"
+     ],
+     [
+      "The tennis player hit the ball with her ___.",
+      "racket"
+     ],
+     [
+      "A rainbow has seven ___.",
+      "colours"
+     ],
+     [
+      "He sliced the bread with a sharp ___.",
+      "knife"
+     ],
+     [
+      "The snake slowly shed its old ___.",
+      "skin"
+     ],
+     [
+      "To unlock the door he needed the right ___.",
+      "key"
+     ],
+     [
+      "She cut the paper with a pair of ___.",
+      "scissors"
+     ],
+     [
+      "The tired baby fell asleep in its mother's ___.",
+      "arms"
+     ],
+     [
+      "The lion is known as the king of the ___.",
+      "jungle"
+     ],
+     [
+      "He took off his shoes and ___.",
+      "socks"
+     ]
+    ],
+    "B": [
+     [
+      "The carpenter cut the wood with a ___.",
+      "saw"
+     ],
+     [
+      "After the long race the runner stopped to catch his ___.",
+      "breath"
+     ],
+     [
+      "Elephants are famous for their long ___.",
+      "trunks"
+     ],
+     [
+      "Every morning at dawn the rooster begins to ___.",
+      "crow"
+     ],
+     [
+      "A spider caught the fly in its ___.",
+      "web"
+     ],
+     [
+      "She looked up the meaning of the word in a ___.",
+      "dictionary"
+     ],
+     [
+      "Stop the car when the traffic light turns ___.",
+      "red"
+     ],
+     [
+      "The bread was baked in a hot ___.",
+      "oven"
+     ],
+     [
+      "In winter the lake turned into solid ___.",
+      "ice"
+     ],
+     [
+      "The birthday girl blew out all the ___.",
+      "candles"
+     ],
+     [
+      "The teacher wrote the date on the ___.",
+      "board"
+     ],
+     [
+      "The doctor rolled up his sleeve and gave him an ___.",
+      "injection"
+     ],
+     [
+      "A comb is used to tidy your ___.",
+      "hair"
+     ],
+     [
+      "A triangle has three ___.",
+      "sides"
+     ],
+     [
+      "The singer walked out onto the ___.",
+      "stage"
+     ]
+    ]
+   },
+   "stroop": {
+    "words": [
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue"
+    ],
+    "colours": [
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green"
+    ],
+    "cw_words": [
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue"
+    ],
+    "cw_ink": [
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red"
+    ],
+    "practice": {
+     "words": [
+      "red",
+      "blue",
+      "green",
+      "red",
+      "green"
+     ],
+     "colours": [
+      "blue",
+      "green",
+      "red",
+      "blue",
+      "green"
+     ],
+     "cw_words": [
+      "red",
+      "green",
+      "blue",
+      "red",
+      "blue"
+     ],
+     "cw_ink": [
+      "blue",
+      "red",
+      "green",
+      "blue",
+      "green"
+     ]
+    }
+   },
+   "tmtA": [
+    [
+     47.9,
+     143.2
+    ],
+    [
+     123.6,
+     141.9
+    ],
+    [
+     95.6,
+     163.8
+    ],
+    [
+     53.3,
+     167.3
+    ],
+    [
+     25.4,
+     143.7
+    ],
+    [
+     104.6,
+     54.5
+    ],
+    [
+     137.5,
+     93.7
+    ],
+    [
+     119.4,
+     8.6
+    ],
+    [
+     61.6,
+     24.1
+    ],
+    [
+     111.4,
+     32.2
+    ],
+    [
+     33.3,
+     72.8
+    ],
+    [
+     28.9,
+     18.8
+    ],
+    [
+     20.9,
+     106.3
+    ],
+    [
+     18.1,
+     45.8
+    ],
+    [
+     9.9,
+     123.2
+    ],
+    [
+     15.8,
+     162.1
+    ],
+    [
+     33.8,
+     176.1
+    ],
+    [
+     123.0,
+     173.9
+    ],
+    [
+     136.4,
+     158.4
+    ],
+    [
+     140.3,
+     122.1
+    ],
+    [
+     120.0,
+     109.1
+    ],
+    [
+     102.1,
+     92.2
+    ],
+    [
+     98.0,
+     119.8
+    ],
+    [
+     73.9,
+     120.4
+    ],
+    [
+     77.4,
+     99.2
+    ]
+   ],
+   "tmtB": [
+    [
+     85.7,
+     126.6
+    ],
+    [
+     50.5,
+     105.4
+    ],
+    [
+     15.8,
+     157.1
+    ],
+    [
+     57.0,
+     130.5
+    ],
+    [
+     104.0,
+     146.7
+    ],
+    [
+     118.8,
+     67.1
+    ],
+    [
+     86.0,
+     83.9
+    ],
+    [
+     45.0,
+     72.4
+    ],
+    [
+     66.1,
+     26.6
+    ],
+    [
+     14.2,
+     100.3
+    ],
+    [
+     26.5,
+     62.6
+    ],
+    [
+     20.7,
+     28.5
+    ],
+    [
+     37.2,
+     45.0
+    ],
+    [
+     41.2,
+     22.5
+    ],
+    [
+     105.7,
+     10.4
+    ],
+    [
+     130.9,
+     26.4
+    ],
+    [
+     73.8,
+     51.6
+    ],
+    [
+     141.8,
+     45.0
+    ],
+    [
+     121.4,
+     131.8
+    ],
+    [
+     119.6,
+     162.2
+    ],
+    [
+     40.0,
+     159.0
+    ],
+    [
+     73.9,
+     174.8
+    ],
+    [
+     140.7,
+     169.4
+    ],
+    [
+     137.4,
+     108.7
+    ],
+    [
+     141.0,
+     85.0
+    ]
+   ]
+  },
+  "B": {
+   "form": "B",
+   "seed": 4102,
+   "dsf": {
+    "practice": [
+     [
+      5,
+      9
+     ]
+    ],
+    "trials": [
+     [
+      5,
+      2
+     ],
+     [
+      2,
+      6
+     ],
+     [
+      9,
+      2,
+      6
+     ],
+     [
+      3,
+      8,
+      2
+     ],
+     [
+      4,
+      7,
+      2,
+      6
+     ],
+     [
+      1,
+      4,
+      8,
+      2
+     ],
+     [
+      4,
+      2,
+      5,
+      3,
+      8
+     ],
+     [
+      5,
+      7,
+      4,
+      9,
+      2
+     ],
+     [
+      7,
+      9,
+      2,
+      4,
+      6,
+      1
+     ],
+     [
+      8,
+      4,
+      2,
+      7,
+      9,
+      5
+     ],
+     [
+      4,
+      1,
+      6,
+      9,
+      2,
+      5,
+      8
+     ],
+     [
+      2,
+      5,
+      7,
+      3,
+      1,
+      9,
+      4
+     ],
+     [
+      8,
+      6,
+      2,
+      4,
+      9,
+      5,
+      7,
+      1
+     ],
+     [
+      6,
+      4,
+      2,
+      8,
+      5,
+      1,
+      9,
+      3
+     ],
+     [
+      7,
+      1,
+      4,
+      2,
+      5,
+      3,
+      8,
+      6,
+      9
+     ],
+     [
+      9,
+      3,
+      6,
+      2,
+      8,
+      4,
+      1,
+      7,
+      5
+     ]
+    ]
+   },
+   "dsb": {
+    "practice": [
+     [
+      5,
+      1
+     ]
+    ],
+    "trials": [
+     [
+      1,
+      9
+     ],
+     [
+      9,
+      1
+     ],
+     [
+      6,
+      2,
+      8
+     ],
+     [
+      2,
+      5,
+      1
+     ],
+     [
+      3,
+      8,
+      2,
+      6
+     ],
+     [
+      5,
+      3,
+      1,
+      7
+     ],
+     [
+      6,
+      1,
+      4,
+      8,
+      5
+     ],
+     [
+      9,
+      2,
+      7,
+      1,
+      6
+     ],
+     [
+      9,
+      3,
+      6,
+      1,
+      8,
+      2
+     ],
+     [
+      7,
+      5,
+      1,
+      8,
+      6,
+      9
+     ],
+     [
+      2,
+      8,
+      4,
+      7,
+      5,
+      9,
+      6
+     ],
+     [
+      4,
+      7,
+      9,
+      5,
+      2,
+      8,
+      1
+     ],
+     [
+      4,
+      7,
+      5,
+      9,
+      6,
+      1,
+      8,
+      2
+     ],
+     [
+      1,
+      4,
+      8,
+      5,
+      7,
+      9,
+      6,
+      3
+     ]
+    ]
+   },
+   "lns": {
+    "practice": [
+     [
+      "2",
+      "J"
+     ],
+     [
+      "K",
+      "4"
+     ]
+    ],
+    "trials": [
+     [
+      "3",
+      "R",
+      "2"
+     ],
+     [
+      "L",
+      "6",
+      "J"
+     ],
+     [
+      "9",
+      "S",
+      "H",
+      "4"
+     ],
+     [
+      "M",
+      "5",
+      "2",
+      "H"
+     ],
+     [
+      "5",
+      "8",
+      "R",
+      "2",
+      "F"
+     ],
+     [
+      "K",
+      "Y",
+      "9",
+      "H",
+      "4"
+     ],
+     [
+      "4",
+      "M",
+      "7",
+      "2",
+      "J",
+      "L"
+     ],
+     [
+      "K",
+      "6",
+      "8",
+      "Y",
+      "J",
+      "5"
+     ],
+     [
+      "7",
+      "S",
+      "2",
+      "Y",
+      "J",
+      "9",
+      "4"
+     ],
+     [
+      "J",
+      "6",
+      "7",
+      "L",
+      "X",
+      "2",
+      "F"
+     ],
+     [
+      "4",
+      "1",
+      "H",
+      "Y",
+      "R",
+      "6",
+      "K",
+      "2"
+     ],
+     [
+      "K",
+      "6",
+      "Y",
+      "2",
+      "3",
+      "5",
+      "F",
+      "M"
+     ]
+    ]
+   },
+   "pm": {
+    "lists": [
+     {
+      "op": "+",
+      "items": [
+       80,
+       49,
+       78,
+       53,
+       50,
+       41,
+       94,
+       77,
+       62,
+       91,
+       14,
+       42,
+       81,
+       70,
+       86,
+       68,
+       35,
+       32,
+       27,
+       96,
+       47,
+       65,
+       33,
+       55,
+       13,
+       29,
+       64,
+       26,
+       19,
+       58
+      ],
+      "ops": [
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+"
+      ]
+     },
+     {
+      "op": "-",
+      "items": [
+       92,
+       76,
+       59,
+       68,
+       50,
+       85,
+       74,
+       43,
+       15,
+       31,
+       58,
+       89,
+       40,
+       66,
+       33,
+       21,
+       78,
+       47,
+       80,
+       27,
+       91,
+       42,
+       95,
+       69,
+       24,
+       16,
+       32,
+       54,
+       67,
+       13
+      ],
+      "ops": [
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-"
+      ]
+     },
+     {
+      "op": "+/-",
+      "items": [
+       44,
+       86,
+       18,
+       55,
+       38,
+       71,
+       40,
+       88,
+       63,
+       33,
+       59,
+       47,
+       76,
+       65,
+       56,
+       73,
+       85,
+       34,
+       77,
+       60,
+       25,
+       14,
+       61,
+       52,
+       83,
+       29,
+       94,
+       41,
+       32,
+       96
+      ],
+      "ops": [
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-"
+      ]
+     }
+    ],
+    "practice": {
+     "plus": [
+      5,
+      11,
+      8
+     ],
+     "minus": [
+      10,
+      6,
+      12
+     ],
+     "alt": [
+      9,
+      7,
+      11,
+      4
+     ]
+    }
+   },
+   "flu": {
+    "letters": [
+     "B",
+     "H",
+     "R"
+    ],
+    "cat": "animals",
+    "alt": [
+     "vegetables",
+     "items of clothing"
+    ]
+   },
+   "hay": {
+    "A": [
+     [
+      "The bees flew back to their ___.",
+      "hive"
+     ],
+     [
+      "The ice cream melted because the day was so ___.",
+      "hot"
+     ],
+     [
+      "On her head the queen wore a golden ___.",
+      "crown"
+     ],
+     [
+      "She glanced at her watch to check the ___.",
+      "time"
+     ],
+     [
+      "She stirred the soup with a wooden ___.",
+      "spoon"
+     ],
+     [
+      "The old film was shown in black and ___.",
+      "white"
+     ],
+     [
+      "The old empty house was full of dust and ___.",
+      "cobwebs"
+     ],
+     [
+      "The prisoner was locked in a small ___.",
+      "cell"
+     ],
+     [
+      "At the end of the race the winner received a gold ___.",
+      "medal"
+     ],
+     [
+      "At the library you can borrow ___.",
+      "books"
+     ],
+     [
+      "After every meal he brushed his ___.",
+      "teeth"
+     ],
+     [
+      "The rain stopped and the sun began to ___.",
+      "shine"
+     ],
+     [
+      "The happy dog wagged its ___.",
+      "tail"
+     ],
+     [
+      "The fisherman hoped to catch a big ___.",
+      "fish"
+     ],
+     [
+      "The pirates dug up the buried ___.",
+      "treasure"
+     ]
+    ],
+    "B": [
+     [
+      "Please knock before you open the ___.",
+      "door"
+     ],
+     [
+      "She put on her coat because it was very ___.",
+      "cold"
+     ],
+     [
+      "He paid for the meal with his credit ___.",
+      "card"
+     ],
+     [
+      "He hit the nail with a ___.",
+      "hammer"
+     ],
+     [
+      "Owls sleep in the day and hunt at ___.",
+      "night"
+     ],
+     [
+      "He wrapped the present in colourful ___.",
+      "paper"
+     ],
+     [
+      "Before the drawing lesson he sharpened his ___.",
+      "pencil"
+     ],
+     [
+      "She wrote the address on the front of the ___.",
+      "envelope"
+     ],
+     [
+      "He called the wrong person because he dialled the wrong ___.",
+      "number"
+     ],
+     [
+      "The orchestra was led by the ___.",
+      "conductor"
+     ],
+     [
+      "During the storm there was thunder and ___.",
+      "lightning"
+     ],
+     [
+      "He tied up the parcel with a piece of ___.",
+      "string"
+     ],
+     [
+      "To hide his face, the robber wore a ___.",
+      "mask"
+     ],
+     [
+      "The mouse was caught in a ___.",
+      "trap"
+     ],
+     [
+      "Monkeys love to peel and eat ___.",
+      "bananas"
+     ]
+    ]
+   },
+   "stroop": {
+    "words": [
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red"
+    ],
+    "colours": [
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green"
+    ],
+    "cw_words": [
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red"
+    ],
+    "cw_ink": [
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green"
+    ],
+    "practice": {
+     "words": [
+      "red",
+      "blue",
+      "green",
+      "red",
+      "green"
+     ],
+     "colours": [
+      "blue",
+      "green",
+      "blue",
+      "red",
+      "green"
+     ],
+     "cw_words": [
+      "blue",
+      "green",
+      "red",
+      "blue",
+      "red"
+     ],
+     "cw_ink": [
+      "green",
+      "red",
+      "blue",
+      "green",
+      "blue"
+     ]
+    }
+   },
+   "tmtA": [
+    [
+     123.2,
+     35.9
+    ],
+    [
+     22.6,
+     83.4
+    ],
+    [
+     61.3,
+     19.7
+    ],
+    [
+     82.7,
+     34.3
+    ],
+    [
+     49.7,
+     57.6
+    ],
+    [
+     136.6,
+     19.6
+    ],
+    [
+     133.1,
+     79.1
+    ],
+    [
+     33.2,
+     137.7
+    ],
+    [
+     116.7,
+     117.8
+    ],
+    [
+     77.3,
+     148.0
+    ],
+    [
+     129.1,
+     137.5
+    ],
+    [
+     71.7,
+     167.7
+    ],
+    [
+     50.6,
+     156.5
+    ],
+    [
+     16.1,
+     154.3
+    ],
+    [
+     10.9,
+     134.5
+    ],
+    [
+     46.1,
+     103.6
+    ],
+    [
+     79.3,
+     86.4
+    ],
+    [
+     110.4,
+     81.1
+    ],
+    [
+     118.9,
+     62.1
+    ],
+    [
+     52.0,
+     83.9
+    ],
+    [
+     9.4,
+     111.4
+    ],
+    [
+     9.4,
+     32.9
+    ],
+    [
+     32.1,
+     43.1
+    ],
+    [
+     40.2,
+     12.7
+    ],
+    [
+     9.2,
+     12.1
+    ]
+   ],
+   "tmtB": [
+    [
+     12.8,
+     56.5
+    ],
+    [
+     35.3,
+     94.8
+    ],
+    [
+     47.4,
+     140.7
+    ],
+    [
+     126.5,
+     25.5
+    ],
+    [
+     113.3,
+     71.7
+    ],
+    [
+     125.3,
+     154.9
+    ],
+    [
+     99.0,
+     96.7
+    ],
+    [
+     37.6,
+     172.1
+    ],
+    [
+     78.6,
+     168.7
+    ],
+    [
+     86.9,
+     137.7
+    ],
+    [
+     103.7,
+     168.4
+    ],
+    [
+     139.3,
+     174.0
+    ],
+    [
+     131.7,
+     111.5
+    ],
+    [
+     141.2,
+     79.2
+    ],
+    [
+     139.3,
+     58.9
+    ],
+    [
+     137.9,
+     8.5
+    ],
+    [
+     60.4,
+     51.7
+    ],
+    [
+     48.5,
+     30.0
+    ],
+    [
+     71.6,
+     12.3
+    ],
+    [
+     17.9,
+     33.4
+    ],
+    [
+     71.1,
+     73.9
+    ],
+    [
+     83.2,
+     51.0
+    ],
+    [
+     101.8,
+     43.2
+    ],
+    [
+     62.8,
+     101.7
+    ],
+    [
+     33.1,
+     56.0
+    ]
+   ]
+  },
+  "C": {
+   "form": "C",
+   "seed": 4103,
+   "dsf": {
+    "practice": [
+     [
+      8,
+      3
+     ]
+    ],
+    "trials": [
+     [
+      3,
+      8
+     ],
+     [
+      1,
+      7
+     ],
+     [
+      2,
+      9,
+      5
+     ],
+     [
+      3,
+      6,
+      4
+     ],
+     [
+      4,
+      1,
+      5,
+      3
+     ],
+     [
+      1,
+      7,
+      4,
+      9
+     ],
+     [
+      1,
+      6,
+      2,
+      7,
+      5
+     ],
+     [
+      7,
+      9,
+      1,
+      6,
+      4
+     ],
+     [
+      2,
+      9,
+      6,
+      3,
+      5,
+      7
+     ],
+     [
+      9,
+      5,
+      3,
+      1,
+      4,
+      6
+     ],
+     [
+      2,
+      6,
+      3,
+      1,
+      4,
+      7,
+      5
+     ],
+     [
+      1,
+      7,
+      4,
+      9,
+      2,
+      6,
+      8
+     ],
+     [
+      1,
+      4,
+      7,
+      2,
+      5,
+      3,
+      6,
+      9
+     ],
+     [
+      7,
+      1,
+      8,
+      6,
+      3,
+      9,
+      2,
+      4
+     ],
+     [
+      6,
+      2,
+      4,
+      9,
+      3,
+      7,
+      1,
+      8,
+      5
+     ],
+     [
+      8,
+      2,
+      6,
+      4,
+      9,
+      1,
+      5,
+      7,
+      3
+     ]
+    ]
+   },
+   "dsb": {
+    "practice": [
+     [
+      8,
+      6
+     ]
+    ],
+    "trials": [
+     [
+      2,
+      5
+     ],
+     [
+      8,
+      4
+     ],
+     [
+      6,
+      3,
+      7
+     ],
+     [
+      5,
+      9,
+      6
+     ],
+     [
+      5,
+      9,
+      6,
+      2
+     ],
+     [
+      1,
+      3,
+      6,
+      4
+     ],
+     [
+      6,
+      4,
+      7,
+      1,
+      9
+     ],
+     [
+      4,
+      9,
+      7,
+      5,
+      8
+     ],
+     [
+      5,
+      3,
+      1,
+      6,
+      2,
+      9
+     ],
+     [
+      8,
+      3,
+      9,
+      4,
+      6,
+      2
+     ],
+     [
+      1,
+      8,
+      4,
+      7,
+      3,
+      5,
+      2
+     ],
+     [
+      7,
+      2,
+      9,
+      1,
+      3,
+      8,
+      6
+     ],
+     [
+      9,
+      3,
+      7,
+      5,
+      8,
+      6,
+      1,
+      4
+     ],
+     [
+      4,
+      8,
+      5,
+      3,
+      7,
+      2,
+      6,
+      1
+     ]
+    ]
+   },
+   "lns": {
+    "practice": [
+     [
+      "5",
+      "L"
+     ],
+     [
+      "H",
+      "6"
+     ]
+    ],
+    "trials": [
+     [
+      "3",
+      "F",
+      "1"
+     ],
+     [
+      "X",
+      "3",
+      "R"
+     ],
+     [
+      "3",
+      "R",
+      "F",
+      "1"
+     ],
+     [
+      "X",
+      "9",
+      "2",
+      "S"
+     ],
+     [
+      "5",
+      "8",
+      "Y",
+      "2",
+      "X"
+     ],
+     [
+      "M",
+      "F",
+      "8",
+      "K",
+      "7"
+     ],
+     [
+      "6",
+      "M",
+      "7",
+      "4",
+      "X",
+      "L"
+     ],
+     [
+      "S",
+      "5",
+      "3",
+      "H",
+      "M",
+      "4"
+     ],
+     [
+      "9",
+      "Y",
+      "1",
+      "R",
+      "X",
+      "3",
+      "8"
+     ],
+     [
+      "X",
+      "9",
+      "2",
+      "H",
+      "L",
+      "3",
+      "S"
+     ],
+     [
+      "4",
+      "6",
+      "M",
+      "S",
+      "X",
+      "7",
+      "L",
+      "2"
+     ],
+     [
+      "K",
+      "9",
+      "Y",
+      "1",
+      "3",
+      "7",
+      "X",
+      "S"
+     ]
+    ]
+   },
+   "pm": {
+    "lists": [
+     {
+      "op": "+",
+      "items": [
+       60,
+       53,
+       71,
+       47,
+       66,
+       91,
+       38,
+       33,
+       15,
+       18,
+       55,
+       42,
+       22,
+       68,
+       80,
+       57,
+       14,
+       44,
+       21,
+       73,
+       86,
+       69,
+       52,
+       96,
+       79,
+       20,
+       37,
+       84,
+       49,
+       95
+      ],
+      "ops": [
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+",
+       "+"
+      ]
+     },
+     {
+      "op": "-",
+      "items": [
+       41,
+       39,
+       15,
+       58,
+       92,
+       47,
+       16,
+       33,
+       29,
+       63,
+       20,
+       96,
+       62,
+       66,
+       72,
+       80,
+       93,
+       88,
+       27,
+       54,
+       37,
+       48,
+       71,
+       14,
+       49,
+       65,
+       51,
+       84,
+       70,
+       55
+      ],
+      "ops": [
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-",
+       "-"
+      ]
+     },
+     {
+      "op": "+/-",
+      "items": [
+       58,
+       71,
+       35,
+       40,
+       93,
+       52,
+       31,
+       37,
+       54,
+       74,
+       29,
+       36,
+       60,
+       85,
+       76,
+       15,
+       88,
+       28,
+       45,
+       53,
+       86,
+       84,
+       62,
+       91,
+       17,
+       66,
+       73,
+       63,
+       44,
+       49
+      ],
+      "ops": [
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-",
+       "+",
+       "-"
+      ]
+     }
+    ],
+    "practice": {
+     "plus": [
+      5,
+      11,
+      8
+     ],
+     "minus": [
+      10,
+      6,
+      12
+     ],
+     "alt": [
+      9,
+      7,
+      11,
+      4
+     ]
+    }
+   },
+   "flu": {
+    "letters": [
+     "P",
+     "M",
+     "T"
+    ],
+    "cat": "animals",
+    "alt": [
+     "jobs (occupations)",
+     "vehicles"
+    ]
+   },
+   "hay": {
+    "A": [
+     [
+      "The kitten drank a saucer of ___.",
+      "milk"
+     ],
+     [
+      "After her shower she dried herself with a ___.",
+      "towel"
+     ],
+     [
+      "The bride wore a long white ___.",
+      "dress"
+     ],
+     [
+      "In the field the cows were eating ___.",
+      "grass"
+     ],
+     [
+      "He wore a helmet to protect his ___.",
+      "head"
+     ],
+     [
+      "The speaker greeted the audience: ladies and ___.",
+      "gentlemen"
+     ],
+     [
+      "To find north, the hikers used a ___.",
+      "compass"
+     ],
+     [
+      "There are seven days in a ___.",
+      "week"
+     ],
+     [
+      "At night we turn off the lights and go to ___.",
+      "bed"
+     ],
+     [
+      "She sewed on the button with a needle and ___.",
+      "thread"
+     ],
+     [
+      "The sun rises in the east and sets in the ___.",
+      "west"
+     ],
+     [
+      "Fish breathe through their ___.",
+      "gills"
+     ],
+     [
+      "He opened his umbrella because it started to ___.",
+      "rain"
+     ],
+     [
+      "The wedding guests threw rice at the bride and ___.",
+      "groom"
+     ],
+     [
+      "The firefighters rushed to put out the ___.",
+      "fire"
+     ]
+    ],
+    "B": [
+     [
+      "The soldiers marched in a long straight ___.",
+      "line"
+     ],
+     [
+      "The volcano poured out rivers of red-hot ___.",
+      "lava"
+     ],
+     [
+      "For the party he blew up lots of ___.",
+      "balloons"
+     ],
+     [
+      "The jury decided that the man was not ___.",
+      "guilty"
+     ],
+     [
+      "At the beach, children built castles out of ___.",
+      "sand"
+     ],
+     [
+      "Planes take off and land at the ___.",
+      "airport"
+     ],
+     [
+      "The football flew into the back of the ___.",
+      "net"
+     ],
+     [
+      "He wore a wedding ring on his left ___.",
+      "hand"
+     ],
+     [
+      "The cat climbed to the top of the tall ___.",
+      "tree"
+     ],
+     [
+      "The baby could not walk yet, so it began to ___.",
+      "crawl"
+     ],
+     [
+      "The children built a snowman out of fresh ___.",
+      "snow"
+     ],
+     [
+      "The cowboy jumped onto his ___.",
+      "horse"
+     ],
+     [
+      "He was so tired that he soon fell ___.",
+      "asleep"
+     ],
+     [
+      "He combed his hair in front of the ___.",
+      "mirror"
+     ],
+     [
+      "Bees make sweet ___.",
+      "honey"
+     ]
+    ]
+   },
+   "stroop": {
+    "words": [
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue"
+    ],
+    "colours": [
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green"
+    ],
+    "cw_words": [
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue"
+    ],
+    "cw_ink": [
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "blue",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "red",
+     "green",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red",
+     "blue",
+     "red",
+     "blue",
+     "red",
+     "green",
+     "red"
+    ],
+    "practice": {
+     "words": [
+      "red",
+      "green",
+      "blue",
+      "green",
+      "red"
+     ],
+     "colours": [
+      "blue",
+      "red",
+      "green",
+      "blue",
+      "green"
+     ],
+     "cw_words": [
+      "blue",
+      "red",
+      "green",
+      "red",
+      "blue"
+     ],
+     "cw_ink": [
+      "green",
+      "blue",
+      "red",
+      "blue",
+      "green"
+     ]
+    }
+   },
+   "tmtA": [
+    [
+     71.3,
+     163.4
+    ],
+    [
+     30.4,
+     168.4
+    ],
+    [
+     123.0,
+     37.1
+    ],
+    [
+     72.9,
+     76.2
+    ],
+    [
+     29.7,
+     31.3
+    ],
+    [
+     29.3,
+     51.8
+    ],
+    [
+     35.5,
+     100.3
+    ],
+    [
+     49.8,
+     69.6
+    ],
+    [
+     46.4,
+     119.5
+    ],
+    [
+     8.7,
+     166.4
+    ],
+    [
+     10.6,
+     105.7
+    ],
+    [
+     8.6,
+     47.8
+    ],
+    [
+     11.8,
+     16.3
+    ],
+    [
+     103.0,
+     20.0
+    ],
+    [
+     76.2,
+     28.1
+    ],
+    [
+     98.1,
+     44.2
+    ],
+    [
+     135.4,
+     13.1
+    ],
+    [
+     128.0,
+     63.5
+    ],
+    [
+     131.3,
+     157.8
+    ],
+    [
+     119.4,
+     136.9
+    ],
+    [
+     81.1,
+     137.0
+    ],
+    [
+     109.9,
+     165.3
+    ],
+    [
+     58.0,
+     144.8
+    ],
+    [
+     79.2,
+     113.7
+    ],
+    [
+     106.9,
+     109.3
+    ]
+   ],
+   "tmtB": [
+    [
+     33.0,
+     18.5
+    ],
+    [
+     90.4,
+     37.1
+    ],
+    [
+     60.4,
+     14.4
+    ],
+    [
+     89.0,
+     10.7
+    ],
+    [
+     133.8,
+     22.7
+    ],
+    [
+     30.2,
+     127.0
+    ],
+    [
+     50.2,
+     70.9
+    ],
+    [
+     81.7,
+     63.4
+    ],
+    [
+     25.6,
+     57.6
+    ],
+    [
+     8.3,
+     159.6
+    ],
+    [
+     50.9,
+     153.9
+    ],
+    [
+     111.2,
+     107.2
+    ],
+    [
+     127.7,
+     157.6
+    ],
+    [
+     103.8,
+     153.4
+    ],
+    [
+     71.6,
+     171.4
+    ],
+    [
+     114.8,
+     173.6
+    ],
+    [
+     138.3,
+     176.1
+    ],
+    [
+     141.4,
+     99.8
+    ],
+    [
+     107.1,
+     85.1
+    ],
+    [
+     136.0,
+     79.3
+    ],
+    [
+     121.1,
+     52.8
+    ],
+    [
+     81.0,
+     94.6
+    ],
+    [
+     25.4,
+     148.5
+    ],
+    [
+     65.6,
+     121.4
+    ],
+    [
+     86.3,
+     114.7
+    ]
+   ]
+  }
+ },
+ "adexi": {
+  "items": [
+   "I have difficulty remembering lengthy instructions.",
+   "I sometimes have difficulty remembering what I am doing in the middle of an activity.",
+   "I have a tendency to do things without first thinking about what could happen.",
+   "I sometimes have difficulty stopping myself from doing something that I like even though someone tells me that it is not allowed.",
+   "When someone asks me to do several things, I sometimes remember only the first or last.",
+   "I sometimes have difficulty refraining from smiling or laughing in situations where it is inappropriate.",
+   "I have difficulty coming up with a different way of solving a problem when I get stuck.",
+   "When someone asks me to fetch something, I sometimes forget what I am supposed to fetch.",
+   "I have difficulty planning for an activity (e.g., remembering to bring everything necessary when going on a trip/to work/to school).",
+   "I sometimes have difficulty stopping an activity that I like (e.g., I watch TV or sit in front of the computer in the evening even though it is time to go to bed).",
+   "I sometimes have difficulty understanding verbal instructions unless I am also shown how to do something.",
+   "I have difficulties with tasks or activities that involve several steps.",
+   "I have difficulty thinking ahead or learning from experience.",
+   "People that I meet sometimes seem to think that I am more lively/wilder compared to other people my age."
+  ],
+  "key": {
+   "WM": [
+    1,
+    2,
+    5,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13
+   ],
+   "INH": [
+    3,
+    4,
+    6,
+    10,
+    14
+   ]
+  }
+ },
+ "cloze_order": [
+  {
+   "n": 1,
+   "sentence": "The detective searched the room for ___.",
+   "expected": "clues"
+  },
+  {
+   "n": 2,
+   "sentence": "The speaker greeted the audience: ladies and ___.",
+   "expected": "gentlemen"
+  },
+  {
+   "n": 3,
+   "sentence": "The plants died because nobody gave them any ___.",
+   "expected": "water"
+  },
+  {
+   "n": 4,
+   "sentence": "The bees flew back to their ___.",
+   "expected": "hive"
+  },
+  {
+   "n": 5,
+   "sentence": "She went to the front door and rang the ___.",
+   "expected": "bell"
+  },
+  {
+   "n": 6,
+   "sentence": "At night we turn off the lights and go to ___.",
+   "expected": "bed"
+  },
+  {
+   "n": 7,
+   "sentence": "The jury decided that the man was not ___.",
+   "expected": "guilty"
+  },
+  {
+   "n": 8,
+   "sentence": "He wore a helmet to protect his ___.",
+   "expected": "head"
+  },
+  {
+   "n": 9,
+   "sentence": "A spider has eight ___.",
+   "expected": "legs"
+  },
+  {
+   "n": 10,
+   "sentence": "Monkeys love to peel and eat ___.",
+   "expected": "bananas"
+  },
+  {
+   "n": 11,
+   "sentence": "Owls sleep in the day and hunt at ___.",
+   "expected": "night"
+  },
+  {
+   "n": 12,
+   "sentence": "The bride wore a long white ___.",
+   "expected": "dress"
+  },
+  {
+   "n": 13,
+   "sentence": "Rain falls from the dark grey ___.",
+   "expected": "clouds"
+  },
+  {
+   "n": 14,
+   "sentence": "She looked up the meaning of the word in a ___.",
+   "expected": "dictionary"
+  },
+  {
+   "n": 15,
+   "sentence": "Every morning the hens lay fresh ___.",
+   "expected": "eggs"
+  },
+  {
+   "n": 16,
+   "sentence": "He opened his umbrella because it started to ___.",
+   "expected": "rain"
+  },
+  {
+   "n": 17,
+   "sentence": "She put on her coat because it was very ___.",
+   "expected": "cold"
+  },
+  {
+   "n": 18,
+   "sentence": "The dentist asked him to open his ___.",
+   "expected": "mouth"
+  },
+  {
+   "n": 19,
+   "sentence": "The Earth travels once a year around the ___.",
+   "expected": "sun"
+  },
+  {
+   "n": 20,
+   "sentence": "The kitten drank a saucer of ___.",
+   "expected": "milk"
+  },
+  {
+   "n": 21,
+   "sentence": "The doctor rolled up his sleeve and gave him an ___.",
+   "expected": "injection"
+  },
+  {
+   "n": 22,
+   "sentence": "He took off his shoes and ___.",
+   "expected": "socks"
+  },
+  {
+   "n": 23,
+   "sentence": "She cut the paper with a pair of ___.",
+   "expected": "scissors"
+  },
+  {
+   "n": 24,
+   "sentence": "He scored a goal and the crowd began to ___.",
+   "expected": "cheer"
+  },
+  {
+   "n": 25,
+   "sentence": "He wrapped the present in colourful ___.",
+   "expected": "paper"
+  },
+  {
+   "n": 26,
+   "sentence": "He paid for the meal with his credit ___.",
+   "expected": "card"
+  },
+  {
+   "n": 27,
+   "sentence": "The firefighters rushed to put out the ___.",
+   "expected": "fire"
+  },
+  {
+   "n": 28,
+   "sentence": "Every morning at dawn the rooster begins to ___.",
+   "expected": "crow"
+  },
+  {
+   "n": 29,
+   "sentence": "Before the drawing lesson he sharpened his ___.",
+   "expected": "pencil"
+  },
+  {
+   "n": 30,
+   "sentence": "A rainbow has seven ___.",
+   "expected": "colours"
+  },
+  {
+   "n": 31,
+   "sentence": "After every meal he brushed his ___.",
+   "expected": "teeth"
+  },
+  {
+   "n": 32,
+   "sentence": "Please knock before you open the ___.",
+   "expected": "door"
+  },
+  {
+   "n": 33,
+   "sentence": "At the end of the race the winner received a gold ___.",
+   "expected": "medal"
+  },
+  {
+   "n": 34,
+   "sentence": "She glanced at her watch to check the ___.",
+   "expected": "time"
+  },
+  {
+   "n": 35,
+   "sentence": "On her head the queen wore a golden ___.",
+   "expected": "crown"
+  },
+  {
+   "n": 36,
+   "sentence": "In winter the lake turned into solid ___.",
+   "expected": "ice"
+  },
+  {
+   "n": 37,
+   "sentence": "The thief ran away but was caught by the ___.",
+   "expected": "police"
+  },
+  {
+   "n": 38,
+   "sentence": "She sewed on the button with a needle and ___.",
+   "expected": "thread"
+  },
+  {
+   "n": 39,
+   "sentence": "The happy dog wagged its ___.",
+   "expected": "tail"
+  },
+  {
+   "n": 40,
+   "sentence": "The baby could not walk yet, so it began to ___.",
+   "expected": "crawl"
+  },
+  {
+   "n": 41,
+   "sentence": "During the storm there was thunder and ___.",
+   "expected": "lightning"
+  },
+  {
+   "n": 42,
+   "sentence": "She stirred the soup with a wooden ___.",
+   "expected": "spoon"
+  },
+  {
+   "n": 43,
+   "sentence": "She wrote the address on the front of the ___.",
+   "expected": "envelope"
+  },
+  {
+   "n": 44,
+   "sentence": "To unlock the door he needed the right ___.",
+   "expected": "key"
+  },
+  {
+   "n": 45,
+   "sentence": "A spider caught the fly in its ___.",
+   "expected": "web"
+  },
+  {
+   "n": 46,
+   "sentence": "The cowboy jumped onto his ___.",
+   "expected": "horse"
+  },
+  {
+   "n": 47,
+   "sentence": "The birthday girl blew out all the ___.",
+   "expected": "candles"
+  },
+  {
+   "n": 48,
+   "sentence": "After her shower she dried herself with a ___.",
+   "expected": "towel"
+  },
+  {
+   "n": 49,
+   "sentence": "The tired baby fell asleep in its mother's ___.",
+   "expected": "arms"
+  },
+  {
+   "n": 50,
+   "sentence": "To hide his face, the robber wore a ___.",
+   "expected": "mask"
+  },
+  {
+   "n": 51,
+   "sentence": "The children built a snowman out of fresh ___.",
+   "expected": "snow"
+  },
+  {
+   "n": 52,
+   "sentence": "The bread was baked in a hot ___.",
+   "expected": "oven"
+  },
+  {
+   "n": 53,
+   "sentence": "The volcano poured out rivers of red-hot ___.",
+   "expected": "lava"
+  },
+  {
+   "n": 54,
+   "sentence": "In football, the players try to kick the ___.",
+   "expected": "ball"
+  },
+  {
+   "n": 55,
+   "sentence": "Before posting the letter, she stuck on a ___.",
+   "expected": "stamp"
+  },
+  {
+   "n": 56,
+   "sentence": "The teacher wrote the date on the ___.",
+   "expected": "board"
+  },
+  {
+   "n": 57,
+   "sentence": "The wedding guests threw rice at the bride and ___.",
+   "expected": "groom"
+  },
+  {
+   "n": 58,
+   "sentence": "The sun rises in the east and sets in the ___.",
+   "expected": "west"
+  },
+  {
+   "n": 59,
+   "sentence": "There are seven days in a ___.",
+   "expected": "week"
+  },
+  {
+   "n": 60,
+   "sentence": "The snake slowly shed its old ___.",
+   "expected": "skin"
+  },
+  {
+   "n": 61,
+   "sentence": "She paid the taxi driver and waited for her ___.",
+   "expected": "change"
+  },
+  {
+   "n": 62,
+   "sentence": "Stop the car when the traffic light turns ___.",
+   "expected": "red"
+  },
+  {
+   "n": 63,
+   "sentence": "The football flew into the back of the ___.",
+   "expected": "net"
+  },
+  {
+   "n": 64,
+   "sentence": "He hit the nail with a ___.",
+   "expected": "hammer"
+  },
+  {
+   "n": 65,
+   "sentence": "He tied up the parcel with a piece of ___.",
+   "expected": "string"
+  },
+  {
+   "n": 66,
+   "sentence": "The fisherman hoped to catch a big ___.",
+   "expected": "fish"
+  },
+  {
+   "n": 67,
+   "sentence": "Babies often drink milk from a ___.",
+   "expected": "bottle"
+  },
+  {
+   "n": 68,
+   "sentence": "The pirates dug up the buried ___.",
+   "expected": "treasure"
+  },
+  {
+   "n": 69,
+   "sentence": "Elephants are famous for their long ___.",
+   "expected": "trunks"
+  },
+  {
+   "n": 70,
+   "sentence": "The old empty house was full of dust and ___.",
+   "expected": "cobwebs"
+  },
+  {
+   "n": 71,
+   "sentence": "The carpenter cut the wood with a ___.",
+   "expected": "saw"
+  },
+  {
+   "n": 72,
+   "sentence": "Please pass me the salt and ___.",
+   "expected": "pepper"
+  },
+  {
+   "n": 73,
+   "sentence": "A triangle has three ___.",
+   "expected": "sides"
+  },
+  {
+   "n": 74,
+   "sentence": "The singer walked out onto the ___.",
+   "expected": "stage"
+  },
+  {
+   "n": 75,
+   "sentence": "The lion is known as the king of the ___.",
+   "expected": "jungle"
+  },
+  {
+   "n": 76,
+   "sentence": "At the library you can borrow ___.",
+   "expected": "books"
+  },
+  {
+   "n": 77,
+   "sentence": "At the beach, children built castles out of ___.",
+   "expected": "sand"
+  },
+  {
+   "n": 78,
+   "sentence": "The orchestra was led by the ___.",
+   "expected": "conductor"
+  },
+  {
+   "n": 79,
+   "sentence": "He called the wrong person because he dialled the wrong ___.",
+   "expected": "number"
+  },
+  {
+   "n": 80,
+   "sentence": "The rain stopped and the sun began to ___.",
+   "expected": "shine"
+  },
+  {
+   "n": 81,
+   "sentence": "After the long race the runner stopped to catch his ___.",
+   "expected": "breath"
+  },
+  {
+   "n": 82,
+   "sentence": "Fish breathe through their ___.",
+   "expected": "gills"
+  },
+  {
+   "n": 83,
+   "sentence": "In the field the cows were eating ___.",
+   "expected": "grass"
+  },
+  {
+   "n": 84,
+   "sentence": "He wore a wedding ring on his left ___.",
+   "expected": "hand"
+  },
+  {
+   "n": 85,
+   "sentence": "Hot air balloons float high up into the ___.",
+   "expected": "sky"
+  },
+  {
+   "n": 86,
+   "sentence": "The soldiers marched in a long straight ___.",
+   "expected": "line"
+  },
+  {
+   "n": 87,
+   "sentence": "He combed his hair in front of the ___.",
+   "expected": "mirror"
+  },
+  {
+   "n": 88,
+   "sentence": "To find north, the hikers used a ___.",
+   "expected": "compass"
+  },
+  {
+   "n": 89,
+   "sentence": "For the party he blew up lots of ___.",
+   "expected": "balloons"
+  },
+  {
+   "n": 90,
+   "sentence": "The bird flapped its ___.",
+   "expected": "wings"
+  },
+  {
+   "n": 91,
+   "sentence": "The tennis player hit the ball with her ___.",
+   "expected": "racket"
+  },
+  {
+   "n": 92,
+   "sentence": "He sliced the bread with a sharp ___.",
+   "expected": "knife"
+  },
+  {
+   "n": 93,
+   "sentence": "Planes take off and land at the ___.",
+   "expected": "airport"
+  },
+  {
+   "n": 94,
+   "sentence": "The ice cream melted because the day was so ___.",
+   "expected": "hot"
+  },
+  {
+   "n": 95,
+   "sentence": "The prisoner was locked in a small ___.",
+   "expected": "cell"
+  },
+  {
+   "n": 96,
+   "sentence": "The cat climbed to the top of the tall ___.",
+   "expected": "tree"
+  },
+  {
+   "n": 97,
+   "sentence": "A comb is used to tidy your ___.",
+   "expected": "hair"
+  },
+  {
+   "n": 98,
+   "sentence": "The old film was shown in black and ___.",
+   "expected": "white"
+  },
+  {
+   "n": 99,
+   "sentence": "The mouse was caught in a ___.",
+   "expected": "trap"
+  },
+  {
+   "n": 100,
+   "sentence": "Bees make sweet ___.",
+   "expected": "honey"
+  },
+  {
+   "n": 101,
+   "sentence": "He was so tired that he soon fell ___.",
+   "expected": "asleep"
+  },
+  {
+   "n": 102,
+   "sentence": "Water freezes at zero ___.",
+   "expected": "degrees"
+  }
+ ]
 }

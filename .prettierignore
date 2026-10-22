@@ -8,3 +8,9 @@ pnpm-lock.yaml
 apps/worker/__pycache__
 apps/worker/.venv
 *.pyc
+
+# EF battery v2.0: frozen, hash-pinned research files (seed refuses a changed
+# stimuli.json). Never reformat; battery-extras.json is generated.
+docs/EF_battery_v2/source
+docs/EF_battery_v2/derived
+docs/EF_battery_v2/CHANGELOG.md

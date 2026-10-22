@@ -1,813 +1,904 @@
 {
-  "batteryVersion": "2.0",
-  "ef_sha256": "b8ee0113f223dfeff54bc1d2348364b04817cb43c793af8cf5650d7e86641bb2",
-  "stimuli_sha256": "a705e66707fb0f67f7d73241957dc12b73a0c61eca0b204584d251a97e2dd832",
-  "questionnaire": {
-    "title": "About you and how you feel today",
-    "footer": "These questions describe how you are today. They help us interpret the puzzles and are not a measure of ability.",
-    "partA": {
-      "heading": "About you",
-      "items": [
-        {
-          "code": "A1",
-          "text": "Age:",
-          "type": "number",
-          "unit": "years",
-          "min": 16,
-          "max": 99
-        },
-        {
-          "code": "A2",
-          "text": "Highest completed education:",
-          "type": "choice",
-          "options": [
-            "Secondary",
-            "Diploma / associate",
-            "Bachelor's",
-            "Master's",
-            "Doctorate",
-            "Other:"
-          ],
-          "otherOption": "Other:"
-        },
-        {
-          "code": "A3",
-          "text": "First language(s) you learned as a child:",
-          "type": "text"
-        },
-        {
-          "code": "A4",
-          "text": "Language you use most at home now:",
-          "type": "text"
-        },
-        {
-          "code": "A5",
-          "text": "Main language of teaching at your secondary school:",
-          "type": "text2",
-          "secondText": "and at university/college:"
-        },
-        {
-          "code": "A6",
-          "text": "How well do you understand spoken English?",
-          "type": "choice",
-          "options": [
-            "Not well",
-            "Fairly well",
-            "Well",
-            "Very well",
-            "Native / as well as my first language"
-          ]
-        },
-        {
-          "code": "A7",
-          "text": "How well do you speak English?",
-          "type": "choice",
-          "options": [
-            "Not well",
-            "Fairly well",
-            "Well",
-            "Very well",
-            "Native / as well as my first language"
-          ]
-        },
-        {
-          "code": "A8",
-          "text": "Have you done puzzles like these before (for example repeating numbers backwards, naming ink colours, joining numbered circles, saying words that start with a letter)?",
-          "type": "choice",
-          "options": [
-            "No",
-            "Yes, in a research study",
-            "Yes, in a clinical or educational assessment",
-            "Yes, elsewhere"
-          ],
-          "followup": {
-            "text": "If yes, roughly when?",
-            "when": [
-              "Yes, in a research study",
-              "Yes, in a clinical or educational assessment",
-              "Yes, elsewhere"
-            ]
-          }
-        },
-        {
-          "code": "A9",
-          "text": "Do you have any difficulty telling colours apart (for example red–green colour blindness)?",
-          "type": "choice",
-          "options": ["No", "Yes", "Not sure"]
-        },
-        {
-          "code": "A10",
-          "text": "Do you need glasses or contact lenses for reading?",
-          "type": "choice",
-          "options": ["No", "Yes, and I am wearing them now", "Yes, but I am not wearing them now"]
-        },
-        {
-          "code": "A11",
-          "text": "Do you have any difficulty hearing speech in a quiet room?",
-          "type": "choice",
-          "options": ["No", "Yes"]
-        },
-        {
-          "code": "A12",
-          "text": "Which hand do you write with?",
-          "type": "choice",
-          "options": ["Right", "Left", "Either"]
-        },
-        {
-          "code": "A13",
-          "text": "Have you ever been told by a professional that you have a condition that affects reading, attention or memory (for example dyslexia or ADHD)?",
-          "type": "choice",
-          "options": ["No", "Yes", "Prefer not to say"],
-          "flag": "efShowDiagnosisItem"
-        }
+ "batteryVersion": "2.0",
+ "ef_sha256": "b8ee0113f223dfeff54bc1d2348364b04817cb43c793af8cf5650d7e86641bb2",
+ "stimuli_sha256": "a705e66707fb0f67f7d73241957dc12b73a0c61eca0b204584d251a97e2dd832",
+ "questionnaire": {
+  "title": "About you and how you feel today",
+  "footer": "These questions describe how you are today. They help us interpret the puzzles and are not a measure of ability.",
+  "partA": {
+   "heading": "About you",
+   "items": [
+    {
+     "code": "A1",
+     "text": "Age:",
+     "type": "number",
+     "unit": "years",
+     "min": 16,
+     "max": 99
+    },
+    {
+     "code": "A2",
+     "text": "Highest completed education:",
+     "type": "choice",
+     "options": [
+      "Secondary",
+      "Diploma / associate",
+      "Bachelor's",
+      "Master's",
+      "Doctorate",
+      "Other:"
+     ],
+     "otherOption": "Other:"
+    },
+    {
+     "code": "A3",
+     "text": "First language(s) you learned as a child:",
+     "type": "text"
+    },
+    {
+     "code": "A4",
+     "text": "Language you use most at home now:",
+     "type": "text"
+    },
+    {
+     "code": "A5",
+     "text": "Main language of teaching at your secondary school:",
+     "type": "text2",
+     "secondText": "and at university/college:"
+    },
+    {
+     "code": "A6",
+     "text": "How well do you understand spoken English?",
+     "type": "choice",
+     "options": [
+      "Not well",
+      "Fairly well",
+      "Well",
+      "Very well",
+      "Native / as well as my first language"
+     ]
+    },
+    {
+     "code": "A7",
+     "text": "How well do you speak English?",
+     "type": "choice",
+     "options": [
+      "Not well",
+      "Fairly well",
+      "Well",
+      "Very well",
+      "Native / as well as my first language"
+     ]
+    },
+    {
+     "code": "A8",
+     "text": "Have you done puzzles like these before (for example repeating numbers backwards, naming ink colours, joining numbered circles, saying words that start with a letter)?",
+     "type": "choice",
+     "options": [
+      "No",
+      "Yes, in a research study",
+      "Yes, in a clinical or educational assessment",
+      "Yes, elsewhere"
+     ],
+     "followup": {
+      "text": "If yes, roughly when?",
+      "when": [
+       "Yes, in a research study",
+       "Yes, in a clinical or educational assessment",
+       "Yes, elsewhere"
       ]
+     }
     },
-    "partB": {
-      "heading": "How you usually are",
-      "instructions": "Below you will find a number of statements. Please circle a number to the right of each statement to indicate how well that statement describes how you are as a person. People that you know might feel differently about you – we want to know what you think about yourself. Try to respond as honestly as possible.",
-      "scale": [
-        {
-          "value": 1,
-          "label": "Definitely not true"
-        },
-        {
-          "value": 2,
-          "label": "Not true"
-        },
-        {
-          "value": 3,
-          "label": "Partially true"
-        },
-        {
-          "value": 4,
-          "label": "True"
-        },
-        {
-          "value": 5,
-          "label": "Definitely true"
-        }
-      ],
-      "items": [
-        {
-          "code": "B1",
-          "text": "I have difficulty remembering lengthy instructions."
-        },
-        {
-          "code": "B2",
-          "text": "I sometimes have difficulty remembering what I am doing in the middle of an activity."
-        },
-        {
-          "code": "B3",
-          "text": "I have a tendency to do things without first thinking about what could happen."
-        },
-        {
-          "code": "B4",
-          "text": "I sometimes have difficulty stopping myself from doing something that I like even though someone tells me that it is not allowed."
-        },
-        {
-          "code": "B5",
-          "text": "When someone asks me to do several things, I sometimes remember only the first or last."
-        },
-        {
-          "code": "B6",
-          "text": "I sometimes have difficulty refraining from smiling or laughing in situations where it is inappropriate."
-        },
-        {
-          "code": "B7",
-          "text": "I have difficulty coming up with a different way of solving a problem when I get stuck."
-        },
-        {
-          "code": "B8",
-          "text": "When someone asks me to fetch something, I sometimes forget what I am supposed to fetch."
-        },
-        {
-          "code": "B9",
-          "text": "I have difficulty planning for an activity (e.g., remembering to bring everything necessary when going on a trip/to work/to school)."
-        },
-        {
-          "code": "B10",
-          "text": "I sometimes have difficulty stopping an activity that I like (e.g., I watch TV or sit in front of the computer in the evening even though it is time to go to bed)."
-        },
-        {
-          "code": "B11",
-          "text": "I sometimes have difficulty understanding verbal instructions unless I am also shown how to do something."
-        },
-        {
-          "code": "B12",
-          "text": "I have difficulties with tasks or activities that involve several steps."
-        },
-        {
-          "code": "B13",
-          "text": "I have difficulty thinking ahead or learning from experience."
-        },
-        {
-          "code": "B14",
-          "text": "People that I meet sometimes seem to think that I am more lively/wilder compared to other people my age."
-        }
-      ],
-      "key": {
-        "WM": [1, 2, 5, 7, 8, 9, 11, 12, 13],
-        "INH": [3, 4, 6, 10, 14]
-      },
-      "attribution": "Items: Holst & Thorell (2018), reproduced unchanged."
+    {
+     "code": "A9",
+     "text": "Do you have any difficulty telling colours apart (for example red–green colour blindness)?",
+     "type": "choice",
+     "options": [
+      "No",
+      "Yes",
+      "Not sure"
+     ]
     },
-    "partCBefore": [
-      {
-        "code": "C1",
-        "text": "How many hours did you sleep last night?",
-        "type": "number",
-        "unit": "hours",
-        "min": 0,
-        "max": 24,
-        "step": 0.5
-      },
-      {
-        "code": "C2",
-        "text": "Compared with a usual night, last night's sleep was ...",
-        "type": "choice",
-        "options": ["Much worse", "A bit worse", "About usual", "A bit better", "Much better"]
-      },
-      {
-        "code": "C3",
-        "text": "Right now, how tired do you feel?",
-        "type": "scale",
-        "min": 0,
-        "max": 10,
-        "lowLabel": "Not at all tired",
-        "highLabel": "Extremely tired"
-      },
-      {
-        "code": "C4",
-        "text": "Right now, how well do you feel able to concentrate?",
-        "type": "scale",
-        "min": 0,
-        "max": 10,
-        "lowLabel": "Not at all",
-        "highLabel": "Extremely well"
-      },
-      {
-        "code": "C5",
-        "text": "Right now, how stressed or anxious do you feel?",
-        "type": "scale",
-        "min": 0,
-        "max": 10,
-        "lowLabel": "Not at all",
-        "highLabel": "Extremely"
-      },
-      {
-        "code": "C6",
-        "text": "Have you had coffee, tea, an energy drink or other caffeine in the last 3 hours?",
-        "type": "choice",
-        "options": ["Yes", "No"]
-      },
-      {
-        "code": "C7",
-        "text": "Have you taken any medicine today that can make you drowsy or affect concentration?",
-        "type": "choice",
-        "options": ["Yes", "No", "Prefer not to say"]
-      }
-    ],
-    "partCAfter": [
-      {
-        "code": "C8",
-        "text": "How much effort did you put into the puzzles?",
-        "type": "scale",
-        "min": 0,
-        "max": 10,
-        "lowLabel": "No effort",
-        "highLabel": "Maximum effort"
-      },
-      {
-        "code": "C9",
-        "text": "Was anything distracting or disrupting you during the puzzles?",
-        "type": "choice",
-        "options": ["No", "Yes (please describe)"],
-        "describeOption": "Yes (please describe)"
-      }
-    ]
-  },
-  "hayling": {
-    "practice": {
-      "A": [
-        {
-          "sentence": "Please pass me the salt and ___.",
-          "expected": "pepper"
-        },
-        {
-          "sentence": "A spider has eight ___.",
-          "expected": "legs"
-        }
-      ],
-      "B": [
-        {
-          "sentence": "Every morning the hens lay fresh ___.",
-          "expected": "eggs"
-        },
-        {
-          "sentence": "The bird flapped its ___.",
-          "expected": "wings"
-        }
-      ]
+    {
+     "code": "A10",
+     "text": "Do you need glasses or contact lenses for reading?",
+     "type": "choice",
+     "options": [
+      "No",
+      "Yes, and I am wearing them now",
+      "Yes, but I am not wearing them now"
+     ]
     },
-    "codingExamples": {
-      "door": {
-        "a": "window",
-        "b": "key"
-      },
-      "ice": {
-        "a": "stone",
-        "b": "skate"
-      },
-      "mirror": {
-        "a": "window",
-        "b": "brush"
-      },
-      "dress": {
-        "a": "gown",
-        "b": "wedding"
-      },
-      "web": {
-        "a": "mouth",
-        "b": "silk"
-      },
-      "knife": {
-        "a": "blade",
-        "b": "butter"
-      },
-      "crow": {
-        "a": "sing",
-        "b": "egg"
-      },
-      "shine": {
-        "a": "rise",
-        "b": "moon"
-      },
-      "card": {
-        "a": "",
-        "b": "bank"
-      },
-      "treasure": {
-        "a": "gold",
-        "b": "ship"
-      },
-      "red": {
-        "a": "green",
-        "b": "stop"
-      },
-      "hive": {
-        "a": "nest",
-        "b": "honey"
-      },
-      "asleep": {
-        "a": "",
-        "b": "pillow"
-      },
-      "grass": {
-        "a": "hay",
-        "b": "milk"
-      },
-      "dictionary": {
-        "a": "book",
-        "b": "spelling"
-      },
-      "hand": {
-        "a": "finger",
-        "b": "glove"
-      },
-      "sun": {
-        "a": "",
-        "b": "moon"
-      },
-      "envelope": {
-        "a": "letter",
-        "b": "stamp"
-      },
-      "net": {
-        "a": "goal",
-        "b": "player"
-      },
-      "gills": {
-        "a": "",
-        "b": "water"
-      },
-      "candles": {
-        "a": "",
-        "b": "cake"
-      },
-      "week": {
-        "a": "",
-        "b": "calendar"
-      },
-      "medal": {
-        "a": "cup",
-        "b": "podium"
-      },
-      "line": {
-        "a": "row",
-        "b": "army"
-      },
-      "tree": {
-        "a": "wall",
-        "b": "branch"
-      },
-      "bell": {
-        "a": "doorbell",
-        "b": "knock"
-      },
-      "jungle": {
-        "a": "",
-        "b": "zoo"
-      },
-      "police": {
-        "a": "guard",
-        "b": "prison"
-      },
-      "towel": {
-        "a": "",
-        "b": "soap"
-      },
-      "sky": {
-        "a": "clouds",
-        "b": "wind"
-      },
-      "sand": {
-        "a": "",
-        "b": "sea"
-      },
-      "breath": {
-        "a": "",
-        "b": "sweat"
-      },
-      "thread": {
-        "a": "cotton",
-        "b": "sewing"
-      },
-      "lava": {
-        "a": "rock",
-        "b": "mountain"
-      },
-      "number": {
-        "a": "",
-        "b": "phone"
-      },
-      "spoon": {
-        "a": "stick",
-        "b": "bowl"
-      },
-      "hammer": {
-        "a": "rock",
-        "b": "wood"
-      },
-      "white": {
-        "a": "",
-        "b": "colour"
-      },
-      "books": {
-        "a": "films",
-        "b": "librarian"
-      },
-      "time": {
-        "a": "",
-        "b": "clock"
-      },
-      "water": {
-        "a": "sunlight",
-        "b": "garden"
-      },
-      "bananas": {
-        "a": "fruit",
-        "b": "tree"
-      },
-      "gentlemen": {
-        "a": "",
-        "b": "microphone"
-      },
-      "sides": {
-        "a": "corners",
-        "b": "square"
-      },
-      "teeth": {
-        "a": "",
-        "b": "dentist"
-      },
-      "stage": {
-        "a": "",
-        "b": "song"
-      },
-      "string": {
-        "a": "rope",
-        "b": "post"
-      },
-      "guilty": {
-        "a": "innocent",
-        "b": "judge"
-      },
-      "night": {
-        "a": "",
-        "b": "moon"
-      },
-      "groom": {
-        "a": "",
-        "b": "cake"
-      },
-      "board": {
-        "a": "whiteboard",
-        "b": "chalk"
-      },
-      "trunks": {
-        "a": "tusks",
-        "b": "zoo"
-      },
-      "cobwebs": {
-        "a": "dirt",
-        "b": "spider"
-      },
-      "key": {
-        "a": "code",
-        "b": "lock"
-      },
-      "paper": {
-        "a": "",
-        "b": "ribbon"
-      },
-      "arms": {
-        "a": "lap",
-        "b": "milk"
-      },
-      "skin": {
-        "a": "",
-        "b": "poison"
-      },
-      "compass": {
-        "a": "map",
-        "b": "mountain"
-      },
-      "milk": {
-        "a": "water",
-        "b": "cat"
-      },
-      "pencil": {
-        "a": "",
-        "b": "eraser"
-      },
-      "lightning": {
-        "a": "rain",
-        "b": "cloud"
-      },
-      "horse": {
-        "a": "",
-        "b": "cow"
-      },
-      "trap": {
-        "a": "cage",
-        "b": "cheese"
-      },
-      "injection": {
-        "a": "",
-        "b": "nurse"
-      },
-      "oven": {
-        "a": "",
-        "b": "flour"
-      },
-      "fire": {
-        "a": "flames",
-        "b": "smoke"
-      },
-      "snow": {
-        "a": "",
-        "b": "winter"
-      },
-      "scissors": {
-        "a": "",
-        "b": "glue"
-      },
-      "socks": {
-        "a": "",
-        "b": "feet"
-      },
-      "conductor": {
-        "a": "",
-        "b": "violin"
-      },
-      "west": {
-        "a": "",
-        "b": "sunset"
-      },
-      "head": {
-        "a": "",
-        "b": "bicycle"
-      },
-      "balloons": {
-        "a": "",
-        "b": "birthday"
-      },
-      "fish": {
-        "a": "",
-        "b": "boat"
-      },
-      "hot": {
-        "a": "warm",
-        "b": "summer"
-      },
-      "honey": {
-        "a": "",
-        "b": "flowers"
-      },
-      "crawl": {
-        "a": "",
-        "b": "nappy"
-      },
-      "cold": {
-        "a": "windy",
-        "b": "winter"
-      },
-      "rain": {
-        "a": "snow",
-        "b": "cloud"
-      },
-      "cell": {
-        "a": "room",
-        "b": "police"
-      },
-      "colours": {
-        "a": "",
-        "b": "sky"
-      },
-      "mask": {
-        "a": "scarf",
-        "b": "bank"
-      },
-      "crown": {
-        "a": "hat",
-        "b": "king"
-      },
-      "bottle": {
-        "a": "cup",
-        "b": "cow"
-      },
-      "racket": {
-        "a": "bat",
-        "b": "net"
-      },
-      "saw": {
-        "a": "axe",
-        "b": "tree"
-      },
-      "tail": {
-        "a": "",
-        "b": "bone"
-      },
-      "bed": {
-        "a": "sleep",
-        "b": "pillow"
-      },
-      "airport": {
-        "a": "",
-        "b": "pilot"
-      },
-      "hair": {
-        "a": "",
-        "b": "brush"
-      },
-      "eggs": {
-        "a": "",
-        "b": "chicken"
-      },
-      "wings": {
-        "a": "",
-        "b": "feather"
-      },
-      "pepper": {
-        "a": "",
-        "b": "pasta"
-      },
-      "legs": {
-        "a": "",
-        "b": "insect"
-      },
-      "stamp": {
-        "a": "",
-        "b": "post"
-      },
-      "mouth": {
-        "a": "",
-        "b": "tooth"
-      },
-      "clues": {
-        "a": "evidence",
-        "b": "police"
-      },
-      "degrees": {
-        "a": "Celsius",
-        "b": "cold"
-      },
-      "change": {
-        "a": "receipt",
-        "b": "money"
-      },
-      "cheer": {
-        "a": "shout",
-        "b": "football"
-      },
-      "clouds": {
-        "a": "sky",
-        "b": "umbrella"
-      },
-      "ball": {
-        "a": "",
-        "b": "goal"
-      }
+    {
+     "code": "A11",
+     "text": "Do you have any difficulty hearing speech in a quiet room?",
+     "type": "choice",
+     "options": [
+      "No",
+      "Yes"
+     ]
     },
-    "promptAfterMs": 15000
-  },
-  "fluency": {
-    "exampleLetter": "N",
-    "exampleLetterWords": ["nail", "night", "near"],
-    "exampleNames": ["Nancy", "Nepal"],
-    "exampleRoot": ["eat", "eating"],
-    "exampleSwitchPair": ["colours", "body parts"],
-    "exampleSwitchWords": ["red", "arm", "blue", "leg"],
-    "secondsPerPrompt": 60
-  },
-  "stroop": {
-    "colours": ["red", "green", "blue"],
-    "rows": 20,
-    "cols": 5,
-    "secondsPerPage": 45,
-    "rgb": {
-      "red": [200, 30, 30],
-      "green": [20, 140, 60],
-      "blue": [30, 70, 200]
+    {
+     "code": "A12",
+     "text": "Which hand do you write with?",
+     "type": "choice",
+     "options": [
+      "Right",
+      "Left",
+      "Either"
+     ]
+    },
+    {
+     "code": "A13",
+     "text": "Have you ever been told by a professional that you have a condition that affects reading, attention or memory (for example dyslexia or ADHD)?",
+     "type": "choice",
+     "options": [
+      "No",
+      "Yes",
+      "Prefer not to say"
+     ],
+     "flag": "efShowDiagnosisItem"
     }
+   ]
   },
-  "tmt": {
-    "fieldMm": [150.0, 185.0],
-    "sampleFieldMm": [120.0, 70.0],
-    "circleDiameterMm": 8.5,
-    "beginEndOffsetMm": 6.8,
-    "labelsA": [
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-      "7",
-      "8",
-      "9",
-      "10",
-      "11",
-      "12",
-      "13",
-      "14",
-      "15",
-      "16",
-      "17",
-      "18",
-      "19",
-      "20",
-      "21",
-      "22",
-      "23",
-      "24",
-      "25"
+  "partB": {
+   "heading": "How you usually are",
+   "instructions": "Below you will find a number of statements. Please circle a number to the right of each statement to indicate how well that statement describes how you are as a person. People that you know might feel differently about you – we want to know what you think about yourself. Try to respond as honestly as possible.",
+   "scale": [
+    {
+     "value": 1,
+     "label": "Definitely not true"
+    },
+    {
+     "value": 2,
+     "label": "Not true"
+    },
+    {
+     "value": 3,
+     "label": "Partially true"
+    },
+    {
+     "value": 4,
+     "label": "True"
+    },
+    {
+     "value": 5,
+     "label": "Definitely true"
+    }
+   ],
+   "items": [
+    {
+     "code": "B1",
+     "text": "I have difficulty remembering lengthy instructions."
+    },
+    {
+     "code": "B2",
+     "text": "I sometimes have difficulty remembering what I am doing in the middle of an activity."
+    },
+    {
+     "code": "B3",
+     "text": "I have a tendency to do things without first thinking about what could happen."
+    },
+    {
+     "code": "B4",
+     "text": "I sometimes have difficulty stopping myself from doing something that I like even though someone tells me that it is not allowed."
+    },
+    {
+     "code": "B5",
+     "text": "When someone asks me to do several things, I sometimes remember only the first or last."
+    },
+    {
+     "code": "B6",
+     "text": "I sometimes have difficulty refraining from smiling or laughing in situations where it is inappropriate."
+    },
+    {
+     "code": "B7",
+     "text": "I have difficulty coming up with a different way of solving a problem when I get stuck."
+    },
+    {
+     "code": "B8",
+     "text": "When someone asks me to fetch something, I sometimes forget what I am supposed to fetch."
+    },
+    {
+     "code": "B9",
+     "text": "I have difficulty planning for an activity (e.g., remembering to bring everything necessary when going on a trip/to work/to school)."
+    },
+    {
+     "code": "B10",
+     "text": "I sometimes have difficulty stopping an activity that I like (e.g., I watch TV or sit in front of the computer in the evening even though it is time to go to bed)."
+    },
+    {
+     "code": "B11",
+     "text": "I sometimes have difficulty understanding verbal instructions unless I am also shown how to do something."
+    },
+    {
+     "code": "B12",
+     "text": "I have difficulties with tasks or activities that involve several steps."
+    },
+    {
+     "code": "B13",
+     "text": "I have difficulty thinking ahead or learning from experience."
+    },
+    {
+     "code": "B14",
+     "text": "People that I meet sometimes seem to think that I am more lively/wilder compared to other people my age."
+    }
+   ],
+   "key": {
+    "WM": [
+     1,
+     2,
+     5,
+     7,
+     8,
+     9,
+     11,
+     12,
+     13
     ],
-    "labelsB": [
-      "1",
-      "A",
-      "2",
-      "B",
-      "3",
-      "C",
-      "4",
-      "D",
-      "5",
-      "E",
-      "6",
-      "F",
-      "7",
-      "G",
-      "8",
-      "H",
-      "9",
-      "I",
-      "10",
-      "J",
-      "11",
-      "K",
-      "12",
-      "L",
-      "13"
+    "INH": [
+     3,
+     4,
+     6,
+     10,
+     14
+    ]
+   },
+   "attribution": "Items: Holst & Thorell (2018), reproduced unchanged."
+  },
+  "partCBefore": [
+   {
+    "code": "C1",
+    "text": "How many hours did you sleep last night?",
+    "type": "number",
+    "unit": "hours",
+    "min": 0,
+    "max": 24,
+    "step": 0.5
+   },
+   {
+    "code": "C2",
+    "text": "Compared with a usual night, last night's sleep was ...",
+    "type": "choice",
+    "options": [
+     "Much worse",
+     "A bit worse",
+     "About usual",
+     "A bit better",
+     "Much better"
+    ]
+   },
+   {
+    "code": "C3",
+    "text": "Right now, how tired do you feel?",
+    "type": "scale",
+    "min": 0,
+    "max": 10,
+    "lowLabel": "Not at all tired",
+    "highLabel": "Extremely tired"
+   },
+   {
+    "code": "C4",
+    "text": "Right now, how well do you feel able to concentrate?",
+    "type": "scale",
+    "min": 0,
+    "max": 10,
+    "lowLabel": "Not at all",
+    "highLabel": "Extremely well"
+   },
+   {
+    "code": "C5",
+    "text": "Right now, how stressed or anxious do you feel?",
+    "type": "scale",
+    "min": 0,
+    "max": 10,
+    "lowLabel": "Not at all",
+    "highLabel": "Extremely"
+   },
+   {
+    "code": "C6",
+    "text": "Have you had coffee, tea, an energy drink or other caffeine in the last 3 hours?",
+    "type": "choice",
+    "options": [
+     "Yes",
+     "No"
+    ]
+   },
+   {
+    "code": "C7",
+    "text": "Have you taken any medicine today that can make you drowsy or affect concentration?",
+    "type": "choice",
+    "options": [
+     "Yes",
+     "No",
+     "Prefer not to say"
+    ]
+   }
+  ],
+  "partCAfter": [
+   {
+    "code": "C8",
+    "text": "How much effort did you put into the puzzles?",
+    "type": "scale",
+    "min": 0,
+    "max": 10,
+    "lowLabel": "No effort",
+    "highLabel": "Maximum effort"
+   },
+   {
+    "code": "C9",
+    "text": "Was anything distracting or disrupting you during the puzzles?",
+    "type": "choice",
+    "options": [
+     "No",
+     "Yes (please describe)"
     ],
-    "yAxisUp": true,
-    "discontinueSeconds": 300
+    "describeOption": "Yes (please describe)"
+   }
+  ]
+ },
+ "hayling": {
+  "practice": {
+   "A": [
+    {
+     "sentence": "Please pass me the salt and ___.",
+     "expected": "pepper"
+    },
+    {
+     "sentence": "A spider has eight ___.",
+     "expected": "legs"
+    }
+   ],
+   "B": [
+    {
+     "sentence": "Every morning the hens lay fresh ___.",
+     "expected": "eggs"
+    },
+    {
+     "sentence": "The bird flapped its ___.",
+     "expected": "wings"
+    }
+   ]
   },
-  "digitSpan": {
-    "onMs": 800,
-    "offMs": 200
+  "codingExamples": {
+   "door": {
+    "a": "window",
+    "b": "key"
+   },
+   "ice": {
+    "a": "stone",
+    "b": "skate"
+   },
+   "mirror": {
+    "a": "window",
+    "b": "brush"
+   },
+   "dress": {
+    "a": "gown",
+    "b": "wedding"
+   },
+   "web": {
+    "a": "mouth",
+    "b": "silk"
+   },
+   "knife": {
+    "a": "blade",
+    "b": "butter"
+   },
+   "crow": {
+    "a": "sing",
+    "b": "egg"
+   },
+   "shine": {
+    "a": "rise",
+    "b": "moon"
+   },
+   "card": {
+    "a": "",
+    "b": "bank"
+   },
+   "treasure": {
+    "a": "gold",
+    "b": "ship"
+   },
+   "red": {
+    "a": "green",
+    "b": "stop"
+   },
+   "hive": {
+    "a": "nest",
+    "b": "honey"
+   },
+   "asleep": {
+    "a": "",
+    "b": "pillow"
+   },
+   "grass": {
+    "a": "hay",
+    "b": "milk"
+   },
+   "dictionary": {
+    "a": "book",
+    "b": "spelling"
+   },
+   "hand": {
+    "a": "finger",
+    "b": "glove"
+   },
+   "sun": {
+    "a": "",
+    "b": "moon"
+   },
+   "envelope": {
+    "a": "letter",
+    "b": "stamp"
+   },
+   "net": {
+    "a": "goal",
+    "b": "player"
+   },
+   "gills": {
+    "a": "",
+    "b": "water"
+   },
+   "candles": {
+    "a": "",
+    "b": "cake"
+   },
+   "week": {
+    "a": "",
+    "b": "calendar"
+   },
+   "medal": {
+    "a": "cup",
+    "b": "podium"
+   },
+   "line": {
+    "a": "row",
+    "b": "army"
+   },
+   "tree": {
+    "a": "wall",
+    "b": "branch"
+   },
+   "bell": {
+    "a": "doorbell",
+    "b": "knock"
+   },
+   "jungle": {
+    "a": "",
+    "b": "zoo"
+   },
+   "police": {
+    "a": "guard",
+    "b": "prison"
+   },
+   "towel": {
+    "a": "",
+    "b": "soap"
+   },
+   "sky": {
+    "a": "clouds",
+    "b": "wind"
+   },
+   "sand": {
+    "a": "",
+    "b": "sea"
+   },
+   "breath": {
+    "a": "",
+    "b": "sweat"
+   },
+   "thread": {
+    "a": "cotton",
+    "b": "sewing"
+   },
+   "lava": {
+    "a": "rock",
+    "b": "mountain"
+   },
+   "number": {
+    "a": "",
+    "b": "phone"
+   },
+   "spoon": {
+    "a": "stick",
+    "b": "bowl"
+   },
+   "hammer": {
+    "a": "rock",
+    "b": "wood"
+   },
+   "white": {
+    "a": "",
+    "b": "colour"
+   },
+   "books": {
+    "a": "films",
+    "b": "librarian"
+   },
+   "time": {
+    "a": "",
+    "b": "clock"
+   },
+   "water": {
+    "a": "sunlight",
+    "b": "garden"
+   },
+   "bananas": {
+    "a": "fruit",
+    "b": "tree"
+   },
+   "gentlemen": {
+    "a": "",
+    "b": "microphone"
+   },
+   "sides": {
+    "a": "corners",
+    "b": "square"
+   },
+   "teeth": {
+    "a": "",
+    "b": "dentist"
+   },
+   "stage": {
+    "a": "",
+    "b": "song"
+   },
+   "string": {
+    "a": "rope",
+    "b": "post"
+   },
+   "guilty": {
+    "a": "innocent",
+    "b": "judge"
+   },
+   "night": {
+    "a": "",
+    "b": "moon"
+   },
+   "groom": {
+    "a": "",
+    "b": "cake"
+   },
+   "board": {
+    "a": "whiteboard",
+    "b": "chalk"
+   },
+   "trunks": {
+    "a": "tusks",
+    "b": "zoo"
+   },
+   "cobwebs": {
+    "a": "dirt",
+    "b": "spider"
+   },
+   "key": {
+    "a": "code",
+    "b": "lock"
+   },
+   "paper": {
+    "a": "",
+    "b": "ribbon"
+   },
+   "arms": {
+    "a": "lap",
+    "b": "milk"
+   },
+   "skin": {
+    "a": "",
+    "b": "poison"
+   },
+   "compass": {
+    "a": "map",
+    "b": "mountain"
+   },
+   "milk": {
+    "a": "water",
+    "b": "cat"
+   },
+   "pencil": {
+    "a": "",
+    "b": "eraser"
+   },
+   "lightning": {
+    "a": "rain",
+    "b": "cloud"
+   },
+   "horse": {
+    "a": "",
+    "b": "cow"
+   },
+   "trap": {
+    "a": "cage",
+    "b": "cheese"
+   },
+   "injection": {
+    "a": "",
+    "b": "nurse"
+   },
+   "oven": {
+    "a": "",
+    "b": "flour"
+   },
+   "fire": {
+    "a": "flames",
+    "b": "smoke"
+   },
+   "snow": {
+    "a": "",
+    "b": "winter"
+   },
+   "scissors": {
+    "a": "",
+    "b": "glue"
+   },
+   "socks": {
+    "a": "",
+    "b": "feet"
+   },
+   "conductor": {
+    "a": "",
+    "b": "violin"
+   },
+   "west": {
+    "a": "",
+    "b": "sunset"
+   },
+   "head": {
+    "a": "",
+    "b": "bicycle"
+   },
+   "balloons": {
+    "a": "",
+    "b": "birthday"
+   },
+   "fish": {
+    "a": "",
+    "b": "boat"
+   },
+   "hot": {
+    "a": "warm",
+    "b": "summer"
+   },
+   "honey": {
+    "a": "",
+    "b": "flowers"
+   },
+   "crawl": {
+    "a": "",
+    "b": "nappy"
+   },
+   "cold": {
+    "a": "windy",
+    "b": "winter"
+   },
+   "rain": {
+    "a": "snow",
+    "b": "cloud"
+   },
+   "cell": {
+    "a": "room",
+    "b": "police"
+   },
+   "colours": {
+    "a": "",
+    "b": "sky"
+   },
+   "mask": {
+    "a": "scarf",
+    "b": "bank"
+   },
+   "crown": {
+    "a": "hat",
+    "b": "king"
+   },
+   "bottle": {
+    "a": "cup",
+    "b": "cow"
+   },
+   "racket": {
+    "a": "bat",
+    "b": "net"
+   },
+   "saw": {
+    "a": "axe",
+    "b": "tree"
+   },
+   "tail": {
+    "a": "",
+    "b": "bone"
+   },
+   "bed": {
+    "a": "sleep",
+    "b": "pillow"
+   },
+   "airport": {
+    "a": "",
+    "b": "pilot"
+   },
+   "hair": {
+    "a": "",
+    "b": "brush"
+   },
+   "eggs": {
+    "a": "",
+    "b": "chicken"
+   },
+   "wings": {
+    "a": "",
+    "b": "feather"
+   },
+   "pepper": {
+    "a": "",
+    "b": "pasta"
+   },
+   "legs": {
+    "a": "",
+    "b": "insect"
+   },
+   "stamp": {
+    "a": "",
+    "b": "post"
+   },
+   "mouth": {
+    "a": "",
+    "b": "tooth"
+   },
+   "clues": {
+    "a": "evidence",
+    "b": "police"
+   },
+   "degrees": {
+    "a": "Celsius",
+    "b": "cold"
+   },
+   "change": {
+    "a": "receipt",
+    "b": "money"
+   },
+   "cheer": {
+    "a": "shout",
+    "b": "football"
+   },
+   "clouds": {
+    "a": "sky",
+    "b": "umbrella"
+   },
+   "ball": {
+    "a": "",
+    "b": "goal"
+   }
   },
-  "plusMinus": {
-    "operand": 3
+  "promptAfterMs": 15000
+ },
+ "fluency": {
+  "exampleLetter": "N",
+  "exampleLetterWords": [
+   "nail",
+   "night",
+   "near"
+  ],
+  "exampleNames": [
+   "Nancy",
+   "Nepal"
+  ],
+  "exampleRoot": [
+   "eat",
+   "eating"
+  ],
+  "exampleSwitchPair": [
+   "colours",
+   "body parts"
+  ],
+  "exampleSwitchWords": [
+   "red",
+   "arm",
+   "blue",
+   "leg"
+  ],
+  "secondsPerPrompt": 60
+ },
+ "stroop": {
+  "colours": [
+   "red",
+   "green",
+   "blue"
+  ],
+  "rows": 20,
+  "cols": 5,
+  "secondsPerPage": 45,
+  "rgb": {
+   "red": [
+    200,
+    30,
+    30
+   ],
+   "green": [
+    20,
+    140,
+    60
+   ],
+   "blue": [
+    30,
+    70,
+    200
+   ]
   }
+ },
+ "tmt": {
+  "fieldMm": [
+   150.0,
+   185.0
+  ],
+  "sampleFieldMm": [
+   120.0,
+   70.0
+  ],
+  "circleDiameterMm": 8.5,
+  "beginEndOffsetMm": 6.8,
+  "labelsA": [
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "10",
+   "11",
+   "12",
+   "13",
+   "14",
+   "15",
+   "16",
+   "17",
+   "18",
+   "19",
+   "20",
+   "21",
+   "22",
+   "23",
+   "24",
+   "25"
+  ],
+  "labelsB": [
+   "1",
+   "A",
+   "2",
+   "B",
+   "3",
+   "C",
+   "4",
+   "D",
+   "5",
+   "E",
+   "6",
+   "F",
+   "7",
+   "G",
+   "8",
+   "H",
+   "9",
+   "I",
+   "10",
+   "J",
+   "11",
+   "K",
+   "12",
+   "L",
+   "13"
+  ],
+  "yAxisUp": true,
+  "discontinueSeconds": 300
+ },
+ "digitSpan": {
+  "onMs": 800,
+  "offMs": 200
+ },
+ "plusMinus": {
+  "operand": 3
+ }
 }
