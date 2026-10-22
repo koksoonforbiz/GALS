@@ -102,9 +102,22 @@ export function PermissionGate({ onGranted }: Props) {
       webcamStreamRef.current = stream;
       if (webcamVideoRef.current) webcamVideoRef.current.srcObject = stream;
       setWebcamStatus('active');
-    } catch {
+    } catch (err) {
       setWebcamStatus('denied');
-      setWebcamError('Camera access was denied. Click "Try Again" and allow access when prompted.');
+      // Name the real cause: a browser that remembers "Block" refuses without
+      // prompting again, so a generic "denied" sends students round in circles.
+      const name = err instanceof DOMException ? err.name : '';
+      setWebcamError(
+        !navigator.mediaDevices?.getUserMedia
+          ? 'This browser cannot use the camera here. Please use Chrome or Edge.'
+          : name === 'NotAllowedError'
+            ? 'Camera access is blocked. Click the lock icon left of the web address, set Camera to "Allow", then reload the page. On Windows, also check Settings → Privacy & security → Camera.'
+            : name === 'NotReadableError' || name === 'AbortError'
+              ? 'The camera is being used by another app or tab (e.g. Teams or Zoom). Close it, then click "Try Again".'
+              : name === 'NotFoundError' || name === 'OverconstrainedError'
+                ? 'No camera was found. Connect a webcam, then click "Try Again".'
+                : `The camera could not start (${name || 'unknown error'}). Click "Try Again", or try Chrome or Edge.`,
+      );
     }
   }, []);
 
