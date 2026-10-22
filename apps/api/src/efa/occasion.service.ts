@@ -24,6 +24,8 @@ import {
   EFA_NOTICE_TITLE,
   EFA_NOTICE_VERSION,
 } from './consent-notice';
+import type { EfaStimuli } from './battery/stimuli.types';
+import type { Extras, TaskCode } from './tasks/steps';
 import {
   AnswerError,
   itemsOf,
@@ -63,12 +65,19 @@ export interface PuzzleOccasionView {
   puzzleCount: number;
   notice?: { version: string; title: string; paragraphs: readonly string[]; acceptLabel: string };
   message?: string;
+  /** next puzzle to run (neutral code w1..w7), when next = tasks */
+  task?: { code: TaskCode; number: number; of: number };
+}
+
+export interface StimulusSetCache {
+  sha256: string;
+  data: EfaStimuli;
+  extras: { questionnaire: ExtrasQuestionnaire } & Extras;
 }
 
 @Injectable()
 export class EfaOccasionService {
-  private stimulusCache: { sha256: string; extras: { questionnaire: ExtrasQuestionnaire } } | null =
-    null;
+  private stimulusCache: StimulusSetCache | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -79,18 +88,22 @@ export class EfaOccasionService {
 
   // ── reference data ──────────────────────────────────────────────────────
 
-  async stimulusSet() {
+  async stimulusSet(): Promise<StimulusSetCache> {
     if (this.stimulusCache) return this.stimulusCache;
     const set = await this.prisma.efaStimulusSet.findFirst({
       where: { batteryVersion: BATTERY_VERSION },
       orderBy: { seededAt: 'desc' },
-      select: { sha256: true, extras: true },
+      select: { sha256: true, data: true, extras: true },
     });
     if (!set)
       throw new ConflictException(
         'The puzzles are not available yet. Please contact your instructor.',
       );
-    this.stimulusCache = { sha256: set.sha256, extras: set.extras as never };
+    this.stimulusCache = {
+      sha256: set.sha256,
+      data: set.data as never,
+      extras: set.extras as never,
+    };
     return this.stimulusCache;
   }
 
@@ -120,7 +133,7 @@ export class EfaOccasionService {
   }
 
   /** Load the student's own occasion; marks it abandoned after 24 h idle (lazy, no scheduler). */
-  private async ownOccasion(studentId: string, occasionId: string): Promise<EfaOccasion> {
+  async ownOccasion(studentId: string, occasionId: string): Promise<EfaOccasion> {
     const o = await this.prisma.efaOccasion.findUnique({ where: { id: occasionId } });
     if (!o || o.studentId !== studentId) throw new NotFoundException('Not found');
     return this.applyAbandon(o);
@@ -136,21 +149,21 @@ export class EfaOccasionService {
     });
   }
 
-  private assertOpen(o: EfaOccasion) {
+  assertOpen(o: EfaOccasion) {
     if (o.status === 'abandoned') {
       throw new ConflictException('This session has expired. Please contact your instructor.');
     }
     if (o.status === 'completed') throw new ConflictException('Already completed');
   }
 
-  private touch(id: string, extra: Prisma.EfaOccasionUpdateInput = {}) {
+  touch(id: string, extra: Prisma.EfaOccasionUpdateInput = {}) {
     return this.prisma.efaOccasion.update({
       where: { id },
       data: { lastActivityAt: new Date(), ...extra },
     });
   }
 
-  private async log(
+  async log(
     sessionId: string | undefined,
     studentId: string,
     courseId: string,
@@ -161,14 +174,54 @@ export class EfaOccasionService {
     await this.activityLog.record({ sessionId, userId: studentId, action, courseId, metadata });
   }
 
-  private async tasksDone(o: EfaOccasion, cfg: EfaConfig): Promise<boolean> {
+  /** First enabled puzzle (fixed order W1..W7) without a finished run; a staff reset reopens one. */
+  async nextTask(
+    o: EfaOccasion,
+    cfg: EfaConfig,
+  ): Promise<{ code: TaskCode; number: number; of: number } | null> {
     const runs = await this.prisma.efaTaskRun.findMany({
       where: { occasionId: o.id },
-      select: { taskCode: true, status: true },
+      orderBy: { attemptNo: 'desc' },
+      select: { taskCode: true, status: true, resetReason: true },
     });
-    return cfg.enabledTasks.every((t) =>
-      runs.some((r) => r.taskCode === t && TERMINAL_TASK.has(r.status)),
-    );
+    const enabled = TASK_CODES.filter((t) => cfg.enabledTasks.includes(t));
+    for (const [i, code] of enabled.entries()) {
+      const latest = runs.find((r) => r.taskCode === code);
+      if (!latest || latest.resetReason || !TERMINAL_TASK.has(latest.status)) {
+        return { code, number: i + 1, of: enabled.length };
+      }
+    }
+    return null;
+  }
+
+  private async tasksDone(o: EfaOccasion, cfg: EfaConfig): Promise<boolean> {
+    return (await this.nextTask(o, cfg)) === null;
+  }
+
+  /**
+   * A run still in progress when the puzzles page loads means the student
+   * reloaded or closed the page mid-puzzle: mark it interrupted (never
+   * re-run — its items were seen) so they continue with the next puzzle.
+   */
+  private async interruptStale(o: EfaOccasion, sessionId?: string) {
+    const stale = await this.prisma.efaTaskRun.findMany({
+      where: { occasionId: o.id, status: 'in_progress' },
+    });
+    for (const run of stale) {
+      await this.prisma.efaTaskRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'interrupted',
+          completedAt: new Date(),
+          flags: { ...((run.flags as object) ?? {}), interrupted: true },
+        },
+      });
+      await this.log(sessionId, o.studentId, o.courseId, ActivityAction.EF_TASK_INTERRUPTED, {
+        occasion: o.occasion,
+        task: run.taskCode,
+        attempt: run.attemptNo,
+      });
+    }
   }
 
   private async nextStep(o: EfaOccasion | null, cfg: EfaConfig): Promise<PuzzleNextStep> {
@@ -192,6 +245,8 @@ export class EfaOccasionService {
     studentId: string,
     courseId: string,
     occasion: PuzzleOccasion,
+    sessionId?: string,
+    opts: { interruptRunning?: boolean } = {},
   ): Promise<PuzzleOccasionView> {
     await this.assertEnrolled(studentId, courseId);
     const cfg = await this.config(courseId);
@@ -208,11 +263,15 @@ export class EfaOccasionService {
       where: { studentId_courseId_occasion: { studentId, courseId, occasion } },
     });
     if (o) o = await this.applyAbandon(o);
+    if (o && opts.interruptRunning && o.status !== 'abandoned')
+      await this.interruptStale(o, sessionId);
     const next = await this.nextStep(o, cfg);
+    const task = next === 'tasks' && o ? await this.nextTask(o, cfg) : null;
     return {
       ...base,
       occasionId: o?.id ?? null,
       next,
+      ...(task ? { task } : {}),
       ...(next === 'consent'
         ? {
             notice: {

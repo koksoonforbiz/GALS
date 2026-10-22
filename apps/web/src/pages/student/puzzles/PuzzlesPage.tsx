@@ -14,6 +14,7 @@ import { usePauseReplay } from '../../../components/replayPause';
 import { NoticeStep } from './NoticeStep';
 import { QuestionnaireStep } from './QuestionnaireStep';
 import { ColourCheckStep } from './ColourCheckStep';
+import { TaskRunner } from './runner/TaskRunner';
 
 export interface OccasionView {
   occasionId: string | null;
@@ -22,6 +23,7 @@ export interface OccasionView {
   puzzleCount: number;
   notice?: { version: string; title: string; paragraphs: string[]; acceptLabel: string };
   message?: string;
+  task?: { code: 'w1' | 'w2' | 'w3' | 'w4' | 'w5' | 'w6' | 'w7'; number: number; of: number };
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -99,11 +101,12 @@ export function PuzzlesPage() {
       {view.next === 'colour' && view.occasionId && (
         <ColourCheckStep occasionId={view.occasionId} onDone={go} />
       )}
-      {view.next === 'tasks' && (
-        <Message
-          title="The puzzles come next"
-          body="Thank you — the questions are done. The puzzles will open here shortly."
-          onBack={back}
+      {view.next === 'tasks' && view.occasionId && view.task && (
+        <TaskRunner
+          key={view.task.code}
+          occasionId={view.occasionId}
+          task={view.task}
+          onDone={go}
         />
       )}
       {view.next === 'after' && view.occasionId && (
