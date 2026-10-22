@@ -25,6 +25,7 @@ import {
   type PuzzleSubmitRequest,
   type UserRole,
 } from '@ats/shared';
+import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -50,6 +51,10 @@ const ItemCodeParam = new ZodValidationPipe(z.string().regex(/^[A-C]\d{1,2}$/));
 @Controller('puzzles')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('student')
+// The global 30/min default is far below a normal pace here: 33 autosaved
+// questionnaire answers and one request per puzzle step (W1 has 32, W5 34).
+// Found by the browser test (students' saves were silently refused).
+@Throttle({ default: { limit: 600, ttl: 60_000 } })
 export class PuzzlesController {
   constructor(
     private readonly occasions: EfaOccasionService,

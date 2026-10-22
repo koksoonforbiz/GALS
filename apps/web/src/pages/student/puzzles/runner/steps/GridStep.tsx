@@ -109,6 +109,7 @@ export function GridStep({ step, rel, focus, onResult }: StepProps) {
   const cellView = (c: Cell, i: number) => (
     <div
       key={i}
+      data-current={i === current ? 'true' : undefined}
       className={`rounded px-2 py-0.5 text-center font-semibold tracking-wide ${
         i === current
           ? flash

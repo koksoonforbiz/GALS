@@ -22,7 +22,8 @@
     "seed:prompting-course-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-prompting-course-local.ts",
     "learning-events:backfill": "ts-node --transpile-only -P tsconfig.json prisma/scripts/backfill-learning-events.ts",
     "seed:twodoor": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-twodoor-local.ts",
-    "seed:ef-battery": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-ef-battery.ts"
+    "seed:ef-battery": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-ef-battery.ts",
+    "seed:efa-e2e-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-efa-e2e-local.ts"
   },
   "dependencies": {
     "@ats/shared": "workspace:*",

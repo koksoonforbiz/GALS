@@ -108,7 +108,12 @@ export function TrailStep({ step, rel, focus, onResult }: StepProps) {
       {p.points.map((_, i) => {
         const c = xy(i);
         return (
-          <g key={i} onMouseDown={() => click(i)} className="cursor-pointer">
+          <g
+            key={i}
+            data-label={p.labels[i]}
+            onMouseDown={() => click(i)}
+            className="cursor-pointer"
+          >
             <circle
               cx={c.x}
               cy={c.y}

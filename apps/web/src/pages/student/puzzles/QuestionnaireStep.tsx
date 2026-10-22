@@ -43,11 +43,27 @@ export function QuestionnaireStep({
     setValues((v) => ({ ...v, [code]: value }));
     clearTimeout(timers.current[code]);
     timers.current[code] = setTimeout(async () => {
-      try {
-        await api.put(`/puzzles/occasions/${occasionId}/answers/${code}`, { value });
-        setErrors(({ [code]: _gone, ...rest }) => rest);
-      } catch (err) {
-        setErrors((e) => ({ ...e, [code]: err instanceof ApiError ? err.message : 'Not saved' }));
+      // Retry transient failures (rate limit, network) a few times; a 400
+      // is a real validation message and is shown straight away.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await api.put(`/puzzles/occasions/${occasionId}/answers/${code}`, { value });
+          setErrors(({ [code]: _gone, ...rest }) => rest);
+          return;
+        } catch (err) {
+          const transient = !(err instanceof ApiError) || err.status === 429 || err.status >= 500;
+          if (!transient || attempt === 3) {
+            setErrors((e) => ({
+              ...e,
+              [code]:
+                err instanceof ApiError && err.status === 400
+                  ? err.message
+                  : 'Not saved yet — please try again.',
+            }));
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        }
       }
     }, delay);
   };

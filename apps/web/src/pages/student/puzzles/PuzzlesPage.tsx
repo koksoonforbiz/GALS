@@ -11,6 +11,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import type { PuzzleNextStep, PuzzleOccasion } from '@ats/shared';
 import { api, ApiError } from '../../../lib/api';
 import { usePauseReplay } from '../../../components/replayPause';
+import { useHoldSurvey } from '../../../components/surveyHold';
 import { NoticeStep } from './NoticeStep';
 import { QuestionnaireStep } from './QuestionnaireStep';
 import { ColourCheckStep } from './ColourCheckStep';
@@ -58,6 +59,7 @@ export function PuzzlesPage() {
   const [view, setView] = useState<OccasionView | null>(null);
   const [error, setError] = useState('');
   usePauseReplay(true);
+  useHoldSurvey(true);
 
   const back = () => navigate(`/student/courses/${courseId}`);
 

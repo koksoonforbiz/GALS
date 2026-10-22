@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { afterPaint, now, untilTime } from '../timing';
 import type { StepProps } from './types';
 
@@ -27,15 +28,16 @@ export function SequenceStep({ step, rel, focus, onResult }: StepProps) {
       await afterPaint();
       const start = now() + 300;
       await untilTime(start);
+      // Each change is committed synchronously right after a frame callback,
+      // so it is painted in that frame: on/off are the frame times the item
+      // appeared and disappeared (a state update left to React's scheduler
+      // landed a frame late and showed every item ~833 ms instead of 800).
       for (let k = 0; k < p.items.length && !cancelled; k++) {
-        const target = start + k * (p.onMs + p.offMs);
-        await untilTime(target);
-        setShown(p.items[k]!);
-        const on = await afterPaint();
+        const on = await untilTime(start + k * (p.onMs + p.offMs));
+        flushSync(() => setShown(p.items[k]!));
         if (k === 0) marks.current.onset = on;
-        await untilTime(on + p.onMs);
-        setShown(null);
-        const off = await afterPaint();
+        const off = await untilTime(on + p.onMs);
+        flushSync(() => setShown(null));
         marks.current.shown.push(Math.round(off - on));
       }
       if (cancelled) return;

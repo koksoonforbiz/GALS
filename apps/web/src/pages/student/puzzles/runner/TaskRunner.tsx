@@ -106,8 +106,13 @@ export function TaskRunner({
     }
   };
 
+  // One submission per step: a second Enter (or key repeat) while the first
+  // is in flight would be refused by the server as out of step.
+  const submitting = useRef(false);
+
   const onResult = async (result: PuzzleStepResult) => {
-    if (!step) return;
+    if (!step || submitting.current) return;
+    submitting.current = true;
     try {
       const r = await api.post<PuzzleStepResponse & { done?: boolean; view?: OccasionView }>(
         `/puzzles/runs/${runId.current}/steps`,
@@ -127,6 +132,8 @@ export function TaskRunner({
           ? err.message
           : 'Could not save your answer. Please check your connection.',
       );
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -186,13 +193,15 @@ export function TaskRunner({
             </div>
           )}
           {phase.at === 'step' && Step && step && (
-            <Step
-              key={`${step.id}#${step.attempt}`}
-              step={step}
-              rel={rel}
-              focus={focus}
-              onResult={(r) => void onResult(r)}
-            />
+            <div data-step-kind={step.kind} data-step-id={step.id} data-attempt={step.attempt}>
+              <Step
+                key={`${step.id}#${step.attempt}`}
+                step={step}
+                rel={rel}
+                focus={focus}
+                onResult={(r) => void onResult(r)}
+              />
+            </div>
           )}
           {phase.at === 'feedback' && (
             <div className="mx-auto max-w-xl text-center">

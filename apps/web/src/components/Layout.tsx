@@ -4,6 +4,7 @@ import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { PageContextProvider } from '../contexts/PageContext';
 import { EmotionSurveyModal, type EmotionOption } from './EmotionSurveyModal';
+import { SurveyHoldContext } from './surveyHold';
 import { useAuth } from '../contexts/AuthContext';
 import { usePageViewTracker, useActivityLog } from '../lib/activity-log';
 
@@ -17,6 +18,8 @@ export function Layout() {
 
   const [showSurvey, setShowSurvey] = useState(false);
   const [pendingLogout, setPendingLogout] = useState(false);
+  // A page (the puzzles) may hold the periodic survey back; it shows afterwards.
+  const [surveyHeld, setSurveyHeld] = useState(false);
   // Each time the student answers, update this timestamp to restart the 15-min clock.
   const [lastAnsweredAt, setLastAnsweredAt] = useState(() => Date.now());
 
@@ -66,12 +69,16 @@ export function Layout() {
         <div className="flex flex-1 min-h-0">
           <Sidebar />
           <main className="flex-1 min-h-0 p-4 overflow-y-auto">
-            <Outlet />
+            <SurveyHoldContext.Provider value={setSurveyHeld}>
+              <Outlet />
+            </SurveyHoldContext.Provider>
           </main>
         </div>
       </div>
       <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
-      {showSurvey && <EmotionSurveyModal onAnswer={handleAnswer} />}
+      {showSurvey && (!surveyHeld || pendingLogout) && (
+        <EmotionSurveyModal onAnswer={handleAnswer} />
+      )}
     </PageContextProvider>
   );
 }
