@@ -15,3 +15,4 @@ export * from './interactive-lesson';
 export * from './prompt-lab';
 export * from './course-gates';
 export * from './puzzles';
+export * from './efa-admin';

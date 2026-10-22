@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import type { EfaOccasion, Prisma } from '@prisma/client';
 import type {
@@ -18,6 +19,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import { ActivityAction, SERVER_ONLY_ACTIONS } from '../activity-log/activity-action.enum';
 import { CourseGateService } from '../course-gates/course-gate.service';
 import { EfaAllocationService, formFor } from './allocation.service';
+import { EfaScoringService } from './scoring/scoring.service';
 import {
   EFA_NOTICE_ACCEPT_LABEL,
   EFA_NOTICE_PARAGRAPHS,
@@ -84,6 +86,7 @@ export class EfaOccasionService {
     private readonly allocation: EfaAllocationService,
     private readonly gates: CourseGateService,
     private readonly activityLog: ActivityLogService,
+    @Optional() private readonly scoring?: EfaScoringService,
   ) {}
 
   // ── reference data ──────────────────────────────────────────────────────
@@ -221,6 +224,7 @@ export class EfaOccasionService {
         task: run.taskCode,
         attempt: run.attemptNo,
       });
+      await this.scoring?.scoreRunSafely(run.id);
     }
   }
 

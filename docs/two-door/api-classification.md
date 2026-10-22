@@ -116,7 +116,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /.well-known/acme-challenge/   (Let's Encrypt HTTP-01)
 ```
 
-Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/course-gates/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
+Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/course-gates/**`, `/api/efa-admin/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
 
 ## Full route table (generated)
 
@@ -338,6 +338,20 @@ Added 2026-10-22 for generic course gates (EF assessment, `docs/EF_battery_v2/`)
 | GET    | `/api/course-gates/courses/:courseId`                     | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Gates of a course with completion counts.        |
 | GET    | `/api/course-gates/courses/:courseId/students/:studentId` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One student's lock state.                        |
 | POST   | `/api/course-gates/:gateId/students/:studentId/unlock`    | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Override with reason; audited (`GATE_OVERRIDE`). |
+
+### EfaAdminController (`efa/efa-admin.controller.ts`)
+
+Added 2026-10-22 (EF assessment Phase 6). Staff only; never in the student bundle (`efa-admin` is a forbidden string). Course owner or admin; staff named in `efa_rater_assignments` for the course may use the coding queue only (not disagreements, adjudication, re-score or exports).
+
+| Method | Path                                                           | @Roles         | Guards                  | Door        | Note                                                                            |
+| ------ | -------------------------------------------------------------- | -------------- | ----------------------- | ----------- | ------------------------------------------------------------------------------- |
+| POST   | `/api/efa-admin/courses/:courseId/rescore`                     | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Recompute task scores for the current scoring version.                          |
+| GET    | `/api/efa-admin/courses/:courseId/coding/summary`              | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Per-task coding progress and Cohen's κ.                                         |
+| GET    | `/api/efa-admin/courses/:courseId/coding/:task/queue`          | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Blind rater queue (W4/W5).                                                      |
+| GET    | `/api/efa-admin/courses/:courseId/coding/:task/disagreements`  | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Both raters' codes; owner/admin only.                                           |
+| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId`       | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One rater's codes.                                                              |
+| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId/final` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Adjudicated final codes; owner/admin only.                                      |
+| GET    | `/api/efa-admin/courses/:courseId/export/:file.csv`            | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | `trials`, `task-scores`, `questionnaire`, `occasions`, `coding`; pseudonymised. |
 
 ### DialogueNotesController (`dialogue-notes/dialogue-notes.controller.ts`)
 

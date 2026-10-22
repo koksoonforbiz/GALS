@@ -7,6 +7,22 @@ import type { RawAction } from '../engine/types';
 import { csvCell } from '../validation/validation.service';
 import { TextConsentService } from '../../governance/text-consent.service';
 
+/** RESEARCH_EXPORT_SALT, or refuse: exports never fall back to real ids. */
+export function researchSalt(): string {
+  const s = process.env.RESEARCH_EXPORT_SALT;
+  if (!s || s.length < 16) {
+    throw new ServiceUnavailableException(
+      'Research exports need RESEARCH_EXPORT_SALT (≥ 16 characters) in the API environment.',
+    );
+  }
+  return s;
+}
+
+/** The one pseudonym used by every research export (EF exports join on it). */
+export function researchPseudonym(studentId: string, salt: string): string {
+  return createHash('sha256').update(`${salt}:${studentId}`).digest('hex').slice(0, 16);
+}
+
 export type EventLogActivity = 'raw' | 'learning_event';
 export type EventLogCase = 'item' | 'session';
 /** activitylog: one row per instance (start/end); eventlog: start + complete lifecycle rows. */
@@ -40,17 +56,11 @@ export class ResearchExportsService {
   }
 
   private salt(): string {
-    const s = process.env.RESEARCH_EXPORT_SALT;
-    if (!s || s.length < 16) {
-      throw new ServiceUnavailableException(
-        'Research exports need RESEARCH_EXPORT_SALT (≥ 16 characters) in the API environment.',
-      );
-    }
-    return s;
+    return researchSalt();
   }
 
   pseudonym(studentId: string, salt = this.salt()): string {
-    return createHash('sha256').update(`${salt}:${studentId}`).digest('hex').slice(0, 16);
+    return researchPseudonym(studentId, salt);
   }
 
   private async courseSessions(courseId: string) {

@@ -404,3 +404,22 @@ For W3/W6/W7, the "answer" is derivable from the visible stimulus by design: n �
 | Q14 | Default: device check as proposed.                                                                                                                                                                                                                                                                                                                      |
 | Q15 | Default: `RESEARCH_EXPORT_SALT` goes into the Phase 8 deployment notes.                                                                                                                                                                                                                                                                                 |
 | Q16 | (2026-10-22) `CONSENT_NOTICE.md` and `ONLINE_ADAPTATION.md` approved as drafted, including the five open points as proposed: ADEXI "circle" wording kept verbatim; W4 keep-going nudge after 15 s without an entry, before the 30 s mark; W5 RT from sentence onset with sentence length recorded; W6 keys F/J/K; practice feedback wording as drafted. |
+
+## 14. Phase notes
+
+### Phase 5 browser check (2026-10-22)
+
+A full T0 occasion runs in Chromium against the built student bundle (`e2e/puzzles.e2e.spec.ts`, local fixture `pnpm --filter @ats/api run seed:efa-e2e-local -- --reset`). What it found and what changed:
+
+- **Rate limit.** The global 30 requests/min refused questionnaire autosaves (33 items) and puzzle steps. `/api/puzzles` now allows 600/min per route, and the autosave retries transient failures (429, 5xx, network) with backoff.
+- **W1/W2 presentation time.** Items were on screen ~833 ms (two frames late). Show/hide is now committed synchronously in the frame callback; measured 800 ms.
+- **Double submission.** A second Enter while an answer was being saved sent the step twice (refused by the server as out of step). The runner now accepts one result per step.
+- **Mood pop-up.** The existing 15-minute "How are you feeling right now?" pop-up could open over a timed puzzle. It is now deferred while the puzzles page is open and shown when the student leaves it (the logout survey is unchanged).
+
+### Phase 6: scoring, coding, exports
+
+- **Scores** are written to `efa_task_scores` (`efa-1.0.0`) when a run completes or is interrupted, from raw trials plus final codes; scoring failures never block the student (logged; repaired by re-score). `POST /api/efa-admin/courses/:id/rescore` recomputes every finished run for the current version; rows of other versions are kept.
+- **ADEXI** WM/INH (and the 12-item variant) are computed at export time into `ef_questionnaire.csv` (`kind=score`), so no new table is needed.
+- **Coding** (`/teacher/courses/:courseId/efa/coding`, linked from Course → Settings): the unit is one W4 list or one W5 Part B sentence, coded per entry. Items carry no student/occasion/run id and come in a per-rater random order. Raters for a puzzle are the users in `efa_rater_assignments`; without assignments, the course owner and admins. An assigned rater who does not own the course can use the queue but not disagreements, adjudication, re-score or exports. Two agreeing codes become final (`rater_agree`); disagreements are adjudicated by the owner/admin (`adjudicated`), which re-scores the run. κ per task is computed over entries with two codes (code + category as one label). W4 shows the automatic pre-scoring as hints (no pre-fill); W5 pre-fills **A** when the response is the expected word, and saving confirms it.
+- **Exports** `GET /api/efa-admin/courses/:id/export/{trials,task-scores,questionnaire,occasions,coding}.csv`: pseudonymised with the same salted hash as the other research exports (`RESEARCH_EXPORT_SALT`, ≥16 chars, required), raters too. Only occasions whose notice was accepted (Q10). Task scores are long format (one row per measure); `?version=` selects another scoring version.
+- **Two-door:** `/api/efa-admin/` is denied on the public door (nginx) and classified PRIVATE; `efa-admin` is a forbidden string in the student bundle.

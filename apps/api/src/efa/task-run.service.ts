@@ -4,6 +4,7 @@ import type { PuzzleStepResponse, PuzzleStepSubmitRequest, PuzzleStepView } from
 import { PrismaService } from '../prisma';
 import { ActivityAction } from '../activity-log/activity-action.enum';
 import { EfaOccasionService, type PuzzleOccasionView } from './occasion.service';
+import { EfaScoringService } from './scoring/scoring.service';
 import { advance, currentStep, isFinished, startProgress, type Progress } from './tasks/engine';
 import { evaluateStep } from './tasks/evaluate';
 import { stepView, taskSteps, type Step, type TaskCode } from './tasks/steps';
@@ -19,6 +20,7 @@ export class EfaTaskRunService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly occasions: EfaOccasionService,
+    private readonly scoring: EfaScoringService,
   ) {}
 
   private async steps(occasion: { form: string | null }, task: TaskCode): Promise<Step[]> {
@@ -157,6 +159,8 @@ export class EfaTaskRunService {
     ]);
 
     if (!finished) return { feedback: ev.feedback, next: this.view(steps, next) };
+
+    await this.scoring.scoreRunSafely(run.id);
 
     await this.occasions.log(sessionId, studentId, o.courseId, ActivityAction.EF_TASK_COMPLETED, {
       occasion: o.occasion,
