@@ -14,3 +14,7 @@ apps/worker/.venv
 docs/EF_battery_v2/source
 docs/EF_battery_v2/derived
 docs/EF_battery_v2/CHANGELOG.md
+
+# Knowledge-test item bank (docs/assessments/README.md): research material,
+# never reformat.
+docs/assessment
