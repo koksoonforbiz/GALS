@@ -48,6 +48,7 @@ import { LearningEventsModule } from './learning-events';
 import { GovernanceModule } from './governance';
 import { CourseGatesModule } from './course-gates';
 import { EfaModule } from './efa/efa.module';
+import { KnowledgeTestsModule } from './knowledge-tests/knowledge-tests.module';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -112,6 +113,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     GovernanceModule,
     CourseGatesModule,
     EfaModule,
+    KnowledgeTestsModule,
   ],
   controllers: [HealthController],
   providers: [

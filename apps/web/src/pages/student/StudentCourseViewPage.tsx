@@ -730,46 +730,49 @@ export function StudentCourseViewPage() {
               {course.gateSteps && (
                 <CourseGateChecklist courseId={course.id} steps={course.gateSteps} compact />
               )}
-              {course.modules.map((mod) => (
-                <div key={mod.id} className="mb-4">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
-                    {mod.locked && <LockedBadge />}
-                    <span className="truncate">{mod.title}</span>
-                  </h4>
-                  <div className="space-y-0.5">
-                    {mod.items.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => !mod.locked && setSelectedItemId(item.id)}
-                        disabled={mod.locked}
-                        title={mod.locked ? 'Complete the steps above first' : undefined}
-                        className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
-                          mod.locked
-                            ? 'text-gray-400 cursor-not-allowed'
-                            : selectedItemId === item.id
-                              ? 'bg-blue-50 text-blue-700 font-medium'
-                              : 'text-gray-600 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                            item.type === 'PAGE'
-                              ? 'bg-blue-400'
-                              : item.type === 'INTERACTIVE_LESSON'
-                                ? 'bg-amber-400'
-                                : item.type === 'PDF'
-                                  ? 'bg-red-400'
-                                  : item.type === 'LINK'
-                                    ? 'bg-purple-400'
-                                    : 'bg-green-400'
+              {/* Locked sessions stay hidden: a session appears once the steps before it are done. */}
+              {course.modules
+                .filter((mod) => !mod.locked)
+                .map((mod) => (
+                  <div key={mod.id} className="mb-4">
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                      {mod.locked && <LockedBadge />}
+                      <span className="truncate">{mod.title}</span>
+                    </h4>
+                    <div className="space-y-0.5">
+                      {mod.items.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => !mod.locked && setSelectedItemId(item.id)}
+                          disabled={mod.locked}
+                          title={mod.locked ? 'Complete the steps above first' : undefined}
+                          className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
+                            mod.locked
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : selectedItemId === item.id
+                                ? 'bg-blue-50 text-blue-700 font-medium'
+                                : 'text-gray-600 hover:bg-gray-50'
                           }`}
-                        />
-                        <span className="truncate">{item.title}</span>
-                      </button>
-                    ))}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                              item.type === 'PAGE'
+                                ? 'bg-blue-400'
+                                : item.type === 'INTERACTIVE_LESSON'
+                                  ? 'bg-amber-400'
+                                  : item.type === 'PDF'
+                                    ? 'bg-red-400'
+                                    : item.type === 'LINK'
+                                      ? 'bg-purple-400'
+                                      : 'bg-green-400'
+                            }`}
+                          />
+                          <span className="truncate">{item.title}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
 

@@ -116,7 +116,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /.well-known/acme-challenge/   (Let's Encrypt HTTP-01)
 ```
 
-Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/course-gates/**`, `/api/efa-admin/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
+Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/course-gates/**`, `/api/efa-admin/**`, `/api/knowledge-tests-admin/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
 
 ## Full route table (generated)
 
@@ -315,6 +315,35 @@ Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 | ------ | --------------------------------------------------------------- | ----------------------- | ----------------------- | ---------- | ------------------------------------------ |
 | GET    | `/api/interactive-lessons/items/:itemId`                        | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service. |
 | PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.          |
+
+### KnowledgeTestsController (`knowledge-tests/knowledge-tests.controller.ts`)
+
+Added 2026-10-23 (knowledge tests, `docs/assessments/README.md`). Student only; enrolment-checked; course order enforced server-side through course gates (403 with a reason code, logged as `KNOWLEDGE_TEST_GATE_BLOCKED`). Never returns keys, rubrics, objectives or scores.
+
+| Method | Path                                               | @Roles  | Guards                  | Door       | Note                                                            |
+| ------ | -------------------------------------------------- | ------- | ----------------------- | ---------- | --------------------------------------------------------------- |
+| GET    | `/api/knowledge-tests/courses/:courseId/status`    | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Which tests are available / locked (with reason) / submitted.   |
+| POST   | `/api/knowledge-tests/courses/:courseId/assign-me` | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Create the student's counterbalanced assignments.               |
+| POST   | `/api/knowledge-tests/courses/:courseId/attempts`  | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Start/resume an attempt if the gate allows; items without keys. |
+| PATCH  | `/api/knowledge-tests/attempts/:attemptId`         | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Autosave (≤ 32 KB).                                             |
+| POST   | `/api/knowledge-tests/attempts/:attemptId/submit`  | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Final submit; returns only `{ submitted: true }`.               |
+
+### KnowledgeTestsAdminController (`knowledge-tests/knowledge-tests-admin.controller.ts`)
+
+Staff only; never in the student bundle (`knowledge-tests-admin` is a forbidden string). Course owner or admin; staff named in `efa_rater_assignments` for the course may score written answers (not adjudicate, export or set up).
+
+| Method | Path                                                                 | @Roles         | Guards                  | Door        | Note                                                   |
+| ------ | -------------------------------------------------------------------- | -------------- | ----------------------- | ----------- | ------------------------------------------------------ |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/setup`                 | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Sessions found, gates, definitions.                    |
+| PUT    | `/api/knowledge-tests-admin/courses/:courseId/setup`                 | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Turn the tests on/off (places/removes 18 gates).       |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/definitions`           | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Definitions with keys and rubrics.                     |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/written/next`          | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Next blinded open answer for this rater.               |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/written/disagreements` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Answers waiting for adjudication.                      |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/inter-rater`           | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Agreement and Cohen's κ per rubric dimension.          |
+| GET    | `/api/knowledge-tests-admin/attempts/:attemptId/written`             | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Open answers of one attempt, blinded.                  |
+| GET    | `/api/knowledge-tests-admin/attempts/:attemptId/written/:slot`       | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One open answer, blinded.                              |
+| POST   | `/api/knowledge-tests-admin/attempts/:attemptId/written/:slot/score` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One rater's or the adjudicator's score.                |
+| GET    | `/api/knowledge-tests-admin/courses/:courseId/:file.csv`             | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | `assignments`, `attempts`, `responses`; pseudonymised. |
 
 ### PuzzlesController (`efa/puzzles.controller.ts`)
 

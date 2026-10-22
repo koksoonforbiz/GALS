@@ -1692,6 +1692,12 @@ export function CourseBuilderPage() {
             EF assessment (puzzles): settings, progress, coding
           </button>
           <button
+            onClick={() => navigate(`/teacher/courses/${courseId}/knowledge-tests`)}
+            className="w-full px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-left"
+          >
+            Knowledge tests: setup, scoring, exports
+          </button>
+          <button
             onClick={handleDuplicate}
             className="w-full px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-left"
           >

@@ -60,6 +60,7 @@ const FORBIDDEN = [
   // "Attention and memory puzzles" / "About you and how you feel today".
   ['/course-gates', 'course-gate staff API'],
   ['efa-admin', 'EF assessment staff API'],
+  ['knowledge-tests-admin', 'knowledge-test staff API'],
   ['"EF_', 'server-only EF activity actions'],
   ['ADEXI', 'questionnaire construct name'],
   ['Stroop', 'task construct name'],

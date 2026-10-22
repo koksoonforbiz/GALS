@@ -16,3 +16,4 @@ export * from './prompt-lab';
 export * from './course-gates';
 export * from './puzzles';
 export * from './efa-admin';
+export * from './knowledge-tests';

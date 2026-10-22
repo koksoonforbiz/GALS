@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { CourseGate, CourseGateKind } from '@prisma/client';
-import type { StudentGateStep } from '@ats/shared';
+import { knowledgeTestLabel, parseKnowledgeTestOccasion, type StudentGateStep } from '@ats/shared';
 import { PrismaService } from '../prisma';
 import { SecurityEventService } from '../auth/security-event.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
@@ -58,13 +58,20 @@ export class CourseGateService {
   /** Checklist for the course page, in course order. */
   async studentSteps(studentId: string, courseId: string): Promise<StudentGateStep[]> {
     const { steps } = await this.lockState(studentId, courseId);
-    return steps.map(({ gate, done, next }) => ({
-      gateId: gate.id,
-      ...STUDENT_STEP[gate.kind],
-      occasion: gate.occasion,
-      done,
-      next,
-    }));
+    return steps.map(({ gate, done, next }) => {
+      const kt =
+        gate.kind === 'KNOWLEDGE_TEST' && gate.occasion
+          ? parseKnowledgeTestOccasion(gate.occasion)
+          : null;
+      return {
+        gateId: gate.id,
+        ...STUDENT_STEP[gate.kind],
+        ...(kt ? { label: knowledgeTestLabel(kt.kind, kt.sessionNo) } : {}),
+        occasion: gate.occasion,
+        done,
+        next,
+      };
+    });
   }
 
   private async isActiveStudent(studentId: string, courseId: string): Promise<boolean> {

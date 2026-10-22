@@ -306,6 +306,16 @@ enum ActivityAction {
   EF_QUESTIONNAIRE_SUBMITTED
   // Generic course gates: a gate completed by staff override.
   GATE_UNLOCKED
+
+  // Knowledge tests (docs/assessments/; the quiz feature owns ASSESSMENT_*).
+  // OPENED/ITEM_* come from the browser; SUBMITTED and GATE_BLOCKED are
+  // written by the server only.
+  KNOWLEDGE_TEST_OPENED
+  KNOWLEDGE_TEST_ITEM_VIEWED
+  KNOWLEDGE_TEST_ITEM_ANSWERED
+  KNOWLEDGE_TEST_ITEM_SKIPPED
+  KNOWLEDGE_TEST_SUBMITTED
+  KNOWLEDGE_TEST_GATE_BLOCKED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -424,22 +434,23 @@ model User {
   vlmConfig         VlmConfig?         @relation("teacherVlmConfig")
 
   // Interactive-lesson working state (prompting course)
-  lessonSlideStates       LessonSlideState[]
+  lessonSlideStates        LessonSlideState[]
   // Prompt Lab (prompting course, Phase 3)
-  promptLabRuns           PromptLabRun[]
-  promptLabVersions       PromptLabVersion[]
-  promptLabTestCases      PromptLabTestCase[]
-  promptLabTestResults    PromptLabTestResult[]
-  promptLabRatings        PromptLabOutputRating[]
+  promptLabRuns            PromptLabRun[]
+  promptLabVersions        PromptLabVersion[]
+  promptLabTestCases       PromptLabTestCase[]
+  promptLabTestResults     PromptLabTestResult[]
+  promptLabRatings         PromptLabOutputRating[]
   // Phase 5
-  aiPromptClassifications AiPromptClassification[] @relation("AiPromptClassificationStudent")
-  transferTaskScores      TransferTaskScore[]      @relation("TransferTaskScoreStudent")
+  aiPromptClassifications  AiPromptClassification[]  @relation("AiPromptClassificationStudent")
+  transferTaskScores       TransferTaskScore[]       @relation("TransferTaskScoreStudent")
   // Phase 6
-  textCaptureConsents     TextCaptureConsent[]     @relation("TextCaptureConsentStudent")
-  ruleNudges              RuleNudge[]              @relation("RuleNudgeStudent")
+  textCaptureConsents      TextCaptureConsent[]      @relation("TextCaptureConsentStudent")
+  ruleNudges               RuleNudge[]               @relation("RuleNudgeStudent")
   // EF assessment + course gates
-  efaOccasions            EfaOccasion[]            @relation("EfaOccasionStudent")
-  gateCompletions         StudentGateCompletion[]  @relation("GateCompletionStudent")
+  efaOccasions             EfaOccasion[]             @relation("EfaOccasionStudent")
+  gateCompletions          StudentGateCompletion[]   @relation("GateCompletionStudent")
+  knowledgeTestAssignments KnowledgeTestAssignment[] @relation("KtAssignmentStudent")
 
   @@map("users")
 }
@@ -1606,6 +1617,8 @@ model StudentSession {
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  knowledgeTestAttempts KnowledgeTestAttempt[]
 
   @@index([userId])
   @@index([userId, startedAt])
@@ -3154,4 +3167,126 @@ model EfaRaterAssignment {
 
   @@id([courseId, taskCode, raterId])
   @@map("efa_rater_assignments")
+}
+
+// ── Knowledge tests (docs/assessments/README.md) ───────────────────────────
+// Pre/post-study (forms A/B/C, 24 items) and pre/post-session tests for
+// Sessions 1–8 (forms A/B, 8 items), from docs/assessment/knowledge_tests_v2.json.
+// Course order is enforced with course_gates (kind KNOWLEDGE_TEST).
+
+enum KnowledgeTestKind {
+  PRE_STUDY
+  POST_STUDY
+  PRE_SESSION
+  POST_SESSION
+}
+
+enum KnowledgeTestForm {
+  A
+  B
+  C
+}
+
+enum KnowledgeTestAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  SCORED
+}
+
+enum KnowledgeTestRaterRole {
+  RATER
+  ADJUDICATOR
+}
+
+/// One form of one test, items verbatim from the bank (with keys and rubrics: server only).
+/// Session forms are stored once per session; the assignment decides pre vs post.
+model KnowledgeTestDefinition {
+  id        String            @id @default(uuid()) @db.Uuid
+  courseId  String            @map("course_id") @db.Uuid
+  /// "study" or "session" — which kinds may use this form
+  scope     String
+  /// 1–8 for session forms, 0 for study forms (a unique index needs a value)
+  sessionNo Int               @default(0) @map("session_no")
+  form      KnowledgeTestForm
+  version   String
+  title     String?
+  items     Json
+  maxMarks  Int               @map("max_marks")
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  attempts KnowledgeTestAttempt[]
+
+  @@unique([courseId, scope, sessionNo, form, version])
+  @@index([courseId])
+  @@map("knowledge_test_definitions")
+}
+
+/// Which form a student takes for one test, and the counterbalancing order they are in.
+model KnowledgeTestAssignment {
+  id        String            @id @default(uuid()) @db.Uuid
+  studentId String            @map("student_id") @db.Uuid
+  courseId  String            @map("course_id") @db.Uuid
+  kind      KnowledgeTestKind
+  /// 0 for the study tests (unique index needs a value), 1–8 for session tests
+  sessionNo Int               @default(0) @map("session_no")
+  form      KnowledgeTestForm
+  /// e.g. "BCA" (study: baseline, post, delayed) or "AB"/"BA" (session: pre, post)
+  order     String
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  student  User                   @relation("KtAssignmentStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  attempts KnowledgeTestAttempt[]
+
+  @@unique([studentId, courseId, kind, sessionNo])
+  @@index([studentId, kind, sessionNo])
+  @@index([courseId])
+  @@map("knowledge_test_assignments")
+}
+
+/// One sitting. Append-only after submission: responses are never overwritten.
+model KnowledgeTestAttempt {
+  id               String                     @id @default(uuid()) @db.Uuid
+  assignmentId     String                     @map("assignment_id") @db.Uuid
+  definitionId     String                     @map("definition_id") @db.Uuid
+  studentSessionId String?                    @map("student_session_id") @db.Uuid
+  startedAt        DateTime                   @default(now()) @map("started_at") @db.Timestamptz
+  submittedAt      DateTime?                  @map("submitted_at") @db.Timestamptz
+  durationMs       Int?                       @map("duration_ms")
+  /// { "<slot>": { option?: string, options?: string[], text?: string } }
+  responses        Json                       @default("{}")
+  /// last autosave time and whether the final submit changed anything
+  lastSavedAt      DateTime?                  @map("last_saved_at") @db.Timestamptz
+  autosaveOnly     Boolean                    @default(false) @map("autosave_only")
+  autoScore        Json?                      @map("auto_score")
+  status           KnowledgeTestAttemptStatus @default(IN_PROGRESS)
+
+  assignment     KnowledgeTestAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  definition     KnowledgeTestDefinition     @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  studentSession StudentSession?             @relation(fields: [studentSessionId], references: [id], onDelete: SetNull)
+  writtenScores  KnowledgeTestWrittenScore[]
+
+  @@index([assignmentId])
+  @@index([definitionId])
+  @@map("knowledge_test_attempts")
+}
+
+/// One rater's (or the adjudicator's) score for one open response.
+model KnowledgeTestWrittenScore {
+  id              String                 @id @default(uuid()) @db.Uuid
+  attemptId       String                 @map("attempt_id") @db.Uuid
+  slot            Int
+  raterId         String                 @map("rater_id") @db.Uuid
+  role            KnowledgeTestRaterRole @default(RATER)
+  /// one 0/1 per mark, in rubric order
+  dimensionScores Json                   @map("dimension_scores")
+  total           Int
+  /// when the response was shown to the rater (blinded payload)
+  blindedAt       DateTime               @map("blinded_at") @db.Timestamptz
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz
+
+  attempt KnowledgeTestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, slot, raterId])
+  @@index([attemptId])
+  @@map("knowledge_test_written_scores")
 }

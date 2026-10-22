@@ -86,7 +86,13 @@ export type ActivityAction =
   | 'OUTPUT_PASTED'
   | 'OUTPUT_EDITED'
   // Transfer task (prompting course, Phase 5)
-  | 'TRANSFER_TASK_SUBMITTED';
+  | 'TRANSFER_TASK_SUBMITTED'
+  // Knowledge tests (docs/assessments/): never the answer text — option ids
+  // or a character count only. SUBMITTED / GATE_BLOCKED are server-written.
+  | 'KNOWLEDGE_TEST_OPENED'
+  | 'KNOWLEDGE_TEST_ITEM_VIEWED'
+  | 'KNOWLEDGE_TEST_ITEM_ANSWERED'
+  | 'KNOWLEDGE_TEST_ITEM_SKIPPED';
 
 export interface ActivityEvent {
   action: ActivityAction;

@@ -45,6 +45,8 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public errors?: Record<string, string[]>,
+    /** machine-readable reason from the server body, e.g. MODULE_LOCKED */
+    public code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -144,7 +146,7 @@ export async function apiFetch<T>(
     ) {
       window.location.href = '/account/security';
     }
-    throw new ApiError(403, toMessage(body.message, 'Forbidden'), body.errors);
+    throw new ApiError(403, toMessage(body.message, 'Forbidden'), body.errors, body.code);
   }
 
   if (!res.ok) {
@@ -153,6 +155,7 @@ export async function apiFetch<T>(
       res.status,
       toMessage(body.message, `API error: ${res.status}`),
       body.errors,
+      body.code,
     );
   }
 

@@ -121,6 +121,16 @@ export enum ActivityAction {
   EF_TASK_INTERRUPTED = 'EF_TASK_INTERRUPTED',
   EF_QUESTIONNAIRE_SUBMITTED = 'EF_QUESTIONNAIRE_SUBMITTED',
   GATE_UNLOCKED = 'GATE_UNLOCKED',
+
+  // Knowledge tests (docs/assessments/). OPENED/ITEM_* come from the browser;
+  // SUBMITTED and GATE_BLOCKED only from the server (SERVER_WRITTEN_ACTIONS).
+  // Measurement, not learning process: no M-rule takes them as input.
+  KNOWLEDGE_TEST_OPENED = 'KNOWLEDGE_TEST_OPENED',
+  KNOWLEDGE_TEST_ITEM_VIEWED = 'KNOWLEDGE_TEST_ITEM_VIEWED',
+  KNOWLEDGE_TEST_ITEM_ANSWERED = 'KNOWLEDGE_TEST_ITEM_ANSWERED',
+  KNOWLEDGE_TEST_ITEM_SKIPPED = 'KNOWLEDGE_TEST_ITEM_SKIPPED',
+  KNOWLEDGE_TEST_SUBMITTED = 'KNOWLEDGE_TEST_SUBMITTED',
+  KNOWLEDGE_TEST_GATE_BLOCKED = 'KNOWLEDGE_TEST_GATE_BLOCKED',
 }
 
 /**
@@ -137,4 +147,14 @@ export const SERVER_ONLY_ACTIONS: ReadonlySet<ActivityAction> = new Set([
   ActivityAction.EF_TASK_INTERRUPTED,
   ActivityAction.EF_QUESTIONNAIRE_SUBMITTED,
   ActivityAction.GATE_UNLOCKED,
+]);
+
+/**
+ * Actions the browser may not send, although (unlike SERVER_ONLY_ACTIONS)
+ * they stay in the event-log exports: knowledge-test submission and
+ * refused gate attempts, written by the server where the facts are known.
+ */
+export const SERVER_WRITTEN_ACTIONS: ReadonlySet<ActivityAction> = new Set([
+  ActivityAction.KNOWLEDGE_TEST_SUBMITTED,
+  ActivityAction.KNOWLEDGE_TEST_GATE_BLOCKED,
 ]);

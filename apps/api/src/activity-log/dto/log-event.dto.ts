@@ -1,9 +1,14 @@
 import { z } from 'zod';
-import { ActivityAction, SERVER_ONLY_ACTIONS } from '../activity-action.enum';
+import {
+  ActivityAction,
+  SERVER_ONLY_ACTIONS,
+  SERVER_WRITTEN_ACTIONS,
+} from '../activity-action.enum';
 
-// Server-only actions (EF assessment, gates) are not accepted from clients.
+// Server-only and server-written actions (EF assessment, gates, knowledge-test
+// submission) are not accepted from clients.
 const ActivityActionValues = Object.values(ActivityAction).filter(
-  (a) => !SERVER_ONLY_ACTIONS.has(a),
+  (a) => !SERVER_ONLY_ACTIONS.has(a) && !SERVER_WRITTEN_ACTIONS.has(a),
 ) as [string, ...string[]];
 
 export const LogEventSchema = z.object({

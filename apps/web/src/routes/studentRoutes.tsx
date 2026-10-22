@@ -15,6 +15,7 @@ import { DialogueLearning } from '../pages/student/DialogueLearning';
 import { DialogueSessionHistory } from '../pages/student/DialogueSessionHistory';
 import { ChatHistoryPage } from '../pages/student/ChatHistoryPage';
 import { PuzzlesPage } from '../pages/student/puzzles/PuzzlesPage';
+import { KnowledgeTestPage } from '../pages/student/knowledge/KnowledgeTestPage';
 
 // Student routes, moved verbatim from App.tsx. Wrappers (RoleRoute,
 // BiometricsWrapper) are unchanged; see docs/two-door/route-table.md.
@@ -41,6 +42,16 @@ export const studentRoutes: RouteObject[] = [
   // Attention and memory puzzles: student(), NOT studentBiometric() — no eye
   // tracking / webcam recording during the puzzles (docs/EF_battery_v2).
   { path: '/student/courses/:courseId/puzzles/:occasion', element: student(<PuzzlesPage />) },
+  // Knowledge checks (docs/assessments/): student(), no camera gate. Not
+  // /assessment/…: that path belongs to the quiz feature above.
+  {
+    path: '/student/courses/:courseId/knowledge-check/:kind',
+    element: student(<KnowledgeTestPage />),
+  },
+  {
+    path: '/student/courses/:courseId/knowledge-check/:kind/:sessionNo',
+    element: student(<KnowledgeTestPage />),
+  },
   { path: '/student/review-queue', element: student(<ReviewQueuePage />) },
   { path: '/student/courses/:courseId/dialogue', element: studentBiometric(<DialogueLearning />) },
   {

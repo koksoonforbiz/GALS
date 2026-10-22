@@ -19,6 +19,7 @@ import { SessionTimelinePage } from '../pages/dashboard/SessionTimelinePage';
 import { StudentTextMiningPage } from '../features/text-mining/pages/StudentTextMiningPage';
 import { EfaAdminPage } from '../pages/teacher/efa/EfaAdminPage';
 import { EfaCodingPage } from '../pages/teacher/efa/EfaCodingPage';
+import { KnowledgeTestsAdminPage } from '../pages/teacher/knowledge/KnowledgeTestsAdminPage';
 
 // Teacher/admin routes, moved verbatim from App.tsx. Only ever mounted by
 // the admin entry; the student bundle must not import this module
@@ -35,6 +36,10 @@ export const teacherRoutes: RouteObject[] = [
   { path: '/teacher/courses/:courseId/prompts', element: staff(<PromptSettingsPage />) },
   { path: '/teacher/courses/:courseId/efa', element: staff(<EfaAdminPage />) },
   { path: '/teacher/courses/:courseId/efa/coding', element: staff(<EfaCodingPage />) },
+  {
+    path: '/teacher/courses/:courseId/knowledge-tests',
+    element: staff(<KnowledgeTestsAdminPage />),
+  },
   {
     path: '/teacher/courses/:courseId/generate-questions',
     element: staff(<QuestionGenerationPage />),
