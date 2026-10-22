@@ -55,6 +55,10 @@ services:
       # BEDROCK_GUARDRAIL_ID's comment in .env.example. Unset = no guardrail.
       BEDROCK_GUARDRAIL_ID: ${BEDROCK_GUARDRAIL_ID:-}
       BEDROCK_GUARDRAIL_VERSION: ${BEDROCK_GUARDRAIL_VERSION:-}
+      # Research exports (event log, outcomes, EF assessment CSVs) pseudonymise
+      # student ids with this salt and refuse to run without it (≥16 chars).
+      # See RESEARCH_EXPORT_SALT's comment in .env.example.
+      RESEARCH_EXPORT_SALT: ${RESEARCH_EXPORT_SALT:-}
       # Malware scanning on uploaded files (checklist item 49). Not in
       # `depends_on` below — ClamAV's virus-database download can take
       # several minutes on first boot, and MalwareScanService already

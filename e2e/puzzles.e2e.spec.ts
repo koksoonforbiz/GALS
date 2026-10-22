@@ -13,6 +13,7 @@
  * Skips unless E2E_STUDENT_LOGIN / E2E_STUDENT_PASSWORD / E2E_COURSE_ID are set.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { acceptNotice, answerQuestionnaire, colourCheck, loginStudent } from './puzzles.helpers';
 
 const LOGIN = process.env.E2E_STUDENT_LOGIN;
 const PASSWORD = process.env.E2E_STUDENT_PASSWORD;
@@ -36,71 +37,11 @@ const INK: Record<string, string> = {
 };
 const WORD: Record<string, string> = { RED: 'f', GREEN: 'j', BLUE: 'k' };
 
-async function answerQuestionnairePage(page: Page) {
-  const items = page.locator('ol > li');
-  const n = await items.count();
-  for (let i = 0; i < n; i++) {
-    const li = items.nth(i);
-    const num = li.locator('input[type="number"]');
-    if (await num.count()) {
-      const min = Number((await num.getAttribute('min')) ?? 0);
-      const max = Number((await num.getAttribute('max')) ?? 99);
-      await num.fill(String(Math.min(max, Math.max(min, 7))));
-      continue;
-    }
-    const radios = li.locator('input[type="radio"]');
-    if (await radios.count()) {
-      await radios.first().check();
-      continue;
-    }
-    const scale = li.locator('[role="radio"]');
-    if (await scale.count()) {
-      await scale.first().click();
-      continue;
-    }
-    const texts = li.locator('input:not([type])');
-    for (let k = 0; k < (await texts.count()); k++) await texts.nth(k).fill('English');
-  }
-  await page.waitForTimeout(1200); // let the debounced autosaves land
-}
-
-async function answerQuestionnaire(page: Page) {
-  for (let guard = 0; guard < 5; guard++) {
-    await answerQuestionnairePage(page);
-    const next = page.getByRole('button', { name: /^(Next|Continue)$/ });
-    const label = await next.textContent();
-    if (!(await next.isEnabled())) {
-      await page.screenshot({
-        path: 'test-results/puzzles-questionnaire-stuck.png',
-        fullPage: true,
-      });
-      const dump = await page
-        .locator('ol > li')
-        .evaluateAll((lis) => lis.map((li) => li.outerHTML.slice(0, 300)));
-      throw new Error(`questionnaire page incomplete:\n${dump.join('\n')}`);
-    }
-    await next.click({ timeout: 10_000 });
-    if (label?.trim() === 'Continue') return;
-  }
-}
-
-async function colourCheck(page: Page) {
-  const patches = page.locator('[aria-label^="patch "]');
-  for (let i = 0; i < 3; i++) {
-    const bg = await patches.nth(i).evaluate((el) => getComputedStyle(el).backgroundColor);
-    const name = {
-      'rgb(200, 30, 30)': 'red',
-      'rgb(20, 140, 60)': 'green',
-      'rgb(30, 70, 200)': 'blue',
-    }[bg]!;
-    await patches.nth(i).locator('xpath=..').getByRole('button', { name, exact: true }).click();
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
-}
-
 /** Press the correct key for the highlighted Stroop cell. */
 async function stroopPress(page: Page, stepId: string) {
   const cell = page.locator('[data-current="true"]');
+  // between a finished row and the next screen there is no current cell
+  if (!(await cell.count())) return void (await page.waitForTimeout(100));
   const [text, color] = await cell.evaluate((el) => [
     el.textContent ?? '',
     getComputedStyle(el).color,
@@ -204,12 +145,7 @@ test('one full T0 occasion: questionnaire, all seven puzzles, course unlocked', 
   page,
 }) => {
   test.setTimeout(20 * 60_000);
-  await page.addInitScript(() => sessionStorage.setItem('gals:permissions_granted', '1'));
-  await page.goto('/login');
-  await page.getByPlaceholder('you@example.com or your login ID').fill(LOGIN!);
-  await page.getByLabel('Password').fill(PASSWORD!);
-  await page.keyboard.press('Enter');
-  await page.waitForURL(/\/student/);
+  await loginStudent(page, LOGIN!, PASSWORD!);
 
   // Course page: locked, with the checklist and its Start button.
   await page.goto(`/student/courses/${COURSE_ID}`);
@@ -219,15 +155,12 @@ test('one full T0 occasion: questionnaire, all seven puzzles, course unlocked', 
   await page.waitForURL(/\/puzzles\/T0$/);
   await expect(page).toHaveTitle('Attention and memory puzzles');
 
-  // Notice + device check.
-  await page.getByLabel(/physical keyboard/).check();
-  await page.getByLabel(/agree to take part/).check();
-  await page.getByRole('button', { name: /Continue/ }).click();
+  await acceptNotice(page);
 
   await expect(page.getByRole('heading', { name: 'About you' })).toBeVisible();
   await answerQuestionnaire(page);
   await expect(page.getByRole('heading', { name: 'Colours' })).toBeVisible();
-  await colourCheck(page);
+  await colourCheck(page, true);
 
   const stats: Record<string, number> = {};
   for (let n = 1; n <= 7; n++) await runPuzzle(page, n, stats);

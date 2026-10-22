@@ -110,14 +110,41 @@ export function TaskRunner({
   // is in flight would be refused by the server as out of step.
   const submitting = useRef(false);
 
+  // A failed save must not lose a timed puzzle's result: transient failures
+  // (network, rate limit, server) are retried, then the student can try
+  // again with the same result. If the server already has it (refused as
+  // out of step after a retry), reloading moves on to the next puzzle.
+  const lastResult = useRef<PuzzleStepResult | null>(null);
+  const [stuck, setStuck] = useState<'retry' | 'reload' | null>(null);
+
+  const send = async (result: PuzzleStepResult) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return {
+          retried: attempt > 0,
+          r: await api.post<PuzzleStepResponse & { done?: boolean; view?: OccasionView }>(
+            `/puzzles/runs/${runId.current}/steps`,
+            { stepId: step!.id, attempt: step!.attempt, result },
+          ),
+        };
+      } catch (err) {
+        const transient =
+          !(err instanceof ApiError) || err.status === 0 || err.status === 429 || err.status >= 500;
+        if (!transient || attempt === 3)
+          throw Object.assign(err as object, { retried: attempt > 0 });
+        await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));
+      }
+    }
+  };
+
   const onResult = async (result: PuzzleStepResult) => {
     if (!step || submitting.current) return;
     submitting.current = true;
+    lastResult.current = result;
+    setStuck(null);
+    setError('');
     try {
-      const r = await api.post<PuzzleStepResponse & { done?: boolean; view?: OccasionView }>(
-        `/puzzles/runs/${runId.current}/steps`,
-        { stepId: step.id, attempt: step.attempt, result },
-      );
+      const { r } = await send(result);
       prev.current = step;
       if (r.done && r.view) {
         setPhase({ at: 'break', view: r.view });
@@ -127,11 +154,21 @@ export function TaskRunner({
       if (r.feedback) setPhase({ at: 'feedback', fb: r.feedback });
       else if (r.next) show(r.next);
     } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.message
-          : 'Could not save your answer. Please check your connection.',
-      );
+      const retried = (err as { retried?: boolean }).retried;
+      if (err instanceof ApiError && err.status === 409 && retried) {
+        setStuck('reload');
+        setError('Your answer may already be saved. Please continue.');
+      } else if (
+        !(err instanceof ApiError) ||
+        err.status === 0 ||
+        err.status === 429 ||
+        err.status >= 500
+      ) {
+        setStuck('retry');
+        setError('Could not save your answer. Please check your connection and try again.');
+      } else {
+        setError(err.message);
+      }
     } finally {
       submitting.current = false;
     }
@@ -239,7 +276,21 @@ export function TaskRunner({
             </div>
           )}
           {error && phase.at !== 'intro' && (
-            <p className="mt-4 text-center text-sm text-red-600">{error}</p>
+            <div className="mt-4 text-center">
+              <p className="text-sm text-red-600">{error}</p>
+              {stuck && (
+                <button
+                  onClick={() =>
+                    stuck === 'reload'
+                      ? window.location.reload()
+                      : lastResult.current && void onResult(lastResult.current)
+                  }
+                  className="mt-2 rounded-md border border-gray-300 px-4 py-1.5 text-sm hover:bg-gray-50"
+                >
+                  {stuck === 'reload' ? 'Continue' : 'Try again'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -54,7 +54,10 @@ const ItemCodeParam = new ZodValidationPipe(z.string().regex(/^[A-C]\d{1,2}$/));
 // The global 30/min default is far below a normal pace here: 33 autosaved
 // questionnaire answers and one request per puzzle step (W1 has 32, W5 34).
 // Found by the browser test (students' saves were silently refused).
-@Throttle({ default: { limit: 600, ttl: 60_000 } })
+// Limits are per client IP and route, so a computer lab behind one NAT
+// address shares them: 3000/min leaves room for a class doing puzzles at
+// once. These routes are student-authenticated and cheap.
+@Throttle({ default: { limit: 3000, ttl: 60_000 } })
 export class PuzzlesController {
   constructor(
     private readonly occasions: EfaOccasionService,

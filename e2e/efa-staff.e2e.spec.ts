@@ -2,7 +2,8 @@
  * EF assessment staff pages in a real browser (admin bundle): progress
  * dashboard with the administration log, settings, raters, and the coding
  * page. Run after e2e/puzzles.e2e.spec.ts so the fixture student has a
- * completed T0 occasion.
+ * completed T0 occasion — as a separate command: Playwright orders files
+ * alphabetically, so passing both runs this one first.
  *
  *   `vite preview --config vite.config.admin.ts --port 5176` with GALS_API_TARGET
  *   E2E_ADMIN_URL=http://localhost:5176 dotenv -e apps/api/.env.efa-e2e.local -- npx playwright test e2e/efa-staff.e2e.spec.ts

@@ -433,3 +433,10 @@ Page `/teacher/courses/:courseId/efa` (Course → Settings → "EF assessment"),
 - **Actions, each with a required reason and audited:** Unlock gate (existing `POST /api/course-gates/:gateId/students/:studentId/unlock`, `GATE_OVERRIDE`); Reset puzzle (`POST /api/efa-admin/runs/:runId/reset`, latest attempt of an open occasion only; next attempt same form, `items_reexposed`; `EF_TASK_RESET`); Reopen an expired occasion (`POST /api/efa-admin/occasions/:id/reopen`; `EF_TASK_RESET` with `scope: occasion`, no new enum value).
 - **Raters** (`GET/PUT …/raters`): teacher/admin accounts per W4/W5.
 - Tests: `efa-staff.integration.spec.ts` (9); browser smoke `e2e/efa-staff.e2e.spec.ts`.
+
+### Phase 8: test pass, hardening, deployment notes
+
+- **Tests.** Full API suite green (69 suites, 704 tests). Browser (local, Chromium): `e2e/puzzles.e2e.spec.ts` (one full T0), `e2e/efa-staff.e2e.spec.ts` (staff pages; run after the full one), `e2e/puzzles-edge.e2e.spec.ts` (failed colour check skips W6; reload mid-puzzle → interrupted, next puzzle; staff see both, unlock the gate with a reason; trials CSV download is pseudonymised). Each needs `seed:efa-e2e-local -- --reset` first and reads the fresh credentials (the reset changes the passwords).
+- **Hardening.** Puzzle routes allow 3000 requests/min per client IP and route (a lab behind one NAT address shares the limit). A failed step save is retried on network/429/5xx; then the student gets "Try again" with the same result, or, when the server already has it, "Continue" (reload → next puzzle). Timed puzzles therefore never lose their result to a transient error.
+- **Deployment.** `RESEARCH_EXPORT_SALT` was not passed to the api container at all (`docker-compose.yml` lists the api environment explicitly), so no research export could run on lithium; it is now passed through and documented in `.env.example`. Step-by-step lithium notes: `DEPLOYMENT_LITHIUM.md`.
+- **ONLINE_ADAPTATION.md** is final (v1.0), with the scoring and coding as implemented and the measured W1/W2 timing.

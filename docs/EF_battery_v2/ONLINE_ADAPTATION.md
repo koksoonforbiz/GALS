@@ -1,4 +1,6 @@
-# EF battery v2.0: online adaptation for GALS (DRAFT for review before Phase 5)
+# EF battery v2.0: online adaptation for GALS
+
+**Status:** final v1.0, approved 2026-10-22 (IMPLEMENTATION_PLAN §13 Q16). Implemented on branch `course-prompting-ef`; scoring version `efa-1.0.0`.
 
 The paper battery (`source/`) is administered in person by a facilitator. GALS gives the same stimuli (`source/stimuli.json`, sha256 `a705e667…`) online and self-administered. **The constructs are the same, but the scores are not equivalent to the paper version.** Presentation, response mode and timing all differ. The pilot and any norms must use the online version.
 
@@ -31,6 +33,7 @@ Decisions already made (IMPLEMENTATION_PLAN §13):
 | Breaks as needed                                                                                                                   | Optional untimed break screen between puzzles                                                                                                                                                                                                                                      |
 | Paper booklet: "Please do not turn a page until the facilitator asks you to"                                                       | One puzzle per full-screen view; the next view opens only after the previous one finishes                                                                                                                                                                                          |
 | Interruptions handled by the facilitator                                                                                           | A puzzle reloaded or closed mid-way is marked `interrupted` and **never re-run** (its items would be exposed); the student continues with the next puzzle. Staff can reset one puzzle with a reason, which re-shows the same items and is flagged `items_reexposed` (decision Q13) |
+| Course pop-ups n/a on paper                                                                                                        | The course's periodic "How are you feeling right now?" pop-up is **held back** while the puzzles page is open and appears after the student leaves it                                                                                                                              |
 | Sensing (camera, eye tracking) n/a on paper                                                                                        | Eye tracking, pupil measurement, webcam recording and replay snapshots are **off** during the questionnaire and puzzles. Focus and visibility of the tab are still logged                                                                                                          |
 
 **Progress text:** "Puzzle _n_ of _N_", with no task names.
@@ -197,10 +200,33 @@ On-screen wording:
   - `w5_unnormed`;
   - `items_reexposed`.
 
-## 5. Open points for the researcher
+### 4.1 Scoring as implemented (`apps/api/src/efa/scoring/scoring.ts`)
 
-1. Is keeping "circle a number" in the ADEXI instructions acceptable online, or is there approved wording?
-2. The W4 "keep going" rule online: show the nudge after 15 s without an entry before the 30 s mark. OK?
-3. W5 RT is measured from sentence onset, not from the end of reading. Is modelling the sentence length enough, or should Part A/B RTs be read-time adjusted another way?
-4. W6 key mapping F/J/K: OK, or are labelled on-screen buttons preferred (slower, more like pointing)?
-5. Practice feedback wording above: approve or edit.
+| Task  | Scores (per run)                                                                                                                                                        | Notes                                                                            |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| W1    | fwd/bwd total correct (0–16 / 0–14), longest span, trials given                                                                                                         | Discontinue after both trials of a length fail                                   |
+| W2    | total correct, longest length with ≥1 correct trial (Q9), trials given                                                                                                  | Same discontinue rule                                                            |
+| W3    | time per list (s), errors per list, mean item RT, **switch cost = T3 − ½(T1+T2)**, switch ratio                                                                         | An unfinished list has no time; missing items count as errors; >3 errors flagged |
+| W4    | entries and automatic valid count per prompt; after coding: valid, repeats, rule breaks; switching: **correct switches**, same-category pairs, intrusions, switch ratio | Final scores wait for two raters (`awaiting_coding`)                             |
+| W5    | mean first-key RT for A and B, B − A; after coding: **B error score = 3 × A + 1 × B** (0–45), A and B counts; prompted count                                            | Flag `w5_unnormed` (Q3)                                                          |
+| W6    | items completed W/C/CW (correct presses in 45 s), corrected errors, **Golden IG = CW − (W×C)/(W+C)**, CW/C, mean per-item RT, RT interference                           | Skipped when the colour check fails                                              |
+| W7    | time (s), errors and circles reached for Parts 1 and 2                                                                                                                  | Part 2 stopped at 300 s (time scored 300, flagged)                               |
+| ADEXI | WM (9–45), INH (5–25), 12-item variants without items 1 and 14                                                                                                          | Computed into the questionnaire export                                           |
+
+Scores are written when a puzzle finishes or is interrupted and can be recomputed for a new version without touching raw data.
+
+### 4.2 Rater coding (W4, W5)
+
+Two blind raters per entry (no student or occasion shown; random order per rater). W4 codes: valid / repeat / rule break / intrusion, plus the category of each valid word when switching; the automatic pre-scoring (repeat, same root, wrong letter, likely name) is shown as a hint only. W5 Part B codes: A (fits the sentence) / B (related or indirect) / 0 (unrelated), with the expected word and the `HAYLING_CODING_EXAMPLES` anchors; **A is pre-filled when the response is exactly the expected word and is confirmed by saving**. Agreeing codes become final; disagreements are adjudicated by the course owner. Cohen's κ per task is reported on the coding page and in `ef_coding.csv`.
+
+### 4.3 Timing check
+
+In a full browser run (Chromium, 60 Hz display), every W1/W2 item was measured on screen for 800 ms (26 of 26; target 800 ± 20 ms). Each item's measured on-screen time is stored (`shown_ms`), so the check can be repeated on real data.
+
+## 5. Decisions on the open points (2026-10-22, Q16)
+
+1. ADEXI "circle a number" wording: **kept verbatim** (students click a number).
+2. W4 keep-going nudge: **after 15 s without an entry, before the 30 s mark.**
+3. W5 RT: **from sentence onset**, with sentence length recorded for modelling.
+4. W6 keys: **F = red, J = green, K = blue**, shown on screen.
+5. Practice feedback wording: **approved as drafted.**
