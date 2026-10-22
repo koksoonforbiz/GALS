@@ -56,8 +56,8 @@ export class CoursesController {
   @Get(':id')
   // Two-door: BOTH — see docs/two-door/api-classification.md.
   @PublicDoor()
-  findOne(@Param('id') id: string) {
-    return this.coursesService.findOne(id);
+  findOne(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    return this.coursesService.findOne(id, req.user);
   }
 
   // OWASP API3:2023 (Broken Object Property Level Authorization) — this

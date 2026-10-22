@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import type { Prisma } from '@prisma/client';
@@ -12,6 +13,7 @@ import { prepareActions } from '../engine/prepare';
 import { runRules } from '../engine/rules';
 import type { Draft, RawAction } from '../engine/types';
 import { ValidationService } from '../validation/validation.service';
+import { CourseGateService } from '../../course-gates/course-gate.service';
 
 /**
  * Starter policies (plan Phase 6.1 #3). All created DISABLED. Each nudge says
@@ -91,6 +93,7 @@ export class NudgeService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly validation: ValidationService,
+    @Optional() private readonly gates?: CourseGateService,
   ) {}
 
   // ── policies (researcher) ────────────────────────────────────────────────
@@ -172,6 +175,8 @@ export class NudgeService {
       select: { userId: true },
     });
     if (session?.userId !== studentId) throw new ForbiddenException('Not your session');
+    // Enrollment + course-gate check: no nudges for content the student cannot open.
+    await this.gates?.assertItemAccess(studentId, body.moduleItemId);
 
     // Fast path: nothing enabled → nothing to evaluate.
     const policies = await this.prisma.interventionPolicy.findMany({

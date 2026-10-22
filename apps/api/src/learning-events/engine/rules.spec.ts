@@ -366,3 +366,47 @@ describe('Prompt Lab rules', () => {
     expect(byRule(i, 'M31')).toHaveLength(0);
   });
 });
+
+describe('server-only actions never reach the rules (EF assessment, course gates)', () => {
+  // A session that fires several rules, ending in an open idle interval:
+  // the case where a trailing action of *any* type used to change M20.
+  const session = (): RawAction[] => [
+    act('SLIDE_ENTERED', 0, { slideKey: 's1-1', slideType: 'objectives', visitNo: 1 }),
+    act('SLIDE_EXITED', 30, { slideKey: 's1-1', slideType: 'objectives', dwellMs: 30_000 }),
+    act('SLIDE_ENTERED', 30, { slideKey: 's1-6', slideType: 'think', visitNo: 1 }),
+    act('ATTEMPT_STARTED', 35, { slideKey: 's1-6', fieldKey: 'think', msFromSlideEnter: 5000 }),
+    act('PREDICTION_COMMITTED', 70, { slideKey: 's1-6', chars: 140 }),
+    act('SLIDE_EXITED', 80, { slideKey: 's1-6', slideType: 'think', dwellMs: 50_000 }),
+    act('IDLE_STARTED', 90, { slideKey: 's1-7' }),
+  ];
+  const serverOnly = (sec: number) => [
+    act('EF_OCCASION_STARTED', sec, { occasion: 'T1' }, { moduleItemId: null }),
+    act('EF_TASK_STARTED', sec + 1, { task: 'w3' }, { moduleItemId: null }),
+    act(
+      'EF_TASK_COMPLETED',
+      sec + 300,
+      { task: 'w3', durationMs: 299_000 },
+      { moduleItemId: null },
+    ),
+    act('GATE_UNLOCKED', sec + 301, { gateId: 'g1' }, { moduleItemId: null }),
+  ];
+  const signature = (actions: RawAction[]) =>
+    runRules(input(actions)).map(
+      (d) => `${d.ruleId}|${d.start}|${d.end}|${d.slideKey}|${d.outcome ?? ''}`,
+    );
+
+  it('rule output is identical with server-only actions interleaved and trailing', () => {
+    const base = signature(session());
+    expect(base.length).toBeGreaterThan(0);
+    expect(signature([...serverOnly(-400), ...session()])).toEqual(base);
+    expect(signature([...session(), ...serverOnly(95)])).toEqual(base);
+  });
+
+  it('prepareActions drops them and does not count them as duplicates', () => {
+    const { actions, duplicates } = prepareActions([...session(), ...serverOnly(95)]);
+    expect(actions.some((a) => a.action.startsWith('EF_') || a.action === 'GATE_UNLOCKED')).toBe(
+      false,
+    );
+    expect(duplicates).toBe(0);
+  });
+});

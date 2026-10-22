@@ -56,6 +56,19 @@ const FORBIDDEN = [
   // Product strings that only the teacher UI shows.
   ['ai-settings', 'AI settings page'],
   ['Bulk Provision', 'teacher sidebar label'],
+  // EF assessment blinding (docs/EF_battery_v2): students see only
+  // "Attention and memory puzzles" / "About you and how you feel today".
+  ['/course-gates', 'course-gate staff API'],
+  ['efa-admin', 'EF assessment staff API'],
+  ['"EF_', 'server-only EF activity actions'],
+  ['ADEXI', 'questionnaire construct name'],
+  ['Stroop', 'task construct name'],
+  ['Hayling', 'task construct name'],
+  ['inhibition', 'construct name'],
+  ['working memory', 'construct name'],
+  ['xecutive function', 'construct name'],
+  ['switch cost', 'score name'],
+  ['rail making', 'task construct name'],
 ];
 
 if (!existsSync(DIST)) {

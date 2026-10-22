@@ -1,3 +1,4 @@
+import { CourseGatesModule } from '../course-gates';
 import { Module, forwardRef } from '@nestjs/common';
 import { PrismaModule } from '../prisma';
 import { RagModule } from '../rag';
@@ -23,6 +24,7 @@ import { LearningInterventionsService } from './learning-interventions.service';
     ActivityLogModule,
     forwardRef(() => TextMiningModule),
     CodePracticeModule,
+    CourseGatesModule,
   ],
   controllers: [LearningInterventionsController],
   providers: [LearningInterventionsService],

@@ -20,6 +20,7 @@ interface RequestWithUser extends Request {
 export interface StandardErrorResponse {
   statusCode: number;
   error: string;
+  code?: string;
   message: string | string[];
   timestamp: string;
   path: string;
@@ -89,17 +90,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const exResponse = exception.getResponse();
       let message: string | string[];
+      let code: string | undefined;
       if (typeof exResponse === 'string') {
         message = exResponse;
       } else if (typeof exResponse === 'object' && exResponse !== null) {
         const resp = exResponse as Record<string, unknown>;
         message = (resp.message ?? exception.message) as string | string[];
+        // Machine-readable reason the client branches on
+        // (PASSWORD_CHANGE_REQUIRED, MFA_ENROLMENT_REQUIRED, MODULE_LOCKED).
+        if (typeof resp.code === 'string') code = resp.code;
       } else {
         message = exception.message;
       }
       return {
         statusCode: status,
         error: HttpStatus[status] ?? 'Error',
+        ...(code ? { code } : {}),
         message,
         timestamp,
         path,

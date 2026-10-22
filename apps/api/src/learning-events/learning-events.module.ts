@@ -1,3 +1,4 @@
+import { CourseGatesModule } from '../course-gates';
 import { Module } from '@nestjs/common';
 import { RagModule } from '../rag';
 import { GovernanceModule } from '../governance/governance.module';
@@ -19,7 +20,7 @@ export class LearningEventsCoreModule {}
 
 @Module({
   // RagModule provides LlmService for the prompt classifier (no new provider).
-  imports: [LearningEventsCoreModule, RagModule, GovernanceModule],
+  imports: [LearningEventsCoreModule, RagModule, GovernanceModule, CourseGatesModule],
   controllers: [LearningEventsController, NudgeController],
   providers: [
     ValidationService,

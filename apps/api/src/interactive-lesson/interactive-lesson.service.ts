@@ -15,6 +15,7 @@ import {
 } from '@ats/shared';
 import { PrismaService } from '../prisma';
 import { TextConsentService } from '../governance/text-consent.service';
+import { CourseGateService } from '../course-gates/course-gate.service';
 
 export interface LessonViewer {
   id: string;
@@ -26,6 +27,7 @@ export class InteractiveLessonService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly consent?: TextConsentService,
+    @Optional() private readonly gates?: CourseGateService,
   ) {}
 
   /**
@@ -57,6 +59,8 @@ export class InteractiveLessonService {
       if (enrollment?.status !== 'ACTIVE') {
         throw new ForbiddenException('You are not enrolled in this course');
       }
+      // Course gates (e.g. the pre-course questionnaire and puzzles) lock later modules.
+      await this.gates?.assertModuleOpen(viewer.id, courseId, item.moduleId);
     } else if (viewer.role === 'teacher' && item.module.course.teacherId !== viewer.id) {
       throw new ForbiddenException('You can only view lessons in your own courses');
     }

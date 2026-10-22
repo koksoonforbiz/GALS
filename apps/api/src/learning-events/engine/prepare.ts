@@ -1,4 +1,5 @@
 import type { RawAction } from './types';
+import { SERVER_ONLY_ACTIONS, type ActivityAction } from '../../activity-log/activity-action.enum';
 
 /**
  * De-duplicate and order a session's raw actions.
@@ -16,14 +17,21 @@ import type { RawAction } from './types';
 export function prepareActions(rows: RawAction[]): { actions: RawAction[]; duplicates: number } {
   const seen = new Set<string>();
   const out: RawAction[] = [];
+  let dropped = 0;
   for (const r of rows) {
+    // Server-only actions (EF assessment, course gates) are not learning
+    // behaviour in the course: no rule may see them (IMPLEMENTATION_PLAN §8).
+    if (SERVER_ONLY_ACTIONS.has(r.action as ActivityAction)) {
+      dropped++;
+      continue;
+    }
     const key = `${r.action}|${r.at}|${stableStringify(r.meta)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(r);
   }
   out.sort((a, b) => a.at - b.at || seqOf(a) - seqOf(b) || a.id.localeCompare(b.id));
-  return { actions: out, duplicates: rows.length - out.length };
+  return { actions: out, duplicates: rows.length - dropped - out.length };
 }
 
 function seqOf(a: RawAction): number {

@@ -9,10 +9,14 @@ import type { Prisma } from '@prisma/client';
 import { DialogueCourseSettingsSchema } from '@ats/shared';
 import type { CreateCourse, UpdateCourse, UserRole } from '@ats/shared';
 import { getChatModel, isSelectable, type LlmProvider } from '../llm/model-registry';
+import { CourseGateService } from '../course-gates/course-gate.service';
 
 @Injectable()
 export class CoursesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gates: CourseGateService,
+  ) {}
 
   private readonly listInclude = {
     teacher: { select: { id: true, name: true, email: true } },
@@ -155,7 +159,51 @@ export class CoursesService {
     });
   }
 
-  async findOne(id: string) {
+  /**
+   * Course detail. Staff get the full course as before. Students must hold
+   * an ACTIVE enrollment; modules behind an incomplete course gate keep
+   * their title and item list but lose item content (`locked: true`), and
+   * the response carries the student's neutral "Before you start" steps.
+   */
+  async findOne(id: string, viewer?: { id: string; role: UserRole }) {
+    const course = await this.findOneFull(id);
+    if (viewer?.role !== 'student') return course;
+
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { studentId_courseId: { studentId: viewer.id, courseId: id } },
+      select: { status: true },
+    });
+    if (enrollment?.status !== 'ACTIVE') {
+      throw new ForbiddenException('You are not enrolled in this course');
+    }
+
+    const [{ lockedModuleIds }, gateSteps] = await Promise.all([
+      this.gates.lockState(viewer.id, id),
+      this.gates.studentSteps(viewer.id, id),
+    ]);
+    return {
+      ...course,
+      gateSteps,
+      modules: course.modules.map((m) =>
+        lockedModuleIds.has(m.id)
+          ? {
+              ...m,
+              locked: true,
+              items: m.items.map((it) => ({
+                ...it,
+                contentMdx: null,
+                pdfBlobKey: null,
+                pdfFilename: null,
+                url: null,
+                learningOutcomes: null,
+              })),
+            }
+          : { ...m, locked: false },
+      ),
+    };
+  }
+
+  private async findOneFull(id: string) {
     const course = await this.prisma.course.findUnique({
       where: { id },
       include: {

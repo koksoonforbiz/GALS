@@ -9,6 +9,8 @@ import BlockRenderer from '../../components/editor/BlockRenderer';
 import PdfReader from '../../components/PdfReader';
 import { DockedChatbot } from '../../components/FloatingChatbot';
 import { InteractiveLesson, slidePlainText } from '../../components/interactive-lesson';
+import { CourseGateChecklist, LockedBadge } from '../../components/student/CourseGateChecklist';
+import type { StudentGateStep } from '@ats/shared';
 
 const CodePlayground = lazy(() =>
   import('../../components/code-practice/CodePlayground').then((m) => ({
@@ -35,6 +37,8 @@ interface CourseModule {
   orderIndex: number;
   showPlayground: boolean;
   items: ModuleItem[];
+  /** behind an incomplete course gate (server strips item content) */
+  locked?: boolean;
 }
 
 interface Course {
@@ -45,6 +49,8 @@ interface Course {
   learningMode?: string;
   teacher: { id: string; name: string };
   modules: CourseModule[];
+  /** course gates still to pass (students only) */
+  gateSteps?: StudentGateStep[];
 }
 
 // Docked-chatbot resizer constants. Width persists in localStorage so
@@ -604,8 +610,9 @@ export function StudentCourseViewPage() {
           }>(`/vlm/config/course/${courseId}`)
           .then((cfg) => setVlmConfig(cfg))
           .catch(() => {});
-        // Auto-select first item
-        const firstItem = data.modules[0]?.items[0];
+        // Auto-select the first item of the first open module. With course
+        // gates outstanding nothing opens, and the checklist shows instead.
+        const firstItem = data.modules.find((m) => !m.locked)?.items[0];
         if (firstItem) setSelectedItemId(firstItem.id);
       } catch {
         toast('error', 'Failed to load course');
@@ -720,20 +727,26 @@ export function StudentCourseViewPage() {
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              {course.gateSteps && <CourseGateChecklist steps={course.gateSteps} compact />}
               {course.modules.map((mod) => (
                 <div key={mod.id} className="mb-4">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                    {mod.title}
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                    {mod.locked && <LockedBadge />}
+                    <span className="truncate">{mod.title}</span>
                   </h4>
                   <div className="space-y-0.5">
                     {mod.items.map((item) => (
                       <button
                         key={item.id}
-                        onClick={() => setSelectedItemId(item.id)}
+                        onClick={() => !mod.locked && setSelectedItemId(item.id)}
+                        disabled={mod.locked}
+                        title={mod.locked ? 'Complete the steps above first' : undefined}
                         className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors flex items-center gap-2 ${
-                          selectedItemId === item.id
-                            ? 'bg-blue-50 text-blue-700 font-medium'
-                            : 'text-gray-600 hover:bg-gray-50'
+                          mod.locked
+                            ? 'text-gray-400 cursor-not-allowed'
+                            : selectedItemId === item.id
+                              ? 'bg-blue-50 text-blue-700 font-medium'
+                              : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
                         <span
@@ -806,7 +819,11 @@ export function StudentCourseViewPage() {
             <div className="flex-1 min-h-0 flex flex-col">
               {!selectedItem ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-                  <p className="text-gray-400">Select an item from the left.</p>
+                  {course.gateSteps?.some((g) => !g.done) ? (
+                    <CourseGateChecklist steps={course.gateSteps} />
+                  ) : (
+                    <p className="text-gray-400">Select an item from the left.</p>
+                  )}
                 </div>
               ) : selectedItem.type === 'INTERACTIVE_LESSON' ? (
                 // Imported slide lesson (prompting course): takes the place

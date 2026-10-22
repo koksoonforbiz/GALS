@@ -1,3 +1,4 @@
+import { CourseGatesModule } from '../course-gates';
 import { Module } from '@nestjs/common';
 import { RagModule } from '../rag';
 import { GovernanceModule } from '../governance/governance.module';
@@ -6,7 +7,7 @@ import { PromptLabService } from './prompt-lab.service';
 
 @Module({
   // RagModule provides LlmService — the shared LLM funnel. No new provider.
-  imports: [RagModule, GovernanceModule],
+  imports: [RagModule, GovernanceModule, CourseGatesModule],
   controllers: [PromptLabController],
   providers: [PromptLabService],
 })

@@ -3,8 +3,10 @@ import { ModulesController } from './modules.controller';
 import { ModulesService } from './modules.service';
 import { ItemsController, ItemActionsController } from './items.controller';
 import { ItemsService } from './items.service';
+import { CourseGatesModule } from '../course-gates';
 
 @Module({
+  imports: [CourseGatesModule],
   controllers: [ModulesController, ItemsController, ItemActionsController],
   providers: [ModulesService, ItemsService],
   exports: [ModulesService, ItemsService],

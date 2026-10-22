@@ -6,6 +6,7 @@ import {
   Logger,
   Inject,
   forwardRef,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +35,7 @@ import type { LessonDocument } from '@ats/shared';
 import { lessonToPlainText } from '../interactive-lesson/course-html-parser';
 import type { FunnelMessage, FunnelContentPart } from '../rag/llm.service';
 import { CodePracticeService } from '../code-practice/code-practice.service';
+import { CourseGateService } from '../course-gates/course-gate.service';
 import type { CodePracticeQuestion } from '../code-practice/code-practice.service';
 
 // Marker the chat LLM appends to its own reply, on its own line, when
@@ -543,6 +545,7 @@ export class LearningInterventionsService {
     private readonly groundedEvidence: GroundedEvidenceService,
     private readonly faithfulnessCheck: FaithfulnessCheckService,
     private readonly codePracticeService: CodePracticeService,
+    @Optional() private readonly gates?: CourseGateService,
   ) {}
 
   // ─── Prompt Config ────────────────────────────────────────
@@ -802,6 +805,9 @@ export class LearningInterventionsService {
      *  when coverage applied cleanly or wasn't requested. */
     coverageFallback?: CoverageFallback;
   }> {
+    // Students: ACTIVE enrollment in the course, and no grounding on a module
+    // behind an incomplete course gate (staff pass through unchanged).
+    await this.gates?.assertContentAccess(studentId, dto.courseId, dto.contentId);
     const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
     if (sel.length >= 20) {
       // Selection mode: no structured evidence, no images. The
@@ -4109,6 +4115,7 @@ export class LearningInterventionsService {
     if (!dto.message || dto.message.trim().length < 2) {
       throw new BadRequestException('Message is too short');
     }
+    await this.gates?.assertContentAccess(userId, dto.courseId, dto.contentId ?? undefined);
 
     const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
 

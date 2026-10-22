@@ -115,7 +115,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /.well-known/acme-challenge/   (Let's Encrypt HTTP-01)
 ```
 
-Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
+Everything else under `/api/` → **404** on the public door. Notably denied: `/api/user-management/**`, `/api/question-generation/**`, `/api/questions/**`, `/api/rag/**`, `/api/llm/**`, `/api/llm-settings`, `/api/analytics/**`, `/api/affective-mapping/**`, `/api/text-mining/**`, `/api/replay-annotations/**`, `/api/jobs/**`, `/api/openface3/**`, `/api/evaluation/**`, `/api/course-structure/**`, `/api/page-content/**`, `/api/admin/**`, `/api/activity-log/teacher/**`, `/api/course-gates/**`, `/api/dev/**`, `/api/health`, and every teacher-only method on the mixed prefixes.
 
 ## Full route table (generated)
 
@@ -314,6 +314,16 @@ Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 | ------ | --------------------------------------------------------------- | ----------------------- | ----------------------- | ---------- | ------------------------------------------ |
 | GET    | `/api/interactive-lessons/items/:itemId`                        | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service. |
 | PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.          |
+
+### CourseGateController (`course-gates/course-gate.controller.ts`)
+
+Added 2026-10-22 for generic course gates (EF assessment, `docs/EF_battery_v2/`). Students never call this controller: their checklist arrives with `GET /api/courses/:id` (neutral labels only). Course gates are also enforced, for students, inside `GET /api/courses/:id`, `GET /api/items/:id/download-url`, `/api/interactive-lessons/**`, `/api/prompt-lab/**`, `/api/learning-interventions/**` (content grounding) and `POST /api/nudges/evaluate` (403 `MODULE_LOCKED`).
+
+| Method | Path                                                      | @Roles         | Guards                  | Door        | Note                                             |
+| ------ | --------------------------------------------------------- | -------------- | ----------------------- | ----------- | ------------------------------------------------ |
+| GET    | `/api/course-gates/courses/:courseId`                     | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Gates of a course with completion counts.        |
+| GET    | `/api/course-gates/courses/:courseId/students/:studentId` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One student's lock state.                        |
+| POST   | `/api/course-gates/:gateId/students/:studentId/unlock`    | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Override with reason; audited (`GATE_OVERRIDE`). |
 
 ### DialogueNotesController (`dialogue-notes/dialogue-notes.controller.ts`)
 

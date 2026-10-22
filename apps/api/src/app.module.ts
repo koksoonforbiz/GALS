@@ -46,6 +46,7 @@ import { InteractiveLessonModule } from './interactive-lesson';
 import { PromptLabModule } from './prompt-lab';
 import { LearningEventsModule } from './learning-events';
 import { GovernanceModule } from './governance';
+import { CourseGatesModule } from './course-gates';
 import { HealthController } from './health.controller';
 import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
 
@@ -108,6 +109,7 @@ import { ThrottlerRedisStorage } from './common/throttle-redis.storage';
     PromptLabModule,
     LearningEventsModule,
     GovernanceModule,
+    CourseGatesModule,
   ],
   controllers: [HealthController],
   providers: [

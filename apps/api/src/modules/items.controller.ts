@@ -10,6 +10,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { ItemsService } from './items.service';
+import { CourseGateService } from '../course-gates/course-gate.service';
 import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { PublicDoor } from '../common';
 import type { UserRole } from '@ats/shared';
@@ -72,7 +73,10 @@ export class ItemsController {
 @Controller('items')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ItemActionsController {
-  constructor(private readonly itemsService: ItemsService) {}
+  constructor(
+    private readonly itemsService: ItemsService,
+    private readonly gates: CourseGateService,
+  ) {}
 
   @Post(':id/upload-url')
   @Roles('teacher', 'admin')
@@ -99,7 +103,9 @@ export class ItemActionsController {
   @Get(':id/download-url')
   // Two-door: the one item route students need — the PDF download URL (BOTH) — see docs/two-door/api-classification.md.
   @PublicDoor()
-  getDownloadUrl(@Param('id') id: string) {
+  async getDownloadUrl(@Request() req: { user: RequestUser }, @Param('id') id: string) {
+    // Students: ACTIVE enrollment + the item's module must not be behind a course gate.
+    if (req.user.role === 'student') await this.gates.assertItemAccess(req.user.id, id);
     return this.itemsService.getDownloadUrl(id);
   }
 

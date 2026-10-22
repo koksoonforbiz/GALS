@@ -22,6 +22,7 @@ import { LlmService } from '../rag/llm.service';
 import { isSelectable, listChatModels, type LlmProvider } from '../llm/model-registry';
 import { approxTokens, wordDiffStats } from './text-diff';
 import { TextConsentService } from '../governance/text-consent.service';
+import { CourseGateService } from '../course-gates/course-gate.service';
 
 /** Slide types whose lab work runs in the Prompt Lab (external AI tool in the HTML). */
 const LAB_SLIDE_TYPES = new Set(['exercise', 'task', 'stretch']);
@@ -52,6 +53,7 @@ export class PromptLabService {
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
     @Optional() private readonly consent?: TextConsentService,
+    @Optional() private readonly gates?: CourseGateService,
   ) {}
 
   // ── access ──────────────────────────────────────────────────────────────
@@ -62,6 +64,7 @@ export class PromptLabService {
       select: {
         type: true,
         lessonJson: true,
+        moduleId: true,
         module: { select: { courseId: true, course: { select: { teacherId: true } } } },
       },
     });
@@ -75,6 +78,7 @@ export class PromptLabService {
     });
     if (enrollment?.status !== 'ACTIVE')
       throw new ForbiddenException('You are not enrolled in this course');
+    await this.gates?.assertModuleOpen(studentId, courseId, item.moduleId);
     const slide = (item.lessonJson as unknown as LessonDocument).slides.find(
       (s) => s.key === slideKey,
     );
@@ -272,9 +276,10 @@ export class PromptLabService {
   async setTags(studentId: string, versionId: string, revisionTags: string[]) {
     const v = await this.prisma.promptLabVersion.findFirst({
       where: { id: versionId, studentId },
-      select: { id: true },
+      select: { id: true, moduleItemId: true },
     });
     if (!v) throw new NotFoundException('Version not found');
+    await this.gates?.assertItemAccess(studentId, v.moduleItemId);
     return this.prisma.promptLabVersion.update({
       where: { id: versionId },
       data: { revisionTags },
@@ -304,9 +309,10 @@ export class PromptLabService {
   async recordTestResult(studentId: string, dto: PromptLabTestResultRequest) {
     const v = await this.prisma.promptLabVersion.findFirst({
       where: { id: dto.versionId, studentId },
-      select: { id: true },
+      select: { id: true, moduleItemId: true },
     });
     if (!v) throw new NotFoundException('Version not found');
+    await this.gates?.assertItemAccess(studentId, v.moduleItemId);
     if (dto.runId) await this.assertOwnRun(studentId, dto.runId);
     const data = {
       runId: dto.runId ?? null,
@@ -337,9 +343,10 @@ export class PromptLabService {
   private async assertOwnRun(studentId: string, runId: string) {
     const r = await this.prisma.promptLabRun.findFirst({
       where: { id: runId, studentId },
-      select: { id: true },
+      select: { id: true, moduleItemId: true },
     });
     if (!r) throw new NotFoundException('Run not found');
+    await this.gates?.assertItemAccess(studentId, r.moduleItemId);
   }
 
   // ── reads ───────────────────────────────────────────────────────────────

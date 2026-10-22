@@ -13,3 +13,4 @@ export * from './pyfeat.schema';
 export * from './affective-mapping';
 export * from './interactive-lesson';
 export * from './prompt-lab';
+export * from './course-gates';
