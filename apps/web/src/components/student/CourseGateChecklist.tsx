@@ -1,4 +1,5 @@
 import { Check, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import type { StudentGateStep } from '@ats/shared';
 
 /**
@@ -6,10 +7,20 @@ import type { StudentGateStep } from '@ats/shared';
  * student still has to pass. Labels come from the server and are neutral
  * by design (no construct names in the student bundle).
  */
+/** Where a step is done in the student app (knowledge checks: later). */
+function stepHref(courseId: string, s: StudentGateStep): string | null {
+  if ((s.step === 'questionnaire' || s.step === 'puzzles') && s.occasion) {
+    return `/student/courses/${courseId}/puzzles/${s.occasion}`;
+  }
+  return null;
+}
+
 export function CourseGateChecklist({
+  courseId,
   steps,
   compact = false,
 }: {
+  courseId: string;
   steps: StudentGateStep[];
   compact?: boolean;
 }) {
@@ -48,7 +59,16 @@ export function CourseGateChecklist({
               />
             )}
             <span>{s.label}</span>
-            {s.next && !compact && <span className="ml-auto text-xs text-amber-700">Next</span>}
+            {s.next && stepHref(courseId, s) && (
+              <Link
+                to={stepHref(courseId, s)!}
+                className={`ml-auto rounded-md bg-amber-600 font-medium text-white hover:bg-amber-700 ${
+                  compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'
+                }`}
+              >
+                {steps.some((x) => x.done) ? 'Continue' : 'Start'}
+              </Link>
+            )}
           </li>
         ))}
       </ol>

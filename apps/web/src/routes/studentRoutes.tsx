@@ -14,6 +14,7 @@ import { ReviewQueuePage } from '../pages/student/ReviewQueuePage';
 import { DialogueLearning } from '../pages/student/DialogueLearning';
 import { DialogueSessionHistory } from '../pages/student/DialogueSessionHistory';
 import { ChatHistoryPage } from '../pages/student/ChatHistoryPage';
+import { PuzzlesPage } from '../pages/student/puzzles/PuzzlesPage';
 
 // Student routes, moved verbatim from App.tsx. Wrappers (RoleRoute,
 // BiometricsWrapper) are unchanged; see docs/two-door/route-table.md.
@@ -37,6 +38,9 @@ export const studentRoutes: RouteObject[] = [
   { path: '/student/catalog', element: student(<CatalogPage />) },
   { path: '/student/courses', element: student(<MyCoursesPage />) },
   { path: '/student/courses/:courseId', element: studentBiometric(<StudentCourseViewPage />) },
+  // Attention and memory puzzles: student(), NOT studentBiometric() — no eye
+  // tracking / webcam recording during the puzzles (docs/EF_battery_v2).
+  { path: '/student/courses/:courseId/puzzles/:occasion', element: student(<PuzzlesPage />) },
   { path: '/student/review-queue', element: student(<ReviewQueuePage />) },
   { path: '/student/courses/:courseId/dialogue', element: studentBiometric(<DialogueLearning />) },
   {

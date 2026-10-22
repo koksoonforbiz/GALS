@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useInteractionLogger } from '../lib/interaction-log/useInteractionLogger';
 import { useSessionReplayRecorder } from '../lib/interaction-log/useSessionReplayRecorder';
 import { LoggingErrorBoundary } from './LoggingErrorBoundary';
+import { ReplayPauseContext } from './replayPause';
 
 interface LoggingProviderProps {
   sessionId: string;
@@ -18,12 +19,13 @@ export function LoggingProvider({
   children,
   captureDom = false,
 }: LoggingProviderProps) {
+  const [replayPaused, setReplayPaused] = useState(false);
   useInteractionLogger({ sessionId, userId });
-  useSessionReplayRecorder({ sessionId, userId, captureDom });
+  useSessionReplayRecorder({ sessionId, userId, captureDom, enabled: !replayPaused });
 
   return (
     <LoggingErrorBoundary sessionId={sessionId} userId={userId}>
-      {children}
+      <ReplayPauseContext.Provider value={setReplayPaused}>{children}</ReplayPauseContext.Provider>
     </LoggingErrorBoundary>
   );
 }

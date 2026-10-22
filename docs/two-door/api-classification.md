@@ -108,6 +108,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /api/student-rag/**
 /api/interactive-lessons/**   (prompting course — added 2026-10-07)
 /api/prompt-lab/**  EXCEPT  /api/prompt-lab/courses/**  (PRIVATE)   (prompting course — added 2026-10-07)
+/api/puzzles/**   (EF assessment, student-only — added 2026-10-22)
 /api/pre-generation/{match-document,ready}
 /api/vlm/config/course/:x  GET     /api/vlm/describe-page  POST
 /socket.io/            (dialogue + default namespaces; text-mining refused at handshake)
@@ -314,6 +315,19 @@ Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 | ------ | --------------------------------------------------------------- | ----------------------- | ----------------------- | ---------- | ------------------------------------------ |
 | GET    | `/api/interactive-lessons/items/:itemId`                        | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service. |
 | PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.          |
+
+### PuzzlesController (`efa/puzzles.controller.ts`)
+
+Added 2026-10-22 (EF assessment, `docs/EF_battery_v2/`). Student-only, neutral path and payloads: no construct names, scores or answer keys (blinding).
+
+| Method | Path                                                       | @Roles  | Guards                  | Door       | Note                                            |
+| ------ | ---------------------------------------------------------- | ------- | ----------------------- | ---------- | ----------------------------------------------- |
+| GET    | `/api/puzzles/courses/:courseId/occasions/:occasion`       | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Next step (+ notice text before consent).       |
+| POST   | `/api/puzzles/courses/:courseId/occasions/:occasion/start` | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Accept notice, device record, form allocation.  |
+| GET    | `/api/puzzles/occasions/:occasionId/questionnaire?part=`   | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Items + own saved answers.                      |
+| PUT    | `/api/puzzles/occasions/:occasionId/answers/:itemCode`     | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Autosave one answer.                            |
+| POST   | `/api/puzzles/occasions/:occasionId/questionnaire/submit`  | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Completes the questionnaire gate (before part). |
+| POST   | `/api/puzzles/occasions/:occasionId/colour-check`          | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Recorded once; failure skips the colour puzzle. |
 
 ### CourseGateController (`course-gates/course-gate.controller.ts`)
 

@@ -14,3 +14,4 @@ export * from './affective-mapping';
 export * from './interactive-lesson';
 export * from './prompt-lab';
 export * from './course-gates';
+export * from './puzzles';

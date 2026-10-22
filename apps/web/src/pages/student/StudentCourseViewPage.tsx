@@ -727,7 +727,9 @@ export function StudentCourseViewPage() {
               </div>
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-              {course.gateSteps && <CourseGateChecklist steps={course.gateSteps} compact />}
+              {course.gateSteps && (
+                <CourseGateChecklist courseId={course.id} steps={course.gateSteps} compact />
+              )}
               {course.modules.map((mod) => (
                 <div key={mod.id} className="mb-4">
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
@@ -820,7 +822,7 @@ export function StudentCourseViewPage() {
               {!selectedItem ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                   {course.gateSteps?.some((g) => !g.done) ? (
-                    <CourseGateChecklist steps={course.gateSteps} />
+                    <CourseGateChecklist courseId={course.id} steps={course.gateSteps} />
                   ) : (
                     <p className="text-gray-400">Select an item from the left.</p>
                   )}
