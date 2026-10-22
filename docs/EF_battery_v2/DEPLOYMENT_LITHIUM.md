@@ -28,6 +28,9 @@ Nothing else (postgres, redis, minio, clamav, workers) changes.
 pnpm --filter @ats/api test
 pnpm check:two-door && pnpm --filter @ats/web lint:boundaries
 
+# archive WITHOUT CRLF conversion (Windows git would change stimuli.json's hash and break shell scripts)
+git -c core.autocrlf=false archive -o gals.tar HEAD
+
 # build the two changed images with the server's project name (repo-*)
 GALS_API_BUILD_TARGET=production \
   COMPOSE_PROJECT_NAME=repo ./deploy/scripts/twodoor.sh local build api nginx
@@ -79,12 +82,12 @@ grep -q '^RESEARCH_EXPORT_SALT=.\{16,\}' .env || \
 
 # battery: dry run first, then the real seed (docs folder bind-mounted read-only)
 ./deploy/scripts/twodoor.sh l40 run --rm --no-deps -T -v "$PWD/docs/EF_battery_v2:/efa:ro" \
-  --entrypoint sh api -c 'pnpm run seed:ef-battery -- --dir /efa --dry-run'
+  --entrypoint sh api -c 'npx --no-install ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-ef-battery.ts --dir /efa --dry-run'
 ./deploy/scripts/twodoor.sh l40 run --rm --no-deps -T -v "$PWD/docs/EF_battery_v2:/efa:ro" \
-  --entrypoint sh api -c 'pnpm run seed:ef-battery -- --dir /efa'
+  --entrypoint sh api -c 'npx --no-install ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-ef-battery.ts --dir /efa'
 ```
 
-The seed output must show stimuli sha256 `a705e66707fb0f67f7d73241957dc12b73a0c61eca0b204584d251a97e2dd832` and 60 allocation slots. Before seeding, check the checkout has not been reformatted: `sha256sum docs/EF_battery_v2/source/stimuli.json`.
+Do not use `pnpm run …` in the container on lithium: corepack tries to download pnpm from npm, which the firewall blocks. The seed output must show stimuli sha256 `a705e66707fb0f67f7d73241957dc12b73a0c61eca0b204584d251a97e2dd832` and 60 allocation slots. Before seeding, check the checkout has not been reformatted: `sha256sum docs/EF_battery_v2/source/stimuli.json`.
 
 `docs/EF_battery_v2/pdf/` (facilitator sheets with answers) is not in git and must not be copied to the server.
 
