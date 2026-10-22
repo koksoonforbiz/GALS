@@ -1,0 +1,260 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.7cm]{geometry}
+\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb,array,booktabs,longtable,enumitem,xcolor,tikz,fancyhdr,multicol,needspace}
+\definecolor{inkred}{RGB}{200,30,30}\definecolor{inkgreen}{RGB}{20,140,60}\definecolor{inkblue}{RGB}{30,70,200}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\newcommand{\blank}[1][1.2cm]{\rule{#1}{0.4pt}}
+\newcommand{\bx}{$\square$}
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\sffamily EF battery --- scoring key --- CONFIDENTIAL}\rhead{\small\sffamily v2.0}\cfoot{\small\sffamily\thepage}
+\begin{document}
+\begin{center}{\LARGE\bfseries Scoring key and scoring rules}\\[3pt]{\small EF battery v2.0 --- Forms A, B, C --- researcher/scorer use only}\end{center}
+\section*{1. Scoring rules}
+\begin{description}[style=nextline,leftmargin=0.6cm,itemsep=3pt]
+\item[W1 Number repetition] 1 point per correct trial (all digits, correct order). Forward total 0--16, backward total 0--14; longest span = longest length with at least one correct trial. Forward and backward are scored and analysed separately; forward span is a short-term storage/attention covariate, \emph{not} a working-memory updating indicator.
+\item[W2 Sorting numbers and letters] 1 point per correct scored trial (0--12); practice not scored. A trial is correct only if all digits come first in ascending order, then all letters in alphabetical order.
+\item[W3 Adding and subtracting] Per list: time (s) and errors (wrong, skipped or illegible). Primary: switch cost $= T_3 - \tfrac12(T_1+T_2)$ (s); sensitivity: ratio $T_3/\tfrac12(T_1+T_2)$ and a residual of $T_3$ on $T_1,T_2$. Report all three list times and errors. Lists with $>3$ errors flagged.
+\item[W4 Word lists] Score from the transcript (or audio) by two raters blind to occasion. \emph{Letters}: valid = an English word beginning with the letter; not valid = names of people, places, brands; numbers; repeats; the same word with a different ending (eat/eating/eaten; plurals) --- count the first instance only; words in another language. Compound words count if they are not a variant of an earlier word. \emph{Animals}: any real animal (incl.\ birds, fish, insects, extinct animals); a general term and a specific kind both count (dog, poodle); male/female/young forms count separately unless they share the word root (lion/lioness = one). \emph{Switching}: valid word = belongs to one of the two categories, common noun, not a repeat. Correct switch = a valid word from the other category immediately following a valid word. Primary: correct switches; also total valid words, switch ratio $=$ correct switches / (total responses $-1$), repeats, same-category-in-a-row errors, intrusions.
+\item[W5 Finishing sentences] Part B coding anchors for every item are printed on the record sheets (A = expected word or another sensible completion; B = related word; illustrative, not exhaustive). Part A: mean RT (s) of the 15 items; Part A errors (no sensible completion) recorded. Part B: mean RT; error score $= 3\times(\text{A codes}) + 1\times(\text{B codes})$ (0--45). Primary inhibition index for W5 is a single within-task score formed first (mean of $z$[B$-$A RT] and $z$[B error score], each reversed) and then \emph{re-standardised} to SD 1 in the T0 sample, so W5 is neither double-weighted nor under-weighted against Stroop. Prompted items are kept and flagged. Two blind raters code Part B; report Cohen's $\kappa$ (target $\ge .80$); disagreements resolved by discussion.
+\item[W6 Colours] $W$, $C$, $CW$ = items completed in 45 s. Golden interference $IG = CW - \frac{W\times C}{W+C}$; \textbf{higher $IG$ = better interference control} (enter as $+z$). Also report raw $CW$, $CW/C$, and errors.
+\item[W7 Joining circles] Time (s) for parts 1 and 2; errors. Primary shifting index: residual of part-2 time regressed on part-1 time (baseline sample), higher = slower = worse (enter as $-z$). $B-A$ and $B/A$ are sensitivity analyses only.
+\item[W8 ADEXI] Official scoring: Working memory = sum of items 1, 2, 5, 7, 8, 9, 11, 12, 13 (9--45); Inhibition = sum of items 3, 4, 6, 10, 14 (5--25); higher = more reported difficulty. Report separately from the task scores; never combine into a single EF total.
+\end{description}
+\textbf{Direction and standardisation.} All $z$ scores use the \emph{T0 sample} mean and SD (fixed reference) so later occasions stay on the same scale; where pilot equating constants exist, subtract the form-specific pilot mean difference first (linear equating). Higher domain score = better: WM $=$ mean($z$ backward total, $z$ W2 total); Inhibition $=$ mean($+z\,IG$, $z$ W5 index); Shifting $=$ mean($-z$ W3 switch cost, $-z$ W7 residual) with $+z$ W4 correct switches as a sensitivity indicator. Forward span, Part 1 time and letter/animal fluency are covariates.
+\clearpage\section*{2.1 Form A answer key}
+\textbf{W3 answers} (practice: +3: 8, 14, 11; $-$3: 7, 3, 9; alternate: 12, 4, 14, 1)\par
+{\small\begin{tabular}{@{}rlll@{\hspace{1.2cm}}rlll@{}}\toprule \# & L1 (+3) & L2 ($-$3) & L3 (alt.) & \# & L1 (+3) & L2 ($-$3) & L3 (alt.)\\ \midrule
+1 & 23$\to$\textbf{26} & 40$\to$\textbf{37} & 36$\to$\textbf{39} & 16 & 45$\to$\textbf{48} & 78$\to$\textbf{75} & 43$\to$\textbf{40}\\
+2 & 61$\to$\textbf{64} & 46$\to$\textbf{43} & 95$\to$\textbf{92} & 17 & 59$\to$\textbf{62} & 92$\to$\textbf{89} & 83$\to$\textbf{86}\\
+3 & 96$\to$\textbf{99} & 13$\to$\textbf{10} & 78$\to$\textbf{81} & 18 & 32$\to$\textbf{35} & 34$\to$\textbf{31} & 34$\to$\textbf{31}\\
+4 & 77$\to$\textbf{80} & 69$\to$\textbf{66} & 85$\to$\textbf{82} & 19 & 40$\to$\textbf{43} & 71$\to$\textbf{68} & 75$\to$\textbf{78}\\
+5 & 50$\to$\textbf{53} & 82$\to$\textbf{79} & 15$\to$\textbf{18} & 20 & 63$\to$\textbf{66} & 27$\to$\textbf{24} & 56$\to$\textbf{53}\\
+6 & 42$\to$\textbf{45} & 93$\to$\textbf{90} & 69$\to$\textbf{66} & 21 & 19$\to$\textbf{22} & 67$\to$\textbf{64} & 64$\to$\textbf{67}\\
+7 & 17$\to$\textbf{20} & 64$\to$\textbf{61} & 49$\to$\textbf{52} & 22 & 51$\to$\textbf{54} & 18$\to$\textbf{15} & 18$\to$\textbf{15}\\
+8 & 81$\to$\textbf{84} & 33$\to$\textbf{30} & 71$\to$\textbf{68} & 23 & 46$\to$\textbf{49} & 50$\to$\textbf{47} & 30$\to$\textbf{33}\\
+9 & 93$\to$\textbf{96} & 17$\to$\textbf{14} & 22$\to$\textbf{25} & 24 & 94$\to$\textbf{97} & 45$\to$\textbf{42} & 37$\to$\textbf{34}\\
+10 & 18$\to$\textbf{21} & 55$\to$\textbf{52} & 41$\to$\textbf{38} & 25 & 39$\to$\textbf{42} & 61$\to$\textbf{58} & 46$\to$\textbf{49}\\
+11 & 36$\to$\textbf{39} & 58$\to$\textbf{55} & 53$\to$\textbf{56} & 26 & 74$\to$\textbf{77} & 25$\to$\textbf{22} & 86$\to$\textbf{83}\\
+12 & 84$\to$\textbf{87} & 21$\to$\textbf{18} & 73$\to$\textbf{70} & 27 & 62$\to$\textbf{65} & 70$\to$\textbf{67} & 57$\to$\textbf{60}\\
+13 & 80$\to$\textbf{83} & 84$\to$\textbf{81} & 84$\to$\textbf{87} & 28 & 78$\to$\textbf{81} & 52$\to$\textbf{49} & 24$\to$\textbf{21}\\
+14 & 25$\to$\textbf{28} & 89$\to$\textbf{86} & 52$\to$\textbf{49} & 29 & 28$\to$\textbf{31} & 96$\to$\textbf{93} & 91$\to$\textbf{94}\\
+15 & 67$\to$\textbf{70} & 36$\to$\textbf{33} & 68$\to$\textbf{71} & 30 & 55$\to$\textbf{58} & 49$\to$\textbf{46} & 60$\to$\textbf{57}\\
+\bottomrule\end{tabular}}\par\medskip
+\textbf{W6 keys} (R/G/B, laid out exactly as on the page; read down each column)\par\medskip\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Words (W)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}G & R & B & R & R\\
+R & B & G & G & B\\
+G & R & R & B & G\\
+R & G & G & G & R\\
+B & B & R & R & B\\
+R & R & G & B & R\\
+B & B & R & R & G\\
+G & R & B & B & R\\
+B & G & G & G & B\\
+G & B & B & R & G\\
+B & G & G & B & B\\
+R & R & B & G & R\\
+G & G & R & B & G\\
+R & R & B & R & R\\
+G & B & R & B & G\\
+B & R & B & R & R\\
+G & B & R & G & G\\
+R & G & G & B & R\\
+B & B & B & R & G\\
+G & G & G & B & B\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink (C)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}R & R & B & B & G\\
+G & G & G & R & R\\
+R & R & R & G & B\\
+B & G & B & B & R\\
+G & B & G & R & G\\
+R & G & B & B & B\\
+G & B & G & G & R\\
+R & G & B & R & B\\
+B & R & R & B & G\\
+R & B & G & G & R\\
+G & R & B & R & G\\
+R & G & G & G & R\\
+B & B & B & R & B\\
+R & R & R & B & G\\
+G & G & B & G & B\\
+R & R & G & R & R\\
+B & G & B & G & B\\
+R & R & G & B & R\\
+G & B & B & G & B\\
+B & R & G & B & G\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink, not word (CW)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}B & G & G & G & B\\
+G & R & B & R & G\\
+R & G & G & G & R\\
+G & B & R & B & G\\
+R & R & B & G & R\\
+G & B & R & R & B\\
+R & G & B & B & R\\
+B & B & R & G & B\\
+R & R & B & B & G\\
+B & G & R & G & R\\
+G & B & B & R & G\\
+B & G & R & B & B\\
+R & R & G & G & R\\
+G & B & R & B & B\\
+R & R & B & G & R\\
+G & G & G & B & G\\
+R & R & B & R & B\\
+G & B & R & G & G\\
+R & R & G & B & B\\
+B & B & B & G & R\\\end{tabular}\end{minipage}\par\medskip
+\textbf{W1, W2, W5:} correct responses / expected words are printed on the Form A facilitator record sheet.
+\clearpage\section*{2.2 Form B answer key}
+\textbf{W3 answers} (practice: +3: 8, 14, 11; $-$3: 7, 3, 9; alternate: 12, 4, 14, 1)\par
+{\small\begin{tabular}{@{}rlll@{\hspace{1.2cm}}rlll@{}}\toprule \# & L1 (+3) & L2 ($-$3) & L3 (alt.) & \# & L1 (+3) & L2 ($-$3) & L3 (alt.)\\ \midrule
+1 & 80$\to$\textbf{83} & 92$\to$\textbf{89} & 44$\to$\textbf{47} & 16 & 68$\to$\textbf{71} & 21$\to$\textbf{18} & 73$\to$\textbf{70}\\
+2 & 49$\to$\textbf{52} & 76$\to$\textbf{73} & 86$\to$\textbf{83} & 17 & 35$\to$\textbf{38} & 78$\to$\textbf{75} & 85$\to$\textbf{88}\\
+3 & 78$\to$\textbf{81} & 59$\to$\textbf{56} & 18$\to$\textbf{21} & 18 & 32$\to$\textbf{35} & 47$\to$\textbf{44} & 34$\to$\textbf{31}\\
+4 & 53$\to$\textbf{56} & 68$\to$\textbf{65} & 55$\to$\textbf{52} & 19 & 27$\to$\textbf{30} & 80$\to$\textbf{77} & 77$\to$\textbf{80}\\
+5 & 50$\to$\textbf{53} & 50$\to$\textbf{47} & 38$\to$\textbf{41} & 20 & 96$\to$\textbf{99} & 27$\to$\textbf{24} & 60$\to$\textbf{57}\\
+6 & 41$\to$\textbf{44} & 85$\to$\textbf{82} & 71$\to$\textbf{68} & 21 & 47$\to$\textbf{50} & 91$\to$\textbf{88} & 25$\to$\textbf{28}\\
+7 & 94$\to$\textbf{97} & 74$\to$\textbf{71} & 40$\to$\textbf{43} & 22 & 65$\to$\textbf{68} & 42$\to$\textbf{39} & 14$\to$\textbf{11}\\
+8 & 77$\to$\textbf{80} & 43$\to$\textbf{40} & 88$\to$\textbf{85} & 23 & 33$\to$\textbf{36} & 95$\to$\textbf{92} & 61$\to$\textbf{64}\\
+9 & 62$\to$\textbf{65} & 15$\to$\textbf{12} & 63$\to$\textbf{66} & 24 & 55$\to$\textbf{58} & 69$\to$\textbf{66} & 52$\to$\textbf{49}\\
+10 & 91$\to$\textbf{94} & 31$\to$\textbf{28} & 33$\to$\textbf{30} & 25 & 13$\to$\textbf{16} & 24$\to$\textbf{21} & 83$\to$\textbf{86}\\
+11 & 14$\to$\textbf{17} & 58$\to$\textbf{55} & 59$\to$\textbf{62} & 26 & 29$\to$\textbf{32} & 16$\to$\textbf{13} & 29$\to$\textbf{26}\\
+12 & 42$\to$\textbf{45} & 89$\to$\textbf{86} & 47$\to$\textbf{44} & 27 & 64$\to$\textbf{67} & 32$\to$\textbf{29} & 94$\to$\textbf{97}\\
+13 & 81$\to$\textbf{84} & 40$\to$\textbf{37} & 76$\to$\textbf{79} & 28 & 26$\to$\textbf{29} & 54$\to$\textbf{51} & 41$\to$\textbf{38}\\
+14 & 70$\to$\textbf{73} & 66$\to$\textbf{63} & 65$\to$\textbf{62} & 29 & 19$\to$\textbf{22} & 67$\to$\textbf{64} & 32$\to$\textbf{35}\\
+15 & 86$\to$\textbf{89} & 33$\to$\textbf{30} & 56$\to$\textbf{59} & 30 & 58$\to$\textbf{61} & 13$\to$\textbf{10} & 96$\to$\textbf{93}\\
+\bottomrule\end{tabular}}\par\medskip
+\textbf{W6 keys} (R/G/B, laid out exactly as on the page; read down each column)\par\medskip\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Words (W)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}B & R & G & G & B\\
+R & G & B & R & G\\
+G & R & G & B & R\\
+B & G & B & R & B\\
+R & R & R & B & G\\
+G & G & B & G & B\\
+R & R & R & B & G\\
+G & G & B & G & B\\
+R & B & G & B & G\\
+G & R & B & G & R\\
+R & B & G & B & B\\
+G & R & B & G & R\\
+R & B & R & R & B\\
+B & R & G & G & G\\
+G & G & B & R & B\\
+R & B & R & G & R\\
+B & R & G & B & B\\
+R & G & R & G & R\\
+B & R & B & B & G\\
+G & B & R & G & R\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink (C)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}R & B & G & R & G\\
+B & G & B & G & B\\
+R & R & R & B & R\\
+B & B & G & G & G\\
+R & R & B & B & B\\
+G & G & G & R & R\\
+R & R & R & B & B\\
+B & B & B & G & R\\
+R & G & G & R & G\\
+G & B & R & B & B\\
+B & G & B & G & G\\
+G & R & G & R & B\\
+B & B & R & G & G\\
+R & R & G & R & R\\
+B & G & B & G & B\\
+R & B & G & B & R\\
+B & R & R & R & B\\
+G & G & G & B & G\\
+B & B & R & R & R\\
+G & R & G & B & G\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink, not word (CW)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}R & G & B & R & G\\
+B & R & R & G & R\\
+R & B & B & R & G\\
+G & R & R & B & R\\
+B & B & G & R & B\\
+R & R & R & B & G\\
+B & G & B & G & B\\
+R & R & R & B & G\\
+G & G & B & G & R\\
+B & B & R & B & G\\
+G & G & B & G & R\\
+B & B & G & R & G\\
+G & G & B & G & R\\
+R & B & R & B & B\\
+B & R & G & G & G\\
+G & G & B & R & B\\
+R & B & R & G & G\\
+G & R & B & B & B\\
+R & G & R & G & R\\
+B & R & B & R & G\\\end{tabular}\end{minipage}\par\medskip
+\textbf{W1, W2, W5:} correct responses / expected words are printed on the Form B facilitator record sheet.
+\clearpage\section*{2.3 Form C answer key}
+\textbf{W3 answers} (practice: +3: 8, 14, 11; $-$3: 7, 3, 9; alternate: 12, 4, 14, 1)\par
+{\small\begin{tabular}{@{}rlll@{\hspace{1.2cm}}rlll@{}}\toprule \# & L1 (+3) & L2 ($-$3) & L3 (alt.) & \# & L1 (+3) & L2 ($-$3) & L3 (alt.)\\ \midrule
+1 & 60$\to$\textbf{63} & 41$\to$\textbf{38} & 58$\to$\textbf{61} & 16 & 57$\to$\textbf{60} & 80$\to$\textbf{77} & 15$\to$\textbf{12}\\
+2 & 53$\to$\textbf{56} & 39$\to$\textbf{36} & 71$\to$\textbf{68} & 17 & 14$\to$\textbf{17} & 93$\to$\textbf{90} & 88$\to$\textbf{91}\\
+3 & 71$\to$\textbf{74} & 15$\to$\textbf{12} & 35$\to$\textbf{38} & 18 & 44$\to$\textbf{47} & 88$\to$\textbf{85} & 28$\to$\textbf{25}\\
+4 & 47$\to$\textbf{50} & 58$\to$\textbf{55} & 40$\to$\textbf{37} & 19 & 21$\to$\textbf{24} & 27$\to$\textbf{24} & 45$\to$\textbf{48}\\
+5 & 66$\to$\textbf{69} & 92$\to$\textbf{89} & 93$\to$\textbf{96} & 20 & 73$\to$\textbf{76} & 54$\to$\textbf{51} & 53$\to$\textbf{50}\\
+6 & 91$\to$\textbf{94} & 47$\to$\textbf{44} & 52$\to$\textbf{49} & 21 & 86$\to$\textbf{89} & 37$\to$\textbf{34} & 86$\to$\textbf{89}\\
+7 & 38$\to$\textbf{41} & 16$\to$\textbf{13} & 31$\to$\textbf{34} & 22 & 69$\to$\textbf{72} & 48$\to$\textbf{45} & 84$\to$\textbf{81}\\
+8 & 33$\to$\textbf{36} & 33$\to$\textbf{30} & 37$\to$\textbf{34} & 23 & 52$\to$\textbf{55} & 71$\to$\textbf{68} & 62$\to$\textbf{65}\\
+9 & 15$\to$\textbf{18} & 29$\to$\textbf{26} & 54$\to$\textbf{57} & 24 & 96$\to$\textbf{99} & 14$\to$\textbf{11} & 91$\to$\textbf{88}\\
+10 & 18$\to$\textbf{21} & 63$\to$\textbf{60} & 74$\to$\textbf{71} & 25 & 79$\to$\textbf{82} & 49$\to$\textbf{46} & 17$\to$\textbf{20}\\
+11 & 55$\to$\textbf{58} & 20$\to$\textbf{17} & 29$\to$\textbf{32} & 26 & 20$\to$\textbf{23} & 65$\to$\textbf{62} & 66$\to$\textbf{63}\\
+12 & 42$\to$\textbf{45} & 96$\to$\textbf{93} & 36$\to$\textbf{33} & 27 & 37$\to$\textbf{40} & 51$\to$\textbf{48} & 73$\to$\textbf{76}\\
+13 & 22$\to$\textbf{25} & 62$\to$\textbf{59} & 60$\to$\textbf{63} & 28 & 84$\to$\textbf{87} & 84$\to$\textbf{81} & 63$\to$\textbf{60}\\
+14 & 68$\to$\textbf{71} & 66$\to$\textbf{63} & 85$\to$\textbf{82} & 29 & 49$\to$\textbf{52} & 70$\to$\textbf{67} & 44$\to$\textbf{47}\\
+15 & 80$\to$\textbf{83} & 72$\to$\textbf{69} & 76$\to$\textbf{79} & 30 & 95$\to$\textbf{98} & 55$\to$\textbf{52} & 49$\to$\textbf{46}\\
+\bottomrule\end{tabular}}\par\medskip
+\textbf{W6 keys} (R/G/B, laid out exactly as on the page; read down each column)\par\medskip\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Words (W)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}R & G & B & G & G\\
+B & R & R & B & R\\
+G & B & B & G & G\\
+R & G & G & R & R\\
+G & B & B & B & G\\
+B & G & G & G & R\\
+R & B & R & B & G\\
+B & R & B & G & B\\
+G & G & R & R & R\\
+R & B & G & G & B\\
+G & R & B & R & R\\
+B & G & R & G & B\\
+R & B & G & R & R\\
+B & G & B & B & B\\
+G & B & R & G & R\\
+R & R & B & R & B\\
+G & B & G & B & R\\
+B & G & R & G & B\\
+G & R & G & B & R\\
+R & G & B & R & B\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink (C)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}R & R & B & B & R\\
+B & B & G & G & G\\
+G & R & R & R & B\\
+B & G & G & G & R\\
+G & B & R & R & B\\
+B & R & G & B & G\\
+R & B & B & R & B\\
+B & G & G & G & R\\
+R & R & B & R & B\\
+G & B & G & B & G\\
+R & R & B & G & R\\
+B & G & R & R & G\\
+G & R & G & G & B\\
+B & G & B & R & R\\
+G & R & G & B & B\\
+B & G & R & R & G\\
+R & R & G & B & B\\
+B & G & R & R & G\\
+R & B & B & G & B\\
+G & R & R & B & G\\\end{tabular}\end{minipage}\hfill\begin{minipage}[t]{0.3\linewidth}\centering\textbf{Ink, not word (CW)}\\[2pt]\ttfamily\footnotesize\begin{tabular}{ccccc}B & B & G & B & B\\
+G & G & B & R & G\\
+R & R & R & B & R\\
+B & B & B & G & G\\
+R & G & R & R & R\\
+G & B & B & B & G\\
+B & G & G & R & R\\
+R & B & R & B & G\\
+B & R & G & G & B\\
+G & G & B & R & R\\
+B & B & R & G & B\\
+G & R & G & R & R\\
+B & G & R & B & G\\
+R & B & G & G & R\\
+B & R & B & B & B\\
+G & B & G & G & R\\
+B & G & R & R & B\\
+G & R & G & B & R\\
+B & G & R & R & G\\
+G & R & G & G & R\\\end{tabular}\end{minipage}\par\medskip
+\textbf{W1, W2, W5:} correct responses / expected words are printed on the Form C facilitator record sheet.
+\end{document}

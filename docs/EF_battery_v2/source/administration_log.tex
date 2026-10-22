@@ -1,0 +1,29 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=1.7cm]{geometry}
+\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb,array,booktabs,longtable,enumitem,xcolor,tikz,fancyhdr,multicol,needspace}
+\definecolor{inkred}{RGB}{200,30,30}\definecolor{inkgreen}{RGB}{20,140,60}\definecolor{inkblue}{RGB}{30,70,200}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\newcommand{\blank}[1][1.2cm]{\rule{#1}{0.4pt}}
+\newcommand{\bx}{$\square$}
+\pagestyle{fancy}\fancyhf{}\renewcommand{\headrulewidth}{0.3pt}
+\lhead{\small\sffamily EF battery --- administration log --- facilitator only}\rhead{\small\sffamily v2.0}\cfoot{\small\sffamily\thepage}
+\begin{document}
+Participant ID: \blank[4cm]
+\section*{Administration log (facilitator, every occasion)}
+\begin{tabular}{@{}p{6.3cm}p{10cm}@{}}\toprule
+Occasion & \bx\ T0 \quad \bx\ T1 \quad \bx\ T2 \\
+Form used / order code & Form \blank[1cm] \quad order \blank[1.5cm] (from allocation list)\\
+Position in the session & \bx\ start of session, before any test or course content (protocol) \quad \bx\ other: \blank[3cm]\\
+Date / clock time started -- finished & \blank[2.5cm] \quad \blank[1.5cm] -- \blank[1.5cm]\\
+Minutes since the end of the last test or demanding activity & \blank[1.5cm] min\\
+Mode & \bx\ paper, in person (protocol) \quad \bx\ other: \blank[3cm]\\
+Room & \bx\ quiet \quad \bx\ some noise \quad \bx\ noisy \quad Lighting adequate for colours: \bx\ yes \bx\ no\\
+Timing method & \bx\ audio recording + later measurement \quad \bx\ stopwatch\\
+Breaks taken (when, how long) & \blank[8cm]\\
+Tasks omitted or interrupted, and why & \blank[8cm]\\
+Deviations from the script & \blank[8cm]\\
+Facilitator & \blank[5cm]\\ \bottomrule
+\end{tabular}
+\end{document}

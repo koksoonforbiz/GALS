@@ -1,7 +1,10 @@
 import { z } from 'zod';
-import { ActivityAction } from '../activity-action.enum';
+import { ActivityAction, SERVER_ONLY_ACTIONS } from '../activity-action.enum';
 
-const ActivityActionValues = Object.values(ActivityAction) as [string, ...string[]];
+// Server-only actions (EF assessment, gates) are not accepted from clients.
+const ActivityActionValues = Object.values(ActivityAction).filter(
+  (a) => !SERVER_ONLY_ACTIONS.has(a),
+) as [string, ...string[]];
 
 export const LogEventSchema = z.object({
   action: z.enum(ActivityActionValues),

@@ -112,4 +112,29 @@ export enum ActivityAction {
 
   // Transfer task (prompting course, Phase 5)
   TRANSFER_TASK_SUBMITTED = 'TRANSFER_TASK_SUBMITTED',
+
+  // EF assessment + course gates — server-written only (SERVER_ONLY_ACTIONS)
+  EF_OCCASION_STARTED = 'EF_OCCASION_STARTED',
+  EF_OCCASION_COMPLETED = 'EF_OCCASION_COMPLETED',
+  EF_TASK_STARTED = 'EF_TASK_STARTED',
+  EF_TASK_COMPLETED = 'EF_TASK_COMPLETED',
+  EF_TASK_INTERRUPTED = 'EF_TASK_INTERRUPTED',
+  EF_QUESTIONNAIRE_SUBMITTED = 'EF_QUESTIONNAIRE_SUBMITTED',
+  GATE_UNLOCKED = 'GATE_UNLOCKED',
 }
+
+/**
+ * Actions only the API writes. The client batch endpoint rejects them, so
+ * a browser cannot forge assessment or gate state, and their names never
+ * need to exist in the student bundle (blinding). Learning-event rules
+ * drop them before parsing (see learning-events `isRuleInput`).
+ */
+export const SERVER_ONLY_ACTIONS: ReadonlySet<ActivityAction> = new Set([
+  ActivityAction.EF_OCCASION_STARTED,
+  ActivityAction.EF_OCCASION_COMPLETED,
+  ActivityAction.EF_TASK_STARTED,
+  ActivityAction.EF_TASK_COMPLETED,
+  ActivityAction.EF_TASK_INTERRUPTED,
+  ActivityAction.EF_QUESTIONNAIRE_SUBMITTED,
+  ActivityAction.GATE_UNLOCKED,
+]);

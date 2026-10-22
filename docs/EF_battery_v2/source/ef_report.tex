@@ -1,0 +1,154 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}\usepackage{lmodern}
+\usepackage{amsmath,amssymb,booktabs,enumitem,array,longtable,hyperref,fancyhdr}
+\pagestyle{fancy}\fancyhf{}\rhead{\small\sffamily EF battery --- researcher report --- CONFIDENTIAL, not for participants}\cfoot{\thepage}
+\setlength{\parskip}{4pt}
+\begin{document}\sloppy
+\title{Executive Function Battery (``Attention and memory puzzles'', forms A--C)\\\large Researcher report: constructs, materials, scoring and analysis plan}
+\author{Study: AI-supported learning of prompt engineering (8 sessions)}
+\date{20 October 2026 --- v2.0 (revised after the protocol audit and the forms audit)}
+\maketitle
+
+\section*{What changed from v1.0}
+The two independent audits (protocol audit; audit of the actual forms) required a major revision. The main changes are: the inhibition composite now enters the Golden Stroop interference score with a \emph{positive} sign; the aim of flagging ``EF decline'' has been removed; W8 is now the official ADEXI, given at baseline only; participant and facilitator materials are separate documents so that spoken stimuli are never printed for participants; all stimuli are regenerated under explicit parallel-form constraints with automated checks; the occasion schedule is symmetric and separated from form allocation (six orders); and the analysis plan distinguishes rank-order stability, practice-adjusted mean change and equivalence. A point-by-point log is in \texttt{CHANGELOG.md}.
+
+\section*{Purpose (revised claims)}
+\begin{enumerate}[label=(\alph*)]
+\item \textbf{Baseline individual differences.} Characterise baseline individual differences in working-memory manipulation, inhibitory control and cognitive flexibility using a research battery, and everyday self-reported executive difficulties using the ADEXI. Scores from study-generated tasks are nonclinical \emph{relative performance} indicators within this sample. They are not evidence of decline or disorder, and published clinical norms are not applied to them.
+\item \textbf{Repeated task performance.} Estimate change and rank-order stability in repeated EF task performance across three occasions, accounting where possible for retest, form and administration effects. Analyses test whether any observed change is small enough to fall within pre-specified equivalence bounds; results may be inconclusive given the sample size and measurement error. These analyses do not by themselves rule out cognitive-state or EF-related influences on learning.
+\item \textbf{EF and learning.} Examine whether baseline EF is associated with learning gain and process-mining behaviour. Moderation of an \emph{intervention} effect is tested only if the study has a randomised comparison condition; otherwise the analysis is an association with gain.
+\end{enumerate}
+
+\section*{Disclosure and debriefing}
+Participants see the battery as \emph{Attention and memory puzzles}. Consent states that ``brief puzzle-like tasks measuring attention and memory'' are part of the protocol, which is accurate. The construct labels, hypotheses and this report are withheld until debriefing; the ethics application should describe this as partial disclosure of purpose, justify it on the grounds that naming the tasks as EF measures could change how participants approach them and could reveal the study hypothesis, and provide a debrief that names the constructs and offers participants their own scores on request. (v1.0 asserted that labelling would induce stereotype threat; that claim is not made here.) Scores are never communicated as a diagnosis.
+
+\section{Design: occasions, forms and schedule}
+\begin{itemize}
+\item \textbf{Occasions are not forms.} T0, T1 and T2 are occasions; A, B and C are parallel forms. Each participant receives the three forms in one of six orders (ABC, ACB, BAC, BCA, CAB, CBA), allocated from \texttt{allocation.csv} in permuted blocks of six, so that form is crossed with occasion rather than aliased with it.
+\item \textbf{Symmetric timing (proposed; confirm with the study team).} Every battery is given at the \emph{start} of a session, before any test or course content: T0 at the start of the first session before the pre-study test; T1 at the start of Session~5 before content; T2 at the start of the final session before the post-study test. This removes the v1.0 asymmetry in which the post-study battery followed a demanding test. Aim for a comparable time of day; record deviations in the administration log.
+\item \textbf{Two layers.} Dispositional everyday EF (ADEXI) and background are measured at T0 (ADEXI optionally again at T2, interpreted cautiously because its items describe how the person generally is). The task battery is given at T0, T1 and T2. A brief state check (sleep, fatigue, concentration, stress, caffeine, medication; effort afterwards) is given at every occasion and is analysed as a covariate, not as EF.
+\item \textbf{Modality.} Paper, in person, one facilitator; spoken tasks audio-recorded where consent allows, with response times measured from the recording. The participant booklet contains only W3, W6 and W7; spoken stimuli (W1, W2, W4, W5) appear only on the facilitator record sheet. Participant-facing documents carry neutral titles (no construct labels); the administration log is a separate facilitator document.
+\item \textbf{Duration.} About 30 minutes for the tasks (practice items added), plus about 5 minutes of questionnaires at T0 and 2 minutes at T1/T2.
+\end{itemize}
+
+\section{What each task measures}
+Domains follow the unity/diversity framework (Miyake et al.\ 2000; Friedman \& Miyake 2017) and Diamond (2013). Several EF-loaded indicators are sampled per domain. With the planned sample size the analysis uses transparently defined manifest domain summaries, supported by task-level sensitivity analyses; no validated latent factor structure is claimed.
+
+\begin{longtable}{@{}p{2.3cm}p{3.0cm}p{5.0cm}p{4.6cm}@{}}
+\toprule
+Task & Role in analysis & Model paradigm and status & Primary score (direction) \\ \midrule
+W1 Number repetition & Backward: WM manipulation indicator. Forward: storage/attention covariate & Digit-span paradigm; sequences are original (not WAIS items), generated under one rule at all lengths & Backward total correct 0--14 (higher better); forward total 0--16 as covariate \\
+W2 Sorting numbers and letters & WM manipulation indicator & Letter--number sequencing paradigm; original items; composition and reordering demand fixed by slot across forms & Total correct 0--12 (higher better) \\
+W3 Adding and subtracting & Shifting indicator (switch cost) & Plus--minus task (Jersild 1927; Spector \& Biederman 1976; Miyake et al.\ 2000); arithmetic demand equated across forms & $T_3-\tfrac12(T_1+T_2)$ s (lower better); list times and errors reported \\
+W4 (a--c) letters & Covariate: EF-loaded verbal generation & Letter fluency; FAS and BHR (D-KEFS forms; Delis et al.\ 2001), PMT study-chosen; no letter shared across forms & Valid words over three letters \\
+W4 (d) animals & Covariate: semantic retrieval / verbal ability & Category fluency, same category at every occasion (Tombaugh et al.\ 1999) & Valid words in 60 s \\
+W4 (e) switching & Shifting sensitivity indicator & Category-switching fluency (cf.\ D-KEFS; Troyer et al.\ 1997) & Correct switches; total valid words as covariate \\
+W5 Finishing sentences & Inhibition indicator & Hayling paradigm (Burgess \& Shallice 1996, 1997); 90 study-written sentences \emph{pending cloze norming} & One within-task index: mean of reversed $z$(B$-$A RT) and reversed $z$(B error score) \\
+W6 Colours & Inhibition indicator & Stroop, Golden (1978) format: W, C, CW pages, 100 items, 45 s; restart rule & $IG = CW - \dfrac{W\,C}{W+C}$ (\textbf{higher better}) \\
+W7 Joining circles & Shifting indicator (Part 2); speed covariate (Part 1) & Trail-making paradigm (Reitan 1958; Bowie \& Harvey 2006); study-generated layouts matched on geometry & Residual of Part 2 time on Part 1 time (lower better) \\
+W8 ADEXI & Everyday self-reported EF (T0) & Official ADEXI (Holst \& Thorell 2018), unchanged & WM sum 9--45; Inhibition sum 5--25 (higher = more difficulty) \\
+\bottomrule
+\end{longtable}
+
+\subsection*{Domain scores}
+Standardise each indicator against the T0 sample mean and SD (a fixed reference, so later occasions stay on the same scale), after applying form-specific linear equating constants from the pilot where available. Orient every indicator so that higher is better:
+\begin{align*}
+\text{WM} &= \tfrac12\big(z_{\text{DS backward}} + z_{\text{LNS}}\big)\\
+\text{Inhibition} &= \tfrac12\big(+z_{IG} + z_{\text{W5}}\big),\qquad z_{\text{W5}} = \operatorname{std}\!\Big[\tfrac12\big(-z_{\text{B$-$A RT}} - z_{\text{B errors}}\big)\Big]\\
+\text{Shifting} &= \tfrac12\big(-z_{\text{plus--minus cost}} - z_{\text{TMT Part 2 residual}}\big)\quad[\text{sensitivity: add } +z_{\text{correct switches}}]
+\end{align*}
+\textbf{Correction from v1.0:} v1.0 entered $-z(IG)$, which rewarded worse interference control. With Golden's definition a larger $IG$ means better-than-predicted CW performance (e.g.\ $W=100$, $C=80$: $CW=40$ gives $IG=-4.44$, $CW=50$ gives $+5.56$), so $IG$ enters with a positive sign. Raw $CW$ and $CW/C$ are sensitivity analyses. The two Hayling indicators are combined within the task first and the result is re-standardised (std$[\cdot]$, SD 1 at T0), so W5 is neither double-weighted nor under-weighted relative to Stroop. Forward span, Part 1 time and letter/animal fluency are covariates. ADEXI subscales are reported separately and are never combined with task scores into a global EF total. Internal coherence of each domain summary (inter-indicator correlations) is reported; an equally weighted average is not presented as a validated trait.
+
+\section{Materials and parallel-form construction}
+All stimuli are produced by \texttt{ef.py} with fixed seeds; \texttt{stimuli.json} is the frozen record of what is printed, and the build stops if any of the automated checks fails (90 checks; results in \texttt{form\_diagnostics.md}).
+
+\begin{longtable}{@{}p{1.2cm}p{14.3cm}@{}}
+\toprule
+Task & Constraint enforced \\ \midrule
+W1 & Digits 1--9; no repeat within a trial at any length (v1.0 allowed repeats only at length 9); no adjacent pair differing by 1; no sequence reused across forms; one unscored practice trial per part. \\
+W2 & Length 2 only as practice; scored lengths 3--8 $\times$ 2. Digit/letter composition, first-item category and position pattern identical by slot across forms; within-category inversions fixed at $\lceil n(n-1)/4\rceil$; letters chosen to limit acoustic confusion. \\
+W3 & Practice numbers below 13 so they never recur as test items; test numbers 13--96; Lists 1 and 2 each contain every final digit exactly three times (9/30 tens-crossings; v1.0 ranged from 3 to 14); List 3 has 4/15 crossings on each operation; identical list means across forms; each list on its own page. \\
+W4 & Letter sets FAS / BHR / PMT share no letter (v1.0 reused F); animals at every occasion; switching pairs are common nouns only (v1.0's ``countries'' conflicted with the proper-noun rule); fixed English response language; explicit scoring rules. \\
+W5 & 90 sentences, all gaps sentence-final, one expected word each, no expected word repeated in the battery, no stem containing another same-form item's expected word; balanced across the six form $\times$ part cells for length (means 8.40--8.47 words) and expected-word frequency (Zipf 4.54--4.55); item-level A/B coding anchors on the record sheets. 19 cross-form overlaps remain (a stem containing another form's expected word, e.g.\ ``sun''); they are documented and can be removed when items are replaced after norming. \\
+W6 & Exact 34/33/33 colour counts per page; no immediate repetition down columns, no more than 3 identical items across a row, last item differs from the first (restart rule); 0\% congruent CW items; practice row per page; colour-naming check; restart-from-top rule (removes the 100-item ceiling). \\
+W7 & Part A ends at 25 and Part B at 13 (``End'' is a label, not a target); no crossings; six layouts selected from a seeded pool of 240 to match path length (1238--1278~mm, all within $\pm2\%$), turning, and distractor proximity; sample trails added. v1.0 Part A lengths differed by 36\%. \\
+W8 & Official ADEXI wording, order, scale and scoring. \\
+\bottomrule
+\end{longtable}
+Matched \emph{properties} do not establish equal \emph{difficulty}. Form equivalence, sentence cloze values and scorer agreement must be established in the pilot (Section~6).
+
+\section{Reliability evidence and its limits}
+Published coefficients describe the original instruments under their standard procedures; they do not transfer to these study-generated paper versions and are not used for individual change scores (Section~5). They indicate what to expect, and the study reports its own estimates.
+\begin{longtable}{@{}p{3.2cm}p{5.6cm}p{6.7cm}@{}}
+\toprule
+Paradigm & Published evidence (original instruments) & Implication here \\ \midrule
+Digit span / LNS & WAIS-IV subtests report high reliability (Wechsler 2008) & Not applicable to these original sequences; estimate internal consistency (trial-level) and pilot retest \\
+Plus--minus cost & Difference scores are less reliable than their components (Miyake et al.\ 2000; Hedge et al.\ 2018) & Report list times; treat cost as a noisier indicator \\
+Fluency & Letter fluency retest $r\approx .70$--$.88$ (Tombaugh et al.\ 1999; Strauss et al.\ 2006); CFL harder than FAS (Barry et al.\ 2008) & Letter sets differ in difficulty; pilot equating required \\
+Hayling & Standardised items and scaled scores only (Burgess \& Shallice 1997) & No norms for new sentences; within-sample only; inter-rater $\kappa$ \\
+Stroop & Page scores more reliable than interference scores; ``reliability paradox'' (Hedge et al.\ 2018) & $IG$ is the least reliable index; report raw pages \\
+TMT & Part B retest $r\approx .67$--$.89$; practice effects at short intervals (Dikmen et al.\ 1999; Calamia et al.\ 2012) & Layouts are new; pilot equating and retest \\
+ADEXI & Test--retest $r=.68$--$.72$, ICC $.62$--$.72$ (Holst \& Thorell 2018) & Applies because the official instrument is now used; report sample $\alpha$/$\omega$ \\
+\bottomrule
+\end{longtable}
+
+\section{Analysis plan}
+\begin{enumerate}
+\item \textbf{Estimands.} Primary: association of baseline domain scores with learning gain. Secondary: practice-adjusted change in each domain score across T0--T2. Exploratory: relations between EF and process-mining metrics. Pre-register this hierarchy; hierarchical testing (or Holm correction) within secondary outcomes; everything else exploratory.
+\item \textbf{Repeated scores.} Per domain (and per task as sensitivity): $\text{score} \sim \text{occasion} + \text{form} + \text{order} + \text{state covariates} + (1\,|\,\text{participant})$. Six-order allocation keeps occasion and form identifiable; check this before fitting. Keep the model small for $n\approx40$ (no random slopes unless supported).
+\item \textbf{Three distinct questions.} (a) Rank-order stability: ICC(3,1) consistency with 95\% CI (Koo \& Li 2016). (b) Mean change: occasion means with 95\% CIs and individual trajectories, with the expected practice drift (TMT, fluency) pre-registered. (c) Equivalence: two one-sided tests (Lakens 2017) against a smallest effect of interest set \emph{per task metric} from the pilot's measurement error (e.g.\ the smallest detectable change), justified in the pre-registration. A non-significant occasion effect is never reported as evidence of stability; insufficient precision is reported as inconclusive.
+\item \textbf{Individual change.} A practice-adjusted reliable change index, $\text{RCI}_{\text{adj}} = (x_2-x_1-\bar g)/SE_{\text{diff}}$ (Chelune et al.\ 1993; Duff 2012), is computed only if the retest gain $\bar g$ and $SE_{\text{diff}}$ come from an independent stable retest sample on these exact forms. Otherwise individual change is described, not classified.
+\item \textbf{EF and learning.} Baseline domain scores enter learning-gain and process-mining models as predictors with prior proficiency, English proficiency, education and administration covariates. Because the indicators are noisy, use disattenuated or latent-variable sensitivity analyses. No post-exposure mediators are conditioned on without a causal model.
+\item \textbf{Power.} Replace v1.0's unqualified $d\approx0.45$ with a simulation that uses pilot variance components, within-person correlations, form effects, expected attrition and the chosen equivalence bounds.
+\item \textbf{Data quality.} Pre-specify exclusions (colour-check failure removes W6 only; discontinued TMT recorded at 300~s and flagged; plus--minus lists with $>3$ errors flagged); inspect skew, floor/ceiling and missingness; use robust or log-transformed times where needed.
+\end{enumerate}
+
+\section{Pilot and validation before recruitment}
+\begin{enumerate}
+\item \textbf{Cloze norming (W5).} Independent adults with a language background like the cohort's ($n\ge30$; never study participants) complete \texttt{cloze\_norming\_form}. Keep a sentence if its dominant completion matches the expected word for $\ge 80\%$ of respondents; replace failures from the reserve list and re-norm; rebalance cells with \texttt{ef.py --reassign-hayling}.
+\item \textbf{Switching categories (W4e).} The three category pairs are not matched in size; estimate form constants in the calibration pilot.
+\item \textbf{Cognitive interviews} with 5--8 adult learners of varied English backgrounds on instructions, the ADEXI and the state check.
+\item \textbf{Form calibration.} A pilot sample completes all three forms in counterbalanced order at the study's interval. Estimate form means (linear equating constants), practice gain, retest reliability and floor/ceiling for each indicator.
+\item \textbf{Scorer agreement.} Two blind raters score W4 and W5 Part B from audio/transcripts; target Cohen's $\kappa$ or ICC $\ge .80$ before main scoring.
+\item \textbf{Administration checks.} Print calibration of the three inks; facilitator training against the scripts; timing of the full session.
+\end{enumerate}
+
+\section{Safety and interpretation}
+The battery is not diagnostic and no participant is classified as showing decline. If a facilitator is concerned about a participant's wellbeing during administration, the ethics-approved general support procedure applies; research scores are not used to make clinical suggestions.
+
+\section{Administration and scoring}
+Scripts, timing, discontinuation rules and response capture are on the facilitator record sheets; scoring rules and answer keys are in \texttt{scoring\_key}. Key points: W1/W2 discontinue after both trials of a length are failed; W3 is timed per list from ``Begin''; W4 is 60~s per prompt with one ``keep going'' prompt; W5 RT runs from the end of the facilitator's last word to response onset, measured from audio where possible; W6 counts items completed in 45~s, with errors corrected on the examiner's ``No'' and recorded separately; W7 errors are pointed out immediately with the clock running, and the task is discontinued at 300~s.
+
+\section*{References}
+\begin{small}
+\begin{itemize}[leftmargin=1.2em,itemsep=2pt]
+\item Barry, D., Bates, M.\ E., \& Labouvie, E.\ (2008). FAS and CFL forms of verbal fluency differ in difficulty: A meta-analytic study. \emph{Applied Neuropsychology, 15}(2), 97--106.
+\item Bowie, C.\ R., \& Harvey, P.\ D.\ (2006). Administration and interpretation of the Trail Making Test. \emph{Nature Protocols, 1}, 2277--2281.
+\item Burgess, P.\ W., \& Shallice, T.\ (1996). Response suppression, initiation and strategy use following frontal lobe lesions. \emph{Neuropsychologia, 34}, 263--272.
+\item Burgess, P.\ W., \& Shallice, T.\ (1997). \emph{The Hayling and Brixton Tests}. Thames Valley Test Company.
+\item Calamia, M., Markon, K., \& Tranel, D.\ (2012). Scoring higher the second time around: Meta-analyses of practice effects in neuropsychological assessment. \emph{The Clinical Neuropsychologist, 26}, 543--570.
+\item Chelune, G.\ J., Naugle, R.\ I., L\"uders, H., Sedlak, J., \& Awad, I.\ A.\ (1993). Individual change after epilepsy surgery: Practice effects and base-rate information. \emph{Neuropsychology, 7}, 41--52.
+\item Delis, D.\ C., Kaplan, E., \& Kramer, J.\ H.\ (2001). \emph{Delis--Kaplan Executive Function System}. The Psychological Corporation.
+\item Diamond, A.\ (2013). Executive functions. \emph{Annual Review of Psychology, 64}, 135--168.
+\item Dikmen, S.\ S., Heaton, R.\ K., Grant, I., \& Temkin, N.\ R.\ (1999). Test--retest reliability and practice effects of Expanded Halstead--Reitan Neuropsychological Test Battery. \emph{Journal of the International Neuropsychological Society, 5}, 346--356.
+\item Duff, K.\ (2012). Evidence-based indicators of neuropsychological change in the individual patient: Relevant concepts and methods. \emph{Archives of Clinical Neuropsychology, 27}, 248--261.
+\item Friedman, N.\ P., \& Miyake, A.\ (2017). Unity and diversity of executive functions: Individual differences as a window on cognitive structure. \emph{Cortex, 86}, 186--204.
+\item Golden, C.\ J.\ (1978). \emph{Stroop Color and Word Test: A manual for clinical and experimental uses}. Stoelting.
+\item Hedge, C., Powell, G., \& Sumner, P.\ (2018). The reliability paradox: Why robust cognitive tasks do not produce reliable individual differences. \emph{Behavior Research Methods, 50}, 1166--1186.
+\item Holst, Y., \& Thorell, L.\ B.\ (2018). Adult executive functioning inventory (ADEXI): Validity, reliability, and relations to ADHD. \emph{International Journal of Methods in Psychiatric Research, 27}(1), e1567.
+\item Jersild, A.\ T.\ (1927). Mental set and shift. \emph{Archives of Psychology, 89}.
+\item Koo, T.\ K., \& Li, M.\ Y.\ (2016). A guideline of selecting and reporting intraclass correlation coefficients for reliability research. \emph{Journal of Chiropractic Medicine, 15}, 155--163.
+\item Lakens, D.\ (2017). Equivalence tests: A practical primer for $t$ tests, correlations, and meta-analyses. \emph{Social Psychological and Personality Science, 8}, 355--362.
+\item Miyake, A., Friedman, N.\ P., Emerson, M.\ J., Witzki, A.\ H., Howerter, A., \& Wager, T.\ D.\ (2000). The unity and diversity of executive functions and their contributions to complex ``frontal lobe'' tasks: A latent variable analysis. \emph{Cognitive Psychology, 41}, 49--100.
+\item Reitan, R.\ M.\ (1958). Validity of the Trail Making Test as an indicator of organic brain damage. \emph{Perceptual and Motor Skills, 8}, 271--276.
+\item Scarpina, F., \& Tagini, S.\ (2017). The Stroop Color and Word Test. \emph{Frontiers in Psychology, 8}, 557.
+\item Spector, A., \& Biederman, I.\ (1976). Mental set and mental shift revisited. \emph{American Journal of Psychology, 89}, 669--679.
+\item Strauss, E., Sherman, E.\ M.\ S., \& Spreen, O.\ (2006). \emph{A compendium of neuropsychological tests} (3rd ed.). Oxford University Press.
+\item Tombaugh, T.\ N., Kozak, J., \& Rees, L.\ (1999). Normative data stratified by age and education for two measures of verbal fluency: FAS and animal naming. \emph{Archives of Clinical Neuropsychology, 14}, 167--177.
+\item Troyer, A.\ K., Moscovitch, M., \& Winocur, G.\ (1997). Clustering and switching as two components of verbal fluency. \emph{Neuropsychology, 11}, 138--146.
+\item Wechsler, D.\ (2008). \emph{Wechsler Adult Intelligence Scale---Fourth Edition: Technical and interpretive manual}. Pearson.
+\end{itemize}
+\emph{Verify page numbers and coefficients against the originals before citing in a publication.}
+\end{small}
+\end{document}

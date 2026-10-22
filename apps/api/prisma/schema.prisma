@@ -294,6 +294,18 @@ enum ActivityAction {
 
   // Transfer task (prompting course, Phase 5): unassisted prompt writing
   TRANSFER_TASK_SUBMITTED
+
+  // EF assessment (docs/EF_battery_v2). Written by the server only, never
+  // by the student bundle (blinding); metadata carries codes and durations,
+  // never stimuli or answers. Learning-event rules drop these rows.
+  EF_OCCASION_STARTED
+  EF_OCCASION_COMPLETED
+  EF_TASK_STARTED
+  EF_TASK_COMPLETED
+  EF_TASK_INTERRUPTED
+  EF_QUESTIONNAIRE_SUBMITTED
+  // Generic course gates: a gate completed by staff override.
+  GATE_UNLOCKED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -425,6 +437,9 @@ model User {
   // Phase 6
   textCaptureConsents     TextCaptureConsent[]     @relation("TextCaptureConsentStudent")
   ruleNudges              RuleNudge[]              @relation("RuleNudgeStudent")
+  // EF assessment + course gates
+  efaOccasions            EfaOccasion[]            @relation("EfaOccasionStudent")
+  gateCompletions         StudentGateCompletion[]  @relation("GateCompletionStudent")
 
   @@map("users")
 }
@@ -486,6 +501,12 @@ enum SecurityEventType {
   // unhandled/internal error, not a client mistake (4xx stays
   // Logger.warn only, same as before; a 4xx isn't a system failure).
   SYSTEM_ERROR
+  // Staff opened a course gate for a student without the gate's
+  // activity being completed (metadata: gateId, studentId, reason).
+  GATE_OVERRIDE
+  // Staff reset one EF task for a student; the rerun re-exposes the
+  // same form's items (metadata: runId, taskCode, reason).
+  EF_TASK_RESET
 }
 
 model SecurityEvent {
@@ -2835,4 +2856,302 @@ model TextCaptureConsent {
 
   @@index([studentId, courseId, decidedAt])
   @@map("text_capture_consents")
+}
+
+// ─── Course gates (generic prerequisites) ──────────────────────────────
+
+enum CourseGateKind {
+  EF_QUESTIONNAIRE
+  EF_TESTS
+  /// Reserved for the pre/post knowledge tests (later prompts).
+  KNOWLEDGE_TEST
+}
+
+enum CourseGatePosition {
+  BEFORE_MODULE
+  AFTER_MODULE
+}
+
+/// A prerequisite a student must complete to pass a point in the course.
+/// BEFORE_MODULE locks that module (and every later one) until completed;
+/// AFTER_MODULE locks every module after it. Ordered by sequence within a
+/// position, with gaps left for later gate kinds (docs/EF_battery_v2/IMPLEMENTATION_PLAN.md section 5).
+model CourseGate {
+  id        String             @id @default(uuid()) @db.Uuid
+  courseId  String             @map("course_id") @db.Uuid
+  kind      CourseGateKind
+  /// T0 | T1 | T2 for EF gates; free label for later kinds
+  occasion  String?
+  position  CourseGatePosition
+  moduleId  String             @map("module_id") @db.Uuid
+  sequence  Int
+  required  Boolean            @default(true)
+  config    Json?
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime           @updatedAt @map("updated_at") @db.Timestamptz
+
+  completions StudentGateCompletion[]
+
+  @@unique([courseId, kind, occasion])
+  @@index([courseId])
+  @@map("course_gates")
+}
+
+/// One row per gate a student has passed: automatically when the gated
+/// activity completes, or by audited staff override.
+model StudentGateCompletion {
+  id          String   @id @default(uuid()) @db.Uuid
+  gateId      String   @map("gate_id") @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz
+  /// auto | override
+  source      String
+  overrideBy  String?  @map("override_by") @db.Uuid
+  reason      String?  @db.Text
+
+  gate    CourseGate @relation(fields: [gateId], references: [id], onDelete: Cascade)
+  student User       @relation("GateCompletionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([gateId, studentId])
+  @@index([studentId])
+  @@map("student_gate_completions")
+}
+
+// ─── EF assessment (docs/EF_battery_v2, battery v2.0) ──────────────────
+// Student-facing names are neutral ("Attention and memory puzzles");
+// construct names live only here and in staff code.
+
+enum EfaOccasionCode {
+  T0
+  T1
+  T2
+}
+
+enum EfaOccasionStatus {
+  not_started
+  questionnaire_done
+  in_progress
+  completed
+  abandoned
+}
+
+enum EfaTaskStatus {
+  pending
+  in_progress
+  completed
+  interrupted
+  skipped
+}
+
+/// Frozen stimulus set, seeded from source/stimuli.json by seed-ef-battery.ts.
+/// extras = derived/battery-extras.json (ef.py constants not in stimuli.json).
+model EfaStimulusSet {
+  id             String   @id @default(uuid()) @db.Uuid
+  batteryVersion String   @map("battery_version")
+  sha256         String   @unique
+  data           Json
+  extras         Json
+  extrasSha256   String   @map("extras_sha256")
+  seededAt       DateTime @default(now()) @map("seeded_at") @db.Timestamptz
+
+  @@map("efa_stimulus_sets")
+}
+
+/// Counterbalancing rows (allocation.csv): six orders in permuted blocks
+/// of 6. Claimed once per student at first T0 start (row lock, SKIP LOCKED).
+model EfaAllocationSlot {
+  slot             Int       @id
+  block            Int
+  orderCode        String    @map("order_code")
+  t0               String
+  t1               String
+  t2               String
+  claimedAt        DateTime? @map("claimed_at") @db.Timestamptz
+  claimedStudentId String?   @map("claimed_student_id") @db.Uuid
+  claimedCourseId  String?   @map("claimed_course_id") @db.Uuid
+
+  @@map("efa_allocation_slots")
+}
+
+/// Per-course EF settings (staff, private door). Gate positions live in course_gates.
+model EfaCourseConfig {
+  courseId                  String   @id @map("course_id") @db.Uuid
+  /// { "T0": true, "T1": false, "T2": true }
+  enabledOccasions          Json     @map("enabled_occasions")
+  enabledTasks              String[] @default(["w1", "w2", "w3", "w4", "w5", "w6", "w7"]) @map("enabled_tasks")
+  showDiagnosisItem         Boolean  @default(false) @map("show_diagnosis_item")
+  adexiAtT2                 Boolean  @default(false) @map("adexi_at_t2")
+  t2MinMinutesAfterPrevious Int      @default(0) @map("t2_min_minutes_after_previous")
+  updatedBy                 String?  @map("updated_by") @db.Uuid
+  updatedAt                 DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("efa_course_configs")
+}
+
+/// One assessment occasion for one student in one course.
+model EfaOccasion {
+  id                         String            @id @default(uuid()) @db.Uuid
+  studentId                  String            @map("student_id") @db.Uuid
+  courseId                   String            @map("course_id") @db.Uuid
+  occasion                   EfaOccasionCode
+  status                     EfaOccasionStatus @default(not_started)
+  form                       String?
+  orderCode                  String?           @map("order_code")
+  slot                       Int?
+  batteryVersion             String            @map("battery_version")
+  stimuliSha256              String            @map("stimuli_sha256")
+  consentVersion             String?           @map("consent_version")
+  consentedAt                DateTime?         @map("consented_at") @db.Timestamptz
+  /// userAgent, screen, viewport, devicePixelRatio, pointer, keyboard self-report
+  device                     Json?
+  fullscreenAccepted         Boolean?          @map("fullscreen_accepted")
+  sensingPaused              Boolean           @default(false) @map("sensing_paused")
+  gapSincePreviousActivityMs BigInt?           @map("gap_since_previous_activity_ms")
+  focusLostMsTotal           BigInt            @default(0) @map("focus_lost_ms_total")
+  scoringVersion             String?           @map("scoring_version")
+  flags                      Json?
+  startedAt                  DateTime?         @map("started_at") @db.Timestamptz
+  questionnaireDoneAt        DateTime?         @map("questionnaire_done_at") @db.Timestamptz
+  completedAt                DateTime?         @map("completed_at") @db.Timestamptz
+  abandonedAt                DateTime?         @map("abandoned_at") @db.Timestamptz
+  lastActivityAt             DateTime?         @map("last_activity_at") @db.Timestamptz
+  createdAt                  DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  student  User         @relation("EfaOccasionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  answers  EfaAnswer[]
+  taskRuns EfaTaskRun[]
+
+  @@unique([studentId, courseId, occasion])
+  @@index([courseId])
+  @@map("efa_occasions")
+}
+
+/// Questionnaire answer (A1-A13, B1-B14, C1-C9, colour check), autosaved per item.
+model EfaAnswer {
+  id         String   @id @default(uuid()) @db.Uuid
+  occasionId String   @map("occasion_id") @db.Uuid
+  itemCode   String   @map("item_code")
+  value      Json
+  answeredAt DateTime @default(now()) @map("answered_at") @db.Timestamptz
+
+  occasion EfaOccasion @relation(fields: [occasionId], references: [id], onDelete: Cascade)
+
+  @@unique([occasionId, itemCode])
+  @@map("efa_answers")
+}
+
+/// One run of one task. A staff reset adds attempt_no + 1 (flagged items_reexposed).
+model EfaTaskRun {
+  id          String        @id @default(uuid()) @db.Uuid
+  occasionId  String        @map("occasion_id") @db.Uuid
+  taskCode    String        @map("task_code")
+  attemptNo   Int           @default(1) @map("attempt_no")
+  status      EfaTaskStatus @default(pending)
+  skipReason  String?       @map("skip_reason")
+  /// runner state the server needs between requests (current part, discontinue counters)
+  progress    Json?
+  flags       Json?
+  startedAt   DateTime?     @map("started_at") @db.Timestamptz
+  completedAt DateTime?     @map("completed_at") @db.Timestamptz
+  resetReason String?       @map("reset_reason") @db.Text
+  resetBy     String?       @map("reset_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  occasion EfaOccasion    @relation(fields: [occasionId], references: [id], onDelete: Cascade)
+  trials   EfaTrial[]
+  scores   EfaTaskScore[]
+
+  @@unique([occasionId, taskCode, attemptNo])
+  @@map("efa_task_runs")
+}
+
+/// Trial-level raw data. correct is computed server-side only.
+model EfaTrial {
+  id           String    @id @default(uuid()) @db.Uuid
+  taskRunId    String    @map("task_run_id") @db.Uuid
+  /// practice | test
+  phase        String
+  /// e.g. fwd | bwd | list1 | letter1 | A | B | W | C | CW | P1 | P2
+  part         String
+  trialIndex   Int       @map("trial_index")
+  stimulus     Json
+  response     Json?
+  /// monotonic ms from run start (performance.now() based)
+  onsetMs      Float?    @map("onset_ms")
+  firstInputMs Float?    @map("first_input_ms")
+  submitMs     Float?    @map("submit_ms")
+  /// measured on-screen duration per stimulus element
+  shownMs      Json?     @map("shown_ms")
+  corrections  Int       @default(0)
+  focusLostMs  Float     @default(0) @map("focus_lost_ms")
+  interrupted  Boolean   @default(false)
+  correct      Boolean?
+  clientTs     DateTime? @map("client_ts") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  taskRun    EfaTaskRun     @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  codes      EfaCode[]
+  finalCodes EfaFinalCode[]
+
+  @@unique([taskRunId, phase, part, trialIndex])
+  @@map("efa_trials")
+}
+
+/// Versioned computed scores per run (the re-score endpoint writes a new version).
+model EfaTaskScore {
+  id             String   @id @default(uuid()) @db.Uuid
+  taskRunId      String   @map("task_run_id") @db.Uuid
+  scoringVersion String   @map("scoring_version")
+  scores         Json
+  flags          Json?
+  computedAt     DateTime @default(now()) @map("computed_at") @db.Timestamptz
+
+  taskRun EfaTaskRun @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  @@unique([taskRunId, scoringVersion])
+  @@map("efa_task_scores")
+}
+
+/// Rater-level code for one W4 entry or one W5 Part B response.
+model EfaCode {
+  id         String   @id @default(uuid()) @db.Uuid
+  trialId    String   @map("trial_id") @db.Uuid
+  entryIndex Int      @default(0) @map("entry_index")
+  raterId    String   @map("rater_id") @db.Uuid
+  code       String
+  category   String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  trial EfaTrial @relation(fields: [trialId], references: [id], onDelete: Cascade)
+
+  @@unique([trialId, entryIndex, raterId])
+  @@map("efa_codes")
+}
+
+/// Final code after rater agreement or adjudication.
+model EfaFinalCode {
+  id            String   @id @default(uuid()) @db.Uuid
+  trialId       String   @map("trial_id") @db.Uuid
+  entryIndex    Int      @default(0) @map("entry_index")
+  code          String
+  category      String?
+  /// rater_agree | adjudicated
+  source        String
+  adjudicatedBy String?  @map("adjudicated_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  trial EfaTrial @relation(fields: [trialId], references: [id], onDelete: Cascade)
+
+  @@unique([trialId, entryIndex])
+  @@map("efa_final_codes")
+}
+
+/// Which staff code which task in a course (two raters per item by default).
+model EfaRaterAssignment {
+  courseId String @map("course_id") @db.Uuid
+  taskCode String @map("task_code")
+  raterId  String @map("rater_id") @db.Uuid
+
+  @@id([courseId, taskCode, raterId])
+  @@map("efa_rater_assignments")
 }
