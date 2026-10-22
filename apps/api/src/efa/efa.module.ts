@@ -8,6 +8,7 @@ import { EfaExportsService } from './exports/efa-exports.service';
 import { EfaOccasionService } from './occasion.service';
 import { PuzzlesController } from './puzzles.controller';
 import { EfaScoringService } from './scoring/scoring.service';
+import { EfaStaffService } from './staff/efa-staff.service';
 import { EfaTaskRunService } from './task-run.service';
 
 /**
@@ -24,6 +25,7 @@ import { EfaTaskRunService } from './task-run.service';
     EfaScoringService,
     EfaCodingService,
     EfaExportsService,
+    EfaStaffService,
   ],
   exports: [EfaAllocationService, EfaOccasionService, EfaTaskRunService, EfaScoringService],
 })

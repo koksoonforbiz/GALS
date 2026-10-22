@@ -341,17 +341,24 @@ Added 2026-10-22 for generic course gates (EF assessment, `docs/EF_battery_v2/`)
 
 ### EfaAdminController (`efa/efa-admin.controller.ts`)
 
-Added 2026-10-22 (EF assessment Phase 6). Staff only; never in the student bundle (`efa-admin` is a forbidden string). Course owner or admin; staff named in `efa_rater_assignments` for the course may use the coding queue only (not disagreements, adjudication, re-score or exports).
+Added 2026-10-22 (EF assessment Phases 6–7). Staff only; never in the student bundle (`efa-admin` is a forbidden string). Course owner or admin; staff named in `efa_rater_assignments` for the course may use the coding queue only (not disagreements, adjudication, re-score or exports).
 
-| Method | Path                                                           | @Roles         | Guards                  | Door        | Note                                                                            |
-| ------ | -------------------------------------------------------------- | -------------- | ----------------------- | ----------- | ------------------------------------------------------------------------------- |
-| POST   | `/api/efa-admin/courses/:courseId/rescore`                     | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Recompute task scores for the current scoring version.                          |
-| GET    | `/api/efa-admin/courses/:courseId/coding/summary`              | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Per-task coding progress and Cohen's κ.                                         |
-| GET    | `/api/efa-admin/courses/:courseId/coding/:task/queue`          | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Blind rater queue (W4/W5).                                                      |
-| GET    | `/api/efa-admin/courses/:courseId/coding/:task/disagreements`  | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Both raters' codes; owner/admin only.                                           |
-| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId`       | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One rater's codes.                                                              |
-| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId/final` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Adjudicated final codes; owner/admin only.                                      |
-| GET    | `/api/efa-admin/courses/:courseId/export/:file.csv`            | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | `trials`, `task-scores`, `questionnaire`, `occasions`, `coding`; pseudonymised. |
+| Method | Path                                                           | @Roles         | Guards                  | Door        | Note                                                                               |
+| ------ | -------------------------------------------------------------- | -------------- | ----------------------- | ----------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/efa-admin/courses/:courseId/settings`                    | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | EF settings, gate placement, modules.                                              |
+| PUT    | `/api/efa-admin/courses/:courseId/settings`                    | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Save settings; creates/moves/removes the EF gates.                                 |
+| GET    | `/api/efa-admin/courses/:courseId/progress`                    | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Dashboard + administration log (names: staff door only).                           |
+| POST   | `/api/efa-admin/runs/:runId/reset`                             | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Reset one puzzle with reason; audited (`EF_TASK_RESET`).                           |
+| POST   | `/api/efa-admin/occasions/:occasionId/reopen`                  | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Reopen an expired occasion with reason; audited (`EF_TASK_RESET`, scope occasion). |
+| GET    | `/api/efa-admin/courses/:courseId/raters`                      | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Staff list + W4/W5 rater assignments.                                              |
+| PUT    | `/api/efa-admin/courses/:courseId/raters`                      | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Replace rater assignments.                                                         |
+| POST   | `/api/efa-admin/courses/:courseId/rescore`                     | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Recompute task scores for the current scoring version.                             |
+| GET    | `/api/efa-admin/courses/:courseId/coding/summary`              | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Per-task coding progress and Cohen's κ.                                            |
+| GET    | `/api/efa-admin/courses/:courseId/coding/:task/queue`          | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Blind rater queue (W4/W5).                                                         |
+| GET    | `/api/efa-admin/courses/:courseId/coding/:task/disagreements`  | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Both raters' codes; owner/admin only.                                              |
+| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId`       | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | One rater's codes.                                                                 |
+| POST   | `/api/efa-admin/courses/:courseId/coding/items/:trialId/final` | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Adjudicated final codes; owner/admin only.                                         |
+| GET    | `/api/efa-admin/courses/:courseId/export/:file.csv`            | teacher, admin | JwtAuthGuard,RolesGuard | **PRIVATE** | `trials`, `task-scores`, `questionnaire`, `occasions`, `coding`; pseudonymised.    |
 
 ### DialogueNotesController (`dialogue-notes/dialogue-notes.controller.ts`)
 

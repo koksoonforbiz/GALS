@@ -17,6 +17,7 @@ import { BulkUserProvisioningPage } from '../pages/teacher/BulkUserProvisioningP
 import { StudentLogPage } from '../pages/teacher/student-logs/StudentLogPage';
 import { SessionTimelinePage } from '../pages/dashboard/SessionTimelinePage';
 import { StudentTextMiningPage } from '../features/text-mining/pages/StudentTextMiningPage';
+import { EfaAdminPage } from '../pages/teacher/efa/EfaAdminPage';
 import { EfaCodingPage } from '../pages/teacher/efa/EfaCodingPage';
 
 // Teacher/admin routes, moved verbatim from App.tsx. Only ever mounted by
@@ -32,6 +33,7 @@ export const teacherRoutes: RouteObject[] = [
   { path: '/teacher/courses/:courseId', element: staff(<CourseBuilderPage />) },
   { path: '/teacher/studio/:courseId', element: staff(<CourseStudioPage />) },
   { path: '/teacher/courses/:courseId/prompts', element: staff(<PromptSettingsPage />) },
+  { path: '/teacher/courses/:courseId/efa', element: staff(<EfaAdminPage />) },
   { path: '/teacher/courses/:courseId/efa/coding', element: staff(<EfaCodingPage />) },
   {
     path: '/teacher/courses/:courseId/generate-questions',

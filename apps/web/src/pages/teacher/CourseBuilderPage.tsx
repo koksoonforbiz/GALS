@@ -1686,10 +1686,10 @@ export function CourseBuilderPage() {
             Learning Intervention Prompts
           </button>
           <button
-            onClick={() => navigate(`/teacher/courses/${courseId}/efa/coding`)}
+            onClick={() => navigate(`/teacher/courses/${courseId}/efa`)}
             className="w-full px-4 py-2 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-left"
           >
-            EF assessment: coding and exports
+            EF assessment (puzzles): settings, progress, coding
           </button>
           <button
             onClick={handleDuplicate}

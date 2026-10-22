@@ -60,3 +60,108 @@ export interface EfaCodingSummary {
   kappa: number | null;
   canCode: boolean;
 }
+
+// ── Phase 7: settings, progress, reset, raters ─────────────────────────────
+
+export const EFA_TASKS = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'] as const;
+export const EFA_OCCASIONS = ['T0', 'T1', 'T2'] as const;
+export type EfaOccasionCode = (typeof EFA_OCCASIONS)[number];
+
+/**
+ * EF settings for one course. `positions[occasion]` is the module the
+ * occasion's two gates sit on: before it (T0, T1) or after it (T2).
+ */
+export const EfaSettingsSchema = z.object({
+  enabledOccasions: z.object({ T0: z.boolean(), T1: z.boolean(), T2: z.boolean() }),
+  enabledTasks: z.array(z.enum(EFA_TASKS)).min(1),
+  showDiagnosisItem: z.boolean(),
+  adexiAtT2: z.boolean(),
+  t2MinMinutesAfterPrevious: z
+    .number()
+    .int()
+    .min(0)
+    .max(60 * 24 * 30),
+  positions: z.object({
+    T0: z.string().uuid().nullable(),
+    T1: z.string().uuid().nullable(),
+    T2: z.string().uuid().nullable(),
+  }),
+});
+export type EfaSettings = z.infer<typeof EfaSettingsSchema>;
+
+export interface EfaSettingsView extends EfaSettings {
+  modules: Array<{ id: string; title: string; orderIndex: number }>;
+  gates: Array<{
+    id: string;
+    kind: string;
+    occasion: string | null;
+    position: string;
+    moduleId: string;
+    sequence: number;
+    required: boolean;
+    completions: number;
+  }>;
+  /** true until settings were saved once for this course */
+  usingDefaults: boolean;
+}
+
+export const EfaReasonSchema = z.object({
+  reason: z.string().trim().min(5, 'Give a reason (at least 5 characters)').max(500),
+});
+export type EfaReasonRequest = z.infer<typeof EfaReasonSchema>;
+
+export const EfaRatersSchema = z.object({
+  w4: z.array(z.string().uuid()).max(20),
+  w5: z.array(z.string().uuid()).max(20),
+});
+export type EfaRatersRequest = z.infer<typeof EfaRatersSchema>;
+
+export interface EfaProgressRun {
+  runId: string;
+  task: string;
+  attempt: number;
+  attempts: number;
+  status: string;
+  skipReason: string | null;
+  flags: Record<string, unknown> | null;
+  resetReason: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface EfaProgressOccasion {
+  occasionId: string;
+  occasion: string;
+  status: string;
+  form: string | null;
+  orderCode: string | null;
+  slot: number | null;
+  flags: Record<string, unknown> | null;
+  /** administration log */
+  log: {
+    device: Record<string, unknown> | null;
+    fullscreenAccepted: boolean | null;
+    sensingPaused: boolean;
+    startedAt: string | null;
+    questionnaireDoneAt: string | null;
+    completedAt: string | null;
+    abandonedAt: string | null;
+    gapSincePreviousActivityMin: number | null;
+    focusLostSec: number;
+    scoringVersion: string | null;
+  };
+  runs: EfaProgressRun[];
+}
+
+export interface EfaProgressStudent {
+  studentId: string;
+  name: string;
+  email: string;
+  gates: Array<{ gateId: string; done: boolean; source: string | null; reason: string | null }>;
+  occasions: EfaProgressOccasion[];
+}
+
+export interface EfaProgressView {
+  gates: Array<{ id: string; kind: string; occasion: string | null; label: string }>;
+  students: EfaProgressStudent[];
+}

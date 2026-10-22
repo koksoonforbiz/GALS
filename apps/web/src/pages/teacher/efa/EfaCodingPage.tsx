@@ -89,8 +89,11 @@ export function EfaCodingPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
       <div>
-        <Link to={`/teacher/courses/${courseId}`} className="text-sm text-blue-600 hover:underline">
-          ← Back to course
+        <Link
+          to={`/teacher/courses/${courseId}/efa`}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          ← Back to EF assessment
         </Link>
         <h1 className="mt-2 text-2xl font-semibold text-gray-900">
           EF assessment — coding and exports

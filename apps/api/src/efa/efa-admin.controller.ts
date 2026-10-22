@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Request,
   Res,
@@ -13,7 +14,17 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
-import { EfaCodeSubmitSchema, type EfaCodeSubmitRequest, type UserRole } from '@ats/shared';
+import {
+  EfaCodeSubmitSchema,
+  EfaRatersSchema,
+  EfaReasonSchema,
+  EfaSettingsSchema,
+  type EfaCodeSubmitRequest,
+  type EfaRatersRequest,
+  type EfaReasonRequest,
+  type EfaSettings,
+  type UserRole,
+} from '@ats/shared';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -23,6 +34,7 @@ import { EfaCodingService } from './coding/coding.service';
 import { EFA_EXPORTS, EfaExportsService, type EfaExport } from './exports/efa-exports.service';
 import { EfaScoringService } from './scoring/scoring.service';
 import { assertEfaStaff } from './staff-access';
+import { EfaStaffService } from './staff/efa-staff.service';
 
 interface RequestUser {
   id: string;
@@ -40,7 +52,76 @@ export class EfaAdminController {
     private readonly scoring: EfaScoringService,
     private readonly coding: EfaCodingService,
     private readonly exports: EfaExportsService,
+    private readonly staff: EfaStaffService,
   ) {}
+
+  // ── settings, progress, reset, raters ───────────────────────────────────
+
+  @Get('courses/:courseId/settings')
+  settings(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+  ) {
+    return this.staff.settings(req.user, courseId);
+  }
+
+  @Put('courses/:courseId/settings')
+  saveSettings(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+    @Body(new ZodValidationPipe(EfaSettingsSchema)) body: EfaSettings,
+  ) {
+    return this.staff.saveSettings(req.user, courseId, body);
+  }
+
+  @Get('courses/:courseId/progress')
+  progress(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+  ) {
+    return this.staff.progress(req.user, courseId);
+  }
+
+  @Post('runs/:runId/reset')
+  reset(
+    @Request() req: { user: RequestUser; ip?: string; headers: Record<string, string | undefined> },
+    @Param('runId', ParseUUIDPipe) runId: string,
+    @Body(new ZodValidationPipe(EfaReasonSchema)) body: EfaReasonRequest,
+  ) {
+    return this.staff.resetRun(req.user, runId, body.reason, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Post('occasions/:occasionId/reopen')
+  reopen(
+    @Request() req: { user: RequestUser; ip?: string; headers: Record<string, string | undefined> },
+    @Param('occasionId', ParseUUIDPipe) occasionId: string,
+    @Body(new ZodValidationPipe(EfaReasonSchema)) body: EfaReasonRequest,
+  ) {
+    return this.staff.reopenOccasion(req.user, occasionId, body.reason, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+  }
+
+  @Get('courses/:courseId/raters')
+  raters(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+  ) {
+    return this.staff.raters(req.user, courseId);
+  }
+
+  @Put('courses/:courseId/raters')
+  saveRaters(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', ParseUUIDPipe) courseId: string,
+    @Body(new ZodValidationPipe(EfaRatersSchema)) body: EfaRatersRequest,
+  ) {
+    return this.staff.saveRaters(req.user, courseId, body);
+  }
 
   // ── scoring ─────────────────────────────────────────────────────────────
 
