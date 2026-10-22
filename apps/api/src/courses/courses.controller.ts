@@ -72,11 +72,13 @@ export class CoursesController {
   // endpoints below. Whitelisting via UpdateCourseSchema closes this.
   @Patch(':id')
   @Roles('teacher', 'admin')
-  @UsePipes(new ZodValidationPipe(UpdateCourseSchema))
+  // Pipe on @Body only — a method-level @UsePipes also runs against
+  // @Param('id'), and a string never parses as the object schema, so every
+  // PATCH 400'd with "Validation failed".
   async update(
     @Request() req: { user: RequestUser },
     @Param('id') id: string,
-    @Body() dto: UpdateCourse,
+    @Body(new ZodValidationPipe(UpdateCourseSchema)) dto: UpdateCourse,
   ) {
     const result = await this.coursesService.update(id, req.user.id, dto);
     // Checklist item 25 — config-change audit trail.

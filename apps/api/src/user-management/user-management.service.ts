@@ -781,37 +781,7 @@ export class UserManagementService {
     if (!target) {
       throw new NotFoundException(`User ${targetUserId} not found`);
     }
-    if (target.id === callerId) {
-      throw new ForbiddenException('You cannot deactivate your own account');
-    }
-
-    const caller = await this.prisma.user.findUnique({
-      where: { id: callerId },
-      select: { role: true },
-    });
-    if (!caller) {
-      throw new ForbiddenException('Caller not found');
-    }
-
-    if (caller.role !== 'admin') {
-      if (target.role !== 'student') {
-        throw new ForbiddenException('Only an admin can deactivate a teacher or admin account');
-      }
-      const teacherCourses = await this.prisma.course.findMany({
-        where: { teacherId: callerId },
-        select: { id: true },
-      });
-      const sharedEnrollment = await this.prisma.enrollment.findFirst({
-        where: {
-          studentId: targetUserId,
-          courseId: { in: teacherCourses.map((c) => c.id) },
-          status: 'ACTIVE',
-        },
-      });
-      if (!sharedEnrollment) {
-        throw new ForbiddenException('You can only deactivate students enrolled in your courses');
-      }
-    }
+    await this.assertCanManageUser(callerId, target, 'deactivate');
 
     await this.prisma.user.update({
       where: { id: targetUserId },
@@ -825,6 +795,79 @@ export class UserManagementService {
     );
 
     return { userId: target.id, email: target.email, isActive: active };
+  }
+
+  /**
+   * Clears a user's 2FA factor (authenticator secret or email method) so
+   * they can enrol again — the recovery path for a lost/replaced phone,
+   * since there are no backup codes. Same scoping as setUserActive. If
+   * the target's role is in MFA_REQUIRED_ROLES, their next sign-in routes
+   * them straight back to Account Security to enrol a new factor.
+   */
+  async resetTwoFactor(callerId: string, targetUserId: string) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, email: true, role: true },
+    });
+    if (!target) {
+      throw new NotFoundException(`User ${targetUserId} not found`);
+    }
+    await this.assertCanManageUser(callerId, target, 'reset 2FA for');
+
+    await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: { twoFactorMethod: null, twoFactorEnabledAt: null, totpSecret: null },
+    });
+
+    this.logger.log(
+      `2FA reset by ${sanitizeForLog(callerId)}: target=${sanitizeForLog(targetUserId)} (${sanitizeForLog(target.email)})`,
+    );
+
+    return { userId: target.id, email: target.email, twoFactorMethod: null };
+  }
+
+  /**
+   * Shared scoping for account actions taken on someone else: never on
+   * yourself; admins may act on anyone; teachers only on students
+   * enrolled (ACTIVE) in one of their own courses — so a teacher can't
+   * pivot to another teacher's or an admin's account.
+   */
+  private async assertCanManageUser(
+    callerId: string,
+    target: { id: string; role: string },
+    verb: string,
+  ) {
+    if (target.id === callerId) {
+      throw new ForbiddenException(`You cannot ${verb} your own account`);
+    }
+
+    const caller = await this.prisma.user.findUnique({
+      where: { id: callerId },
+      select: { role: true },
+    });
+    if (!caller) {
+      throw new ForbiddenException('Caller not found');
+    }
+
+    if (caller.role !== 'admin') {
+      if (target.role !== 'student') {
+        throw new ForbiddenException(`Only an admin can ${verb} a teacher or admin account`);
+      }
+      const teacherCourses = await this.prisma.course.findMany({
+        where: { teacherId: callerId },
+        select: { id: true },
+      });
+      const sharedEnrollment = await this.prisma.enrollment.findFirst({
+        where: {
+          studentId: target.id,
+          courseId: { in: teacherCourses.map((c) => c.id) },
+          status: 'ACTIVE',
+        },
+      });
+      if (!sharedEnrollment) {
+        throw new ForbiddenException(`You can only ${verb} students enrolled in your courses`);
+      }
+    }
   }
 
   async resendInvitation(teacherId: string, studentId: string) {
@@ -894,6 +937,23 @@ export class UserManagementService {
     teacherId: string,
     dto: BulkProvisionUsers,
   ): Promise<BulkProvisionUsersResponse> {
+    const teacher = await this.prisma.user.findUnique({
+      where: { id: teacherId },
+      select: { role: true },
+    });
+
+    // Only an admin may provision staff accounts. Without this a teacher
+    // could create an admin (row.role is caller-supplied) and escalate.
+    // Rejects the whole batch so nothing is half-created.
+    if (teacher?.role !== 'admin') {
+      const staffRow = dto.rows.findIndex((r) => r.role === 'teacher' || r.role === 'admin');
+      if (staffRow !== -1) {
+        throw new ForbiddenException(
+          `Only an admin can provision teacher or admin accounts (row ${staffRow + 1})`,
+        );
+      }
+    }
+
     // If enrollCourseId was passed, verify ownership upfront. This
     // also protects against teachers accidentally enrolling users into
     // courses they don't own.
@@ -907,10 +967,6 @@ export class UserManagementService {
         throw new NotFoundException(`Course ${dto.enrollCourseId} not found`);
       }
       // Admins can enroll into any course; teachers only their own.
-      const teacher = await this.prisma.user.findUnique({
-        where: { id: teacherId },
-        select: { role: true },
-      });
       if (teacher?.role !== 'admin' && course.teacherId !== teacherId) {
         throw new ForbiddenException('You can only enroll into your own courses');
       }

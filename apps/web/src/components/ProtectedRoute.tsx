@@ -31,8 +31,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // MFA_REQUIRED_ROLES. Same pattern: RolesGuard enforces it server-side
   // (MFA_ENROLMENT_REQUIRED); this routes the user to enrolment first.
   // Runs after the password gate so a reset account changes its password
-  // before being asked to enrol a factor.
-  if (user.mustEnrolMfa && location.pathname !== '/account/security') {
+  // before being asked to enrol a factor — and skipped while that change
+  // is still pending, or the two gates bounce the user between
+  // /change-password and /account/security forever (blank page).
+  if (user.mustEnrolMfa && !user.mustChangePassword && location.pathname !== '/account/security') {
     return <Navigate to="/account/security" replace />;
   }
 

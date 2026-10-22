@@ -52,6 +52,11 @@ services:
     ports: !reset []
     restart: unless-stopped
 
+  # No host ports to reset, but it needs the same restart policy — without
+  # it the upload scanner stays down after a host/daemon restart.
+  clamav:
+    restart: unless-stopped
+
   # Vite dev server — not part of the two-door stack. `--profile vite-dev`
   # brings it back if you want HMR alongside nginx.
   web:

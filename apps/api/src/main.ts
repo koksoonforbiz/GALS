@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import type { Request, Response, NextFunction } from 'express';
@@ -75,7 +76,16 @@ function gzipRequestDecompression() {
 async function bootstrap() {
   const env = validateEnv();
 
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  // The API only ever sees requests through nginx (two-door) or the Vite
+  // dev proxy, so without this `req.ip` is the proxy's address for every
+  // user — and ThrottlerGuard plus login lockout key on `req.ip`, i.e. the
+  // whole user base shared one rate limit. Trust only private/loopback
+  // hops: Express then walks X-Forwarded-For from the right and stops at
+  // the first public address, so an internet client can't spoof its IP by
+  // sending its own X-Forwarded-For header.
+  app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
   // CSP is meaningless here (this server returns JSON/files, never renders
   // HTML), but the rest of helmet's defaults are worth having. CORP is

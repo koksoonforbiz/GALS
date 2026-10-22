@@ -38,10 +38,17 @@ Everything else — bundles, nginx allowlist, DoorGuard, socket auth — is byte
 ```sh
 cd /srv/gals/repo
 git fetch && git checkout <tag-or-commit that passed CI>
-./deploy/scripts/twodoor.sh l40 up -d --build          # builds both bundles + api production image
-./deploy/scripts/twodoor.sh l40 exec api npx prisma migrate deploy   # the production entrypoint does NOT migrate (apps/api/docker-entrypoint.sh)
+./deploy/scripts/twodoor.sh l40 build                  # builds both bundles + api production image
+./deploy/scripts/twodoor.sh l40 up -d postgres redis minio
+# Migrate BEFORE the api starts — the production entrypoint does NOT migrate
+# (apps/api/docker-entrypoint.sh), and on an empty database the api crash-loops,
+# so `exec api …` has no running container to exec into. A one-off container works:
+./deploy/scripts/twodoor.sh l40 run --rm --no-deps -T --entrypoint sh api -c 'npx --no-install prisma migrate deploy'
+./deploy/scripts/twodoor.sh l40 up -d                  # api becomes healthy, then nginx starts
 ./deploy/scripts/twodoor.sh l40 ps                     # only nginx has PORTS
 ```
+
+On later updates (database already migrated) `exec api npx --no-install prisma migrate deploy` after `up -d --build` is fine. If `up` reports `dependency failed to start: container …-api-1 is unhealthy` right after a crash-loop, the api usually recovers on its own within a minute — check `ps`, then re-run `up -d` to start nginx.
 
 First-time provisioning: sign in on the **private** door with the initial admin (created via `POST /api/auth/register` on the private door, or the existing bulk-provisioning flow), then create teachers and provision students (login ID + temporary password) from the User Management pages. Students receive their login ID and temporary password out of band and are forced through `/change-password` on first sign-in.
 

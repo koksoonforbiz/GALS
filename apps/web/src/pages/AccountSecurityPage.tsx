@@ -8,6 +8,11 @@ type EnableStep = 'idle' | 'awaiting-code';
 type TotpStep = 'idle' | 'awaiting-code';
 type DisableStep = 'idle' | 'awaiting-password';
 
+// Email-code 2FA needs working SMTP on the server. Deployments that run
+// authenticator-only (no SMTP account) build with this unset, which hides
+// the email option; set VITE_ENABLE_EMAIL_2FA=true at build time to offer it.
+const EMAIL_2FA_ENABLED = import.meta.env.VITE_ENABLE_EMAIL_2FA === 'true';
+
 const METHOD_LABEL: Record<string, string> = {
   email: 'Email code',
   totp: 'Authenticator app',
@@ -154,8 +159,9 @@ export function AccountSecurityPage() {
         >
           <p className="font-medium">Two-factor authentication is required for your role.</p>
           <p className="mt-1">
-            Enrol an authenticator app or email code below before continuing — every other page
-            stays locked until you do.
+            {EMAIL_2FA_ENABLED
+              ? 'Enrol an authenticator app or email code below before continuing — every other page stays locked until you do.'
+              : 'Set up an authenticator app below before continuing — every other page stays locked until you do.'}
           </p>
         </div>
       )}
@@ -182,8 +188,9 @@ export function AccountSecurityPage() {
           <div>
             <h2 className="text-lg font-medium text-gray-800">Two-factor authentication</h2>
             <p className="mt-1 text-sm text-gray-500">
-              Adds a second step at login, on top of your password — either a code emailed to you,
-              or a code from an authenticator app. Only one method can be active at a time.
+              {EMAIL_2FA_ENABLED
+                ? 'Adds a second step at login, on top of your password — either a code emailed to you, or a code from an authenticator app. Only one method can be active at a time.'
+                : 'Adds a second step at login, on top of your password — a 6-digit code from an authenticator app on your phone (e.g. Google or Microsoft Authenticator).'}
             </p>
           </div>
           <span
@@ -208,17 +215,23 @@ export function AccountSecurityPage() {
               </div>
             )}
             <div className="flex gap-3">
-              <button
-                onClick={handleStartEnable}
-                disabled={enableSubmitting}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {enableSubmitting ? 'Sending code...' : 'Enable via email code'}
-              </button>
+              {EMAIL_2FA_ENABLED && (
+                <button
+                  onClick={handleStartEnable}
+                  disabled={enableSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {enableSubmitting ? 'Sending code...' : 'Enable via email code'}
+                </button>
+              )}
               <button
                 onClick={handleStartTotpSetup}
                 disabled={totpSubmitting}
-                className="px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className={
+                  EMAIL_2FA_ENABLED
+                    ? 'px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                    : 'px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50'
+                }
               >
                 {totpSubmitting ? 'Starting setup...' : 'Enable via authenticator app'}
               </button>

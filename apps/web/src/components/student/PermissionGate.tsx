@@ -72,10 +72,17 @@ export function PermissionGate({ onGranted }: Props) {
       }
 
       setScreenStatus('active');
-    } catch {
+    } catch (err) {
       setScreenStatus('denied');
+      // Keep the browser's reason: "denied" alone can't tell a cancelled
+      // picker from a browser/OS that blocks screen capture outright.
+      const name = err instanceof DOMException ? err.name : '';
       setScreenError(
-        'Screen sharing was denied. Click "Try Again" and allow access when prompted.',
+        !navigator.mediaDevices?.getDisplayMedia
+          ? 'This browser does not support screen sharing. Please use Chrome or Edge.'
+          : name === 'NotAllowedError'
+            ? 'Screen sharing was denied. Click "Try Again", choose a screen, window or tab in the browser\'s picker, then click "Share".'
+            : `Screen sharing failed (${name || 'unknown error'}). Click "Try Again", or try Chrome or Edge.`,
       );
     }
   }, []);

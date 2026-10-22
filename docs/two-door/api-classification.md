@@ -670,6 +670,7 @@ Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 | POST   | `/api/user-management/users/:userId/reset-password`          | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
 | POST   | `/api/user-management/users/:userId/deactivate`              | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
 | POST   | `/api/user-management/users/:userId/reactivate`              | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
+| POST   | `/api/user-management/users/:userId/reset-2fa`               | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
 | POST   | `/api/user-management/enrollments/bulk`                      | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
 | GET    | `/api/user-management/my-usage`                              | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |
 | GET    | `/api/user-management/courses-overview`                      | teacher,admin | JwtAuthGuard,RolesGuard | **PRIVATE** | Explicit @Roles(teacher/admin). |

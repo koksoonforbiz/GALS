@@ -578,6 +578,7 @@ function StudentDetailModal({
   student,
   onClose,
   onResetPassword,
+  onResetTwoFactor,
   onRemoveFromCourse,
 }: {
   student: Student;
@@ -586,6 +587,8 @@ function StudentDetailModal({
   // older "send random temp password" flow because Prompt 05 requires
   // the teacher to set passwords explicitly.
   onResetPassword: (student: { id: string; name: string; email: string }) => void;
+  // Lost-phone recovery — confirmed by the parent before the request.
+  onResetTwoFactor: (student: { id: string; name: string; email: string }) => void;
   // Prompt 03: teacher-initiated drop from a single course. Confirmed
   // by the parent before the request is sent.
   onRemoveFromCourse: (courseId: string, courseName: string) => void;
@@ -715,6 +718,14 @@ function StudentDetailModal({
             className="px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200"
           >
             Reset Password
+          </button>
+          <button
+            onClick={() =>
+              onResetTwoFactor({ id: student.id, name: student.name, email: student.email })
+            }
+            className="px-3 py-1.5 text-sm bg-yellow-100 text-yellow-800 rounded-lg hover:bg-yellow-200"
+          >
+            Reset 2FA
           </button>
           <button
             onClick={onClose}
@@ -859,6 +870,26 @@ export function UserManagementPage() {
       loadStudents();
     } catch (err) {
       toast('error', err instanceof Error ? err.message : 'Failed to remove student from course');
+    }
+  };
+
+  // Lost-phone recovery: clears the student's authenticator so they set
+  // it up again at their next sign-in (there are no backup codes).
+  const handleResetTwoFactor = async (student: { id: string; name: string; email: string }) => {
+    const ok = window.confirm(
+      `Reset two-factor authentication for "${student.name}" (${student.email})?\n\n` +
+        `Their authenticator app will stop working for GALS. At their next sign-in they will be ` +
+        `asked to set up the authenticator again with their new phone.`,
+    );
+    if (!ok) return;
+    try {
+      await api.post(`/user-management/users/${student.id}/reset-2fa`);
+      toast('success', `Two-factor authentication reset for ${student.name}.`);
+    } catch (err) {
+      toast(
+        'error',
+        err instanceof Error ? err.message : 'Failed to reset two-factor authentication',
+      );
     }
   };
 
@@ -1093,6 +1124,19 @@ export function UserManagementPage() {
                           >
                             Reset pwd
                           </button>
+                          <button
+                            onClick={() =>
+                              handleResetTwoFactor({
+                                id: student.id,
+                                name: student.name,
+                                email: student.email,
+                              })
+                            }
+                            className="text-sm text-amber-700 hover:underline"
+                            title="Clear this student's authenticator (lost or new phone)"
+                          >
+                            Reset 2FA
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1269,6 +1313,7 @@ export function UserManagementPage() {
           student={selectedStudent}
           onClose={() => setSelectedStudent(null)}
           onResetPassword={setResetTarget}
+          onResetTwoFactor={handleResetTwoFactor}
           onRemoveFromCourse={(courseId, courseName) =>
             handleRemoveFromCourse(selectedStudent.name, courseId, courseName, selectedStudent.id)
           }

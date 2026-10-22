@@ -127,11 +127,12 @@ export class UserManagementController {
   // matching self-service endpoint — see auth.controller.ts.
   @Post('users/:userId/reset-password')
   @Roles('teacher', 'admin')
-  @UsePipes(new ZodValidationPipe(ResetStudentPasswordSchema))
+  // Pipe on @Body only — method-level @UsePipes would also validate
+  // @Param('userId') against the body schema and reject every request.
   async resetStudentPassword(
     @Request() req: { user: RequestUser },
     @Param('userId') userId: string,
-    @Body() dto: ResetStudentPassword,
+    @Body(new ZodValidationPipe(ResetStudentPasswordSchema)) dto: ResetStudentPassword,
   ) {
     return this.service.resetStudentPassword(req.user.id, userId, dto);
   }
@@ -149,6 +150,14 @@ export class UserManagementController {
   @Roles('teacher', 'admin')
   async reactivateUser(@Request() req: { user: RequestUser }, @Param('userId') userId: string) {
     return this.service.setUserActive(req.user.id, userId, true);
+  }
+
+  // Lost-phone recovery: clears the user's 2FA factor so they re-enrol at
+  // next sign-in. Same scoping as deactivate (see assertCanManageUser).
+  @Post('users/:userId/reset-2fa')
+  @Roles('teacher', 'admin')
+  async resetTwoFactor(@Request() req: { user: RequestUser }, @Param('userId') userId: string) {
+    return this.service.resetTwoFactor(req.user.id, userId);
   }
 
   // ─── Bulk provisioning (prompt 02) ────────────────────
