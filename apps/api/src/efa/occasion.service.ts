@@ -39,7 +39,8 @@ import {
 
 export const BATTERY_VERSION = '2.0';
 export const TASK_CODES = ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w7'] as const;
-const ABANDON_AFTER_MS = 24 * 3600_000;
+/** A gap this long is flagged (`resumedAfterIdle`) for the analysis; it no longer locks. */
+const LONG_PAUSE_MS = 24 * 3600_000;
 const TERMINAL_TASK = new Set(['completed', 'interrupted', 'skipped']);
 const COLOUR_ITEMS = ['COLOUR1', 'COLOUR2', 'COLOUR3'];
 
@@ -135,20 +136,37 @@ export class EfaOccasionService {
     if (e?.status !== 'ACTIVE') throw new ForbiddenException('You are not enrolled in this course');
   }
 
-  /** Load the student's own occasion; marks it abandoned after 24 h idle (lazy, no scheduler). */
+  /** Load the student's own occasion (an idle one simply continues, see resumeIdle). */
   async ownOccasion(studentId: string, occasionId: string): Promise<EfaOccasion> {
     const o = await this.prisma.efaOccasion.findUnique({ where: { id: occasionId } });
     if (!o || o.studentId !== studentId) throw new NotFoundException('Not found');
-    return this.applyAbandon(o);
+    return this.resumeIdle(o);
   }
 
-  private async applyAbandon(o: EfaOccasion): Promise<EfaOccasion> {
+  /**
+   * Students continue where they left off however long the pause. A pause
+   * over 24 h is only flagged for the analysis; an occasion expired under
+   * the old 24 h rule is reopened as staff "reopen" would.
+   */
+  private async resumeIdle(o: EfaOccasion): Promise<EfaOccasion> {
+    if (o.status === 'completed') return o;
     const last = o.lastActivityAt ?? o.startedAt;
-    if (o.status === 'completed' || o.status === 'abandoned' || !last) return o;
-    if (Date.now() - last.getTime() < ABANDON_AFTER_MS) return o;
+    const longPause = !!last && Date.now() - last.getTime() >= LONG_PAUSE_MS;
+    if (o.status !== 'abandoned' && !longPause) return o;
+    const flags = (o.flags as Record<string, unknown> | null) ?? {};
+    if (o.status !== 'abandoned' && flags.resumedAfterIdle) return o;
     return this.prisma.efaOccasion.update({
       where: { id: o.id },
-      data: { status: 'abandoned', abandonedAt: new Date() },
+      data: {
+        ...(o.status === 'abandoned'
+          ? {
+              status: o.questionnaireDoneAt ? 'in_progress' : 'not_started',
+              abandonedAt: null,
+              lastActivityAt: new Date(),
+            }
+          : {}),
+        flags: { ...flags, resumedAfterIdle: true },
+      },
     });
   }
 
@@ -266,7 +284,7 @@ export class EfaOccasionService {
     let o = await this.prisma.efaOccasion.findUnique({
       where: { studentId_courseId_occasion: { studentId, courseId, occasion } },
     });
-    if (o) o = await this.applyAbandon(o);
+    if (o) o = await this.resumeIdle(o);
     if (o && opts.interruptRunning && o.status !== 'abandoned')
       await this.interruptStale(o, sessionId);
     const next = await this.nextStep(o, cfg);

@@ -326,7 +326,7 @@ export class EfaStaffService {
     return { runId, reset: true };
   }
 
-  /** Reopen an occasion that expired after 24 h without activity. */
+  /** Reopen an occasion that expired under the old 24 h rule (students now also reopen one by opening it). */
   async reopenOccasion(staff: EfaStaff, occasionId: string, reason: string, meta: Meta = {}) {
     const o = await this.prisma.efaOccasion.findUnique({ where: { id: occasionId } });
     if (!o) throw new NotFoundException('Not found');

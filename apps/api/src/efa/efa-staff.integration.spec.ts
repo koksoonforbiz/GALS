@@ -313,11 +313,11 @@ describe('EF staff: settings, progress, reset, raters (HTTP)', () => {
     await as(ownerToken, http().post(admin(`/occasions/${occasionId}/reopen`)))
       .send({ reason: 'was ill for two days' })
       .expect(409);
+    // Expired under the old 24 h rule (no longer set by idleness).
     await prisma.efaOccasion.update({
       where: { id: occasionId },
-      data: { lastActivityAt: new Date(Date.now() - 48 * 3600_000) },
+      data: { status: 'abandoned', abandonedAt: new Date() },
     });
-    expect((await studentView()).next).toBe('abandoned');
     await as(ownerToken, http().post(admin(`/occasions/${occasionId}/reopen`)))
       .send({ reason: 'was ill for two days' })
       .expect(201);

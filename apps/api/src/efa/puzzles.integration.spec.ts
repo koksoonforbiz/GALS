@@ -288,15 +288,30 @@ describe('Puzzles occasion flow (HTTP)', () => {
     await http().get(base()).set('Authorization', `Bearer ${teacher.body.accessToken}`).expect(403);
   });
 
-  it('an occasion idle for more than 24 h is marked abandoned', async () => {
+  it('an occasion idle for more than 24 h simply continues (flagged for the analysis)', async () => {
     await prisma.efaOccasion.update({
       where: { id: occasionId },
       data: { lastActivityAt: new Date(Date.now() - 25 * 3600_000) },
     });
     const r = await student(http().get(base())).expect(200);
-    expect(r.body.next).toBe('abandoned');
-    await student(http().put(`/api/puzzles/occasions/${occasionId}/answers/C8`))
-      .send({ value: 5 })
-      .expect(409);
+    expect(r.body.next).not.toBe('abandoned');
+    const answer = await student(
+      http().put(`/api/puzzles/occasions/${occasionId}/answers/C8`),
+    ).send({ value: 5 });
+    expect(answer.status).not.toBe(409); // not "expired"
+    const o = await prisma.efaOccasion.findUniqueOrThrow({ where: { id: occasionId } });
+    expect(o.status).not.toBe('abandoned');
+    expect(o.flags).toEqual(expect.objectContaining({ resumedAfterIdle: true }));
+  });
+
+  it('an occasion expired under the old 24 h rule reopens by itself', async () => {
+    await prisma.efaOccasion.update({
+      where: { id: occasionId },
+      data: { status: 'abandoned', abandonedAt: new Date() },
+    });
+    const r = await student(http().get(base())).expect(200);
+    expect(r.body.next).not.toBe('abandoned');
+    const o = await prisma.efaOccasion.findUniqueOrThrow({ where: { id: occasionId } });
+    expect(o.abandonedAt).toBeNull();
   });
 });
