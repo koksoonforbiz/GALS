@@ -1,18 +1,63 @@
-import { useRef, useState, useCallback, useEffect, type RefObject } from 'react';
+import { useRef, useState, useCallback, useEffect, type ReactNode, type RefObject } from 'react';
 import {
   PERMISSION_SESSION_KEY,
   setPermittedScreenStream,
   setPermittedWebcamStream,
   clearPermittedScreenStream,
 } from '../../lib/biometrics/permittedStreams';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Status = 'idle' | 'requesting' | 'active' | 'denied';
+
+// The screen recording must show the platform itself, so students share
+// THIS tab. Chrome/Edge: `preferCurrentTab` turns the picker into a plain
+// "share this tab?" prompt, and Capture Handle lets us confirm afterwards
+// that the captured surface is this document (any other tab, window or
+// screen is refused and the student is shown how to pick the right one).
+const CAPTURE_HANDLE = 'gals-platform';
+const TAB_TITLE = 'GALS'; // start of the tab title (student.html)
+
+type CaptureHandle = { handle?: string; origin?: string } | null;
+type ShareCheck = 'ok' | 'not-a-tab' | 'other-tab';
+
+/** Tag this document so a capture of it can be recognised (no-op where unsupported). */
+function tagThisTab() {
+  const md = navigator.mediaDevices as
+    | (MediaDevices & {
+        setCaptureHandleConfig?: (c: {
+          handle: string;
+          exposeOrigin: boolean;
+          permittedOrigins: string[];
+        }) => void;
+      })
+    | undefined;
+  try {
+    md?.setCaptureHandleConfig?.({
+      handle: CAPTURE_HANDLE,
+      exposeOrigin: true,
+      permittedOrigins: [window.location.origin],
+    });
+  } catch {
+    // unsupported, or not the top-level document — checkShared falls back
+  }
+}
+
+/** Is the shared surface this platform tab? */
+function checkShared(track: MediaStreamTrack): ShareCheck {
+  const surface = (track.getSettings() as { displaySurface?: string }).displaySurface;
+  if (surface !== 'browser') return 'not-a-tab';
+  const t = track as MediaStreamTrack & { getCaptureHandle?: () => CaptureHandle };
+  // Without Capture Handle (e.g. Firefox) a tab is the best we can check.
+  if (typeof t.getCaptureHandle !== 'function') return 'ok';
+  return t.getCaptureHandle()?.handle === CAPTURE_HANDLE ? 'ok' : 'other-tab';
+}
 
 interface Props {
   onGranted: () => void;
 }
 
 export function PermissionGate({ onGranted }: Props) {
+  const { logout } = useAuth();
   const [screenStatus, setScreenStatus] = useState<Status>('idle');
   const [webcamStatus, setWebcamStatus] = useState<Status>('idle');
   const [screenError, setScreenError] = useState<string | null>(null);
@@ -23,6 +68,9 @@ export function PermissionGate({ onGranted }: Props) {
   const screenVideoRef = useRef<HTMLVideoElement | null>(null);
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const grantedRef = useRef(false);
+  const [wrongShare, setWrongShare] = useState(false);
+
+  useEffect(tagThisTab, []);
 
   // Cleanup: stop streams only when the gate is dismissed WITHOUT granting
   // (user navigated away, or a forced unmount). If granted, the streams are
@@ -52,9 +100,30 @@ export function PermissionGate({ onGranted }: Props) {
 
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: { displaySurface: 'browser' },
         audio: false,
-      });
+        // Chrome/Edge hints (ignored elsewhere): offer this tab, hide whole
+        // screens, and remove "share this tab instead" so the capture can't
+        // be switched to another tab later.
+        preferCurrentTab: true,
+        selfBrowserSurface: 'include',
+        surfaceSwitching: 'exclude',
+        monitorTypeSurfaces: 'exclude',
+      } as DisplayMediaStreamOptions);
+      const shared = stream.getVideoTracks()[0];
+      const check = shared ? checkShared(shared) : 'not-a-tab';
+      if (check !== 'ok') {
+        stream.getTracks().forEach((t) => t.stop());
+        setWrongShare(true);
+        setScreenStatus('denied');
+        setScreenError(
+          check === 'other-tab'
+            ? `You shared a different tab. Share this tab ("${TAB_TITLE}") so the platform is recorded — see the steps below.`
+            : `You shared a window or your whole screen. Share only this tab ("${TAB_TITLE}") — see the steps below.`,
+        );
+        return;
+      }
+      setWrongShare(false);
       screenStreamRef.current = stream;
       if (screenVideoRef.current) screenVideoRef.current.srcObject = stream;
 
@@ -81,7 +150,7 @@ export function PermissionGate({ onGranted }: Props) {
         !navigator.mediaDevices?.getDisplayMedia
           ? 'This browser does not support screen sharing. Please use Chrome or Edge.'
           : name === 'NotAllowedError'
-            ? 'Screen sharing was denied. Click "Try Again", choose a screen, window or tab in the browser\'s picker, then click "Share".'
+            ? `Screen sharing was cancelled. Click "Try Again" and share this tab ("${TAB_TITLE}") — see the steps below.`
             : `Screen sharing failed (${name || 'unknown error'}). Click "Try Again", or try Chrome or Edge.`,
       );
     }
@@ -135,6 +204,8 @@ export function PermissionGate({ onGranted }: Props) {
   }, [onGranted]);
 
   const bothActive = screenStatus === 'active' && webcamStatus === 'active';
+  // Phones and tablets cannot share a browser tab at all.
+  const canShareScreen = !!navigator.mediaDevices?.getDisplayMedia;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/80 p-4 backdrop-blur-sm">
@@ -146,11 +217,19 @@ export function PermissionGate({ onGranted }: Props) {
           </p>
         </div>
 
+        {!canShareScreen && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            This browser cannot share its screen — phones and tablets can&apos;t. Please use a
+            laptop or desktop computer with Chrome or Edge.
+          </p>
+        )}
+
         <PermRow
           label="Screen sharing"
-          description="Share your entire screen or a browser window."
+          description="Share this browser tab (the learning platform)."
           status={screenStatus}
           error={screenError}
+          help={screenStatus === 'active' ? null : <ShareTabSteps emphasise={wrongShare} />}
           videoRef={screenVideoRef as RefObject<HTMLVideoElement>}
           onRequest={requestScreen}
         />
@@ -174,12 +253,53 @@ export function PermissionGate({ onGranted }: Props) {
         >
           Continue
         </button>
+        <p className="text-center text-xs text-gray-400">
+          Not now?{' '}
+          <button type="button" onClick={logout} className="underline hover:text-gray-600">
+            Sign out
+          </button>
+        </p>
       </div>
     </div>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+/** How to pick this tab in the browser's share dialog (Chrome / Edge wording). */
+function ShareTabSteps({ emphasise }: { emphasise: boolean }) {
+  return (
+    <div
+      data-testid="share-tab-steps"
+      className={`rounded-lg border p-3 text-xs ${
+        emphasise
+          ? 'border-amber-300 bg-amber-50 text-amber-900'
+          : 'border-gray-200 bg-white text-gray-600'
+      }`}
+    >
+      <p className="mb-1 font-medium">How to share the right page</p>
+      <ol className="list-decimal space-y-1 pl-4">
+        <li>
+          Click <strong>Enable Screen sharing</strong> (or <strong>Try Again</strong>) above.
+        </li>
+        <li>
+          If the browser asks <em>&ldquo;Allow … to see this tab?&rdquo;</em> (or{' '}
+          <em>&ldquo;Share this tab&rdquo;</em>), click <strong>Allow</strong> /{' '}
+          <strong>Share</strong>.
+        </li>
+        <li>
+          If you see a list instead, open the <strong>Chrome Tab</strong> (Edge:{' '}
+          <strong>Browser tab</strong>) section, select <strong>{TAB_TITLE}</strong>, then click{' '}
+          <strong>Share</strong>.
+        </li>
+        <li>
+          Do not choose <strong>Window</strong> or <strong>Entire screen</strong> — they will be
+          refused.
+        </li>
+      </ol>
+    </div>
+  );
+}
 
 function StatusDot({ status }: { status: Status }) {
   const base =
@@ -199,6 +319,7 @@ function PermRow({
   videoRef,
   onRequest,
   mirrorVideo = false,
+  help = null,
 }: {
   label: string;
   description: string;
@@ -207,6 +328,7 @@ function PermRow({
   videoRef: RefObject<HTMLVideoElement>;
   onRequest: () => void;
   mirrorVideo?: boolean;
+  help?: ReactNode;
 }) {
   const actionLabel =
     status === 'idle' ? `Enable ${label}` : status === 'denied' ? 'Try Again' : null;
@@ -251,6 +373,7 @@ function PermRow({
       />
 
       {error && <p className="text-xs text-red-500">{error}</p>}
+      {help}
     </div>
   );
 }

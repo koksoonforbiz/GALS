@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PermissionGate } from '../components/student/PermissionGate';
 import { LoggingProvider } from '../components/LoggingProvider';
 import { useAuth } from '../contexts/AuthContext';
 import { useActivityLog } from '../lib/activity-log';
-import { PERMISSION_SESSION_KEY } from '../lib/biometrics/permittedStreams';
+import {
+  PERMISSION_SESSION_KEY,
+  peekPermittedScreenStream,
+} from '../lib/biometrics/permittedStreams';
+
+/** The gate's screen share, if it is still running (it never survives a reload). */
+function liveScreenTrack(): MediaStreamTrack | null {
+  const t = peekPermittedScreenStream()?.getVideoTracks()[0];
+  return t && t.readyState === 'live' ? t : null;
+}
 
 // Moved verbatim from App.tsx for the two-door split. The captureDom
 // value and its comment are deliberately untouched — which value ships
@@ -11,9 +20,30 @@ import { PERMISSION_SESSION_KEY } from '../lib/biometrics/permittedStreams';
 export function AuthenticatedLoggingWrapper({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { sessionId } = useActivityLog();
+  // Students pass the gate whenever there is no live screen share — after a
+  // reload, or when they press the browser's "Stop sharing". (A remembered
+  // "granted" flag let a reload skip the gate; the recorder's own
+  // getDisplayMedia then ran without a click, which Chrome refuses, so the
+  // rest of the session had no screen capture and no tab check.)
+  // Dev builds only: the e2e helpers (e2e/puzzles.helpers.ts) set the
+  // session flag to skip the gate, since a test browser has no real screen
+  // to share. Production builds never honour it.
+  const testBypass = import.meta.env.DEV && sessionStorage.getItem(PERMISSION_SESSION_KEY) === '1';
   const [permissionsGranted, setPermissionsGranted] = useState(
-    () => sessionStorage.getItem(PERMISSION_SESSION_KEY) === '1',
+    () => testBypass || !!liveScreenTrack(),
   );
+
+  useEffect(() => {
+    if (user?.role !== 'student' || !permissionsGranted || testBypass) return;
+    const track = liveScreenTrack();
+    if (!track) {
+      setPermissionsGranted(false);
+      return;
+    }
+    const onEnded = () => setPermissionsGranted(false);
+    track.addEventListener('ended', onEnded);
+    return () => track.removeEventListener('ended', onEnded);
+  }, [user?.role, permissionsGranted, testBypass]);
 
   if (user?.role === 'student' && !permissionsGranted) {
     return <PermissionGate onGranted={() => setPermissionsGranted(true)} />;
