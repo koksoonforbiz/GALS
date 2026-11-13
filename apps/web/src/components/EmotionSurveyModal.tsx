@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 export type EmotionOption = 'engaged' | 'bored' | 'confused' | 'frustrated' | 'neutral';
 
@@ -12,9 +12,11 @@ const OPTIONS: { value: EmotionOption; label: string }[] = [
 
 interface Props {
   onAnswer: (emotion: EmotionOption) => void;
+  /** Shown at sign-out (required: recording has already stopped by then). */
+  signingOut?: boolean;
 }
 
-export function EmotionSurveyModal({ onAnswer }: Props) {
+export function EmotionSurveyModal({ onAnswer, signingOut = false }: Props) {
   const [selected, setSelected] = useState<EmotionOption | null>(null);
   const [shaking, setShaking] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
@@ -27,10 +29,25 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
     setTimeout(() => setShowReminder(false), 3000);
   }, [shaking]);
 
+  // A real modal: focus moves in, Escape explains (one answer is required).
+  const firstOption = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    firstOption.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleBackdropClick();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [handleBackdropClick]);
+
   return (
+    // z above the webcam preview (z-[100]) and biometrics badges (z-[90]).
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60"
       onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="emotion-survey-title"
     >
       <div
         className={`bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8 flex flex-col gap-5 ${shaking ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
@@ -38,13 +55,20 @@ export function EmotionSurveyModal({ onAnswer }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-center">
-          <h2 className="text-lg font-bold text-gray-800">How are you feeling right now?</h2>
+          <h2 id="emotion-survey-title" className="text-lg font-bold text-gray-800">
+            How are you feeling right now?
+          </h2>
+          {signingOut && (
+            <p className="mt-1 text-sm text-gray-500">One quick question before you sign out.</p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
-          {OPTIONS.map((opt) => (
+          {OPTIONS.map((opt, i) => (
             <button
               key={opt.value}
+              ref={i === 0 ? firstOption : undefined}
+              aria-pressed={selected === opt.value}
               onClick={() => setSelected(opt.value)}
               className={`flex items-center px-4 py-3 rounded-xl border-2 transition-all text-left ${
                 selected === opt.value

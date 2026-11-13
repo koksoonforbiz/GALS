@@ -117,7 +117,7 @@ export function PuzzlesPage() {
       {view.next === 'done' && (
         <Message
           title="Thank you"
-          body="You have finished. The course sessions are now open."
+          body="You have finished this part. Go back to the course to see your next step."
           onBack={back}
         />
       )}

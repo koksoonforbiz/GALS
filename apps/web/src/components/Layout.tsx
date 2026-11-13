@@ -77,7 +77,7 @@ export function Layout() {
       </div>
       <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
       {showSurvey && (!surveyHeld || pendingLogout) && (
-        <EmotionSurveyModal onAnswer={handleAnswer} />
+        <EmotionSurveyModal onAnswer={handleAnswer} signingOut={pendingLogout} />
       )}
     </PageContextProvider>
   );

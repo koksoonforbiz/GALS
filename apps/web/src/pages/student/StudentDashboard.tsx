@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePageContext } from '../../contexts/PageContext';
 import { apiFetch } from '../../lib/api';
@@ -61,8 +62,13 @@ export function StudentDashboard() {
         ) : (
           <ul className="space-y-2">
             {enrollments.map((enrollment) => (
-              <li key={enrollment.id} className="p-3 bg-gray-50 rounded-lg text-gray-700">
-                {enrollment.course.title}
+              <li key={enrollment.id}>
+                <Link
+                  to={`/student/courses/${enrollment.course.id}`}
+                  className="block p-3 bg-gray-50 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700"
+                >
+                  {enrollment.course.title}
+                </Link>
               </li>
             ))}
           </ul>

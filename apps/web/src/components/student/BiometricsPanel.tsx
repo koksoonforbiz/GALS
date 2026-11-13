@@ -18,7 +18,11 @@ export function BiometricsPanel({
   webgazer,
   isPyfeatEnabled,
 }: BiometricsPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  // Laptop-size screens: start as the small pill so the panel does not
+  // cover the lesson text (student testing at 1024–1366 px).
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1600,
+  );
 
   // Count active features for the collapsed badge
   const activeCount = [

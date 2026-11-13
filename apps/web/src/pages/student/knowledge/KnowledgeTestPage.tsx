@@ -99,7 +99,9 @@ export function KnowledgeTestPage() {
             attemptId: a.attemptId,
           },
         });
-        setView({ at: 'item', i: 0 });
+        // Resume where the student left off: the first unanswered question.
+        const firstOpen = a.items.findIndex((it) => !answered(it, a.responses?.[String(it.slot)]));
+        setView({ at: 'item', i: firstOpen === -1 ? 0 : firstOpen });
       })
       .catch((err) => {
         if (err instanceof ApiError && err.code === 'ALREADY_SUBMITTED') {
@@ -236,6 +238,12 @@ export function KnowledgeTestPage() {
         {back}
         <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-center">
           <p className="text-lg font-medium text-green-800">Submitted — thank you</p>
+          <Link
+            to={`/student/courses/${courseId}`}
+            className="mt-4 inline-block rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
+          >
+            Continue to your next step
+          </Link>
         </div>
       </div>
     );
@@ -257,6 +265,10 @@ export function KnowledgeTestPage() {
           <span className="font-mono">{fmt(elapsed)}</span>
         </span>
       </div>
+      <p className="text-xs text-gray-500">
+        Not graded. Answer what you can — a best guess is fine, and you can skip a question and come
+        back to it before you submit.
+      </p>
       <div className="h-1 overflow-hidden rounded bg-gray-100">
         <div
           className="h-full bg-blue-500"

@@ -383,7 +383,9 @@ function CheckItem({ k, item, p }: { k: number; item: { q: string; a: string }; 
         >
           {open ? 'Hide answer' : 'Show answer'}
         </button>
-        <span className="status">{status}</span>
+        <span className="status" role="status" aria-live="polite">
+          {status}
+        </span>
       </div>
       <div className="a">
         <span dangerouslySetInnerHTML={html(item.a)} />
@@ -479,7 +481,9 @@ function McqSlide(p: SlideProps) {
           >
             Save reasoning and unlock options
           </button>
-          <span className="status">{status}</span>
+          <span className="status" role="status" aria-live="polite">
+            {status}
+          </span>
         </div>
         {unlocked && (choice == null || p.fields.confidence != null) && (
           <ConfidenceRating
@@ -706,7 +710,9 @@ function TransferSlide(p: SlideProps) {
         >
           Submit prompt
         </button>
-        <span className="status">{status}</span>
+        <span className="status" role="status" aria-live="polite">
+          {status}
+        </span>
       </div>
     </div>
   );
@@ -756,7 +762,9 @@ function LabTaskSlide(p: SlideProps) {
         >
           Save
         </button>
-        <span className="status">{status}</span>
+        <span className="status" role="status" aria-live="polite">
+          {status}
+        </span>
       </div>
     </div>
   );
@@ -818,7 +826,9 @@ function ExerciseSlide(p: SlideProps) {
         >
           {open ? 'Hide analysis template' : 'Open analysis template'}
         </button>
-        <span className="status">{status}</span>
+        <span className="status" role="status" aria-live="polite">
+          {status}
+        </span>
       </div>
       <div
         className={`reveal${open ? ' open' : ''}`}

@@ -59,12 +59,15 @@ const CHATBOT_WIDTH_STORAGE_KEY = 'student-docked-chatbot-width';
 const CHATBOT_MIN_WIDTH = 280;
 const CHATBOT_MAX_WIDTH = 700;
 const CHATBOT_DEFAULT_WIDTH = 400;
-// Space we always reserve for the rest of the 3-column row when sizing
-// the chatbot column: 256 (sidebar w-64) + 16 (two gap-2) + 4 (divider)
-// + 280 (minimum readable content). When the viewport gets narrower
-// than this + chatbot min, the chatbot is squeezed below its preferred
-// width so the layout still fits without horizontal scroll.
-const CHATBOT_LAYOUT_RESERVE = 556;
+// Space reserved for the rest of the row when sizing the chatbot column:
+// the module list (its width, or 0 when collapsed) + 20 (gaps, divider) +
+// a readable lesson column. The chatbot is squeezed (down to its minimum)
+// before the lesson is: student testers at 1024–1366 px found the lesson
+// at 120–450 px, one or two words per line, with the old fixed 280 px.
+const CONTENT_MIN_WIDTH = 560;
+const ROW_GAPS = 20;
+/** Below this, the module list starts collapsed unless the student chose otherwise. */
+const NARROW_VIEWPORT = 1600;
 
 function loadChatbotWidth(): number {
   try {
@@ -130,10 +133,12 @@ function loadPlaygroundHeight(): number {
 
 function loadSidebarCollapsed(): boolean {
   try {
-    return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1';
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (stored !== null) return stored === '1';
   } catch {
-    return false;
+    // fall through to the viewport default
   }
+  return typeof window !== 'undefined' && window.innerWidth < NARROW_VIEWPORT;
 }
 
 export function StudentCourseViewPage() {
@@ -285,9 +290,14 @@ export function StudentCourseViewPage() {
   // less than the chatbot's own minimum — at extreme zoom levels we let
   // overflow-hidden on the row clip rather than collapse below
   // usability.
+  // Module-list state is needed here for the reserve (declared early on purpose).
+  // Module-list state, declared here because the chatbot reserve needs it.
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
+  const layoutReserve = (sidebarCollapsed ? 0 : sidebarWidth) + ROW_GAPS + CONTENT_MIN_WIDTH;
   const maxAllowedChatbotWidth = Math.max(
     CHATBOT_MIN_WIDTH,
-    Math.min(CHATBOT_MAX_WIDTH, rowWidth - CHATBOT_LAYOUT_RESERVE),
+    Math.min(CHATBOT_MAX_WIDTH, rowWidth - layoutReserve),
   );
   const displayedChatbotWidth = Math.min(preferredChatbotWidth, maxAllowedChatbotWidth);
 
@@ -368,8 +378,6 @@ export function StudentCourseViewPage() {
   //     bounding rect is {0,0,0,0} → recorded as a zero-area entry
   //     (post-capture-fix, the recorder includes tagged regions even
   //     when their rect is empty so the CSV's aoi_sidebar_w/h flip to 0).
-  const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
   // codePlaygroundCollapsed itself lives in PageContext (see destructure
   // above) — not local state — so the inline code-question widget's
   // "Load into Playground" button can expand the drawer directly.

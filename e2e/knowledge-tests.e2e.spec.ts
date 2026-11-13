@@ -19,7 +19,7 @@ const COURSE = env.E2E_KT_COURSE_ID;
 
 test.use({
   baseURL: env.E2E_BASE_URL ?? 'http://localhost:5175',
-  viewport: { width: 1400, height: 900 },
+  viewport: { width: 1700, height: 900 }, // ≥ 1600: module list starts expanded
   actionTimeout: 30_000,
 });
 test.describe.configure({ retries: 0 });
@@ -54,7 +54,7 @@ test('gate order, no keys in the payload, submitted checks are final', async ({ 
   await page.goto(`/student/courses/${COURSE}/knowledge-check/pre-study`);
   await expect(page.getByText(/Complete “About you and how you feel today” first/)).toBeVisible();
   await page.goto(`/student/courses/${COURSE}`);
-  await expect(page.getByTestId('course-gate-checklist').first()).toContainText(
+  await expect(page.locator('[data-testid="course-gate-checklist"]:visible').first()).toContainText(
     'About you and how you feel today',
   );
   await expect(page.getByText('Session 1: fixture')).toHaveCount(0);
@@ -62,7 +62,7 @@ test('gate order, no keys in the payload, submitted checks are final', async ({ 
   // Warm-up passed (fixture) → the pre-study check is next.
   execSync('pnpm --filter @ats/api run seed:kt-e2e-local -- --warmup-done', { stdio: 'ignore' });
   await page.reload();
-  const checklist = page.getByTestId('course-gate-checklist').first();
+  const checklist = page.locator('[data-testid="course-gate-checklist"]:visible').first();
   await expect(checklist).toContainText('Knowledge check: before the course');
   const [start] = await Promise.all([
     page.waitForResponse(
@@ -81,11 +81,11 @@ test('gate order, no keys in the payload, submitted checks are final', async ({ 
   // Session 1 appears only after its pre-check.
   await page.goto(`/student/courses/${COURSE}`);
   await expect(page.getByText('Session 1: fixture')).toHaveCount(0);
-  await expect(page.getByTestId('course-gate-checklist').first()).toContainText(
+  await expect(page.locator('[data-testid="course-gate-checklist"]:visible').first()).toContainText(
     'Session 1: knowledge check before the lesson',
   );
   await page
-    .getByTestId('course-gate-checklist')
+    .locator('[data-testid="course-gate-checklist"]:visible')
     .first()
     .getByRole('link', { name: 'Continue' })
     .click();

@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Check, Lock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import type { StudentGateStep } from '@ats/shared';
+import type { KnowledgeTestStatus, StudentGateStep } from '@ats/shared';
+import { api } from '../../lib/api';
 
 /**
  * "Before you start" checklist on the course page: the course gates a
@@ -37,10 +39,13 @@ export function CourseGateChecklist({
   compact?: boolean;
 }) {
   const next = steps.find((s) => s.next);
+  const waitsForLesson = useWaitsForLesson(courseId, next);
   if (!next) return null;
   const done = steps.filter((s) => s.done).length;
   const first = done === 0;
-  const href = stepHref(courseId, next);
+  // A post-session check that is next in line still needs its lesson
+  // finished first: point at the lesson instead of a check that refuses.
+  const href = waitsForLesson ? null : stepHref(courseId, next);
   return (
     <div
       className={`rounded-lg border border-amber-200 bg-amber-50 ${compact ? 'p-2 mb-3' : 'p-5 max-w-xl'}`}
@@ -62,7 +67,11 @@ export function CourseGateChecklist({
         <span
           className={`inline-block rounded-full bg-amber-500 ${compact ? 'h-2 w-2' : 'h-2.5 w-2.5'}`}
         />
-        <span>{next.label}</span>
+        <span>
+          {waitsForLesson
+            ? `Finish the Session ${waitsForLesson} lesson (save the reflection on its last slide)`
+            : next.label}
+        </span>
         {href && (
           <Link
             to={href}
@@ -83,6 +92,32 @@ export function CourseGateChecklist({
       )}
     </div>
   );
+}
+
+/**
+ * Session number when `next` is a post-session check whose lesson is not
+ * finished yet (per the knowledge-test status), else null.
+ */
+function useWaitsForLesson(courseId: string, next: StudentGateStep | undefined): number | null {
+  const m = next?.step === 'knowledge' ? /^S([1-8])_POST$/.exec(next.occasion ?? '') : null;
+  const sessionNo = m ? Number(m[1]) : null;
+  const [waits, setWaits] = useState<number | null>(null);
+  useEffect(() => {
+    setWaits(null);
+    if (!sessionNo) return;
+    let current = true;
+    api
+      .get<KnowledgeTestStatus>(`/knowledge-tests/courses/${courseId}/status`)
+      .then((st) => {
+        const t = st.tests.find((x) => x.kind === 'POST_SESSION' && x.sessionNo === sessionNo);
+        if (current && t?.reasonCode === 'LESSON_NOT_FINISHED') setWaits(sessionNo);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [courseId, sessionNo]);
+  return waits;
 }
 
 export function LockedBadge({ size = 12 }: { size?: number }) {

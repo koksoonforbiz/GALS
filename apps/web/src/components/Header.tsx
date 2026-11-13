@@ -14,7 +14,8 @@ interface HeaderProps {
  *  space and sits above the sidebar regardless of scroll. Top-left, not
  *  bottom-left: the student biometric badges and webcam preview occupy
  *  the bottom-left and covered it. Sidebar.tsx keeps its collapsed/hidden
- *  toggle below this button. */
+ *  toggle below this button. z-[110] keeps the menu above the webcam
+ *  preview (z-[100]) wherever the student has dragged it. */
 export function Header({ onLogoutRequest }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export function Header({ onLogoutRequest }: HeaderProps) {
         : 'bg-green-100 text-green-800';
 
   return (
-    <div ref={menuRef} data-replay-region="header" className="fixed top-2 left-2 z-50">
+    <div ref={menuRef} data-replay-region="header" className="fixed top-2 left-2 z-[110]">
       {open && (
         <div className="absolute top-full left-0 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg py-1.5 overflow-hidden">
           <div className="px-3 py-2 border-b border-gray-100">

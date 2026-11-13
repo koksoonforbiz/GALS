@@ -15,7 +15,9 @@ export function Sidebar() {
       if (stored === 'hidden' || stored === 'collapsed' || stored === 'expanded') return stored;
       // Migrate from old key
       if (localStorage.getItem('sidebar_collapsed') === 'true') return 'collapsed';
-      return 'expanded';
+      // No choice yet: icons only on laptop-size screens, so the course
+      // page keeps room for the lesson (student testing at 1024–1366 px).
+      return window.innerWidth < 1600 ? 'collapsed' : 'expanded';
     } catch {
       return 'expanded';
     }

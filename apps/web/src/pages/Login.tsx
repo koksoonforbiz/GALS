@@ -201,8 +201,14 @@ export function Login() {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div
+              role="alert"
+              className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded"
+            >
               {error}
+              <p className="mt-1 text-xs text-red-600">
+                Forgotten your password? Ask your teacher to reset it.
+              </p>
             </div>
           )}
 

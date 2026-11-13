@@ -118,15 +118,28 @@ export function useWebgazer(
     setNeedsCalibration(false);
   }, []);
 
+  // "Calibration on new session" means once per session, not on every
+  // reload: remember that it was completed or skipped for this session.
+  const calibrationKey = `gals:webgazer-calibration-done:${sessionId}`;
+  const rememberCalibration = useCallback(() => {
+    try {
+      sessionStorage.setItem(calibrationKey, '1');
+    } catch {
+      // storage unavailable: the prompt may show again after a reload
+    }
+  }, [calibrationKey]);
+
   const completeCalibration = useCallback(() => {
     setIsCalibrating(false);
     setNeedsCalibration(false);
-  }, []);
+    rememberCalibration();
+  }, [rememberCalibration]);
 
   const skipCalibration = useCallback(() => {
     setIsCalibrating(false);
     setNeedsCalibration(false);
-  }, []);
+    rememberCalibration();
+  }, [rememberCalibration]);
 
   /** Toggle the red gaze-prediction dot on/off. */
   const toggleGazeDot = useCallback(() => {
@@ -286,7 +299,13 @@ export function useWebgazer(
         console.log('[WebGazer] Active, calibrationOnNewSession:', cfg.calibrationOnNewSession);
 
         // If calibration on new session, prompt calibration
-        if (cfg.calibrationOnNewSession) {
+        let doneThisSession = false;
+        try {
+          doneThisSession = sessionStorage.getItem(calibrationKey) === '1';
+        } catch {
+          // storage unavailable: calibrate as before
+        }
+        if (cfg.calibrationOnNewSession && !doneThisSession) {
           console.log('[WebGazer] Triggering calibration for new session');
           setNeedsCalibration(true);
         }

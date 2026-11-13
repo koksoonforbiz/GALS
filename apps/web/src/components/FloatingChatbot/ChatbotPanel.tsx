@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { usePageContext } from '../../contexts/PageContext';
 import { useActivityLog } from '../../lib/activity-log';
-import { api } from '../../lib/api';
+import { api, ApiError } from '../../lib/api';
 
 const CodeQuestionMessage = lazy(() =>
   import('../code-practice/CodeQuestionMessage').then((m) => ({
@@ -466,12 +466,18 @@ export function ChatbotPanel({
       });
       void flushActivityLog();
       return Boolean(result.codeQuestion);
-    } catch {
+    } catch (err) {
+      // Say what actually went wrong: a 4xx carries a message meant for the
+      // student (e.g. the assistant is not set up for this course). The old
+      // advice to "use a learning strategy instead" was wrong — strategies
+      // use the same backend.
       const errorMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content:
-          "Sorry, I couldn't process your message. Try selecting some text and using a learning strategy instead!",
+          err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 401
+            ? `The assistant can't answer right now: ${err.message} If this keeps happening, tell your teacher.`
+            : "Sorry, the assistant couldn't answer just now. Please try again in a moment.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);

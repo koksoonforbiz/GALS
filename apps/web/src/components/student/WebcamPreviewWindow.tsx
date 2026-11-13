@@ -16,7 +16,11 @@ export function WebcamPreviewWindow({
   onToggleGazeDot,
 }: WebcamPreviewWindowProps = {}) {
   const [isOpen, setIsOpen] = useState(true);
-  const [isMinimized, setIsMinimized] = useState(false);
+  // Laptop-size screens: start as a title bar only, so the preview does not
+  // cover the lesson (student testing at 1024–1366 px).
+  const [isMinimized, setIsMinimized] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 1600,
+  );
   const [hasStream, setHasStream] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
 
@@ -27,7 +31,15 @@ export function WebcamPreviewWindow({
     null,
   );
   const containerRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x: 16, y: 64 });
+  // Start in the left column just above the bottom-left biometrics box
+  // (~150 px tall expanded; a ~30 px pill on laptop screens, where it starts
+  // collapsed): at the top it covered the sidebar links and the account
+  // menu (Sign out). A full preview is ~205 px tall, a minimised one ~25 px.
+  const [pos, setPos] = useState(() => {
+    const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const minimized = typeof window !== 'undefined' && window.innerWidth < 1600;
+    return { x: 16, y: Math.max(64, h - (minimized ? 84 : 370)) };
+  });
 
   // Staleness detection: if positions don't change for N frames, face is gone
   const prevPosHashRef = useRef<string>('');
