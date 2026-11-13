@@ -131,15 +131,24 @@ export class SessionService {
    * Called when a student logs out or a session timeout is detected.
    * Computes duration and triggers summary generation.
    */
-  async closeSession(sessionId: string): Promise<void> {
+  async closeSession(
+    sessionId: string,
+    opts: { endedAt?: Date; reason?: 'logout' | 'timeout' } = {},
+  ): Promise<void> {
     const session = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
-      select: { startedAt: true, userId: true, courseId: true },
+      select: { startedAt: true, userId: true, courseId: true, endedAt: true },
     });
     if (!session) return;
+    // A timeout never re-closes; a logout after one still closes again so
+    // the parse sees the events that came later.
+    if (opts.reason === 'timeout' && session.endedAt) return;
 
-    const endedAt = new Date();
-    const durationSecs = Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+    const endedAt = opts.endedAt ?? new Date();
+    const durationSecs = Math.max(
+      0,
+      Math.floor((endedAt.getTime() - session.startedAt.getTime()) / 1000),
+    );
 
     await this.prisma.studentSession.update({
       where: { id: sessionId },
@@ -154,7 +163,7 @@ export class SessionService {
       action: ActivityAction.SESSION_END,
       occurredAt: endedAt,
       courseId: session.courseId ?? undefined,
-      metadata: { durationSecs },
+      metadata: { durationSecs, reason: opts.reason ?? 'logout' },
     });
 
     await this.buildSummary(sessionId);

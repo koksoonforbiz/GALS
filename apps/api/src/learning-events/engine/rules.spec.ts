@@ -410,3 +410,44 @@ describe('server-only actions never reach the rules (EF assessment, course gates
     expect(duplicates).toBe(0);
   });
 });
+
+describe('nudge responses (M12, M34)', () => {
+  it('M12: a dismissed nudge is "support declined", with its rule id', () => {
+    const i = input([
+      act(
+        'INTERVENTION_DISMISSED',
+        10,
+        { triggerReason: 'rule_triggered', ruleId: 'M20' },
+        {
+          interventionId: 'n1',
+        },
+      ),
+    ]);
+    const [d] = byRule(i, 'M12');
+    expect(d?.outcome).toBe('support_declined');
+    expect(d?.detail).toEqual(expect.objectContaining({ ruleId: 'M20', interventionId: 'n1' }));
+    expect(RULES.find((r) => r.id === 'M12')?.notApplicable).toBeUndefined();
+  });
+
+  it('M34: a withheld nudge (control arm) is "withheld", not "not taken up"', () => {
+    const i = input([
+      act(
+        'INTERVENTION_TRIGGERED',
+        10,
+        { triggerReason: 'rule_triggered', shown: false },
+        {
+          interventionId: 'n2',
+        },
+      ),
+      act(
+        'INTERVENTION_TRIGGERED',
+        20,
+        { triggerReason: 'rule_triggered', shown: true },
+        {
+          interventionId: 'n3',
+        },
+      ),
+    ]);
+    expect(byRule(i, 'M34').map((d) => d.outcome)).toEqual(['withheld', 'not_taken_up']);
+  });
+});

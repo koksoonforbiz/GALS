@@ -877,6 +877,27 @@ const M32: RuleDef = {
   run: (i) => relianceRules(i).filter((d) => d.ruleId === 'M32'),
 };
 
+const M12: RuleDef = {
+  id: 'M12',
+  inputs: ['INTERVENTION_DISMISSED', 'HELP_DISMISSED'],
+  // Support declined: a preference or burden signal, not disengagement
+  // (library: feeds the intervention cooldown). The lesson nudge emits
+  // INTERVENTION_DISMISSED; HELP_DISMISSED has no emitter in this course.
+  run: ({ actions }) =>
+    actions
+      .filter((a) => a.action === 'INTERVENTION_DISMISSED' || a.action === 'HELP_DISMISSED')
+      .map((a) =>
+        draft('M12', [a], {
+          outcome: 'support_declined',
+          detail: {
+            triggerReason: a.meta.triggerReason ?? null,
+            ruleId: a.meta.ruleId ?? null,
+            interventionId: a.interventionId ?? null,
+          },
+        }),
+      ),
+};
+
 const M34: RuleDef = {
   id: 'M34',
   inputs: ['INTERVENTION_TRIGGERED'],
@@ -884,6 +905,19 @@ const M34: RuleDef = {
     const out: Draft[] = [];
     for (const t of actions) {
       if (t.action !== 'INTERVENTION_TRIGGERED') continue;
+      // Control arm: the nudge was withheld, so there was nothing to take up.
+      if (t.meta.shown === false) {
+        out.push(
+          draft('M34', [t], {
+            outcome: 'withheld',
+            detail: {
+              triggerReason: t.meta.triggerReason ?? null,
+              interventionType: t.meta.interventionType ?? null,
+            },
+          }),
+        );
+        continue;
+      }
       const matches = (a: RawAction) =>
         t.interventionId ? a.interventionId === t.interventionId : true;
       const done = findAfter(
@@ -951,11 +985,7 @@ export const RULES: RuleDef[] = [
     'Course reveals are gated behind the learner’s own attempt — mapped to M15, never M10.',
   ),
   na('M11', ['MCQ_ANSWERED'], 'One answer per MCQ: repeated failure on an item cannot occur.'),
-  na(
-    'M12',
-    ['INTERVENTION_DISMISSED', 'HELP_DISMISSED'],
-    'INTERVENTION_DISMISSED is never emitted yet (Phase 6 nudges will emit it).',
-  ),
+  M12,
   M13,
   M14,
   M15,

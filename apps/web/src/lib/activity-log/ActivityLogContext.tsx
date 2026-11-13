@@ -32,6 +32,35 @@ const SESSION_KEY = 'ats_session_id';
 const SESSION_CHANGE_EVENT = 'ats_session_change';
 const FLUSH_INTERVAL_MS = 30_000; // 30 seconds
 const API_BATCH_URL = '/api/activity-log/batch';
+/** Dispatched by AuthContext before it closes the session (see flushBeforeClose). */
+export const ACTIVITY_FLUSH_EVENT = 'ats:activity-flush';
+const MAX_EVENTS_PER_BATCH = 500; // server DTO limit (log-event.dto.ts)
+// keepalive bodies are capped by the browser at ~64 KB in total.
+const MAX_KEEPALIVE_BYTES = 60_000;
+
+/** Split into batches the server (≤500 events) and, for keepalive, the browser accept. */
+function chunk(events: ActivityEvent[], maxBytes: number): ActivityEvent[][] {
+  const out: ActivityEvent[][] = [];
+  let cur: ActivityEvent[] = [];
+  let bytes = 0;
+  for (const e of events) {
+    const size = JSON.stringify(e).length + 1;
+    if (cur.length && (cur.length >= MAX_EVENTS_PER_BATCH || bytes + size > maxBytes)) {
+      out.push(cur);
+      cur = [];
+      bytes = 0;
+    }
+    cur.push(e);
+    bytes += size;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** A 4xx other than auth/timeout/rate-limit will fail again: drop it rather than block the queue. */
+function isPermanentRejection(status: number): boolean {
+  return status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
+}
 
 interface Props {
   children: ReactNode;
@@ -54,46 +83,60 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   // Listen for session changes dispatched by initActivitySession / clearActivitySession
   useEffect(() => {
     const handler = () => {
-      setSessionId(sessionStorage.getItem(SESSION_KEY));
+      const next = sessionStorage.getItem(SESSION_KEY);
+      // Events belong to the session they happened in: never carry them
+      // into the next login (logout flushes them first, see ACTIVITY_FLUSH_EVENT).
+      if (next !== sessionIdRef.current) buffer.current = [];
+      sessionIdRef.current = next;
+      setSessionId(next);
     };
     window.addEventListener(SESSION_CHANGE_EVENT, handler);
     return () => window.removeEventListener(SESSION_CHANGE_EVENT, handler);
   }, []);
 
   // ── Flush buffer to API ──────────────────────────────────────────────────
+  const send = useCallback(
+    async (events: ActivityEvent[], keepalive: boolean) => {
+      const sid = sessionIdRef.current;
+      const token = getToken();
+      if (!sid || !token) return events;
+      const failed: ActivityEvent[] = [];
+      for (const batch of chunk(events, keepalive ? MAX_KEEPALIVE_BYTES : Infinity)) {
+        try {
+          const res = await fetch(API_BATCH_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+              'X-Session-Id': sid,
+            },
+            body: JSON.stringify({ sessionId: sid, events: batch }),
+            keepalive,
+          });
+          if (res.ok) continue;
+          const detail = await res.text().catch(() => '');
+          if (isPermanentRejection(res.status)) {
+            console.warn('[ActivityLog] batch rejected, dropped:', res.status, detail);
+          } else {
+            console.warn('[ActivityLog] batch flush failed:', res.status, detail);
+            failed.push(...batch);
+          }
+        } catch {
+          failed.push(...batch); // network error: keep for the next flush
+        }
+      }
+      return failed;
+    },
+    [getToken],
+  );
+
   const flush = useCallback(async () => {
     if (!sessionIdRef.current || buffer.current.length === 0) return;
-    const events = [...buffer.current];
+    const events = buffer.current;
     buffer.current = [];
-
-    try {
-      const token = getToken();
-      if (!token) {
-        buffer.current = [...events, ...buffer.current];
-        return;
-      }
-      const res = await fetch(API_BATCH_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          'X-Session-Id': sessionIdRef.current,
-        },
-        body: JSON.stringify({ sessionId: sessionIdRef.current, events }),
-      });
-      if (!res.ok) {
-        console.warn(
-          '[ActivityLog] batch flush failed:',
-          res.status,
-          await res.text().catch(() => ''),
-        );
-        buffer.current = [...events, ...buffer.current];
-      }
-    } catch {
-      // Silently restore events to the buffer so they aren't lost
-      buffer.current = [...events, ...buffer.current];
-    }
-  }, [getToken]);
+    const failed = await send(events, false);
+    if (failed.length) buffer.current = [...failed, ...buffer.current];
+  }, [send]);
 
   // ── Track a single event ─────────────────────────────────────────────────
   const track = useCallback(
@@ -116,38 +159,40 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     };
   }, [flush]);
 
-  // ── Flush on page unload (sendBeacon for reliability) ───────────────────
+  // ── Flush on hide / unload (keepalive fetch) ────────────────────────────
+  // Take the buffer before sending: re-sending it on every tab switch
+  // without clearing it duplicated rows in the raw log.
   useEffect(() => {
     const handleUnload = () => {
       if (!sessionIdRef.current || buffer.current.length === 0) return;
-      const token = getToken();
-      if (!token) return;
-      const payload = JSON.stringify({
-        sessionId: sessionIdRef.current,
-        events: buffer.current,
+      const events = buffer.current;
+      buffer.current = [];
+      void send(events, true).then((failed) => {
+        if (failed.length) buffer.current = [...failed, ...buffer.current];
       });
-      fetch(API_BATCH_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: payload,
-        keepalive: true,
-      }).catch(() => {});
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') handleUnload();
     };
 
+    // Logout: AuthContext waits for this before closing the session, so the
+    // last events are parsed with it.
+    const handleFlushRequest = (e: Event) => {
+      const waits = (e as CustomEvent<Promise<void>[]>).detail;
+      const p = flush();
+      if (Array.isArray(waits)) waits.push(p);
+    };
+
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', handleUnload);
+    window.addEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
     };
-  }, [getToken]);
+  }, [send, flush]);
 
   return (
     <ActivityLogContext.Provider value={{ sessionId, track, flush }}>

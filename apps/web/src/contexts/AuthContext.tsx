@@ -1,7 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { joinStudentRoom, disconnectSocket } from '../lib/socket';
-import { initActivitySession, clearActivitySession } from '../lib/activity-log';
+import {
+  initActivitySession,
+  clearActivitySession,
+  ACTIVITY_FLUSH_EVENT,
+} from '../lib/activity-log';
 import { mediaStreamRegistry } from '../lib/biometrics/mediaStreamRegistry';
 import type { UserRole, TwoFactorMethod } from '@ats/shared';
 import {
@@ -253,19 +257,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // cleanup is harmless to defer a few seconds (see finishLogout), so it
   // stays there instead.
   const stopBiometrics = useCallback(() => {
-    // Close activity session on the backend (fire-and-forget)
+    // Close the activity session on the backend — after the buffered
+    // activity events are sent, so the session's parse includes them.
     const sid = sessionStorage.getItem('ats_session_id');
     const token = localStorage.getItem('token');
     if (sid && token) {
-      fetch('/api/activity-log/session/close', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          'X-Session-Id': sid,
-        },
-        keepalive: true,
-      }).catch(() => {});
+      const flushes: Promise<void>[] = [];
+      window.dispatchEvent(new CustomEvent(ACTIVITY_FLUSH_EVENT, { detail: flushes }));
+      void Promise.race([
+        Promise.allSettled(flushes),
+        new Promise((resolve) => setTimeout(resolve, 1500)),
+      ]).then(() =>
+        fetch('/api/activity-log/session/close', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'X-Session-Id': sid,
+          },
+          keepalive: true,
+        }).catch(() => {}),
+      );
     }
     sessionStorage.removeItem(PERMISSION_SESSION_KEY);
     clearPermittedScreenStream();
