@@ -47,7 +47,7 @@ export function Sidebar() {
   // Hidden state: show a thin strip with a show button
   if (hidden) {
     return (
-      <aside className="w-6 bg-gray-50 border-r border-gray-200 h-full flex flex-col items-center pt-3 transition-all duration-200">
+      <aside className="w-6 bg-gray-50 border-r border-gray-200 h-full flex flex-col items-center pt-11 transition-all duration-200">
         <button
           onClick={() => setSidebarState('expanded')}
           className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
@@ -70,8 +70,8 @@ export function Sidebar() {
     <aside
       className={`${collapsed ? 'w-16' : 'w-64'} bg-gray-50 border-r border-gray-200 h-full overflow-y-auto transition-all duration-200 flex flex-col`}
     >
-      {/* Toggle button */}
-      <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} px-2 pt-3 pb-1`}>
+      {/* Toggle button (below the fixed top-left account button when centred) */}
+      <div className={`flex ${collapsed ? 'justify-center pt-11' : 'justify-end pt-3'} px-2 pb-1`}>
         <button
           onClick={cycleState}
           className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"

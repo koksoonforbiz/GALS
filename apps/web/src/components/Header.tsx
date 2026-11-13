@@ -7,11 +7,14 @@ interface HeaderProps {
   onLogoutRequest?: () => void;
 }
 
-/** Account menu — a small fixed button in the bottom-left corner that
+/** Account menu — a small fixed button in the top-left corner that
  *  opens a popover with the user's name/role, Account, and Sign out.
  *  Replaces the old always-a-row-in-the-layout top header (no app title
  *  shown anywhere now); positioned `fixed` so it never takes any layout
- *  space and sits above the sidebar regardless of scroll. */
+ *  space and sits above the sidebar regardless of scroll. Top-left, not
+ *  bottom-left: the student biometric badges and webcam preview occupy
+ *  the bottom-left and covered it. Sidebar.tsx keeps its collapsed/hidden
+ *  toggle below this button. */
 export function Header({ onLogoutRequest }: HeaderProps) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -54,9 +57,9 @@ export function Header({ onLogoutRequest }: HeaderProps) {
         : 'bg-green-100 text-green-800';
 
   return (
-    <div ref={menuRef} data-replay-region="header" className="fixed bottom-3 left-3 z-50">
+    <div ref={menuRef} data-replay-region="header" className="fixed top-2 left-2 z-50">
       {open && (
-        <div className="absolute bottom-full left-0 mb-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg py-1.5 overflow-hidden">
+        <div className="absolute top-full left-0 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg py-1.5 overflow-hidden">
           <div className="px-3 py-2 border-b border-gray-100">
             <div className="text-sm font-medium text-gray-800 truncate">{user.name}</div>
             <span
@@ -84,12 +87,12 @@ export function Header({ onLogoutRequest }: HeaderProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-colors"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-colors"
         title={user.name}
         aria-label="Account menu"
         aria-expanded={open}
       >
-        <UserIcon size={18} />
+        <UserIcon size={16} />
       </button>
     </div>
   );

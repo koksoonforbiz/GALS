@@ -57,7 +57,7 @@ export function Layout() {
 
   return (
     <PageContextProvider>
-      {/* Header is now a fixed bottom-left account button (see
+      {/* Header is now a fixed top-left account button (see
           Header.tsx) instead of a top row, so it consumes no layout
           space at all — the row below always gets the full viewport.
           `main` still gets its own overflow-y-auto so pages taller than
