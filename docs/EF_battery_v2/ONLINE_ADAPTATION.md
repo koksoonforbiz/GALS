@@ -147,7 +147,7 @@ On-screen wording:
 | -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Format   | Golden card: 5 × 20 grid, 45 s per page, oral naming   | **Same grid** (reading order down the columns), **keyboard responses:** F = red, J = green, K = blue, with labels on screen; the current item is highlighted |
 | Practice | Practice row per page                                  | Practice row (`stroop.practice`, with feedback) **plus a key-mapping block of about 12 items** (new, to learn the keys)                                      |
-| Errors   | Facilitator says "No"; participant corrects; time runs | **The item flashes red and the correct key must be pressed; time keeps running**                                                                             |
+| Errors   | Facilitator says "No"; participant corrects; time runs | **The item flashes red, keys are ignored for 400 ms, and the correct key must be pressed; time keeps running** (see §6)                                      |
 | Restart  | Restart from the top if finished                       | Same                                                                                                                                                         |
 | Scores   | W, C, CW items completed; Golden IG = CW − (W×C)/(W+C) | Same; **plus per-item RT** and corrected-error counts                                                                                                        |
 
@@ -230,3 +230,20 @@ In a full browser run (Chromium, 60 Hz display), every W1/W2 item was measured o
 3. W5 RT: **from sentence onset**, with sentence length recorded for modelling.
 4. W6 keys: **F = red, J = green, K = blue**, shown on screen.
 5. Practice feedback wording: **approved as drafted.**
+
+## 6. Changes after the validity audit (2026-11-13, scoring version `efa-1.1.0`)
+
+An audit of the implementation against `scoring_key.tex` found the formulas correct and the timing sound (`performance.now()`, onsets after paint), and these issues, now fixed:
+
+1. **W6 key-guessing.** With no cost for a wrong key, cycling F → J → K passed any item in about two presses without reading it, so CW (and IG) could exceed honest performance. A wrong key now locks the keys for **400 ms**, playing the role of the time a spoken correction costs on the paper version (Golden, 1978). Held-key auto-repeat is ignored. A page with more than 25 % wrong presses is flagged `<page>_high_error_rate` in the task-score flags.
+2. **Server-side time limit (W6).** Presses later than 45 s (+250 ms tolerance) after the page onset are not counted; the number dropped is flagged `<page>_late_presses_dropped`.
+3. **Parts never given are missing, not zero.** In an interrupted run, W1 backward, W2, a W3 list, or a W6 page that was never presented now scores `null` instead of 0 (or "30 errors"); Golden IG and the W3 switch cost are `null` when one of their parts is missing. `run_status` stays in the export.
+4. **W4 unsubmitted word.** A word still in the box when the 60 s ends is stored as `unsubmitted` in the trial response. It is not scored.
+5. **No 24 h expiry.** An occasion idle for more than 24 h no longer locks: the student continues, and the occasion is flagged `resumedAfterIdle`. Pre-register this flag as an exclusion criterion or covariate, since the before-questions (C1–C7) may be stale for puzzles done days later.
+
+Open points (not changed):
+
+- W5 Part A errors are not rater-coded, although `scoring_key.tex` records them. Either add Part A to the coding queue or report the deviation.
+- The ADEXI "12-item variant" in `scoring.ts` could not be traced to a publication. Check the source before reporting it.
+- Hayling stems have no local cloze norms (decision Q3), so Part B may sit at floor. Check the Part B distribution after the pilot.
+- W3 switch cost is a difference score from one list per condition, so expect low reliability (Hedge, Powell & Sumner, 2018).

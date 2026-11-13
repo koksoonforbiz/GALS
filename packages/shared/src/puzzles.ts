@@ -146,6 +146,8 @@ export const PuzzleStepResultSchema = z.discriminatedUnion('kind', [
     startMs: ms,
     endMs: ms,
     nudged: z.boolean().optional(),
+    /** typed but not submitted when time ran out — kept for the record, not scored */
+    unsubmitted: z.string().max(64).optional(),
     ...timing,
   }),
   z.object({

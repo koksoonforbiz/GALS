@@ -21,7 +21,7 @@ const COURSE_ID = process.env.E2E_COURSE_ID;
 
 test.use({
   baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5175',
-  viewport: { width: 1400, height: 900 },
+  viewport: { width: 1700, height: 900 }, // ≥ 1600: module list starts expanded
   actionTimeout: 30_000,
 });
 test.describe.configure({ retries: 0 });
@@ -42,10 +42,12 @@ async function stroopPress(page: Page, stepId: string) {
   const cell = page.locator('[data-current="true"]');
   // between a finished row and the next screen there is no current cell
   if (!(await cell.count())) return void (await page.waitForTimeout(100));
-  const [text, color] = await cell.evaluate((el) => [
-    el.textContent ?? '',
-    getComputedStyle(el).color,
-  ]);
+  // the row can finish between count() and evaluate(): treat that as "no cell"
+  const read = await cell
+    .evaluate((el) => [el.textContent ?? '', getComputedStyle(el).color], { timeout: 1_000 })
+    .catch(() => null);
+  if (!read) return;
+  const [text, color] = read;
   const key = stepId.includes('.W.') ? WORD[text.trim()] : INK[color];
   if (!key) {
     // the row may have just finished (its result is on the way to the server)
@@ -149,7 +151,7 @@ test('one full T0 occasion: questionnaire, all seven puzzles, course unlocked', 
 
   // Course page: locked, with the checklist and its Start button.
   await page.goto(`/student/courses/${COURSE_ID}`);
-  await expect(page.getByTestId('course-gate-checklist').first()).toBeVisible();
+  await expect(page.locator('[data-testid="course-gate-checklist"]:visible').first()).toBeVisible();
   await expect(page.getByText('About you and how you feel today').first()).toBeVisible();
   await page.getByRole('link', { name: 'Start' }).first().click();
   await page.waitForURL(/\/puzzles\/T0$/);

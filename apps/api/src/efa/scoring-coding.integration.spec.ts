@@ -412,7 +412,7 @@ describe('EF scoring, coding and exports (HTTP)', () => {
       expect(body).not.toContain('p6-student');
     }
     expect(files.occasions).toContain(SCORING_VERSION);
-    expect(files.scores).toMatch(/,w6,1,completed,efa-1\.0\.0,golden_ig,/);
+    expect(files.scores).toMatch(/,w6,1,completed,efa-1.1.0,golden_ig,/);
     expect(files.questionnaire).toMatch(/,score,adexi_wm,45,/);
     expect(files.questionnaire).toMatch(/,score,adexi_inh,25,/);
     expect(files.trials.split('\n').filter((l) => l.includes(',w1,')).length).toBeGreaterThan(30);

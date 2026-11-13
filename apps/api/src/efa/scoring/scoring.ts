@@ -6,7 +6,7 @@
  * SCORING_VERSION can re-score old data. No z-scores or composites here:
  * those are computed at analysis time against the T0 sample.
  */
-export const SCORING_VERSION = 'efa-1.0.0';
+export const SCORING_VERSION = 'efa-1.1.0';
 
 /** The trial fields scoring needs (subset of efa_trials). */
 export interface ScoreTrial {
@@ -47,9 +47,10 @@ export function scoreW1(trials: ScoreTrial[]): ScoreResult {
   const bwd = test(trials, 'bwd');
   return {
     scores: {
-      fwd_total: fwd.filter((t) => t.correct).length, // 0–16
+      // null, not 0, for a part never reached (interrupted run)
+      fwd_total: fwd.length ? fwd.filter((t) => t.correct).length : null, // 0–16
       fwd_longest: longest(fwd),
-      bwd_total: bwd.filter((t) => t.correct).length, // 0–14
+      bwd_total: bwd.length ? bwd.filter((t) => t.correct).length : null, // 0–14
       bwd_longest: longest(bwd),
       fwd_trials_given: fwd.length,
       bwd_trials_given: bwd.length,
@@ -63,7 +64,7 @@ export function scoreW2(trials: ScoreTrial[]): ScoreResult {
   const t = test(trials, 'lns');
   return {
     scores: {
-      total: t.filter((x) => x.correct).length,
+      total: t.length ? t.filter((x) => x.correct).length : null, // null if never given
       longest: longest(t),
       trials_given: t.length,
     },
@@ -83,12 +84,15 @@ export function scoreW3(trials: ScoreTrial[]): ScoreResult {
       answered.length === 30 && items[0]!.onsetMs != null
         ? (answered[answered.length - 1]!.submitMs! - items[0]!.onsetMs) / 1000
         : null;
-    const errors = items.filter((t) => t.correct !== true).length + (30 - items.length);
+    // A list never given has no error count (it is not "30 errors").
+    const errors = items.length
+      ? items.filter((t) => t.correct !== true).length + (30 - items.length)
+      : null;
     scores[`t${list}_s`] = time == null ? null : round(time);
     scores[`e${list}`] = errors;
     const rts = answered.filter((t) => t.onsetMs != null).map((t) => t.submitMs! - t.onsetMs!);
     scores[`rt${list}_mean_ms`] = rts.length ? round(mean(rts)!, 1) : null;
-    if (errors > 3) flags[`list${list}_over3_errors`] = true;
+    if (errors != null && errors > 3) flags[`list${list}_over3_errors`] = true;
     times.push(time);
   }
   const [t1, t2, t3] = times;
@@ -242,28 +246,41 @@ export function goldenIG(w: number, c: number, cw: number): number | null {
   return w + c > 0 ? round(cw - (w * c) / (w + c), 2) : null;
 }
 
+/** Golden page length; presses after it are not counted (the client timer is not trusted). */
+export const W6_PAGE_MS = 45_000;
+const W6_LATE_TOLERANCE_MS = 250;
+/** Share of wrong presses above which a page is flagged as probable key-guessing. */
+export const W6_ERROR_RATE_FLAG = 0.25;
+
 export function scoreW6(trials: ScoreTrial[]): ScoreResult {
   const scores: Record<string, number | null> = {};
+  const flags: Record<string, unknown> = {};
   const page = (p: string) => {
     const t = test(trials, p)[0];
-    const presses = (
+    const all = (
       (t?.response as { presses?: Array<{ i: number; atMs: number; correct: boolean }> })
         ?.presses ?? []
     ).slice();
+    const onset = t?.onsetMs ?? null;
+    const presses =
+      onset == null ? all : all.filter((x) => x.atMs <= onset + W6_PAGE_MS + W6_LATE_TOLERANCE_MS);
+    if (presses.length < all.length)
+      flags[`${p.toLowerCase()}_late_presses_dropped`] = all.length - presses.length;
     const done = presses.filter((x) => x.correct);
     // per-item RT: time from the previous completed item (or page start) to this item's correct press
     const rts: number[] = [];
-    let prev = t?.onsetMs ?? null;
+    let prev = onset;
     for (const d of done) {
       if (prev != null) rts.push(d.atMs - prev);
       prev = d.atMs;
     }
-    return {
-      items: done.length,
-      errors: presses.length - done.length,
-      rt: mean(rts),
-      present: !!t,
-    };
+    const errors = presses.length - done.length;
+    if (presses.length && errors / presses.length > W6_ERROR_RATE_FLAG)
+      flags[`${p.toLowerCase()}_high_error_rate`] = round(errors / presses.length);
+    // A page never given is missing, not 0 items.
+    return t
+      ? { items: done.length, errors, rt: mean(rts), present: true }
+      : { items: null, errors: null, rt: null, present: false };
   };
   const W = page('W');
   const C = page('C');
@@ -275,12 +292,15 @@ export function scoreW6(trials: ScoreTrial[]): ScoreResult {
   scores.w_corrected_errors = W.errors;
   scores.c_corrected_errors = C.errors;
   scores.cw_corrected_errors = CW.errors;
-  scores.golden_ig = goldenIG(W.items, C.items, CW.items); // primary (+z)
-  scores.cw_over_c = C.items ? round(CW.items / C.items) : null;
+  scores.golden_ig =
+    W.items != null && C.items != null && CW.items != null
+      ? goldenIG(W.items, C.items, CW.items)
+      : null; // primary (+z)
+  scores.cw_over_c = C.items && CW.items != null ? round(CW.items / C.items) : null;
   scores.c_mean_item_rt_ms = C.rt == null ? null : round(C.rt, 1);
   scores.cw_mean_item_rt_ms = CW.rt == null ? null : round(CW.rt, 1);
   scores.rt_interference_ms = C.rt != null && CW.rt != null ? round(CW.rt - C.rt, 1) : null;
-  return { scores, flags: {} };
+  return { scores, flags };
 }
 
 // ── W7 trails ─────────────────────────────────────────────────────────────

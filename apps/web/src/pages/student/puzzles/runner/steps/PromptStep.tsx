@@ -28,6 +28,8 @@ export function PromptStep({ step, rel, focus, onResult }: StepProps) {
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   const input = useRef<HTMLInputElement>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
@@ -52,6 +54,10 @@ export function PromptStep({ step, rel, focus, onResult }: StepProps) {
             startMs: rel(start.current),
             endMs: rel(t),
             nudged: nudged.current,
+            // a word still in the box at 60 s: recorded, not scored
+            ...(valueRef.current.trim()
+              ? { unsubmitted: valueRef.current.trim().slice(0, 64) }
+              : {}),
             focusLostMs: focus.take(),
           });
         }

@@ -82,7 +82,7 @@ test('colour check fails, reload interrupts a puzzle, staff unlock and export', 
   expect(download.suggestedFilename()).toBe('ef_task_scores.csv');
   const csv = readFileSync((await download.path())!, 'utf8');
   expect(csv.startsWith('pid,occasion,form,order_code,task')).toBe(true);
-  expect(csv).toMatch(/,w1,1,interrupted,efa-1\.0\.0,/);
+  expect(csv).toMatch(/,w1,1,interrupted,efa-1\.1\.0,/);
   expect(csv).not.toContain(env.E2E_STUDENT_LOGIN!);
 
   // ── student: Session 1 is open now

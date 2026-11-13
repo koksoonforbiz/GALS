@@ -4,12 +4,14 @@ import {
   prescoreW4,
   scoreAdexi,
   scoreW1,
+  scoreW2,
   scoreW3,
   scoreW4,
   scoreW5,
   scoreW6,
   scoreW7,
   stem,
+  W6_PAGE_MS,
   type FinalCodes,
   type ScoreTrial,
 } from './scoring';
@@ -64,6 +66,49 @@ describe('W6 Golden interference', () => {
     expect(s.cw_mean_item_rt_ms).toBe(1400);
     expect(s.rt_interference_ms).toBe(800);
   });
+
+  const pressPage = (part: string, presses: Array<[number, boolean]>) =>
+    trial({
+      part,
+      onsetMs: 1000,
+      response: { presses: presses.map(([atMs, correct], i) => ({ i, atMs, correct })) },
+    });
+
+  it('presses after the 45 s page are not counted (server-side limit)', () => {
+    const late = 1000 + W6_PAGE_MS + 5000;
+    const r = scoreW6([
+      pressPage('W', [
+        [2000, true],
+        [late, true],
+      ]),
+      pressPage('C', [[2000, true]]),
+      pressPage('CW', [[2000, true]]),
+    ]);
+    expect(r.scores.w_items).toBe(1);
+    expect(r.flags).toEqual(expect.objectContaining({ w_late_presses_dropped: 1 }));
+  });
+
+  it('a page never given is missing (null), and IG is not computed from it', () => {
+    const r = scoreW6([pressPage('W', [[2000, true]]), pressPage('C', [[2000, true]])]);
+    expect(r.scores.cw_items).toBeNull();
+    expect(r.scores.cw_corrected_errors).toBeNull();
+    expect(r.scores.golden_ig).toBeNull();
+    expect(r.scores.cw_over_c).toBeNull();
+  });
+
+  it('flags a page where more than a quarter of presses were wrong (key-guessing)', () => {
+    const guess: Array<[number, boolean]> = Array.from({ length: 20 }, (_, i) => [
+      2000 + i * 300,
+      i % 2 === 0,
+    ]);
+    const r = scoreW6([
+      pressPage('W', [[2000, true]]),
+      pressPage('C', [[2000, true]]),
+      pressPage('CW', guess),
+    ]);
+    expect(r.flags).toEqual(expect.objectContaining({ cw_high_error_rate: 0.5 }));
+    expect(r.flags).not.toHaveProperty('w_high_error_rate');
+  });
 });
 
 describe('W1 number repetition', () => {
@@ -90,6 +135,22 @@ describe('W1 number repetition', () => {
         fwd_trials_given: 6,
       }),
     );
+  });
+});
+
+describe('W1/W2: parts never given are missing, not zero', () => {
+  const t = (part: string, len: number, correct: boolean) =>
+    trial({ part, stimulus: Array(len).fill('1'), correct });
+  it('W1 backward never reached (interrupted) → bwd_total null', () => {
+    const s = scoreW1([t('fwd', 2, true), t('fwd', 2, false)]).scores;
+    expect(s.fwd_total).toBe(1);
+    expect(s.bwd_total).toBeNull();
+    expect(s.bwd_trials_given).toBe(0);
+  });
+  it('W2 totals and longest; no trials → null', () => {
+    const s = scoreW2([t('lns', 3, true), t('lns', 3, true), t('lns', 4, false)]).scores;
+    expect(s).toEqual(expect.objectContaining({ total: 2, longest: 3, trials_given: 3 }));
+    expect(scoreW2([]).scores.total).toBeNull();
   });
 });
 
@@ -123,6 +184,8 @@ describe('W3 plus–minus', () => {
     const r = scoreW3([...list(1, 2).slice(0, 10)]);
     expect(r.scores.t1_s).toBeNull();
     expect(r.scores.e1).toBe(20);
+    expect(r.scores.e2).toBeNull(); // never given: not "30 errors"
+    expect(r.scores.switch_cost_s).toBeNull();
   });
 });
 

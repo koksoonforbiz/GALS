@@ -6,6 +6,13 @@ import type { StepProps } from './types';
 type Colour = 'red' | 'green' | 'blue';
 type Cell = { text: string; ink: Colour | 'black' };
 const KEYS: Record<string, Colour> = { f: 'red', j: 'green', k: 'blue' };
+/**
+ * After a wrong key, keys are ignored this long. Golden's spoken version
+ * makes an error cost the time to say the word again; without a cost,
+ * cycling F→J→K passes any item in ~2 presses without reading it, so CW
+ * (and IG) could exceed honest performance.
+ */
+export const ERROR_LOCKOUT_MS = 400;
 // Battery ink colours (ef.py \definecolor inkred/inkgreen/inkblue).
 const INK: Record<Cell['ink'], string> = {
   red: 'rgb(200,30,30)',
@@ -18,7 +25,8 @@ const INK: Record<Cell['ink'], string> = {
  * W6 colours, Golden card layout on the keyboard. mode "keys"/"row" are
  * untimed practice (read across); mode "grid" is the 45 s page read down
  * the columns, restarting from the top when finished. A wrong key flashes
- * the item red and the right key must still be pressed (time runs on).
+ * the item red, keys are ignored for ERROR_LOCKOUT_MS, and the right key
+ * must still be pressed (time runs on). Held-key auto-repeat is ignored.
  * The correct key is the visible word (W page) or ink (C, CW pages).
  */
 export function GridStep({ step, rel, focus, onResult }: StepProps) {
@@ -39,6 +47,7 @@ export function GridStep({ step, rel, focus, onResult }: StepProps) {
   const start = useRef(0);
   const done = useRef(false);
   const posRef = useRef(0);
+  const lockedUntil = useRef(0);
   posRef.current = pos;
 
   const correctOf = (c: Cell): Colour =>
@@ -89,7 +98,9 @@ export function GridStep({ step, rel, focus, onResult }: StepProps) {
       const colour = KEYS[e.key.toLowerCase()];
       if (!colour || done.current) return;
       e.preventDefault();
+      if (e.repeat) return;
       const at = now();
+      if (at < lockedUntil.current) return;
       const i = posRef.current;
       presses.current.push({ i, key: colour, atMs: rel(at) });
       if (colour === correctOf(p.cells[i % n]!)) {
@@ -99,6 +110,7 @@ export function GridStep({ step, rel, focus, onResult }: StepProps) {
         if (!timed && next >= n) finish(at); // practice: once through
       } else {
         setFlash(true); // must press the right key; position stays
+        lockedUntil.current = at + ERROR_LOCKOUT_MS;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -106,6 +118,17 @@ export function GridStep({ step, rel, focus, onResult }: StepProps) {
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const current = pos % n;
+
+  // The 20-row page is taller than a 768 px laptop screen: keep the current
+  // item in view so the student never has to leave the keys to scroll
+  // during the timed 45 s (that would cost items, not reflect inhibition).
+  useEffect(() => {
+    if (!started) return;
+    document
+      .querySelector<HTMLElement>('[data-current="true"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pos, started]);
+
   const cellView = (c: Cell, i: number) => (
     <div
       key={i}

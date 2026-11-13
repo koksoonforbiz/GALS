@@ -31,12 +31,19 @@ export function QuestionnaireStep({
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
+    // A late (or StrictMode's second) response must not wipe answers given
+    // since: drop stale responses, and keep local edits over saved ones.
+    let current = true;
     void api
       .get<QuestionnaireData>(`/puzzles/occasions/${occasionId}/questionnaire?part=${part}`)
       .then((d) => {
+        if (!current) return;
         setData(d);
-        setValues(d.answers);
+        setValues((v) => ({ ...d.answers, ...v }));
       });
+    return () => {
+      current = false;
+    };
   }, [occasionId, part]);
 
   const save = (code: string, value: unknown, delay = 0) => {
