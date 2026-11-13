@@ -1,5 +1,6 @@
 import { useRoutes } from 'react-router-dom';
 import { AppShell } from './AppShell';
+import { DeviceGate } from '../components/student/DeviceGate';
 import type { NavConfig } from '../nav/NavConfigContext';
 import { studentNavItems } from '../nav/studentNav';
 import { authRoutes, fallbackRoutes } from '../routes/authRoutes';
@@ -24,9 +25,12 @@ function StudentRoutes() {
 }
 
 export function StudentApp() {
+  // Laptop/desktop only: phones and tablets stop here, before login.
   return (
-    <AppShell navConfig={navConfig}>
-      <StudentRoutes />
-    </AppShell>
+    <DeviceGate>
+      <AppShell navConfig={navConfig}>
+        <StudentRoutes />
+      </AppShell>
+    </DeviceGate>
   );
 }
