@@ -68,6 +68,7 @@ server {
 
     ssl_certificate     /etc/nginx/certs/student.crt;
     ssl_certificate_key /etc/nginx/certs/student.key;
+    include /etc/nginx/gals/snippets/real-ip-imperva.conf;
     include /etc/nginx/gals/snippets/tls.conf;
     include /etc/nginx/gals/snippets/security-headers.conf;
 
