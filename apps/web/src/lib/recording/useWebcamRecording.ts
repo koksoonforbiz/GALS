@@ -13,7 +13,12 @@ export interface RecordingState {
   error: string | null;
 }
 
-const MAX_SEGMENT_BYTES = 50 * 1024 * 1024; // 50 MB auto-rotate
+// Upload volume shares the student's uplink with every other request
+// (2026-11-13: 50 MB segments at the browser default ~2.5 Mbit/s queued
+// lesson saves past their 15 s timeout). 800 kbit/s keeps 640x480 face
+// video clear for the analysis; 10 MB segments (~1.7 min) upload quickly.
+const MAX_SEGMENT_BYTES = 10 * 1024 * 1024; // auto-rotate
+const VIDEO_BITS_PER_SECOND = 800_000;
 
 function getPreferredMimeType(): string {
   const candidates = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -139,7 +144,10 @@ export function useWebcamRecording(
       totalBytesRef.current = 0;
 
       const mimeType = getPreferredMimeType();
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: VIDEO_BITS_PER_SECOND,
+      });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -147,7 +155,7 @@ export function useWebcamRecording(
           chunksRef.current.push(e.data);
           totalBytesRef.current += e.data.size;
 
-          // Auto-rotate at 50 MB
+          // Auto-rotate at MAX_SEGMENT_BYTES
           if (totalBytesRef.current >= MAX_SEGMENT_BYTES && !isStoppingRef.current) {
             isStoppingRef.current = true;
             recorder.stop();
@@ -161,15 +169,16 @@ export function useWebcamRecording(
         const currentSid = segmentIdRef.current;
         const startTime = segmentStartTimeRef.current;
 
-        if (currentSid && blob.size > 0) {
-          await uploadSegment(blob, currentSid, startTime, stoppedAt);
-        }
-
-        // If auto-rotated, start a new segment
+        // If auto-rotated, start the next segment BEFORE uploading this one,
+        // so the recording has no gap while the upload runs.
         if (isStoppingRef.current && streamRef.current?.active) {
           isStoppingRef.current = false;
           segmentIndexRef.current += 1;
-          startRecording();
+          void startRecording();
+        }
+
+        if (currentSid && blob.size > 0) {
+          await uploadSegment(blob, currentSid, startTime, stoppedAt);
         }
       };
 

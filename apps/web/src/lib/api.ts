@@ -186,15 +186,20 @@ export const api = {
    * just session-replay snapshots — not a general-purpose replacement for
    * `post`. The server decompresses transparently based on Content-Encoding.
    */
-  postCompressed: async <T>(path: string, data: unknown): Promise<T> => {
+  postCompressed: async <T>(
+    path: string,
+    data: unknown,
+    opts: { timeoutMs?: number } = {},
+  ): Promise<T> => {
     if (!supportsGzipCompression) {
-      return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data) });
+      return apiFetch<T>(path, { method: 'POST', body: JSON.stringify(data), ...opts });
     }
     const compressed = await gzipJson(data);
     return apiFetch<T>(path, {
       method: 'POST',
       body: compressed,
       headers: { 'Content-Encoding': 'gzip' },
+      ...opts,
     });
   },
 

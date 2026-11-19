@@ -42,6 +42,9 @@ const MAX_HTML_CHARS = 5_000_000;
 // `splitIntoSizedChunks` helper puts oversized events in their own
 // chunk, but the batch still has to be acceptably sized).
 const MAX_BATCH_BYTES = 8_000_000;
+// Periodic screen frames (see captureScreenshot).
+const MAX_SCREENSHOT_WIDTH = 1280;
+const SCREENSHOT_JPEG_QUALITY = 0.6;
 
 interface UseSessionReplayRecorderParams {
   sessionId: string;
@@ -906,9 +909,14 @@ export function useSessionReplayRecorder({
   // clearPermittedScreenStream() on logout or by the browser's stop-sharing UI.
   const streamFromGateRef = useRef(false);
 
+  // One replay upload at a time: overlapping multi-MB uploads saturated a
+  // student's uplink on 2026-11-13 and pushed every request past its timeout.
+  const flushingRef = useRef(false);
+
   const flush = useCallback(
     async (useKeepalive = false) => {
       if (bufferRef.current.length === 0) return;
+      if (!useKeepalive && flushingRef.current) return;
       const events = bufferRef.current.splice(0);
       const chunks = splitIntoSizedChunks(sessionId, userId, events);
 
@@ -919,20 +927,23 @@ export function useSessionReplayRecorder({
         return;
       }
 
+      flushingRef.current = true;
       try {
         for (const chunk of chunks) {
           // Compressed (gzip, ~10:1 on HTML/text) — this is the bulk of the
           // recorder's network cost. The unload/keepalive path above stays
           // uncompressed: compression is async, and unload handlers need to
           // fire reliably more than they need to save bandwidth.
-          await api.postCompressed('/logs/replay-snapshots', {
-            sessionId,
-            userId,
-            events: chunk,
-          });
+          await api.postCompressed(
+            '/logs/replay-snapshots',
+            { sessionId, userId, events: chunk },
+            { timeoutMs: 60_000 }, // large background upload, not the 15 s UI default
+          );
         }
       } catch {
         bufferRef.current.unshift(...events);
+      } finally {
+        flushingRef.current = false;
       }
     },
     [sessionId, userId],
@@ -942,8 +953,14 @@ export function useSessionReplayRecorder({
     const video = screenVideoRef.current;
     if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return undefined;
 
-    const width = Math.max(1, Math.floor(video.videoWidth || window.innerWidth));
-    const height = Math.max(1, Math.floor(video.videoHeight || window.innerHeight));
+    // Downscale: a tab capture comes at device pixels (2880 px wide on a
+    // Retina laptop, ~400 KB per JPEG, ~25 MB/min at 1 Hz). 1280 px keeps
+    // the replay legible at ~60-80 KB per frame.
+    const nativeW = Math.max(1, Math.floor(video.videoWidth || window.innerWidth));
+    const nativeH = Math.max(1, Math.floor(video.videoHeight || window.innerHeight));
+    const scale = Math.min(1, MAX_SCREENSHOT_WIDTH / nativeW);
+    const width = Math.max(1, Math.round(nativeW * scale));
+    const height = Math.max(1, Math.round(nativeH * scale));
     let canvas = screenCanvasRef.current;
     if (!canvas) {
       canvas = document.createElement('canvas');
@@ -955,7 +972,7 @@ export function useSessionReplayRecorder({
     if (!ctx) return undefined;
 
     ctx.drawImage(video, 0, 0, width, height);
-    return canvas.toDataURL('image/jpeg', 0.7);
+    return canvas.toDataURL('image/jpeg', SCREENSHOT_JPEG_QUALITY);
   }, []);
 
   const captureSnapshot = useCallback(
