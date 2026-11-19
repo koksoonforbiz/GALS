@@ -44,13 +44,34 @@ COPY apps/web/ .
 FROM web-src AS build
 RUN pnpm run build
 
-# Pinned (checklist item 24) — was the rolling `alpine` tag.
-# `nginx-unprivileged` (not plain `nginx`) — pre-built to run as a
-# non-root user out of the box (checklist item 50 / CIS Docker
-# Benchmark 4.1), rather than hand-patching pid/temp-dir paths onto
-# the root-oriented official image. Listens on 8080, not 80 — see
-# nginx.conf's comment (non-root can't bind ports below 1024).
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS production
+# Pinned (checklist item 24). Runs as the non-root `nginx` user
+# (checklist item 50 / CIS Docker Benchmark 4.1); listens on 8080, not
+# 80 — see nginx.conf's comment (non-root can't bind ports below 1024).
+#
+# Built on the official image with the same patches the
+# nginx-unprivileged image applies (no `user` directive, pid and temp
+# dirs under /tmp, nginx-owned /etc/nginx and cache), because that image
+# lagged the 2026-11-18 security release: 1.30.7 fixes CVE-2026-123007
+# (HTTP/2 flow control), CVE-2026-118899 (TLS 1.3 request-body loop),
+# CVE-2026-123633 (HTTP/2 UAF), CVE-2026-123634 (resolver UAF) and
+# others; 1.30.6 is vulnerable (https://nginx.org/en/security_advisories.html).
+# Bump the patch version here at the next nginx security release.
+FROM nginx:1.30.7-alpine AS nginx-base
+# Temp paths are http-level, so they go in conf.d (included inside http {}).
+RUN sed -i 's,listen       80;,listen       8080;,' /etc/nginx/conf.d/default.conf \
+    && sed -i '/^user /d' /etc/nginx/nginx.conf \
+    && sed -i 's,^pid .*,pid        /tmp/nginx.pid;,' /etc/nginx/nginx.conf \
+    && printf '%s\n' \
+       'proxy_temp_path       /tmp/proxy_temp;' \
+       'client_body_temp_path /tmp/client_temp;' \
+       'fastcgi_temp_path     /tmp/fastcgi_temp;' \
+       'uwsgi_temp_path       /tmp/uwsgi_temp;' \
+       'scgi_temp_path        /tmp/scgi_temp;' > /etc/nginx/conf.d/00-unprivileged-temp.conf \
+    && chown -R nginx:0 /var/cache/nginx /etc/nginx \
+    && chmod -R g+w /var/cache/nginx /etc/nginx
+USER nginx
+
+FROM nginx-base AS production
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 COPY --chown=nginx:nginx apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8080
@@ -64,7 +85,7 @@ EXPOSE 8080
 FROM web-src AS twodoor-build
 RUN pnpm run build:student && pnpm run build:admin
 
-FROM nginxinc/nginx-unprivileged:1.30-alpine AS twodoor
+FROM nginx-base AS twodoor
 USER root
 RUN rm -f /etc/nginx/conf.d/default.conf \
     && mkdir -p /var/www/certbot /etc/nginx/certs /etc/nginx/gals \
