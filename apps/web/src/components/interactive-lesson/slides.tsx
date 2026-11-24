@@ -8,7 +8,14 @@
  * snapshots never carry learner text (PHASE0_DISCOVERY.md decision (f)).
  */
 import { useMemo, useState } from 'react';
-import type { LessonMcqOption, LessonSessionMeta, LessonSlide } from '@ats/shared';
+import { api } from '../../lib/api';
+import type {
+  CheckpointFeedback,
+  CheckpointVerdict,
+  LessonMcqOption,
+  LessonSessionMeta,
+  LessonSlide,
+} from '@ats/shared';
 import { LESSON_GATES } from './gates';
 import type { SlideFields } from './useLessonData';
 import { mcqOrder } from './mcqOrder';
@@ -154,7 +161,7 @@ function TextGate({
   fields: SlideFields;
   save: SlideProps['save'];
   emit: LessonEmit;
-  onSaved?: () => void;
+  onSaved?: (text: string) => void;
 }) {
   const savedText = str(fields.text);
   const [value, setValue] = useState(savedText);
@@ -182,7 +189,7 @@ function TextGate({
     save({ text: value });
     emit(`${kind}_submitted`, { chars: value.length, text: value, fieldKey: kind });
     setStatus({ text: 'Saved', ok: true });
-    onSaved?.();
+    onSaved?.(value);
   };
   return (
     <div data-replay-redact="">
@@ -289,8 +296,54 @@ function ReflectSlide(p: SlideProps) {
   );
 }
 
+const VERDICT_LABEL: Record<CheckpointVerdict, string> = {
+  on_track: 'On track',
+  partly: 'Partly there',
+  off_track: 'Not quite',
+};
+
+/** AI feedback on the Checkpoint prediction, kept in the slide's fields. */
+function CheckpointFeedbackBox({ fb, loading }: { fb?: CheckpointFeedback; loading: boolean }) {
+  if (loading)
+    return (
+      <div className="ai-feedback" role="status" aria-live="polite">
+        Getting feedback on your prediction…
+      </div>
+    );
+  if (!fb) return null;
+  return (
+    <div className={`ai-feedback ${fb.verdict}`} role="status" aria-live="polite">
+      <div className="ai-feedback-title">
+        AI feedback · <strong>{VERDICT_LABEL[fb.verdict]}</strong>
+      </div>
+      <p>{fb.feedback}</p>
+    </div>
+  );
+}
+
 function PredictSlide(p: SlideProps) {
   const [open, setOpen] = useState(Boolean(p.fields.text));
+  const [loading, setLoading] = useState(false);
+  const fb = p.fields.aiFeedback as CheckpointFeedback | undefined;
+  const requestFeedback = (answer: string) => {
+    if (p.readOnly) return;
+    setLoading(true);
+    api
+      .post<{ feedback: CheckpointFeedback | null }>(
+        `/interactive-lessons/items/${p.itemId}/slides/${encodeURIComponent(p.slide.key)}/feedback`,
+        { answer, ...(p.sessionId ? { sessionId: p.sessionId } : {}) },
+        { timeoutMs: 45_000 },
+      )
+      .then((res) => {
+        // Keep it in the local fields too: later saves of this slide send
+        // the whole field set and would otherwise drop it.
+        if (res.feedback) p.save({ aiFeedback: res.feedback });
+      })
+      .catch(() => {
+        // Feedback is a support, never a gate: the reveal is already open.
+      })
+      .finally(() => setLoading(false));
+  };
   return (
     <div className="box predict">
       <div className="box-title">{p.slide.box}</div>
@@ -300,15 +353,17 @@ function PredictSlide(p: SlideProps) {
         fields={p.fields}
         save={p.save}
         emit={p.emit}
-        onSaved={() => {
+        onSaved={(answer) => {
           setOpen(true);
           p.emit('predict_revealed', { auto: true });
+          requestFeedback(answer);
         }}
       />
       <div
         className={`reveal${open ? ' open' : ''}`}
         dangerouslySetInnerHTML={html(p.slide.reveal)}
       />
+      {open && <CheckpointFeedbackBox fb={fb} loading={loading} />}
       {open && (
         <ConfidenceRating
           value={p.fields.confidenceAfter as number | undefined}

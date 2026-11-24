@@ -311,10 +311,11 @@ Added 2026-10-07 (prompting course, Phase 6.1).
 
 Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 
-| Method | Path                                                            | @Roles                  | Guards                  | Door       | Note                                       |
-| ------ | --------------------------------------------------------------- | ----------------------- | ----------------------- | ---------- | ------------------------------------------ |
-| GET    | `/api/interactive-lessons/items/:itemId`                        | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service. |
-| PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.          |
+| Method | Path                                                               | @Roles                  | Guards                  | Door       | Note                                                                   |
+| ------ | ------------------------------------------------------------------ | ----------------------- | ----------------------- | ---------- | ---------------------------------------------------------------------- |
+| GET    | `/api/interactive-lessons/items/:itemId`                           | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service.                             |
+| PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state`    | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.                                      |
+| POST   | `/api/interactive-lessons/items/:itemId/slides/:slideKey/feedback` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | AI feedback on the student's own Checkpoint answer (added 2026-11-24). |
 
 ### KnowledgeTestsController (`knowledge-tests/knowledge-tests.controller.ts`)
 

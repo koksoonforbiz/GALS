@@ -271,6 +271,7 @@ export function ChatbotPanel({
     }
   }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const [isSending, setIsSending] = useState(false);
   const [isResolvingVlm, setIsResolvingVlm] = useState(false);
   const [isCheckingStepwiseCourse, setIsCheckingStepwiseCourse] = useState(false);
@@ -1095,9 +1096,25 @@ export function ChatbotPanel({
 
       {/* Chat input */}
       <div className="px-3 py-2 border-t border-gray-200">
+        {/* Ask about the slide on screen: puts its text in the question
+            context (the yellow bar above), like a manual selection. */}
+        {!selectedText && contentText && stripMdxToPlainText(contentText).trim().length >= 20 && (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedText(stripMdxToPlainText(contentText));
+              chatInputRef.current?.focus();
+            }}
+            className="mb-1.5 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+          >
+            <TextSelect size={12} /> Ask about this slide
+          </button>
+        )}
         <div className="flex gap-2">
           <input
+            ref={chatInputRef}
             type="text"
+            aria-label="Message the learning assistant"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {

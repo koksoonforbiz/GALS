@@ -70,6 +70,7 @@ export function InteractiveLesson({
     lesson,
     fieldsBySlide,
     saveFields,
+    unsaved,
     error,
     consent,
     setConsent,
@@ -278,6 +279,11 @@ export function InteractiveLesson({
         }
       }}
     >
+      {unsaved > 0 && !readOnly && (
+        <div className="il-unsaved" role="status" aria-live="polite">
+          Some of your answers are not saved yet — retrying. Please keep this page open.
+        </div>
+      )}
       <div className="il-bar">
         <button
           type="button"

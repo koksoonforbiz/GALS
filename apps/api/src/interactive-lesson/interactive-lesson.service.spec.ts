@@ -149,3 +149,80 @@ describe('InteractiveLessonService', () => {
     });
   });
 });
+
+describe('InteractiveLessonService.checkpointFeedback', () => {
+  const PREDICT_LESSON = {
+    ...LESSON,
+    slides: [
+      ...LESSON.slides,
+      {
+        key: 's1-2',
+        t: 'predict',
+        contentHash: 'c',
+        box: 'Checkpoint 1',
+        prompt: '<p>Which prompt is <b>more likely</b> to yield Canberra?</p>',
+        reveal: '<p>A, because B primes the common misconception.</p>',
+      },
+    ],
+  };
+  const llmReply = (content: string, provider = 'anthropic') => ({
+    content,
+    promptTokens: 10,
+    completionTokens: 20,
+    model: provider === 'template' ? null : 'model-x',
+    provider,
+  });
+
+  function setup(content: string, provider?: string) {
+    const prisma = {
+      moduleItem: {
+        findUnique: jest.fn().mockResolvedValue(lessonItem({ lessonJson: PREDICT_LESSON })),
+      },
+      enrollment: { findUnique: jest.fn().mockResolvedValue({ status: 'ACTIVE' }) },
+      lessonSlideState: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ state: { fields: { text: 'A because B misleads' } } }),
+        upsert: jest.fn(),
+      },
+    };
+    const llm = { callLlmStructured: jest.fn().mockResolvedValue(llmReply(content, provider)) };
+    const service = new InteractiveLessonService(prisma as any, undefined, undefined, llm as any);
+    return { prisma, llm, service };
+  }
+
+  it('asks the course teacher’s model with the prompt, the reveal and the answer, and stores the feedback', async () => {
+    const { prisma, llm, service } = setup('{"verdict":"on_track","feedback":"Good reasoning."}');
+    const fb = await service.checkpointFeedback('item-1', 's1-2', 'stu-1', 'A because B misleads');
+    expect(fb).toEqual(
+      expect.objectContaining({ verdict: 'on_track', feedback: 'Good reasoning.' }),
+    );
+    const [ownerId, req, usage] = llm.callLlmStructured.mock.calls[0];
+    expect(ownerId).toBe('teacher-1');
+    expect(req.messages[0].content).toContain('more likely');
+    expect(req.messages[0].content).toContain('B primes the common misconception');
+    expect(req.messages[0].content).toContain('A because B misleads');
+    expect(usage).toEqual(
+      expect.objectContaining({ feature: 'checkpoint_feedback', triggeredByUserId: 'stu-1' }),
+    );
+    const saved = prisma.lessonSlideState.upsert.mock.calls[0][0].update.state;
+    expect(saved.fields.text).toBe('A because B misleads'); // merged, not replaced
+    expect(saved.fields.aiFeedback.verdict).toBe('on_track');
+  });
+
+  it('returns null (reveal only) when the course has no LLM configured', async () => {
+    const { prisma, service } = setup('template text', 'template');
+    expect(await service.checkpointFeedback('item-1', 's1-2', 'stu-1', 'x')).toBeNull();
+    expect(prisma.lessonSlideState.upsert).not.toHaveBeenCalled();
+  });
+
+  it('tolerates a malformed verdict and refuses non-checkpoint slides', async () => {
+    const { service } = setup('Sure! {"verdict":"great","feedback":"Nice."}');
+    expect((await service.checkpointFeedback('item-1', 's1-2', 'stu-1', 'x'))?.verdict).toBe(
+      'partly',
+    );
+    await expect(service.checkpointFeedback('item-1', 's1-1', 'stu-1', 'x')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+});

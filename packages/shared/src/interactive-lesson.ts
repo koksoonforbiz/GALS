@@ -126,6 +126,26 @@ export const SaveLessonSlideStateSchema = z.object({
 
 export type SaveLessonSlideState = z.infer<typeof SaveLessonSlideStateSchema>;
 
+// ── Checkpoint feedback (AI marks a "Checkpoint" prediction) ───────────────
+
+export const CHECKPOINT_ANSWER_MAX_CHARS = 2000;
+
+export const CheckpointFeedbackRequestSchema = z.object({
+  answer: z.string().trim().min(1).max(CHECKPOINT_ANSWER_MAX_CHARS),
+  sessionId: z.string().uuid().optional(),
+});
+export type CheckpointFeedbackRequest = z.infer<typeof CheckpointFeedbackRequestSchema>;
+
+export type CheckpointVerdict = 'on_track' | 'partly' | 'off_track';
+
+/** Stored in the slide's fields as `aiFeedback` and returned to the student. */
+export interface CheckpointFeedback {
+  verdict: CheckpointVerdict;
+  feedback: string;
+  at: string;
+  model: string | null;
+}
+
 // ── Text-capture consent (prompting course, Phase 6) ──────────────────────
 
 /** Bump when the learner notice text changes; stored with every decision. */

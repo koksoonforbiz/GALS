@@ -9,6 +9,8 @@ import {
 import type { Prisma } from '@prisma/client';
 import {
   LESSON_SLIDE_STATE_MAX_BYTES,
+  type CheckpointFeedback,
+  type CheckpointVerdict,
   type LessonDocument,
   type LessonSlideState,
   type UserRole,
@@ -16,6 +18,22 @@ import {
 import { PrismaService } from '../prisma';
 import { TextConsentService } from '../governance/text-consent.service';
 import { CourseGateService } from '../course-gates/course-gate.service';
+import { LlmService } from '../rag/llm.service';
+
+const plain = (h: unknown): string =>
+  typeof h === 'string'
+    ? h
+        .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/\s+/g, ' ')
+        .trim()
+    : '';
+
+const VERDICTS: CheckpointVerdict[] = ['on_track', 'partly', 'off_track'];
 
 export interface LessonViewer {
   id: string;
@@ -28,6 +46,7 @@ export class InteractiveLessonService {
     private readonly prisma: PrismaService,
     @Optional() private readonly consent?: TextConsentService,
     @Optional() private readonly gates?: CourseGateService,
+    @Optional() private readonly llm?: LlmService,
   ) {}
 
   /**
@@ -64,7 +83,12 @@ export class InteractiveLessonService {
     } else if (viewer.role === 'teacher' && item.module.course.teacherId !== viewer.id) {
       throw new ForbiddenException('You can only view lessons in your own courses');
     }
-    return { item, courseId, lesson: item.lessonJson as unknown as LessonDocument };
+    return {
+      item,
+      courseId,
+      teacherId: item.module.course.teacherId,
+      lesson: item.lessonJson as unknown as LessonDocument,
+    };
   }
 
   async getLesson(itemId: string, viewer: LessonViewer) {
@@ -121,5 +145,101 @@ export class InteractiveLessonService {
       select: { slideKey: true, updatedAt: true },
     });
     return { ok: true, slideKey: row.slideKey, updatedAt: row.updatedAt };
+  }
+
+  /**
+   * AI feedback on a "Checkpoint" prediction (predict slide): compares the
+   * student's answer with the slide's own reveal text and returns a short
+   * verdict + feedback, stored in the slide state as `aiFeedback`. Billed to
+   * the course teacher's model like the Prompt Lab. Returns null when the
+   * course has no LLM configured (template provider) — the slide then shows
+   * the reveal only, as before.
+   */
+  async checkpointFeedback(
+    itemId: string,
+    slideKey: string,
+    studentId: string,
+    answer: string,
+    sessionId?: string,
+  ): Promise<CheckpointFeedback | null> {
+    const { courseId, teacherId, lesson } = await this.loadAuthorized(itemId, {
+      id: studentId,
+      role: 'student',
+    });
+    const slide = lesson.slides.find((s) => s.key === slideKey);
+    if (!slide) throw new BadRequestException(`Unknown slide "${slideKey}"`);
+    if (slide.t !== 'predict') throw new BadRequestException('Feedback is only for checkpoints');
+    if (!this.llm) return null;
+
+    const systemPrompt = [
+      'You are a supportive tutor in a university course on prompt engineering.',
+      'A student made a prediction at a checkpoint before reading the explanation.',
+      'Compare their prediction with the explanation. Judge the reasoning, not the wording.',
+      'Reply ONLY with JSON: {"verdict": "on_track" | "partly" | "off_track", "feedback": string}.',
+      'feedback: 2-3 short sentences, second person, plain English. Say what they got right,',
+      'then the one idea they missed or should refine. Do not repeat the whole explanation.',
+      'If the answer is off-topic or has no reasoning, use "off_track" and say so kindly.',
+    ].join(' ');
+    const userPrompt = [
+      `Checkpoint question:\n${plain(slide.prompt)}`,
+      `Explanation (the reference):\n${plain(slide.reveal)}`,
+      `Student's prediction:\n${answer.trim()}`,
+    ].join('\n\n');
+
+    const result = await this.llm.callLlmStructured(
+      teacherId,
+      {
+        systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+        jsonMode: true,
+        maxTokens: 300,
+        temperature: 0.2,
+      },
+      { feature: 'checkpoint_feedback', courseId, triggeredByUserId: studentId },
+    );
+    if (!result.provider || result.provider === 'template') return null;
+
+    let parsed: { verdict?: unknown; feedback?: unknown } = {};
+    try {
+      const m = /\{[\s\S]*\}/.exec(result.content);
+      parsed = m ? (JSON.parse(m[0]) as typeof parsed) : {};
+    } catch {
+      parsed = {};
+    }
+    const feedback =
+      typeof parsed.feedback === 'string' ? parsed.feedback.trim().slice(0, 800) : '';
+    if (!feedback) return null;
+    const verdict = VERDICTS.includes(parsed.verdict as CheckpointVerdict)
+      ? (parsed.verdict as CheckpointVerdict)
+      : 'partly';
+    const out: CheckpointFeedback = {
+      verdict,
+      feedback,
+      at: new Date().toISOString(),
+      model: result.model,
+    };
+
+    // Keep it with the slide so it survives a reload (merged, not replaced).
+    const where = {
+      studentId_moduleItemId_slideKey: { studentId, moduleItemId: itemId, slideKey },
+    };
+    const row = await this.prisma.lessonSlideState.findUnique({ where, select: { state: true } });
+    const prev = (row?.state as unknown as LessonSlideState | null) ?? { fields: {} };
+    const next = {
+      ...prev,
+      fields: { ...(prev.fields ?? {}), aiFeedback: out },
+    } as unknown as Prisma.InputJsonValue;
+    await this.prisma.lessonSlideState.upsert({
+      where,
+      create: {
+        studentId,
+        moduleItemId: itemId,
+        slideKey,
+        state: next,
+        lastSessionId: sessionId ?? null,
+      },
+      update: { state: next, lastSessionId: sessionId ?? null },
+    });
+    return out;
   }
 }

@@ -418,6 +418,43 @@
 .il-root .reveal > *:last-child {
   margin-bottom: 0;
 }
+.il-root .ai-feedback {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-left: 4px solid #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-size: 15px;
+}
+.il-root .ai-feedback.on_track {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+}
+.il-root .ai-feedback.partly {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+.il-root .ai-feedback.off_track {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
+.il-root .ai-feedback-title {
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 4px;
+}
+.il-root .ai-feedback p {
+  margin: 0;
+}
+.il-root .il-unsaved {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 13px;
+}
 .il-root .qa {
   margin: 0 0 12px;
   padding: 0 0 12px;
