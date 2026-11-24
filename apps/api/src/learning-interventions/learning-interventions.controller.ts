@@ -40,7 +40,9 @@ interface RequestUser {
 // Two-door: student-facing; the prompt-config/* methods stay private via their @Roles — see docs/two-door/api-classification.md.
 @PublicDoor()
 @Controller('learning-interventions')
-@UseGuards(JwtAuthGuard)
+// RolesGuard (no @Roles here) enforces the password-change and mandatory-
+// 2FA gates on every route, like all other controllers.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class LearningInterventionsController {
   constructor(private readonly service: LearningInterventionsService) {}
 

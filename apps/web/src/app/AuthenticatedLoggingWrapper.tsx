@@ -48,6 +48,12 @@ export function AuthenticatedLoggingWrapper({ children }: { children: React.Reac
     return () => track.removeEventListener('ended', onEnded);
   }, [user?.role, permissionsGranted, testBypass]);
 
+  // Account set-up comes first: until the password is changed and (where
+  // required) two-factor is enrolled, ProtectedRoute keeps the student on
+  // those pages and the API refuses everything else — so no screen-share
+  // gate, recording or logging starts before then.
+  if (user && (user.mustChangePassword || user.mustEnrolMfa)) return <>{children}</>;
+
   if (user?.role === 'student' && !permissionsGranted) {
     return <PermissionGate onGranted={() => setPermissionsGranted(true)} />;
   }

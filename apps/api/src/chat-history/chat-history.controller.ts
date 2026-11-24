@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 import { PublicDoor } from '../common';
 import { ChatHistoryService } from './chat-history.service';
 
@@ -29,7 +30,9 @@ interface RequestUser {
 // Two-door: a student's own chat history — see docs/two-door/api-classification.md.
 @PublicDoor()
 @Controller('chat-history')
-@UseGuards(JwtAuthGuard)
+// RolesGuard (no @Roles here) enforces the password-change and mandatory-
+// 2FA gates on every route, like all other controllers.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ChatHistoryController {
   constructor(private readonly service: ChatHistoryService) {}
 

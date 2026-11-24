@@ -28,7 +28,9 @@ interface RequestUser {
 }
 
 @Controller('question-generation')
-@UseGuards(JwtAuthGuard)
+// RolesGuard (no @Roles here) enforces the password-change and mandatory-
+// 2FA gates on every route, like all other controllers.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class QuestionGenerationController {
   constructor(private readonly service: QuestionGenerationService) {}
 

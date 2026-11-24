@@ -18,6 +18,7 @@ import type { Request, Response } from 'express';
 import { BlobService } from './blob.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 import { PublicDoor } from '../common';
 
 const ALLOWED_TYPES: Record<string, string> = {
@@ -33,7 +34,9 @@ interface RequestUser {
 // Two-door: attempt artefacts are read/written by students (BOTH) — see docs/two-door/api-classification.md.
 @PublicDoor()
 @Controller('blobs')
-@UseGuards(JwtAuthGuard)
+// RolesGuard (no @Roles here) enforces the password-change and mandatory-
+// 2FA gates on every route, like all other controllers.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class BlobController {
   constructor(
     private readonly blob: BlobService,

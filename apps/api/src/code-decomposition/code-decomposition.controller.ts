@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CodeDecompositionService } from './code-decomposition.service';
-import { JwtAuthGuard } from '../auth';
+import { JwtAuthGuard, RolesGuard } from '../auth';
 import { SessionId, PublicDoor } from '../common';
 import type {
   GenerateDecompositionDto,
@@ -28,7 +28,9 @@ interface RequestUser {
 // Two-door: student-facing throughout — see docs/two-door/api-classification.md.
 @PublicDoor()
 @Controller('code-decomposition')
-@UseGuards(JwtAuthGuard)
+// RolesGuard (no @Roles here) enforces the password-change and mandatory-
+// 2FA gates on every route, like all other controllers.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CodeDecompositionController {
   constructor(private readonly service: CodeDecompositionService) {}
 
