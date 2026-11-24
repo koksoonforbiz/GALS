@@ -6,6 +6,7 @@
  * availability (403 with a reason) and never sends keys or scores.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { requestSignOut } from '../../../lib/signOut';
 import { Link, useParams } from 'react-router-dom';
 import type {
   KnowledgeTestKind,
@@ -230,6 +231,45 @@ export function KnowledgeTestPage() {
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900">
           {view.message}
         </p>
+      </div>
+    );
+  if (view.at === 'submitted' && kind === 'PRE_STUDY')
+    return (
+      <div className="mx-auto max-w-xl space-y-4 p-6">
+        {back}
+        <div
+          className="rounded-lg border border-green-200 bg-green-50 p-6"
+          data-testid="pre-study-break"
+        >
+          <p className="text-lg font-medium text-green-800">Submitted — thank you</p>
+          <h2 className="mt-3 text-base font-semibold text-gray-900">
+            Well done — you&apos;ve finished the warm-up and the first knowledge check.
+          </h2>
+          <p className="mt-2 text-sm text-gray-700">
+            You&apos;re welcome to take a break here and come back another time. The questionnaire,
+            puzzles and knowledge check take real effort, and your progress is saved.
+          </p>
+          <p className="mt-2 text-sm text-gray-700">
+            If you&apos;d like to carry on, remember that each session starts with a short knowledge
+            check before the lesson and ends with another one after it.
+          </p>
+          <p className="mt-2 text-sm text-gray-700">Thank you for taking part, and good luck!</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              to={`/student/courses/${courseId}`}
+              className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
+            >
+              Continue to Session 1
+            </Link>
+            <button
+              type="button"
+              onClick={requestSignOut}
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Take a break and sign out
+            </button>
+          </div>
+        </div>
       </div>
     );
   if (view.at === 'submitted')

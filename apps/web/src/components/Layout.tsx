@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from 'react-router-dom';
+import { REQUEST_SIGN_OUT_EVENT } from '../lib/signOut';
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
@@ -54,6 +55,15 @@ export function Layout() {
     setPendingLogout(true);
     setShowSurvey(true);
   }, [stopBiometrics]);
+
+  // Pages without the header's handler (e.g. "Take a break" after the
+  // pre-course check) request the same sign-out flow by event.
+  useEffect(() => {
+    if (user?.role !== 'student') return;
+    const onRequest = () => handleLogoutRequest();
+    window.addEventListener(REQUEST_SIGN_OUT_EVENT, onRequest);
+    return () => window.removeEventListener(REQUEST_SIGN_OUT_EVENT, onRequest);
+  }, [user?.role, handleLogoutRequest]);
 
   return (
     <PageContextProvider>
