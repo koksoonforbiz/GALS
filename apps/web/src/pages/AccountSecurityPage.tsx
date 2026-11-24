@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../components/Toast';
@@ -20,6 +20,10 @@ const METHOD_LABEL: Record<string, string> = {
 
 export function AccountSecurityPage() {
   const { user, refreshUser, startTotpSetup, confirmTotpSetup } = useAuth();
+  const navigate = useNavigate();
+  // After turning 2FA on, go on to the courses: the page had no way forward
+  // when setup was required at first login.
+  const continueToCourses = () => navigate(user?.role === 'student' ? '/student' : '/');
   const { toast } = useToast();
 
   const [enableStep, setEnableStep] = useState<EnableStep>('idle');
@@ -70,6 +74,7 @@ export function AccountSecurityPage() {
       });
       await refreshUser();
       toast('success', 'Two-factor authentication is now on (email code).');
+      continueToCourses();
       setEnableStep('idle');
       setEnableChallengeId(null);
       setEnableCode('');
@@ -109,6 +114,7 @@ export function AccountSecurityPage() {
     try {
       await confirmTotpSetup(totpCode.trim());
       toast('success', 'Two-factor authentication is now on (authenticator app).');
+      continueToCourses();
       setTotpStep('idle');
       setTotpSecret('');
       setTotpQrCodeDataUrl('');

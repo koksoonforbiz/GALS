@@ -41,7 +41,7 @@ type View =
   | { at: 'loading' }
   | { at: 'blocked'; message: string }
   | { at: 'submitted' }
-  | { at: 'item'; i: number }
+  | { at: 'item'; i: number; fromReview?: boolean }
   | { at: 'review' };
 
 const answered = (it: KnowledgeTestStudentItem, r?: KnowledgeTestResponse) =>
@@ -251,7 +251,8 @@ export function KnowledgeTestPage() {
 
   const total = attempt.items.length;
   const missing = attempt.items.filter((it) => !answered(it, responses[String(it.slot)]));
-  const elapsed = now - new Date(attempt.startedAt).getTime();
+  // Clamped: a browser clock slightly behind the server showed "-1:-1".
+  const elapsed = Math.max(0, now - new Date(attempt.startedAt).getTime());
 
   return (
     <div
@@ -361,7 +362,9 @@ export function KnowledgeTestPage() {
                 {missing.map((it) => (
                   <button
                     key={it.slot}
-                    onClick={() => setView({ at: 'item', i: attempt.items.indexOf(it) })}
+                    onClick={() =>
+                      setView({ at: 'item', i: attempt.items.indexOf(it), fromReview: true })
+                    }
                     className="rounded border px-2 py-1 text-sm hover:bg-gray-50"
                   >
                     Question {it.slot}
@@ -392,6 +395,14 @@ export function KnowledgeTestPage() {
             className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
           >
             Back
+          </button>
+        )}
+        {view.at === 'item' && view.fromReview && view.i + 1 < total && (
+          <button
+            onClick={() => go('review')}
+            className="rounded-md border border-blue-600 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50"
+          >
+            Back to review
           </button>
         )}
         {view.at === 'item' && (

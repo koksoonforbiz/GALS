@@ -203,7 +203,9 @@ export function TaskRunner({
         <div className="flex flex-1 flex-col justify-center py-6">
           {phase.at === 'intro' && (
             <div className="text-center">
-              <p className="text-lg text-gray-800">Ready for the next puzzle?</p>
+              <p className="text-lg text-gray-800">
+                {task.number === 1 ? 'Ready for the first puzzle?' : 'Ready for the next puzzle?'}
+              </p>
               <p className="mt-1 text-sm text-gray-500">It starts with a short practice.</p>
               {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
               <button
