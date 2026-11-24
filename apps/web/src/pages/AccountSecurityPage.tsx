@@ -166,8 +166,8 @@ export function AccountSecurityPage() {
           <p className="font-medium">Two-factor authentication is required for your role.</p>
           <p className="mt-1">
             {EMAIL_2FA_ENABLED
-              ? 'Enrol an authenticator app or email code below before continuing — every other page stays locked until you do.'
-              : 'Set up an authenticator app below before continuing — every other page stays locked until you do.'}
+              ? 'Enrol an authenticator app or email code below before continuing. Every other page stays locked until you do.'
+              : 'Set up an authenticator app below before continuing. Every other page stays locked until you do.'}
           </p>
         </div>
       )}
@@ -195,8 +195,8 @@ export function AccountSecurityPage() {
             <h2 className="text-lg font-medium text-gray-800">Two-factor authentication</h2>
             <p className="mt-1 text-sm text-gray-500">
               {EMAIL_2FA_ENABLED
-                ? 'Adds a second step at login, on top of your password — either a code emailed to you, or a code from an authenticator app. Only one method can be active at a time.'
-                : 'Adds a second step at login, on top of your password — a 6-digit code from an authenticator app on your phone (e.g. Google or Microsoft Authenticator).'}
+                ? 'Adds a second step at login, on top of your password: either a code emailed to you, or a code from an authenticator app. Only one method can be active at a time.'
+                : 'Adds a second step at login, on top of your password: a 6-digit code from an authenticator app on your phone (e.g. Google or Microsoft Authenticator).'}
             </p>
           </div>
           <span

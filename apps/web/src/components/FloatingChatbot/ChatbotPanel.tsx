@@ -993,7 +993,7 @@ export function ChatbotPanel({
       {pendingCodingChoice && (
         <div className="px-3 py-2.5 border-t border-blue-200 bg-blue-50">
           <div className="text-xs font-medium text-blue-800 mb-2">
-            This looks like a coding course — which kind of step-by-step practice?
+            This looks like a coding course. Which kind of step-by-step practice?
           </div>
           <div className="flex flex-col gap-1.5">
             <button

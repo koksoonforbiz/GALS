@@ -119,8 +119,8 @@ export function PermissionGate({ onGranted }: Props) {
         setScreenStatus('denied');
         setScreenError(
           check === 'other-tab'
-            ? `You shared a different tab. Share this tab ("${TAB_TITLE}") so the platform is recorded — see the steps below.`
-            : `You shared a window or your whole screen. Share only this tab ("${TAB_TITLE}") — see the steps below.`,
+            ? `You shared a different tab. Share this tab ("${TAB_TITLE}") so the platform is recorded. See the steps below.`
+            : `You shared a window or your whole screen. Share only this tab ("${TAB_TITLE}"). See the steps below.`,
         );
         return;
       }
@@ -151,7 +151,7 @@ export function PermissionGate({ onGranted }: Props) {
         !navigator.mediaDevices?.getDisplayMedia
           ? 'This browser does not support screen sharing. Please use Chrome or Edge.'
           : name === 'NotAllowedError'
-            ? `Screen sharing was cancelled. Click "Try Again" and share this tab ("${TAB_TITLE}") — see the steps below.`
+            ? `Screen sharing was cancelled. Click "Try Again" and share this tab ("${TAB_TITLE}"). See the steps below.`
             : `Screen sharing failed (${name || 'unknown error'}). Click "Try Again", or try Chrome or Edge.`,
       );
     }
@@ -237,7 +237,7 @@ export function PermissionGate({ onGranted }: Props) {
             data-testid="second-screen-block"
           >
             <strong>Disconnect your second screen.</strong> GALS must be used on one screen only.
-            Unplug the external monitor (or switch your display to show on one screen only) — this
+            Unplug the external monitor (or switch your display to show on one screen only). This
             page continues by itself once only one screen is connected.
           </p>
         )}
@@ -248,13 +248,13 @@ export function PermissionGate({ onGranted }: Props) {
             onClick={() => void startAll()}
             className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700"
           >
-            Start — share this tab and turn on my camera
+            Start: share this tab and turn on my camera
           </button>
         )}
 
         {!canShareScreen && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            This browser cannot share its screen — phones and tablets can&apos;t. Please use a
+            This browser cannot share its screen (phones and tablets can&apos;t). Please use a
             laptop or desktop computer with Chrome or Edge.
           </p>
         )}
@@ -328,7 +328,7 @@ function ShareTabSteps({ emphasise }: { emphasise: boolean }) {
           <strong>Share</strong>.
         </li>
         <li>
-          Do not choose <strong>Window</strong> or <strong>Entire screen</strong> — they will be
+          Do not choose <strong>Window</strong> or <strong>Entire screen</strong>. They will be
           refused.
         </li>
       </ol>

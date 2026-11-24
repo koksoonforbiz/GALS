@@ -246,10 +246,10 @@ export function CalibrationModal({
             }`}
             role="status"
           >
-            {faceOk ? 'Face detected' : 'Face not found — face the camera'}
+            {faceOk ? 'Face detected' : 'Face not found. Please face the camera'}
           </div>
           <div className="absolute bottom-4 left-4 text-sm text-gray-600">
-            Point {currentPoint + 1} / {CALIBRATION_POINTS.length} — look at the dot and click it 5
+            Point {currentPoint + 1} / {CALIBRATION_POINTS.length}: look at the dot and click it 5
             times
           </div>
           {CALIBRATION_POINTS.map((point, idx) => (
@@ -277,7 +277,7 @@ export function CalibrationModal({
       {phase === 'accuracy_test' && (
         <>
           <p className="absolute top-6 text-gray-700">
-            Now just <strong>look</strong> at the blue dot — do not click.
+            Now just <strong>look</strong> at the blue dot. Do not click.
           </p>
           {testPoint != null && (
             <div
@@ -324,7 +324,7 @@ export function CalibrationModal({
             {accuracy.pct}% of the screen)
           </p>
           {quality === 'good' && (
-            <p className="text-sm text-green-700">Good — eye tracking is ready.</p>
+            <p className="text-sm text-green-700">Good. Eye tracking is ready.</p>
           )}
           {quality === 'ok' && (
             <p className="text-sm text-amber-700">

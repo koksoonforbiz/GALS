@@ -2,7 +2,7 @@
  * Knowledge tests in a real browser (student bundle): the pre-study check is
  * refused before the warm-up; Session 1 stays hidden until the pre-study and
  * Session 1 pre-checks are submitted; the student payload has no keys; a
- * submitted check only shows "Submitted — thank you"; the post-session check
+ * submitted check only shows "Submitted. Thank you!"; the post-session check
  * waits for the lesson.
  *
  *   pnpm --filter @ats/api run seed:efa-e2e-local
@@ -42,7 +42,7 @@ async function takeCheck(page: Page) {
   await expect(page.getByText(/questions? (are|is) unanswered/)).toBeVisible();
   await page.getByRole('button', { name: 'Submit' }).click();
   await page.getByRole('button', { name: 'Yes, submit' }).click();
-  await expect(page.getByText('Submitted — thank you')).toBeVisible();
+  await expect(page.getByText('Submitted. Thank you!')).toBeVisible();
 }
 
 test('gate order, no keys in the payload, submitted checks are final', async ({ page }) => {
@@ -75,7 +75,7 @@ test('gate order, no keys in the payload, submitted checks are final', async ({ 
   expect(JSON.parse(payload).items).toHaveLength(24);
   await takeCheck(page);
   await page.reload();
-  await expect(page.getByText('Submitted — thank you')).toBeVisible();
+  await expect(page.getByText('Submitted. Thank you!')).toBeVisible();
   await expect(page.getByTestId('knowledge-test')).toHaveCount(0);
 
   // Session 1 appears only after its pre-check.

@@ -98,7 +98,10 @@ export async function apiFetch<T>(
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
-      throw new ApiError(0, 'Request timed out — is the server running?');
+      throw new ApiError(
+        0,
+        'The request took too long. Please check your connection and try again.',
+      );
     }
     throw err;
   } finally {

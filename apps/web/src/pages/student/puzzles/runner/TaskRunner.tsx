@@ -54,7 +54,7 @@ function partLines(step: PuzzleStepView, prev: PuzzleStepView | null): string[] 
   ) {
     return [
       ...(PART_INSTRUCTIONS[step.part] ?? []),
-      step.kind === 'list' ? 'Ready?' : 'Now for real — no more feedback.',
+      step.kind === 'list' ? 'Ready?' : 'Now for real. No more feedback.',
     ];
   }
   return PART_INSTRUCTIONS[step.part] ?? null;
@@ -267,7 +267,7 @@ export function TaskRunner({
           )}
           {phase.at === 'break' && (
             <div className="text-center">
-              <p className="text-lg text-gray-800">Thank you — that puzzle is done.</p>
+              <p className="text-lg text-gray-800">Thank you, that puzzle is done.</p>
               <p className="mt-1 text-sm text-gray-500">{BREAK_TEXT}</p>
               <button
                 onClick={() => onDone(phase.view)}

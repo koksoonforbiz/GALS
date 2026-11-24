@@ -598,7 +598,7 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
             Session complete
             {completionSummary && (
               <span className="text-green-600">
-                — {completionSummary.correctNodes}/{completionSummary.totalNodes} steps done
+                ({completionSummary.correctNodes}/{completionSummary.totalNodes} steps done)
               </span>
             )}
           </div>
@@ -689,7 +689,7 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
                 title={
                   showingRevealed
                     ? 'Go back to your own code'
-                    : 'Peek at the complete correct code — your code is unchanged'
+                    : 'Peek at the complete correct code (your code is unchanged)'
                 }
                 className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed ${
                   showingRevealed
@@ -732,7 +732,7 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
                 title={
                   showingRevealed
                     ? 'Go back to your own tree'
-                    : 'Peek at the complete correct tree — your tree is unchanged'
+                    : 'Peek at the complete correct tree (your tree is unchanged)'
                 }
                 className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed ${
                   showingRevealed
@@ -760,7 +760,7 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
               ) : (
                 nodes.length > 0 && (
                   <span className="self-center text-[11px] text-gray-500">
-                    {nodes.filter((n) => isPassing(n.status)).length}/{nodes.length} steps correct —
+                    {nodes.filter((n) => isPassing(n.status)).length}/{nodes.length} steps correct.
                     get every step to Correct (or Can Be Divided) to unlock Move to Implementation
                   </span>
                 )
@@ -783,8 +783,8 @@ export function DecompositionPanel({ code, loadedQuestion, onApplyCode }: Decomp
                 <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
                   <p className="text-[11px] text-teal-700">
                     {stage === 'formation'
-                      ? 'Complete correct tree (reference only — your own tree is untouched):'
-                      : 'Complete correct solution (reference only — your own code is untouched):'}
+                      ? 'Complete correct tree (reference only; your own tree is untouched):'
+                      : 'Complete correct solution (reference only; your own code is untouched):'}
                   </p>
                   {stage === 'formation' && revealedNodes && (
                     <button

@@ -117,6 +117,9 @@ export interface BuildGroundedMessagesResult {
  * reference the same rule set.
  */
 export const GROUNDING_CONTRACT = [
+  'Style (apply to every answer):',
+  '- Write in plain, natural sentences. Do not use the em dash character (—); use a comma, colon, full stop or brackets instead.',
+  '',
   'Grounding rules (apply to every answer):',
   '- Answer ONLY from the supplied sources (text + images). Do not use outside knowledge.',
   '- CITE every claim with the source label in this exact format: `[Source N: filename.pdf, p.X]` for text and `[Figure: filename.pdf, p.X]` for visuals.',

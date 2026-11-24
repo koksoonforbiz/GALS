@@ -47,7 +47,7 @@ export const PART_INSTRUCTIONS: Record<string, string[]> = {
     'Each sentence has its last word missing. As soon as you see it, type one word that completes the sentence so that it makes good sense, then press Enter. Be as quick as you can.',
   ],
   B: [
-    'Now type a word that does not fit the sentence in any way — a word that has nothing to do with the sentence and makes it nonsense.',
+    'Now type a word that does not fit the sentence in any way: a word that has nothing to do with the sentence and makes it nonsense.',
     'For example, for “The rabbit hopped across the …”, you might type “umbrella”. Be as quick as you can.',
   ],
   'W-keys': [
@@ -72,13 +72,13 @@ export const GRID_INSTRUCTIONS: Record<'W' | 'C' | 'CW', string> = {
   CW: 'Press the key for the colour of the INK, not the word, going down each column.',
 };
 export const GRID_RULES =
-  'F = red, J = green, K = blue. If you make a mistake, the item flashes red — press the right key and carry on. You have 45 seconds.';
+  'F = red, J = green, K = blue. If you make a mistake, the item flashes red. Press the right key and carry on. You have 45 seconds.';
 
 export const TRAIL_TEST_INSTRUCTIONS: Record<'P1' | 'P2', string> = {
   P1: 'Click the numbers in order: 1, 2, 3, … up to 25, as quickly as you can.',
   P2: 'Switch between numbers and letters in order: 1, A, 2, B, 3, C, … up to 13, as quickly as you can.',
 };
 
-export const KEEP_GOING = 'Keep going — any other words?';
+export const KEEP_GOING = 'Keep going! Any other words?';
 export const ANY_WORD = 'Any word';
 export const BREAK_TEXT = 'Take a short break if you like. Continue when you are ready.';

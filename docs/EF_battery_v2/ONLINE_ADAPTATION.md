@@ -114,7 +114,7 @@ On-screen wording:
 | ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Response            | Spoken; facilitator writes; audio optional      | **Typed:** one word per entry, Enter adds it to a visible list; earlier entries can't be edited                                                                                  |
 | Time                | 60 s per prompt from the end of the instruction | 60 s from the first display of the prompt, with a visible countdown; the prompt stays visible                                                                                    |
-| "Keep going" prompt | Said once if the participant stops before 30 s  | **Shown once** ("Keep going — any other words?") if there is no entry for 15 s before the 30 s mark                                                                              |
+| "Keep going" prompt | Said once if the participant stops before 30 s  | **Shown once** ("Keep going! Any other words?") if there is no entry for 15 s before the 30 s mark                                                                               |
 | Scoring             | Two blind raters from the transcript            | Raw entries with timestamps; **automatic pre-scoring** (repeats, same-root variants, wrong initial letter, likely names); **final scoring by two blind raters** in the coding UI |
 
 On-screen wording:
@@ -139,7 +139,7 @@ On-screen wording:
 On-screen wording:
 
 - Part A: "Each sentence has its last word missing. As soon as you see it, type one word that completes the sentence so that it makes good sense, then press Enter. Be as quick as you can."
-- Part B: "Now type a word that does **not** fit the sentence in any way — a word that has nothing to do with the sentence and makes it nonsense. For example, for 'The rabbit hopped across the …', you might type 'umbrella'. Be as quick as you can."
+- Part B: "Now type a word that does **not** fit the sentence in any way: a word that has nothing to do with the sentence and makes it nonsense. For example, for 'The rabbit hopped across the …', you might type 'umbrella'. Be as quick as you can."
 
 ### W6 Colours (`stroop`)
 
@@ -156,7 +156,7 @@ On-screen wording:
 - W page: "Press the key for each **word**, going down each column."
 - C page: "Press the key for the **colour of the ink** of each item, going down each column."
 - CW page: "Press the key for the colour of the **INK**, not the word, going down each column."
-- All pages: "F = red, J = green, K = blue. If you make a mistake, the item flashes red — press the right key and carry on. You have 45 seconds."
+- All pages: "F = red, J = green, K = blue. If you make a mistake, the item flashes red. Press the right key and carry on. You have 45 seconds."
 - **Key-press naming** replaces speech; the size of the interference effect is expected to differ from oral norms.
 
 ### W7 Joining circles (`tmtA`/`tmtB`)

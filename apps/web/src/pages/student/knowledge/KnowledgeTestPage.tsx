@@ -2,7 +2,7 @@
  * Knowledge check (docs/assessments/README.md). One item per screen; "Next"
  * never requires an answer (skipping is allowed and recorded); a review
  * screen lists unanswered items; submitting needs a confirmation. After
- * submission only "Submitted — thank you" is shown. The server decides
+ * submission only "Submitted. Thank you!" is shown. The server decides
  * availability (403 with a reason) and never sends keys or scores.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -127,7 +127,7 @@ export function KnowledgeTestPage() {
       setSaveError('');
     } catch {
       dirty.current = true;
-      setSaveError('Not saved yet — we will keep trying.');
+      setSaveError('Not saved yet. We will keep trying.');
     }
   }, [attempt]);
   useEffect(() => {
@@ -241,9 +241,9 @@ export function KnowledgeTestPage() {
           className="rounded-lg border border-green-200 bg-green-50 p-6"
           data-testid="pre-study-break"
         >
-          <p className="text-lg font-medium text-green-800">Submitted — thank you</p>
+          <p className="text-lg font-medium text-green-800">Submitted. Thank you!</p>
           <h2 className="mt-3 text-base font-semibold text-gray-900">
-            Well done — you&apos;ve finished the warm-up and the first knowledge check.
+            Well done! You&apos;ve finished the warm-up and the first knowledge check.
           </h2>
           <p className="mt-2 text-sm text-gray-700">
             You&apos;re welcome to take a break here and come back another time. The questionnaire,
@@ -277,7 +277,7 @@ export function KnowledgeTestPage() {
       <div className="mx-auto max-w-xl space-y-4 p-6">
         {back}
         <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-center">
-          <p className="text-lg font-medium text-green-800">Submitted — thank you</p>
+          <p className="text-lg font-medium text-green-800">Submitted. Thank you!</p>
           <Link
             to={`/student/courses/${courseId}`}
             className="mt-4 inline-block rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800"
@@ -307,7 +307,7 @@ export function KnowledgeTestPage() {
         </span>
       </div>
       <p className="text-xs text-gray-500">
-        Not graded. Answer what you can — a best guess is fine, and you can skip a question and come
+        Not graded. Answer what you can. A best guess is fine, and you can skip a question and come
         back to it before you submit.
       </p>
       <div className="h-1 overflow-hidden rounded bg-gray-100">

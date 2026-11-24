@@ -152,7 +152,7 @@ export function evaluateStep(step: Step, attempt: number, r: PuzzleStepResult): 
         feedback =
           step.part === 'A'
             ? fits
-              ? { correct: true, message: 'Good — that word completes the sentence.' }
+              ? { correct: true, message: 'Good, that word completes the sentence.' }
               : { correct: false, message: `A word that completes it well would be "${expected}".` }
             : fits
               ? {
@@ -160,7 +160,7 @@ export function evaluateStep(step: Step, attempt: number, r: PuzzleStepResult): 
                   message:
                     'That word fits the sentence. Try a word that has nothing to do with it.',
                 }
-              : { correct: true, message: 'Good — that word has nothing to do with the sentence.' };
+              : { correct: true, message: 'Good, that word has nothing to do with the sentence.' };
       }
       return { rows: [row], correct: null, feedback };
     }

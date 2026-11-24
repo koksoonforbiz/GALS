@@ -321,7 +321,7 @@ export function PdfReaderPanel({
           };
           return (
             <div className="px-3 py-2 border-b border-amber-300 bg-amber-50 flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-amber-800 font-semibold shrink-0">{slideLabel} —</span>
+              <span className="text-xs text-amber-800 font-semibold shrink-0">{slideLabel}:</span>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {(
                   [
@@ -409,7 +409,7 @@ export function PdfReaderPanel({
                       onChange={(e) => handlePageChecked(pageNum, e.target.checked)}
                       className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                     />
-                    <span>Slide {pageNum} — highlight for learning strategies</span>
+                    <span>Slide {pageNum}: highlight for learning strategies</span>
                   </label>
 
                   <div className="bg-white shadow-md rounded-b">

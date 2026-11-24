@@ -179,6 +179,7 @@ export class InteractiveLessonService {
       'feedback: 2-3 short sentences, second person, plain English. Say what they got right,',
       'then the one idea they missed or should refine. Do not repeat the whole explanation.',
       'If the answer is off-topic or has no reasoning, use "off_track" and say so kindly.',
+      'Write in plain, natural sentences and do not use the em dash character.',
     ].join(' ');
     const userPrompt = [
       `Checkpoint question:\n${plain(slide.prompt)}`,

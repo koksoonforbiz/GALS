@@ -16,7 +16,7 @@ export function Terms() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Data Collection Notice</h1>
           <p className="mt-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-            Draft — this page describes what the platform actually collects, based on a code audit.
+            Draft: this page describes what the platform actually collects, based on a code audit.
             It has not been reviewed by SMU's legal or PDPA office and should be replaced with
             approved policy text before real deployment.
           </p>

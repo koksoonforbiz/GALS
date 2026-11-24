@@ -107,7 +107,7 @@ export function StepTreeNode({ node, nodes, actions, stage }: StepTreeNodeProps)
             <span className="flex-1">
               {node.content || (
                 <span className="italic opacity-70">
-                  A step belongs here — click Edit to describe it.
+                  A step belongs here. Click Edit to describe it.
                 </span>
               )}
             </span>

@@ -89,7 +89,7 @@ function buildTranscriptMarkdown(detail: ConversationDetail): string {
   lines.push('');
   for (const m of detail.messages) {
     const who = m.role === 'USER' || m.role === 'user' ? 'Student' : 'Assistant';
-    lines.push(`### ${who} — ${formatDate(m.createdAt)}`);
+    lines.push(`### ${who} (${formatDate(m.createdAt)})`);
     lines.push('');
     lines.push(m.content);
     lines.push('');

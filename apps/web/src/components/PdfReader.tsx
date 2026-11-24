@@ -422,7 +422,7 @@ export function PdfReader({
                         }}
                         className="h-3 w-3 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
                       />
-                      <span>{`Slide ${pageNum} — highlight for learning strategies`}</span>
+                      <span>{`Slide ${pageNum}: highlight for learning strategies`}</span>
                     </label>
                   )}
                   <div className="bg-white shadow-md rounded-b">

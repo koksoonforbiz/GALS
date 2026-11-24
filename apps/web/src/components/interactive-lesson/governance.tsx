@@ -43,8 +43,8 @@ export function ConsentPanel({
         wording unless you agree below. It never records keystrokes or clipboard contents.
       </p>
       <p>
-        <b>Why:</b> to give you feedback on how you work with AI, and — if you agree — for research
-        on how working adults learn to prompt. Results are reported without your name.
+        <b>Why:</b> to give you feedback on how you work with AI, and (if you agree) for research on
+        how working adults learn to prompt. Results are reported without your name.
       </p>
       <label className="il-check">
         <input type="checkbox" checked={choice.answerText} onChange={() => toggle('answerText')} />{' '}

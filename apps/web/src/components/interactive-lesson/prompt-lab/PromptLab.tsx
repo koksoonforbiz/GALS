@@ -346,7 +346,7 @@ export function PromptLab({
   return (
     <div className="prompt-lab" data-prompt-lab={slide.key}>
       <div className="box-title">
-        Prompt Lab — run this exercise here, not in an external AI tool
+        Prompt Lab: run this exercise here, not in an external AI tool
       </div>
 
       {/* 1 · Plan */}
@@ -357,7 +357,7 @@ export function PromptLab({
             type="text"
             className="pl-input"
             data-field-key="goal"
-            placeholder="Goal, audience and output format — one line"
+            placeholder="Goal, audience and output format, in one line"
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
           />
@@ -433,7 +433,7 @@ export function PromptLab({
               setTokenNote(
                 guess === ''
                   ? `≈ ${tokens} tokens`
-                  : `≈ ${tokens} tokens — your guess was ${guess}`,
+                  : `≈ ${tokens} tokens (your guess was ${guess})`,
               );
             }}
           >
@@ -512,9 +512,9 @@ export function PromptLab({
                     <td>v{v.versionNo}</td>
                     <td>{v.tokenCount}</td>
                     <td>
-                      {v.diffFromPrev ? `${Math.round(v.diffFromPrev.editRatio * 100)}%` : '—'}
+                      {v.diffFromPrev ? `${Math.round(v.diffFromPrev.editRatio * 100)}%` : '-'}
                     </td>
-                    <td>{v.revisionTags.join(', ') || '—'}</td>
+                    <td>{v.revisionTags.join(', ') || '-'}</td>
                     <td>
                       <button
                         type="button"

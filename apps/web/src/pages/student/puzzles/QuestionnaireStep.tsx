@@ -65,7 +65,7 @@ export function QuestionnaireStep({
               [code]:
                 err instanceof ApiError && err.status === 400
                   ? err.message
-                  : 'Not saved yet — please try again.',
+                  : 'Not saved yet. Please try again.',
             }));
             return;
           }

@@ -281,7 +281,7 @@ export function InteractiveLesson({
     >
       {unsaved > 0 && !readOnly && (
         <div className="il-unsaved" role="status" aria-live="polite">
-          Some of your answers are not saved yet — retrying. Please keep this page open.
+          Some of your answers are not saved yet. Retrying. Please keep this page open.
         </div>
       )}
       <div className="il-bar">

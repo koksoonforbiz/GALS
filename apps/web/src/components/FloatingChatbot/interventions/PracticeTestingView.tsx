@@ -492,7 +492,7 @@ export function PracticeTestingView({
                 <AlertTriangle size={11} />
                 {totalRequested < 1
                   ? 'Need at least 1 question total.'
-                  : `Max 10 questions total — currently ${totalRequested}.`}
+                  : `Max 10 questions in total (currently ${totalRequested}).`}
               </div>
             )}
           </div>

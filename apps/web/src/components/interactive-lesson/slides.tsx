@@ -326,7 +326,7 @@ function CheckpointFeedbackBox({
   if (!fb && unavailable && !loading)
     return (
       <div className="ai-feedback" role="status" aria-live="polite">
-        AI feedback isn&apos;t available right now — compare your prediction with the explanation
+        AI feedback isn&apos;t available right now. Compare your prediction with the explanation
         above.
       </div>
     );

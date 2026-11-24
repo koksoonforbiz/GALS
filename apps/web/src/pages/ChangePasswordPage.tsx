@@ -55,7 +55,7 @@ export function ChangePasswordPage() {
           </h2>
           {forced && (
             <p className="mt-2 text-center text-sm text-gray-500">
-              Your password was reset or has expired. Choose a new one to continue — you won&apos;t
+              Your password was reset or has expired. Choose a new one to continue. You won&apos;t
               be able to use the rest of the app until you do.
             </p>
           )}
