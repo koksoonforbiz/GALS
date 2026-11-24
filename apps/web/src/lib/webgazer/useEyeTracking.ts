@@ -66,6 +66,8 @@ export function useEyeTracking(
   toggleGazeDot: () => void;
   trainOnPoint: (screenX: number, screenY: number) => void;
   getCurrentPrediction: () => Promise<{ x: number; y: number } | null>;
+  resetCalibration: () => void;
+  setCalibrationPreview: (show: boolean) => void;
   latestGaze: { x: number; y: number } | null;
   config: EyeTrackingConfig | null;
 } {
@@ -118,14 +120,69 @@ export function useEyeTracking(
     setNeedsCalibration(false);
   }, []);
 
+  // "Calibration on new session" means once per session, not on every
+  // reload: remember that it was completed or skipped for this session (the
+  // trained model itself is kept by saveDataAcrossSessions below).
+  const calibrationKey = `gals:eye-calibration-done:${sessionId}`;
+  const rememberCalibration = useCallback(() => {
+    try {
+      sessionStorage.setItem(calibrationKey, '1');
+    } catch {
+      // storage unavailable: the prompt may show again after a reload
+    }
+  }, [calibrationKey]);
+
   const completeCalibration = useCallback(() => {
     setIsCalibrating(false);
     setNeedsCalibration(false);
-  }, []);
+    rememberCalibration();
+  }, [rememberCalibration]);
 
   const skipCalibration = useCallback(() => {
     setIsCalibrating(false);
     setNeedsCalibration(false);
+    rememberCalibration();
+  }, [rememberCalibration]);
+
+  /** Forget all training (Redo calibration starts from scratch). */
+  const resetCalibration = useCallback(() => {
+    try {
+      webgazerRef.current?.clearData();
+    } catch {
+      // not ready yet
+    }
+  }, []);
+
+  /**
+   * Show WebGazer's camera view with its face box during calibration so the
+   * student can centre their face (the box turns green when well placed);
+   * kept off-screen otherwise.
+   */
+  const setCalibrationPreview = useCallback((show: boolean) => {
+    const c = document.getElementById('webgazerVideoContainer');
+    if (!c) return;
+    Object.assign(
+      c.style,
+      show
+        ? {
+            left: '50%',
+            top: '16px',
+            transform: 'translateX(-50%)',
+            width: '320px',
+            height: '240px',
+            opacity: '1',
+            zIndex: '210',
+          }
+        : {
+            left: '-9999px',
+            top: '-9999px',
+            transform: '',
+            width: '1px',
+            height: '1px',
+            opacity: '0',
+            zIndex: '',
+          },
+    );
   }, []);
 
   const toggleGazeDot = useCallback(() => {
@@ -227,7 +284,12 @@ export function useEyeTracking(
       if (!wg) return;
 
       wg.setRegression('weightedRidge');
-      wg.saveDataAcrossSessions(false);
+      // Keep the trained model in this browser (IndexedDB, never uploaded):
+      // calibration runs once per session, so a reload must not leave the
+      // tracker untrained (it then reports essentially random positions).
+      wg.saveDataAcrossSessions(true);
+      // Smooth predictions (WebGazer's Kalman filter); raw estimates jitter.
+      wg.applyKalmanFilter?.(true);
       wg.params.faceMeshSolutionPath = '/mediapipe/face_mesh';
       wg.showVideo(true);
       wg.showFaceOverlay(true);
@@ -270,7 +332,13 @@ export function useEyeTracking(
       });
 
       setIsActive(true);
-      if (cfg.calibrationOnNewSession) setNeedsCalibration(true);
+      let calibratedThisSession = false;
+      try {
+        calibratedThisSession = sessionStorage.getItem(calibrationKey) === '1';
+      } catch {
+        // storage unavailable: calibrate as before
+      }
+      if (cfg.calibrationOnNewSession && !calibratedThisSession) setNeedsCalibration(true);
       flushIntervalRef.current = setInterval(flushBuffer, 30000);
 
       for (const ev of ['mousemove', 'keydown', 'scroll', 'click']) {
@@ -446,6 +514,8 @@ export function useEyeTracking(
     toggleGazeDot,
     trainOnPoint,
     getCurrentPrediction,
+    resetCalibration,
+    setCalibrationPreview,
     latestGaze,
     config,
   };

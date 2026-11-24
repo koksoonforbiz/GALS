@@ -157,6 +157,8 @@ function BiometricsHooksInner({
           triggeredBy="new_session"
           onTrainPoint={webgazer.trainOnPoint}
           getCurrentPrediction={webgazer.getCurrentPrediction}
+          onReset={webgazer.resetCalibration}
+          onPreview={webgazer.setCalibrationPreview}
           onComplete={() => {
             webgazer.completeCalibration();
             track('WEBGAZER_CALIBRATION_COMPLETED', { courseId });
