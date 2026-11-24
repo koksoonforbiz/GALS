@@ -71,6 +71,7 @@ server {
     include /etc/nginx/gals/snippets/real-ip-imperva.conf;
     include /etc/nginx/gals/snippets/tls.conf;
     include /etc/nginx/gals/snippets/security-headers.conf;
+    include /etc/nginx/gals/snippets/compression.conf;
 
     access_log /dev/stdout combined;
 
@@ -99,6 +100,7 @@ server {
     include /etc/nginx/gals/snippets/tls.conf;
     include /etc/nginx/gals/snippets/security-headers.conf;
     include /etc/nginx/gals/admin-access.conf;
+    include /etc/nginx/gals/snippets/compression.conf;
 
     access_log /dev/stdout combined;
 
