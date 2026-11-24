@@ -13,6 +13,8 @@ interface CalibrationModalProps {
   onReset?: () => void;
   /** Show/hide the camera view with the face box. */
   onPreview?: (show: boolean) => void;
+  /** Whether a face is found right now (status chip while calibrating). */
+  isFaceDetected?: () => boolean;
 }
 
 // 9-point training grid (percentage of viewport), clicked 5 times each while
@@ -63,6 +65,7 @@ export function CalibrationModal({
   getCurrentPrediction,
   onReset,
   onPreview,
+  isFaceDetected,
 }: CalibrationModalProps) {
   const [phase, setPhase] = useState<Phase>('instructions');
   const [currentPoint, setCurrentPoint] = useState(0);
@@ -70,12 +73,29 @@ export function CalibrationModal({
   const [accuracy, setAccuracy] = useState<{ px: number; pct: number } | null>(null);
   const clickCountRef = useRef(0);
 
-  // Camera view with the face box while reading the instructions and
-  // calibrating, so the student can position themselves.
+  // Camera view with the face box on the instructions screen only (while the
+  // dots are shown it would cover the top-middle dot); a status chip replaces
+  // it during calibration.
   useEffect(() => {
-    onPreview?.(phase === 'instructions' || phase === 'calibrating');
+    onPreview?.(phase === 'instructions');
     return () => onPreview?.(false);
   }, [phase, onPreview]);
+
+  const [faceOk, setFaceOk] = useState(true);
+  useEffect(() => {
+    if (phase !== 'calibrating' || !isFaceDetected) return;
+    const t = setInterval(() => setFaceOk(isFaceDetected()), 500);
+    return () => clearInterval(t);
+  }, [phase, isFaceDetected]);
+
+  // Each calibration trains a fresh model: data from an earlier calibration
+  // (other lighting, seating, session) would otherwise be mixed in.
+  const start = useCallback(() => {
+    onReset?.();
+    clickCountRef.current = 0;
+    setCurrentPoint(0);
+    setPhase('calibrating');
+  }, [onReset]);
 
   const runAccuracyTest = useCallback(async () => {
     setPhase('accuracy_test');
@@ -121,7 +141,6 @@ export function CalibrationModal({
   );
 
   const redo = useCallback(() => {
-    onReset?.();
     clickCountRef.current = 0;
     setCurrentPoint(0);
     setAccuracy(null);
@@ -158,7 +177,10 @@ export function CalibrationModal({
           : 'weak';
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white">
+    <div
+      className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white"
+      data-gaze-calibration=""
+    >
       {phase === 'instructions' && (
         <div className="text-center max-w-lg space-y-5 mt-56">
           <h2 className="text-2xl font-bold">Eye tracking calibration</h2>
@@ -180,7 +202,7 @@ export function CalibrationModal({
               Skip
             </button>
             <button
-              onClick={() => setPhase('calibrating')}
+              onClick={start}
               className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
               Start calibration
@@ -191,6 +213,14 @@ export function CalibrationModal({
 
       {phase === 'calibrating' && (
         <>
+          <div
+            className={`absolute bottom-4 right-4 rounded-full px-3 py-1 text-xs font-medium ${
+              faceOk ? 'bg-green-900/60 text-green-300' : 'bg-red-900/70 text-red-200'
+            }`}
+            role="status"
+          >
+            {faceOk ? 'Face detected' : 'Face not found — face the camera'}
+          </div>
           <div className="absolute bottom-4 left-4 text-sm text-gray-400">
             Point {currentPoint + 1} / {CALIBRATION_POINTS.length} — look at the dot and click it 5
             times

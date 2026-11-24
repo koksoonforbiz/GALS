@@ -68,6 +68,7 @@ export function useEyeTracking(
   getCurrentPrediction: () => Promise<{ x: number; y: number } | null>;
   resetCalibration: () => void;
   setCalibrationPreview: (show: boolean) => void;
+  isFaceDetected: () => boolean;
   latestGaze: { x: number; y: number } | null;
   config: EyeTrackingConfig | null;
 } {
@@ -143,6 +144,16 @@ export function useEyeTracking(
     setNeedsCalibration(false);
     rememberCalibration();
   }, [rememberCalibration]);
+
+  /** Whether WebGazer currently finds a face (for the calibration status chip). */
+  const isFaceDetected = useCallback((): boolean => {
+    try {
+      const pos = webgazerRef.current?.getTracker?.()?.getPositions?.();
+      return Array.isArray(pos) ? pos.length > 0 : Boolean(pos);
+    } catch {
+      return false;
+    }
+  }, []);
 
   /** Forget all training (Redo calibration starts from scratch). */
   const resetCalibration = useCallback(() => {
@@ -241,6 +252,17 @@ export function useEyeTracking(
   );
 
   useEffect(() => {
+    // Implicit calibration from ordinary clicks (people look at what they
+    // click); calibration-screen clicks are recorded by the modal instead.
+    const onTrainingClick = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest?.('[data-gaze-calibration]')) return;
+      try {
+        webgazerRef.current?.recordScreenPosition(e.clientX, e.clientY, 'click');
+      } catch {
+        // not ready yet
+      }
+    };
     if (!courseId || !sessionId) return;
     let cancelled = false;
 
@@ -326,6 +348,15 @@ export function useEyeTracking(
       const wgDot = document.getElementById('webgazerGazeDot');
       if (wgDot) wgDot.style.display = 'none';
 
+      // Train on clicks only. WebGazer's default listeners also record every
+      // mousemove (~20 Hz) as "the eyes are on the cursor" — wrong whenever
+      // the student reads one place and moves the mouse elsewhere, and it
+      // dragged predictions toward the cursor — and they record each
+      // calibration click a second time. Clicks inside the calibration screen
+      // are trained there, at the dot's centre (CalibrationModal).
+      wg.removeMouseEventListeners?.();
+      document.addEventListener('click', onTrainingClick, true);
+
       wg.setGazeListener((data: { x: number; y: number; confidence?: number } | null) => {
         if (!data) return;
         onGazeSample(data.x, data.y, data.confidence ?? null);
@@ -394,6 +425,7 @@ export function useEyeTracking(
 
     return () => {
       cancelled = true;
+      document.removeEventListener('click', onTrainingClick, true);
       for (const ev of ['mousemove', 'keydown', 'scroll', 'click']) {
         document.removeEventListener(ev, resetTimer);
       }
@@ -516,6 +548,7 @@ export function useEyeTracking(
     getCurrentPrediction,
     resetCalibration,
     setCalibrationPreview,
+    isFaceDetected,
     latestGaze,
     config,
   };
