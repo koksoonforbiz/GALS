@@ -451,3 +451,17 @@ describe('nudge responses (M12, M34)', () => {
     expect(byRule(i, 'M34').map((d) => d.outcome)).toEqual(['withheld', 'not_taken_up']);
   });
 });
+
+describe('study notes (M04)', () => {
+  it('a written note is knowledge building; a bare highlight is not', () => {
+    const i = input([
+      act('HIGHLIGHT_CREATED', 1, { slideKey: 's1-2', quoteChars: 40 }),
+      act('NOTE_CREATED', 5, { slideKey: 's1-2', chars: 0 }),
+      act('NOTE_CREATED', 9, { slideKey: 's1-2', chars: 52 }),
+      act('NOTE_EDITED', 20, { slideKey: 's1-2', chars: 80 }),
+      act('RATIONALE_SUBMITTED', 30, { slideKey: 's1-3', chars: 25 }),
+    ]);
+    const m04 = byRule(i, 'M04');
+    expect(m04.map((d) => d.outcome)).toEqual(['note_written', 'note_written', 'self_explanation']);
+  });
+});

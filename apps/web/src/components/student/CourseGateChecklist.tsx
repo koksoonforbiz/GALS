@@ -18,7 +18,10 @@ function knowledgePath(occasion: string): string | null {
 }
 
 /** Where a step is done in the student app. */
-function stepHref(courseId: string, s: StudentGateStep): string | null {
+export function stepHref(
+  courseId: string,
+  s: Pick<StudentGateStep, 'step' | 'occasion'>,
+): string | null {
   if ((s.step === 'questionnaire' || s.step === 'puzzles') && s.occasion) {
     return `/student/courses/${courseId}/puzzles/${s.occasion}`;
   }

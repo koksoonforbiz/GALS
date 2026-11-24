@@ -26,6 +26,8 @@ export interface InteractiveLessonProps {
   courseId?: string;
   moduleId?: string;
   onSlideChange?: (slide: LessonSlide, index: number) => void;
+  /** Open this slide (from the Notes tab); a new nonce repeats the request. */
+  jumpTo?: { slideKey: string; nonce: number } | null;
 }
 
 const POSITION_KEY = (itemId: string) => `gals.interactiveLesson.position.${itemId}`;
@@ -39,7 +41,7 @@ function loadPosition(itemId: string): number {
   }
 }
 
-function slideTitle(s: LessonSlide, i: number): string {
+export function slideTitle(s: LessonSlide, i: number): string {
   const label =
     s.t === 'title'
       ? 'Title'
@@ -65,6 +67,7 @@ export function InteractiveLesson({
   courseId,
   moduleId,
   onSlideChange,
+  jumpTo,
 }: InteractiveLessonProps) {
   const {
     lesson,
@@ -182,6 +185,17 @@ export function InteractiveLesson({
     },
     [itemId, total],
   );
+
+  // Each request is served once, when the lesson that has the slide is loaded.
+  const servedJump = useRef<number | null>(null);
+  useEffect(() => {
+    if (!jumpTo || !lesson || servedJump.current === jumpTo.nonce) return;
+    const i = lesson.slides.findIndex((s) => s.key === jumpTo.slideKey);
+    if (i < 0) return;
+    servedJump.current = jumpTo.nonce;
+    go(i);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo?.nonce, lesson]);
 
   // Leaving a slide is when "revealed but noted nothing" (M15) becomes visible.
   const prevKey = useRef<string | null>(null);
@@ -343,21 +357,24 @@ export function InteractiveLesson({
           }
         />
       )}
-      <Slide
-        key={current.key}
-        slide={current}
-        session={lesson.session}
-        index={pos}
-        total={total}
-        fields={fieldsBySlide[current.key] ?? {}}
-        save={(patch) => saveFields(current.key, patch)}
-        emit={slideEmit}
-        sessionCriteria={sessionCriteria}
-        itemId={itemId}
-        sessionId={sessionId}
-        readOnly={readOnly}
-        onAdvance={() => go(pos + 1)}
-      />
+      {/* data-note-scope: text here can be highlighted / noted (lib/notes). */}
+      <div data-note-scope="" data-note-item={itemId} data-note-slide={current.key}>
+        <Slide
+          key={current.key}
+          slide={current}
+          session={lesson.session}
+          index={pos}
+          total={total}
+          fields={fieldsBySlide[current.key] ?? {}}
+          save={(patch) => saveFields(current.key, patch)}
+          emit={slideEmit}
+          sessionCriteria={sessionCriteria}
+          itemId={itemId}
+          sessionId={sessionId}
+          readOnly={readOnly}
+          onAdvance={() => go(pos + 1)}
+        />
+      </div>
     </div>
   );
 }

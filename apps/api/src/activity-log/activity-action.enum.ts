@@ -131,6 +131,16 @@ export enum ActivityAction {
   KNOWLEDGE_TEST_ITEM_SKIPPED = 'KNOWLEDGE_TEST_ITEM_SKIPPED',
   KNOWLEDGE_TEST_SUBMITTED = 'KNOWLEDGE_TEST_SUBMITTED',
   KNOWLEDGE_TEST_GATE_BLOCKED = 'KNOWLEDGE_TEST_GATE_BLOCKED',
+
+  // Study notes (course page Notes tab). NOTE_CREATED / NOTE_EDITED are
+  // Process Mining Library v1 #14/#15 (rule M04); metadata carries ids,
+  // lengths and the slide anchor, never the note text.
+  NOTE_CREATED = 'NOTE_CREATED',
+  NOTE_EDITED = 'NOTE_EDITED',
+  NOTE_DELETED = 'NOTE_DELETED',
+  HIGHLIGHT_CREATED = 'HIGHLIGHT_CREATED',
+  HIGHLIGHT_DELETED = 'HIGHLIGHT_DELETED',
+  NOTES_VIEWED = 'NOTES_VIEWED',
 }
 
 /**

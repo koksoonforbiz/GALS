@@ -18,6 +18,21 @@ const STUDENT_STEP: Record<CourseGateKind, { step: StudentGateStep['step']; labe
   KNOWLEDGE_TEST: { step: 'knowledge', label: 'Knowledge check' },
 };
 
+/** The neutral label and step code a student sees for one gate. */
+export function studentGateStep(gate: Pick<CourseGate, 'kind' | 'occasion'>): {
+  step: StudentGateStep['step'];
+  label: string;
+} {
+  const kt =
+    gate.kind === 'KNOWLEDGE_TEST' && gate.occasion
+      ? parseKnowledgeTestOccasion(gate.occasion)
+      : null;
+  return {
+    ...STUDENT_STEP[gate.kind],
+    ...(kt ? { label: knowledgeTestLabel(kt.kind, kt.sessionNo) } : {}),
+  };
+}
+
 export function moduleLockedError() {
   return new ForbiddenException({
     statusCode: 403,
@@ -58,20 +73,13 @@ export class CourseGateService {
   /** Checklist for the course page, in course order. */
   async studentSteps(studentId: string, courseId: string): Promise<StudentGateStep[]> {
     const { steps } = await this.lockState(studentId, courseId);
-    return steps.map(({ gate, done, next }) => {
-      const kt =
-        gate.kind === 'KNOWLEDGE_TEST' && gate.occasion
-          ? parseKnowledgeTestOccasion(gate.occasion)
-          : null;
-      return {
-        gateId: gate.id,
-        ...STUDENT_STEP[gate.kind],
-        ...(kt ? { label: knowledgeTestLabel(kt.kind, kt.sessionNo) } : {}),
-        occasion: gate.occasion,
-        done,
-        next,
-      };
-    });
+    return steps.map(({ gate, done, next }) => ({
+      gateId: gate.id,
+      ...studentGateStep(gate),
+      occasion: gate.occasion,
+      done,
+      next,
+    }));
   }
 
   private async isActiveStudent(studentId: string, courseId: string): Promise<boolean> {

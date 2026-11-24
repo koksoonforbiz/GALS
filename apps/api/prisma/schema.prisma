@@ -316,6 +316,16 @@ enum ActivityAction {
   KNOWLEDGE_TEST_ITEM_SKIPPED
   KNOWLEDGE_TEST_SUBMITTED
   KNOWLEDGE_TEST_GATE_BLOCKED
+
+  // Study notes (course page Notes tab). NOTE_CREATED / NOTE_EDITED are
+  // Process Mining Library v1 #14/#15 (rule M04); metadata carries ids,
+  // lengths and the slide anchor, never the note text.
+  NOTE_CREATED
+  NOTE_EDITED
+  NOTE_DELETED
+  HIGHLIGHT_CREATED
+  HIGHLIGHT_DELETED
+  NOTES_VIEWED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -435,6 +445,7 @@ model User {
 
   // Interactive-lesson working state (prompting course)
   lessonSlideStates        LessonSlideState[]
+  studyNotes               StudyNote[]
   // Prompt Lab (prompting course, Phase 3)
   promptLabRuns            PromptLabRun[]
   promptLabVersions        PromptLabVersion[]
@@ -598,6 +609,7 @@ model Course {
   questions        Question[]
   modules          CourseModule[]
   sourceDocuments  SourceDocument[]
+  studyNotes       StudyNote[]
   contentDrafts    ContentDraft[]
   studentDocuments StudentSourceDocument[]
   dialogueSessions DialogueSession[]
@@ -854,6 +866,7 @@ model ModuleItem {
   module            CourseModule         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   versions          PageContentVersion[]
   lessonSlideStates LessonSlideState[]
+  studyNotes        StudyNote[]
   promptLabRuns     PromptLabRun[]
   promptLabVersions PromptLabVersion[]
   promptLabCases    PromptLabTestCase[]
@@ -884,6 +897,37 @@ model LessonSlideState {
   @@unique([studentId, moduleItemId, slideKey])
   @@index([moduleItemId])
   @@map("lesson_slide_states")
+}
+
+/// A student's own highlight or note in a course (course page Notes tab).
+/// Anchored to a module item and, for interactive lessons, a slide; the
+/// quote is found again on the page by its text plus a little context
+/// (prefix/suffix), so highlights survive re-renders without DOM offsets.
+model StudyNote {
+  id           String   @id @default(uuid()) @db.Uuid
+  studentId    String   @map("student_id") @db.Uuid
+  courseId     String   @map("course_id") @db.Uuid
+  moduleItemId String?  @map("module_item_id") @db.Uuid
+  slideKey     String?  @map("slide_key")
+  /// Where it was made, as shown to the student ("Session 1 · 4. Why prompts fail").
+  location     String   @default("")
+  /// highlight (text selected on the page) | note (typed) | assistant (saved answer)
+  source       String
+  quote        String?
+  prefix       String?
+  suffix       String?
+  /// yellow | green | blue | pink; null for a note without a highlight
+  color        String?
+  body         String   @default("")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  student    User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course     Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  moduleItem ModuleItem? @relation(fields: [moduleItemId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, courseId])
+  @@map("study_notes")
 }
 
 model PageContentVersion {

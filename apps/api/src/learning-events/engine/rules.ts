@@ -238,14 +238,27 @@ const M21: RuleDef = {
   run: (i) => readingRules(i).filter((d) => d.ruleId === 'M21'),
 };
 
+/**
+ * M04 knowledge building: a submitted rationale, or the learner writing a
+ * study note in their own words (Notes tab; NOTE_CREATED / NOTE_EDITED with
+ * text). A bare highlight or a saved assistant answer is not their own
+ * production, so it does not count (the workbook: weight by production).
+ */
 const M04: RuleDef = {
   id: 'M04',
-  inputs: ['RATIONALE_SUBMITTED'],
+  inputs: ['RATIONALE_SUBMITTED', 'NOTE_CREATED', 'NOTE_EDITED'],
   run: ({ actions }) =>
     actions
-      .filter((a) => a.action === 'RATIONALE_SUBMITTED')
+      .filter(
+        (a) =>
+          a.action === 'RATIONALE_SUBMITTED' ||
+          (is(a, 'NOTE_CREATED', 'NOTE_EDITED') && Number(a.meta.chars ?? 0) > 0),
+      )
       .map((a) =>
-        draft('M04', [a], { outcome: 'self_explanation', detail: { chars: a.meta.chars } }),
+        draft('M04', [a], {
+          outcome: a.action === 'RATIONALE_SUBMITTED' ? 'self_explanation' : 'note_written',
+          detail: { chars: a.meta.chars },
+        }),
       ),
 };
 

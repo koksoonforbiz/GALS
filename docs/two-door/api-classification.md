@@ -109,6 +109,7 @@ Because no PRIVATE route shares a (method, path) with a PUBLIC one, **nginx can 
 /api/interactive-lessons/**   (prompting course — added 2026-10-07)
 /api/prompt-lab/**  EXCEPT  /api/prompt-lab/courses/**  (PRIVATE)   (prompting course — added 2026-10-07)
 /api/puzzles/**   (EF assessment, student-only — added 2026-10-22)
+/api/study-notes  /api/study-notes/:x   /api/course-progress/my   (student-only — added 2026-11-24)
 /api/pre-generation/{match-document,ready}
 /api/vlm/config/course/:x  GET     /api/vlm/describe-page  POST
 /socket.io/            (dialogue + default namespaces; text-mining refused at handshake)
@@ -316,6 +317,18 @@ Added 2026-10-07 for the prompting-course integration (`docs/process-mining/`).
 | GET    | `/api/interactive-lessons/items/:itemId`                           | student, teacher, admin | JwtAuthGuard,RolesGuard | **BOTH**   | Enrollment / ownership checked in service.                             |
 | PUT    | `/api/interactive-lessons/items/:itemId/slides/:slideKey/state`    | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | Student's own working state only.                                      |
 | POST   | `/api/interactive-lessons/items/:itemId/slides/:slideKey/feedback` | student                 | JwtAuthGuard,RolesGuard | **PUBLIC** | AI feedback on the student's own Checkpoint answer (added 2026-11-24). |
+
+### StudyNotesController (`study-notes/study-notes.controller.ts`) and CourseProgressController (`course-progress/course-progress.controller.ts`)
+
+Added 2026-11-24: the student's own highlights and notes (course page Notes tab) and the home-page progress summary. No staff route reads notes.
+
+| Method | Path                         | @Roles  | Guards                  | Door       | Note                                                  |
+| ------ | ---------------------------- | ------- | ----------------------- | ---------- | ----------------------------------------------------- |
+| GET    | `/api/study-notes?courseId=` | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Own notes in one enrolled course.                     |
+| POST   | `/api/study-notes`           | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Enrollment + item gate checked in service.            |
+| PATCH  | `/api/study-notes/:id`       | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Own note only (404 otherwise).                        |
+| DELETE | `/api/study-notes/:id`       | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Own note only (404 otherwise).                        |
+| GET    | `/api/course-progress/my`    | student | JwtAuthGuard,RolesGuard | **PUBLIC** | Neutral checklist labels only, as on the course page. |
 
 ### KnowledgeTestsController (`knowledge-tests/knowledge-tests.controller.ts`)
 

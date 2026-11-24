@@ -92,7 +92,14 @@ export type ActivityAction =
   | 'KNOWLEDGE_TEST_OPENED'
   | 'KNOWLEDGE_TEST_ITEM_VIEWED'
   | 'KNOWLEDGE_TEST_ITEM_ANSWERED'
-  | 'KNOWLEDGE_TEST_ITEM_SKIPPED';
+  | 'KNOWLEDGE_TEST_ITEM_SKIPPED'
+  // Study notes (Notes tab): ids, lengths and anchors only, never note text
+  | 'NOTE_CREATED'
+  | 'NOTE_EDITED'
+  | 'NOTE_DELETED'
+  | 'HIGHLIGHT_CREATED'
+  | 'HIGHLIGHT_DELETED'
+  | 'NOTES_VIEWED';
 
 export interface ActivityEvent {
   action: ActivityAction;

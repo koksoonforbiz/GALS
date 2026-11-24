@@ -251,6 +251,8 @@ Labs: 17 slides carry `lab:true`, spread across 11 exercise, 4 task and 2 stretc
 
 **Totals: A 12 · N 31 · D 24 · X 16 = 83.**
 
+**Amendment 2026-11-24:** #14 `NOTE_CREATED` and #15 `NOTE_EDITED` are now captured (X → N): the course page has a Notes tab beside the Learning Assistant, with page highlights (`HIGHLIGHT_CREATED` / `HIGHLIGHT_DELETED`, `NOTE_DELETED`, `NOTES_VIEWED` are GALS-local raw actions, not library rows). Metadata carries note id, slide key, colour and lengths only, never the note text. Rule M04 now also takes `NOTE_CREATED` / `NOTE_EDITED` with `chars > 0` (outcome `note_written`). The totals above are the Phase 0 snapshot.
+
 `slideType` / `slideKey` refer to metadata on the new slide events.
 
 | #   | Action event              | Cat.        | Captured by / derived from                                                                                                                                                                                                                                                                                                                                 |

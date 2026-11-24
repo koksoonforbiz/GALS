@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePageContext } from '../../contexts/PageContext';
 import { useActivityLog } from '../../lib/activity-log';
 import { api, ApiError } from '../../lib/api';
+import { FOCUS_ASSISTANT_EVENT, useNotesOptional } from '../../lib/notes/NotesContext';
 
 const CodeQuestionMessage = lazy(() =>
   import('../code-practice/CodeQuestionMessage').then((m) => ({
@@ -164,6 +165,8 @@ import {
   Zap,
   Sparkles,
   Code2,
+  BookmarkPlus,
+  BookmarkCheck,
 } from 'lucide-react';
 
 const STRATEGY_META: Record<
@@ -212,6 +215,11 @@ interface ChatbotPanelProps {
    * and returns the resolved selectedText, or null if nothing changed.
    */
   resolveVlmSlides?: () => Promise<string | null>;
+  /**
+   * Replaces the "Learning Assistant" title in the header (the docked
+   * course-page panel puts its Assistant | Notes switch there).
+   */
+  headerTitle?: React.ReactNode;
 }
 
 export function ChatbotPanel({
@@ -220,6 +228,7 @@ export function ChatbotPanel({
   isMaximized = false,
   onClearAllHighlights,
   resolveVlmSlides,
+  headerTitle,
 }: ChatbotPanelProps) {
   const {
     pageType,
@@ -272,6 +281,29 @@ export function ChatbotPanel({
   }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
   const chatInputRef = useRef<HTMLInputElement>(null);
+  // "Ask" from a highlight or a note: the panel switches to the assistant
+  // and the question box takes focus (the selection is already the context).
+  useEffect(() => {
+    const focus = () => {
+      setMode((m) => (m === 'review-tab' ? 'chat' : m));
+      window.setTimeout(() => chatInputRef.current?.focus(), 0);
+    };
+    window.addEventListener(FOCUS_ASSISTANT_EVENT, focus);
+    return () => window.removeEventListener(FOCUS_ASSISTANT_EVENT, focus);
+  }, []);
+  // Save an answer to the course notes (NotebookLM "Save to note").
+  const notes = useNotesOptional();
+  const [savedToNotes, setSavedToNotes] = useState<Set<string>>(new Set());
+  const saveToNotes = async (msg: ChatMessage) => {
+    if (!notes || savedToNotes.has(msg.id)) return;
+    const saved = await notes.createNote({
+      source: 'assistant',
+      quote: msg.content.slice(0, 4000),
+      body: '',
+      color: null,
+    });
+    if (saved) setSavedToNotes((prev) => new Set(prev).add(msg.id));
+  };
   // "Ask about this slide" text belongs to that slide: drop it when the
   // student moves to another slide (it otherwise answered about the old one).
   const slideContextRef = useRef<string | null>(null);
@@ -632,6 +664,7 @@ export function ChatbotPanel({
           onMinimize={onMinimize}
           onToggleMaximize={onToggleMaximize}
           isMaximized={isMaximized}
+          title={headerTitle}
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={true}
         />
@@ -648,6 +681,7 @@ export function ChatbotPanel({
           onMinimize={onMinimize}
           onToggleMaximize={onToggleMaximize}
           isMaximized={isMaximized}
+          title={headerTitle}
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
@@ -676,6 +710,7 @@ export function ChatbotPanel({
           onMinimize={onMinimize}
           onToggleMaximize={onToggleMaximize}
           isMaximized={isMaximized}
+          title={headerTitle}
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
@@ -710,6 +745,7 @@ export function ChatbotPanel({
             onMinimize={onMinimize}
             onToggleMaximize={onToggleMaximize}
             isMaximized={isMaximized}
+            title={headerTitle}
             onReviewTab={() => setMode('review-tab')}
             isReviewTab={false}
           />
@@ -752,6 +788,7 @@ export function ChatbotPanel({
           onMinimize={onMinimize}
           onToggleMaximize={onToggleMaximize}
           isMaximized={isMaximized}
+          title={headerTitle}
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
@@ -781,6 +818,7 @@ export function ChatbotPanel({
           onMinimize={onMinimize}
           onToggleMaximize={onToggleMaximize}
           isMaximized={isMaximized}
+          title={headerTitle}
           onReviewTab={() => setMode('review-tab')}
           isReviewTab={false}
         />
@@ -808,6 +846,7 @@ export function ChatbotPanel({
         onMinimize={onMinimize}
         onToggleMaximize={onToggleMaximize}
         isMaximized={isMaximized}
+        title={headerTitle}
         onReviewTab={() => setMode('review-tab')}
         isReviewTab={false}
       />
@@ -885,6 +924,26 @@ export function ChatbotPanel({
                   )}
                 </div>
               </div>
+              {msg.role === 'assistant' && notes && msg.content.trim().length > 0 && (
+                <div className="mt-0.5 flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => void saveToNotes(msg)}
+                    disabled={savedToNotes.has(msg.id)}
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:hover:bg-transparent disabled:text-green-600"
+                  >
+                    {savedToNotes.has(msg.id) ? (
+                      <>
+                        <BookmarkCheck size={11} /> Saved to notes
+                      </>
+                    ) : (
+                      <>
+                        <BookmarkPlus size={11} /> Save to notes
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
               {/* Inline code question — the LLM decided this message was
                   a request for a coding exercise. Runs entirely
                   client-side via Pyodide; there's no grading, so
@@ -1161,7 +1220,9 @@ function PanelHeader({
   isMaximized,
   onReviewTab,
   isReviewTab,
+  title,
 }: {
+  title?: React.ReactNode;
   // Optional — the docked variant (StudentCourseViewPage) doesn't provide
   // these because the panel is already part of the page layout, not a
   // floating window. When undefined, the minimize / maximize / close
@@ -1175,10 +1236,12 @@ function PanelHeader({
 }) {
   return (
     <div className="chatbot-drag-handle flex items-center justify-between px-3 py-2 bg-blue-600 text-white cursor-grab active:cursor-grabbing select-none rounded-t-lg">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <GraduationCap size={18} />
-        <span>Learning Assistant</span>
-      </div>
+      {title ?? (
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <GraduationCap size={18} />
+          <span>Learning Assistant</span>
+        </div>
+      )}
       <div className="flex items-center gap-1">
         <button
           onClick={(e) => {

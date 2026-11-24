@@ -93,3 +93,27 @@ body {
 .annotationLayer a {
   pointer-events: auto !important;
 }
+
+/* Study-note highlights on the lesson page (lib/notes/PageAnnotator.tsx,
+   CSS Custom Highlight API: no DOM changes). "noted" = a note is written on
+   the highlight; "flash" = just opened from the Notes tab. */
+::highlight(gals-hl-yellow) {
+  background-color: rgb(253 224 71 / 0.55);
+}
+::highlight(gals-hl-green) {
+  background-color: rgb(134 239 172 / 0.6);
+}
+::highlight(gals-hl-blue) {
+  background-color: rgb(125 211 252 / 0.55);
+}
+::highlight(gals-hl-pink) {
+  background-color: rgb(249 168 212 / 0.6);
+}
+::highlight(gals-hl-noted) {
+  text-decoration: underline dotted rgb(75 85 99);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+::highlight(gals-hl-flash) {
+  background-color: rgb(251 146 60 / 0.7);
+}

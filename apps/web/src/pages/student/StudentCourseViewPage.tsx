@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { apiFetch, api } from '../../lib/api';
 import { useToast } from '../../components/Toast';
@@ -10,7 +10,10 @@ import PdfReader from '../../components/PdfReader';
 import { DockedChatbot } from '../../components/FloatingChatbot';
 import { InteractiveLesson, slidePlainText } from '../../components/interactive-lesson';
 import { CourseGateChecklist, LockedBadge } from '../../components/student/CourseGateChecklist';
-import type { StudentGateStep } from '@ats/shared';
+import type { LessonSlide, StudentGateStep, StudyNote } from '@ats/shared';
+import { slideTitle } from '../../components/interactive-lesson/InteractiveLesson';
+import { NotesProvider, useNotes, type NotesLocation } from '../../lib/notes/NotesContext';
+import { PageAnnotator } from '../../lib/notes/PageAnnotator';
 
 const CodePlayground = lazy(() =>
   import('../../components/code-practice/CodePlayground').then((m) => ({
@@ -141,8 +144,43 @@ function loadSidebarCollapsed(): boolean {
   return typeof window !== 'undefined' && window.innerWidth < NARROW_VIEWPORT;
 }
 
+/**
+ * Tells the notes layer where the student is reading and how to open a
+ * note's slide. Renders nothing.
+ */
+function NotesBridge({
+  location,
+  onNavigate,
+}: {
+  location: NotesLocation | null;
+  onNavigate: (note: StudyNote) => void;
+}) {
+  const { setLocation, registerNavigator } = useNotes();
+  useEffect(() => {
+    setLocation(location);
+  }, [location?.moduleItemId, location?.slideKey, location?.label]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nav = useRef(onNavigate);
+  nav.current = onNavigate;
+  useEffect(() => {
+    registerNavigator((n) => nav.current(n));
+    return () => registerNavigator(null);
+  }, [registerNavigator]);
+  return null;
+}
+
+/** Course page with the student's study notes (Notes tab, page highlights). */
 export function StudentCourseViewPage() {
   const { courseId } = useParams<{ courseId: string }>();
+  return (
+    <NotesProvider courseId={courseId!}>
+      <CourseView />
+    </NotesProvider>
+  );
+}
+
+function CourseView() {
+  const { courseId } = useParams<{ courseId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -158,6 +196,15 @@ export function StudentCourseViewPage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Study notes: the slide on screen, a pending "go to slide", and the
+  // lesson column the annotator watches.
+  const [currentSlide, setCurrentSlide] = useState<{
+    itemId: string;
+    slide: LessonSlide;
+    index: number;
+  } | null>(null);
+  const [jump, setJump] = useState<{ slideKey: string; nonce: number } | null>(null);
+  const [lessonEl, setLessonEl] = useState<HTMLDivElement | null>(null);
   // Per-page highlight checkbox state. Tracks which PDF pages (if any) are
   // currently checked so PdfReader can render the right checkbox state.
   const [checkedPdfPages, setCheckedPdfPages] = useState<Set<number>>(new Set());
@@ -621,7 +668,15 @@ export function StudentCourseViewPage() {
           .catch(() => {});
         // Auto-select the first item of the first open module. With course
         // gates outstanding nothing opens, and the checklist shows instead.
-        const firstItem = data.modules.find((m) => !m.locked)?.items[0];
+        // ?item=<id> (home page "Continue") opens that item if it is open.
+        const wanted = searchParams.get('item');
+        const wantedItem = wanted
+          ? data.modules
+              .filter((m) => !m.locked)
+              .flatMap((m) => m.items)
+              .find((i) => i.id === wanted)
+          : undefined;
+        const firstItem = wantedItem ?? data.modules.find((m) => !m.locked)?.items[0];
         if (firstItem) setSelectedItemId(firstItem.id);
       } catch {
         toast('error', 'Failed to load course');
@@ -647,8 +702,36 @@ export function StudentCourseViewPage() {
     }
   }
 
+  const itemOrder: Record<string, number> = {};
+  course.modules.flatMap((m) => m.items).forEach((it, i) => (itemOrder[it.id] = i));
+  const notesLocation: NotesLocation | null = !selectedItem
+    ? null
+    : selectedItem.type === 'INTERACTIVE_LESSON'
+      ? currentSlide && currentSlide.itemId === selectedItem.id
+        ? {
+            moduleItemId: selectedItem.id,
+            slideKey: currentSlide.slide.key,
+            label: `${selectedModule?.title ?? selectedItem.title} · ${slideTitle(currentSlide.slide, currentSlide.index)}`,
+          }
+        : null
+      : {
+          moduleItemId: selectedItem.id,
+          slideKey: null,
+          label: selectedModule
+            ? `${selectedModule.title} · ${selectedItem.title}`
+            : selectedItem.title,
+        };
+  const openNote = (note: StudyNote) => {
+    if (!note.moduleItemId) return;
+    if (note.moduleItemId !== selectedItemId) setSelectedItemId(note.moduleItemId);
+    if (note.slideKey) setJump({ slideKey: note.slideKey, nonce: Date.now() });
+  };
+  const lessonItemId = selectedItem?.id ?? null;
+
   return (
     <div className="h-full flex flex-col">
+      <NotesBridge location={notesLocation} onNavigate={openNote} />
+      <PageAnnotator container={lessonEl} />
       {course.modules.length === 0 ? (
         <>
           {/* Header — only needed here; when there's a sidebar (below),
@@ -826,6 +909,7 @@ export function StudentCourseViewPage() {
               Playground doesn't claim; when the Playground is collapsed
               it gets everything. */}
           <div
+            ref={setLessonEl}
             data-selectable="true"
             data-replay-region="lesson"
             className="flex-1 min-w-0 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col"
@@ -849,16 +933,20 @@ export function StudentCourseViewPage() {
                     sessionId={sessionId}
                     courseId={course.id}
                     moduleId={selectedModule?.id}
-                    onSlideChange={(slide) =>
-                      setPageContext({ contentText: slidePlainText(slide) || null })
-                    }
+                    jumpTo={jump}
+                    onSlideChange={(slide, index) => {
+                      setPageContext({ contentText: slidePlainText(slide) || null });
+                      if (lessonItemId) setCurrentSlide({ itemId: lessonItemId, slide, index });
+                    }}
                   />
                 </div>
               ) : selectedItem.type === 'PAGE' ? (
                 <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">{selectedItem.title}</h3>
                   {selectedItem.contentMdx ? (
-                    <BlockRenderer content={selectedItem.contentMdx} />
+                    <div data-note-scope="" data-note-item={selectedItem.id} data-note-slide="">
+                      <BlockRenderer content={selectedItem.contentMdx} />
+                    </div>
                   ) : (
                     <p className="text-gray-400">No content yet.</p>
                   )}
@@ -1002,6 +1090,7 @@ export function StudentCourseViewPage() {
                 pendingImagePagesRef.current = new Map();
               }}
               resolveVlmSlides={resolveVlmSlides}
+              itemOrder={itemOrder}
             />
           </div>
         </div>

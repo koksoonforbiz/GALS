@@ -17,3 +17,4 @@ export * from './course-gates';
 export * from './puzzles';
 export * from './efa-admin';
 export * from './knowledge-tests';
+export * from './study-notes';

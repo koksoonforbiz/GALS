@@ -25,7 +25,8 @@
     "seed:ef-battery": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-ef-battery.ts",
     "import:knowledge-tests": "ts-node --transpile-only -P tsconfig.json prisma/scripts/import-knowledge-tests.ts",
     "seed:kt-e2e-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-kt-e2e-local.ts",
-    "seed:efa-e2e-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-efa-e2e-local.ts"
+    "seed:efa-e2e-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-efa-e2e-local.ts",
+    "seed:notes-e2e-local": "ts-node --transpile-only -P tsconfig.json prisma/scripts/seed-notes-e2e-local.ts"
   },
   "dependencies": {
     "@ats/shared": "workspace:*",
