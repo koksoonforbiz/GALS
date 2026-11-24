@@ -222,8 +222,8 @@ export function PermissionGate({ onGranted }: Props) {
   }, [bothActive, extended, handleContinue]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg space-y-6 rounded-2xl bg-white p-8 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-900/80 p-4 backdrop-blur-sm sm:items-center">
+      <div className="my-auto w-full max-w-lg space-y-6 rounded-2xl bg-white p-8 shadow-2xl">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">Before you begin</h2>
           <p className="mt-1 text-sm text-gray-500">

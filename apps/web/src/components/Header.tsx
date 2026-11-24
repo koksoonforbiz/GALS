@@ -59,6 +59,16 @@ export function Header({ onLogoutRequest }: HeaderProps) {
 
   return (
     <div ref={menuRef} data-replay-region="header" className="fixed top-2 left-2 z-[110]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-colors"
+        title={user.name}
+        aria-label="Account menu"
+        aria-expanded={open}
+      >
+        <UserIcon size={16} />
+      </button>
       {open && (
         <div className="absolute top-full left-0 mt-2 w-52 rounded-lg border border-gray-200 bg-white shadow-lg py-1.5 overflow-hidden">
           <div className="px-3 py-2 border-b border-gray-100">
@@ -70,6 +80,7 @@ export function Header({ onLogoutRequest }: HeaderProps) {
             </span>
           </div>
           <Link
+            autoFocus
             to="/account/security"
             onClick={() => setOpen(false)}
             className="block px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
@@ -85,16 +96,6 @@ export function Header({ onLogoutRequest }: HeaderProps) {
           </button>
         </div>
       )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-8 w-8 items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-colors"
-        title={user.name}
-        aria-label="Account menu"
-        aria-expanded={open}
-      >
-        <UserIcon size={16} />
-      </button>
     </div>
   );
 }

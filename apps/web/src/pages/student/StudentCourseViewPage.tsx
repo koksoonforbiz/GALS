@@ -294,7 +294,8 @@ export function StudentCourseViewPage() {
   // Module-list state, declared here because the chatbot reserve needs it.
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => loadSidebarWidth());
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => loadSidebarCollapsed());
-  const layoutReserve = (sidebarCollapsed ? 0 : sidebarWidth) + ROW_GAPS + CONTENT_MIN_WIDTH;
+  // Collapsed, the module list still leaves a ~28 px strip.
+  const layoutReserve = (sidebarCollapsed ? 28 : sidebarWidth) + ROW_GAPS + CONTENT_MIN_WIDTH;
   const maxAllowedChatbotWidth = Math.max(
     CHATBOT_MIN_WIDTH,
     Math.min(CHATBOT_MAX_WIDTH, rowWidth - layoutReserve),

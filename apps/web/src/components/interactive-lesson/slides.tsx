@@ -196,6 +196,7 @@ function TextGate({
     <div data-replay-redact="">
       <textarea
         data-field-key={kind}
+        aria-label={placeholder.replace('…', '')}
         placeholder={placeholder}
         value={value}
         onChange={(e) => {

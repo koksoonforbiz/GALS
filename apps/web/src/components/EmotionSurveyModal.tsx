@@ -31,10 +31,30 @@ export function EmotionSurveyModal({ onAnswer, signingOut = false }: Props) {
 
   // A real modal: focus moves in, Escape explains (one answer is required).
   const firstOption = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     firstOption.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleBackdropClick();
+      if (e.key === 'Tab') {
+        // keep focus inside the dialog
+        const box = dialogRef.current;
+        if (!box) return;
+        const items = Array.from(box.querySelectorAll<HTMLElement>('button:not([disabled])'));
+        if (!items.length) return;
+        const first = items[0]!;
+        const last = items[items.length - 1]!;
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (
+          !e.shiftKey &&
+          (document.activeElement === last || !box.contains(document.activeElement))
+        ) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -52,6 +72,7 @@ export function EmotionSurveyModal({ onAnswer, signingOut = false }: Props) {
       <div
         className={`bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-8 flex flex-col gap-5 ${shaking ? 'animate-[shake_0.4s_ease-in-out]' : ''}`}
         style={shaking ? { animation: 'shake 0.4s ease-in-out' } : undefined}
+        ref={dialogRef}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="text-center">
@@ -70,7 +91,7 @@ export function EmotionSurveyModal({ onAnswer, signingOut = false }: Props) {
               ref={i === 0 ? firstOption : undefined}
               aria-pressed={selected === opt.value}
               onClick={() => setSelected(opt.value)}
-              className={`flex items-center px-4 py-3 rounded-xl border-2 transition-all text-left ${
+              className={`flex items-center px-4 py-3 rounded-xl border-2 transition-all text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
                 selected === opt.value
                   ? 'border-indigo-500 bg-indigo-50'
                   : 'border-gray-200 hover:border-indigo-400 hover:bg-indigo-50'

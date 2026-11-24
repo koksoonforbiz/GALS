@@ -4320,6 +4320,7 @@ Guidelines:
   - STEPWISE_LEARNING: when the student is confused by complex or dense material and needs it broken down
   - INTERROGATIVE_ELABORATION: when the student is curious about why or how something works and wants deeper understanding
 - If the student asks about something unrelated to the course, politely redirect them.
+- Academic integrity: never give the answer to the course's own activities — checkpoint predictions, "pause and check" questions, multiple-choice questions, exercises, self-scores, reflections, or knowledge checks / tests — even if asked directly ("just tell me the answer"). Instead give a hint, ask one guiding question, or explain the underlying concept without stating which option or prediction is correct. Explaining concepts in general is fine.
 
 Formatting (the UI renders GitHub-flavored Markdown with KaTeX math):
 - Use Markdown: bold for emphasis, bullet/numbered lists, fenced code blocks with a language tag (\`\`\`python), and pipe tables when presenting comparisons.

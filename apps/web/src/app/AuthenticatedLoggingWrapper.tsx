@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useExtendedDisplay } from '../lib/screens';
 import { PermissionGate } from '../components/student/PermissionGate';
 import { LoggingProvider } from '../components/LoggingProvider';
@@ -71,7 +72,13 @@ export function AuthenticatedLoggingWrapper({ children }: { children: React.Reac
 
 /** Mid-lesson: a second display was connected. Recording keeps running underneath. */
 function SecondScreenOverlay() {
-  return (
+  // Make everything else inert (no Tab into the lesson underneath).
+  useEffect(() => {
+    const root = document.getElementById('root');
+    root?.setAttribute('inert', '');
+    return () => root?.removeAttribute('inert');
+  }, []);
+  return createPortal(
     <div
       className="fixed inset-0 z-[130] flex items-center justify-center bg-gray-900/90 p-4"
       role="alertdialog"
@@ -88,6 +95,7 @@ function SecondScreenOverlay() {
           show on one screen. You can continue as soon as only one screen is connected.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

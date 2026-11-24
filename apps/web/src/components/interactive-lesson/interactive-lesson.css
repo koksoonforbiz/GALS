@@ -454,6 +454,10 @@
 .il-root .ai-feedback p {
   margin: 0;
 }
+/* room under the last line for the bottom-left webcam bar and biometrics pill */
+.il-root .slide {
+  padding-bottom: 72px;
+}
 .il-root .il-unsaved {
   /* stays in view on long slides (it scrolled off at the top) */
   position: sticky;
