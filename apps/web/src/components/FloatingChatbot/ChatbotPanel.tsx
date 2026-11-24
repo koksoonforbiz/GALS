@@ -272,6 +272,14 @@ export function ChatbotPanel({
   }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
   const chatInputRef = useRef<HTMLInputElement>(null);
+  // "Ask about this slide" text belongs to that slide: drop it when the
+  // student moves to another slide (it otherwise answered about the old one).
+  const slideContextRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (slideContextRef.current && selectedText === slideContextRef.current) clearSelectedText();
+    slideContextRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentText]);
   const [isSending, setIsSending] = useState(false);
   const [isResolvingVlm, setIsResolvingVlm] = useState(false);
   const [isCheckingStepwiseCourse, setIsCheckingStepwiseCourse] = useState(false);
@@ -1102,7 +1110,9 @@ export function ChatbotPanel({
           <button
             type="button"
             onClick={() => {
-              setSelectedText(stripMdxToPlainText(contentText));
+              const slideText = stripMdxToPlainText(contentText);
+              setSelectedText(slideText);
+              slideContextRef.current = slideText;
               chatInputRef.current?.focus();
             }}
             className="mb-1.5 inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-700 hover:bg-blue-100"

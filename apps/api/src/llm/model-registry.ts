@@ -226,7 +226,10 @@ const CHAT_MODELS: ChatModelSpec[] = [
     // translation). Flag this as unverified if VLM testing shows
     // otherwise.
     capabilities: ['chat', 'vision'],
-    supportsTemperature: true,
+    // Verified 2026-11-24 on the live endpoint: any `temperature` in
+    // inferenceConfig returns 400 (JSON requests then fail; free-text ones
+    // silently fell back to the template), so it is never sent.
+    supportsTemperature: false,
     // Unused by the Bedrock call path (Converse API has its own
     // `inferenceConfig.maxTokens` shape) — set only to satisfy this
     // shared interface.
@@ -242,7 +245,10 @@ const CHAT_MODELS: ChatModelSpec[] = [
     provider: 'bedrock',
     label: 'GPT-5.6 Sol (AWS Bedrock)',
     capabilities: ['chat', 'vision'],
-    supportsTemperature: true,
+    // Verified 2026-11-24 on the live endpoint: any `temperature` in
+    // inferenceConfig returns 400 (JSON requests then fail; free-text ones
+    // silently fell back to the template), so it is never sent.
+    supportsTemperature: false,
     maxTokensParam: 'max_tokens',
     supportsJsonMode: true,
     supportsOpenAiFilesApi: false,

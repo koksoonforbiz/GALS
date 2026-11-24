@@ -216,6 +216,13 @@ describe('InteractiveLessonService.checkpointFeedback', () => {
     expect(prisma.lessonSlideState.upsert).not.toHaveBeenCalled();
   });
 
+  it('returns null (not a 500) when the provider call fails, and sends no temperature', async () => {
+    const { llm, service } = setup('{}');
+    llm.callLlmStructured.mockRejectedValueOnce(new Error('Bedrock API error: 400'));
+    expect(await service.checkpointFeedback('item-1', 's1-2', 'stu-1', 'x')).toBeNull();
+    expect(llm.callLlmStructured.mock.calls[0][1]).not.toHaveProperty('temperature');
+  });
+
   it('tolerates a malformed verdict and refuses non-checkpoint slides', async () => {
     const { service } = setup('Sure! {"verdict":"great","feedback":"Nice."}');
     expect((await service.checkpointFeedback('item-1', 's1-2', 'stu-1', 'x'))?.verdict).toBe(

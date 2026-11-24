@@ -186,17 +186,23 @@ export class InteractiveLessonService {
       `Student's prediction:\n${answer.trim()}`,
     ].join('\n\n');
 
-    const result = await this.llm.callLlmStructured(
-      teacherId,
-      {
-        systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        jsonMode: true,
-        maxTokens: 300,
-        temperature: 0.2,
-      },
-      { feature: 'checkpoint_feedback', courseId, triggeredByUserId: studentId },
-    );
+    // No temperature: the course's Bedrock models reject one (400).
+    let result: Awaited<ReturnType<LlmService['callLlmStructured']>>;
+    try {
+      result = await this.llm.callLlmStructured(
+        teacherId,
+        {
+          systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+          jsonMode: true,
+          maxTokens: 400,
+        },
+        { feature: 'checkpoint_feedback', courseId, triggeredByUserId: studentId },
+      );
+    } catch {
+      // Provider error: feedback is a support, never a gate — the reveal shows.
+      return null;
+    }
     if (!result.provider || result.provider === 'template') return null;
 
     let parsed: { verdict?: unknown; feedback?: unknown } = {};

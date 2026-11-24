@@ -81,9 +81,10 @@ export function CalibrationModal({
     return () => onPreview?.(false);
   }, [phase, onPreview]);
 
-  const [faceOk, setFaceOk] = useState(true);
+  const [faceOk, setFaceOk] = useState(!isFaceDetected);
   useEffect(() => {
-    if (phase !== 'calibrating' || !isFaceDetected) return;
+    if ((phase !== 'calibrating' && phase !== 'instructions') || !isFaceDetected) return;
+    setFaceOk(isFaceDetected());
     const t = setInterval(() => setFaceOk(isFaceDetected()), 500);
     return () => clearInterval(t);
   }, [phase, isFaceDetected]);
@@ -121,7 +122,12 @@ export function CalibrationModal({
     }
     setTestPoint(null);
     const diag = Math.hypot(window.innerWidth, window.innerHeight);
-    const px = errors.length ? Math.round(errors.reduce((a, b) => a + b, 0) / errors.length) : 9999;
+    if (!errors.length) {
+      setAccuracy(null); // no gaze estimate at all (no face seen) — see the done screen
+      setPhase('done');
+      return;
+    }
+    const px = Math.round(errors.reduce((a, b) => a + b, 0) / errors.length);
     setAccuracy({ px, pct: Math.round((px / diag) * 100) });
     setPhase('done');
   }, [getCurrentPrediction]);
@@ -203,6 +209,8 @@ export function CalibrationModal({
             </button>
             <button
               onClick={start}
+              disabled={!faceOk}
+              title={faceOk ? undefined : 'Your face must be visible to the camera first'}
               className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
             >
               Start calibration
@@ -263,6 +271,30 @@ export function CalibrationModal({
             />
           )}
         </>
+      )}
+
+      {phase === 'done' && !accuracy && (
+        <div className="text-center max-w-md space-y-4">
+          <h2 className="text-xl font-bold">No gaze was detected</h2>
+          <p className="text-gray-300">
+            The camera could not see your eyes during the check. Face the camera with light on your
+            face, then try again.
+          </p>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={redo}
+              className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+            >
+              Try again
+            </button>
+            <button
+              onClick={handleSkip}
+              className="px-6 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              Skip for now
+            </button>
+          </div>
+        </div>
       )}
 
       {phase === 'done' && accuracy && (
