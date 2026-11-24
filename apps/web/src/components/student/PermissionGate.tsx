@@ -6,6 +6,7 @@ import {
   clearPermittedScreenStream,
 } from '../../lib/biometrics/permittedStreams';
 import { useAuth } from '../../contexts/AuthContext';
+import { useExtendedDisplay } from '../../lib/screens';
 
 type Status = 'idle' | 'requesting' | 'active' | 'denied';
 
@@ -206,6 +207,19 @@ export function PermissionGate({ onGranted }: Props) {
   const bothActive = screenStatus === 'active' && webcamStatus === 'active';
   // Phones and tablets cannot share a browser tab at all.
   const canShareScreen = !!navigator.mediaDevices?.getDisplayMedia;
+  // One screen only (study rule): a connected second display blocks entry.
+  const extended = useExtendedDisplay() === true;
+
+  // One click: share this tab (needs the click), then the camera (does not).
+  const startAll = useCallback(async () => {
+    if (!screenStreamRef.current) await requestScreen();
+    if (screenStreamRef.current && !webcamStreamRef.current) await requestWebcam();
+  }, [requestScreen, requestWebcam]);
+
+  // Both granted on one screen → carry on without a second click.
+  useEffect(() => {
+    if (bothActive && !extended && !grantedRef.current) handleContinue();
+  }, [bothActive, extended, handleContinue]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/80 p-4 backdrop-blur-sm">
@@ -216,6 +230,27 @@ export function PermissionGate({ onGranted }: Props) {
             Screen sharing and your webcam must be active before you can proceed.
           </p>
         </div>
+
+        {extended && (
+          <p
+            className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800"
+            data-testid="second-screen-block"
+          >
+            <strong>Disconnect your second screen.</strong> GALS must be used on one screen only.
+            Unplug the external monitor (or switch your display to show on one screen only) — this
+            page continues by itself once only one screen is connected.
+          </p>
+        )}
+
+        {canShareScreen && !bothActive && (
+          <button
+            type="button"
+            onClick={() => void startAll()}
+            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            Start — share this tab and turn on my camera
+          </button>
+        )}
 
         {!canShareScreen && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -245,7 +280,7 @@ export function PermissionGate({ onGranted }: Props) {
         />
 
         <button
-          disabled={!bothActive}
+          disabled={!bothActive || extended}
           onClick={handleContinue}
           className="w-full rounded-xl py-3 text-sm font-medium transition-colors
             disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400

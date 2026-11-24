@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useExtendedDisplay } from '../lib/screens';
 import { PermissionGate } from '../components/student/PermissionGate';
 import { LoggingProvider } from '../components/LoggingProvider';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +30,7 @@ export function AuthenticatedLoggingWrapper({ children }: { children: React.Reac
   // session flag to skip the gate, since a test browser has no real screen
   // to share. Production builds never honour it.
   const testBypass = import.meta.env.DEV && sessionStorage.getItem(PERMISSION_SESSION_KEY) === '1';
+  const extendedDisplay = useExtendedDisplay();
   const [permissionsGranted, setPermissionsGranted] = useState(
     () => testBypass || !!liveScreenTrack(),
   );
@@ -49,6 +51,8 @@ export function AuthenticatedLoggingWrapper({ children }: { children: React.Reac
     return <PermissionGate onGranted={() => setPermissionsGranted(true)} />;
   }
 
+  const blockForSecondScreen = user?.role === 'student' && extendedDisplay === true;
+
   if (!user || !sessionId) return <>{children}</>;
 
   // captureDom temporarily ON again — re-testing after lowering
@@ -60,6 +64,30 @@ export function AuthenticatedLoggingWrapper({ children }: { children: React.Reac
   return (
     <LoggingProvider sessionId={sessionId} userId={user.id} captureDom={true}>
       {children}
+      {blockForSecondScreen && <SecondScreenOverlay />}
     </LoggingProvider>
+  );
+}
+
+/** Mid-lesson: a second display was connected. Recording keeps running underneath. */
+function SecondScreenOverlay() {
+  return (
+    <div
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-gray-900/90 p-4"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="second-screen-title"
+      data-testid="second-screen-overlay"
+    >
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl">
+        <h2 id="second-screen-title" className="text-xl font-semibold text-gray-900">
+          Please disconnect your second screen
+        </h2>
+        <p className="mt-2 text-sm text-gray-600">
+          GALS must be used on one screen only. Unplug the external monitor, or set your display to
+          show on one screen. You can continue as soon as only one screen is connected.
+        </p>
+      </div>
+    </div>
   );
 }
