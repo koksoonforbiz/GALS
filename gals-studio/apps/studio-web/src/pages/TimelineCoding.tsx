@@ -45,6 +45,7 @@ const AFFECT_TRACKS = [
  * idle + gaze_unknown), else an accepted guess would render in no lane. */
 const ACTIVITY_TRACKS = [
   { code: 'reading_lesson', label: 'Reading lesson', color: '#2563eb' },
+  { code: 'note_taking', label: 'Note taking', color: '#ca8a04' },
   { code: 'chatbot', label: 'Chatbot', color: '#0d9488' },
   { code: 'intervention', label: 'Intervention', color: '#7c3aed' },
   { code: 'navigating', label: 'Navigating', color: '#94a3b8' },
@@ -76,6 +77,7 @@ const AOI_SERIES = [
   { key: 'on', label: 'on-AOI', color: '#16a34a' },
   { key: 'reading', label: 'reading AOI', color: '#2563eb' },
   { key: 'chat', label: 'chat AOI', color: '#0d9488' },
+  { key: 'notes', label: 'notes AOI', color: '#ca8a04' },
   { key: 'navigating', label: 'navigation AOI', color: '#f59e0b' },
 ] as const;
 type AoiKey = (typeof AOI_SERIES)[number]['key'];
@@ -2363,6 +2365,7 @@ function aoiRegionMatches(regionKey: AoiKey, region: string | undefined): boolea
   if (regionKey === 'on') return region !== undefined;
   if (regionKey === 'reading') return region === 'lesson' || region === 'pdf-viewer';
   if (regionKey === 'chat') return region === 'chatbot';
+  if (regionKey === 'notes') return region === 'notes';
   return region === 'sidebar' || region === 'header';
 }
 

@@ -9,6 +9,8 @@ import type { Aoi } from '@gals-studio/shared';
 
 export type ActivityLabel =
   | 'reading_lesson'
+  /** gaze/clicks on the course page's Notes panel (GALS region "notes") */
+  | 'note_taking'
   | 'chatbot'
   | 'intervention'
   | 'navigating'
@@ -69,6 +71,9 @@ const parseJson = <T>(v: string | null | undefined, fb: T): T => {
 function regionToActivity(region: string | null): ActivityLabel | null {
   if (!region) return null;
   if (region === 'lesson' || region === 'pdf-viewer') return 'reading_lesson';
+  // "notes" is nested inside the chatbot column (smaller rect wins) and only
+  // exists while the Notes tab is shown.
+  if (region === 'notes') return 'note_taking';
   if (region === 'chatbot') return 'chatbot';
   if (region === 'sidebar' || region === 'header') return 'navigating';
   return null;
@@ -92,6 +97,9 @@ function aoiHit(aois: Aoi[], x: number, y: number): string | null {
 
 const ROLLUP: Record<ActivityLabel, RollupActivity> = {
   reading_lesson: 'reading_lesson',
+  // Studying the lesson content: kept in the reading bucket so pctByActivity,
+  // the allocation score and the CSV columns are unchanged.
+  note_taking: 'reading_lesson',
   chatbot: 'chatbot',
   intervention: 'intervention',
   navigating: 'navigating',
@@ -285,6 +293,7 @@ export async function classifyActivity(
       primary = interactionLabel;
       conflict = gazeKnown && gazeLabel !== interactionLabel;
     } else if (domLabel === 'reading_lesson' && gazeLabel === 'chatbot') {
+      // (gaze on the Notes panel is 'note_taking', not divided attention)
       // the case we care most about: page is the lesson, gaze drifts to the chatbot
       // with no active interaction → divided attention, off-task relative to lesson.
       primary = 'divided_attention';
@@ -295,6 +304,7 @@ export async function classifyActivity(
         !!domLabel &&
         domLabel !== 'intervention' &&
         gazeLabel !== 'navigating' &&
+        !(gazeLabel === 'note_taking' && domLabel === 'reading_lesson') &&
         gazeLabel !== domLabel;
     } else if (!anyMotion) {
       primary = 'idle';

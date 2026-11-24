@@ -169,7 +169,7 @@ function wickensPosterior(
 ): Record<AffectState, number> {
   const p = zero();
   const a = act?.primaryActivity;
-  if (a === 'reading_lesson' || a === 'chatbot' || a === 'intervention') {
+  if (a === 'reading_lesson' || a === 'note_taking' || a === 'chatbot' || a === 'intervention') {
     p.engagement = pupilElevated ? 1 : 0.8;
     p.neutral = 0.2;
   } else if (a === 'idle' || a === 'gaze_unknown') {
