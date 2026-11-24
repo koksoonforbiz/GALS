@@ -35,7 +35,12 @@ export async function createTestApp(): Promise<{
  * test database — checking only one (e.g. just NODE_ENV) leaves a gap
  * if that alone were ever misconfigured.
  */
-function assertSafeToWipe(): void {
+/**
+ * Exported for teardowns that delete by id before calling cleanDatabase():
+ * when setup was refused, those ids are undefined and Prisma reads
+ * `{ where: { courseId: undefined } }` as "every row". Call this first.
+ */
+export function assertSafeToWipe(): void {
   const nodeEnv = process.env.NODE_ENV;
   const dbUrl = process.env.DATABASE_URL ?? '';
   // Matches a database name ending in "_test" (e.g. "ats_db_test") —

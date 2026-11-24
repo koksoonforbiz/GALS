@@ -13,7 +13,7 @@ import type {
   PuzzleStepView,
 } from '@ats/shared';
 import { PrismaService } from '../prisma';
-import { createTestApp, cleanDatabase } from '../test/setup';
+import { createTestApp, cleanDatabase, assertSafeToWipe } from '../test/setup';
 import { loadBatteryFiles } from './battery/battery-files';
 import { seedBattery } from './battery/seed-battery';
 import { EFA_NOTICE_VERSION } from './consent-notice';
@@ -251,6 +251,7 @@ describe('EF scoring, coding and exports (HTTP)', () => {
   }, 180_000);
 
   afterAll(async () => {
+    assertSafeToWipe(); // before any delete-by-id (ids are undefined if setup was refused)
     await prisma.efaRaterAssignment.deleteMany({ where: { courseId } });
     await prisma.courseGate.deleteMany({ where: { courseId } });
     await prisma.efaOccasion.deleteMany({ where: { courseId } });

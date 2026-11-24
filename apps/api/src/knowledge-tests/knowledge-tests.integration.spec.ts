@@ -11,7 +11,7 @@ import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import type { KnowledgeTestStatus, KnowledgeTestStudentItem } from '@ats/shared';
 import { PrismaService } from '../prisma';
-import { createTestApp, cleanDatabase } from '../test/setup';
+import { createTestApp, cleanDatabase, assertSafeToWipe } from '../test/setup';
 import { bankDefinitions, type BankFile } from './bank';
 
 process.env.RESEARCH_EXPORT_SALT ??= 'knowledge-tests-integration-salt';
@@ -160,6 +160,7 @@ describe('Knowledge tests (HTTP)', () => {
   }, 120_000);
 
   afterAll(async () => {
+    assertSafeToWipe(); // before any delete-by-id (ids are undefined if setup was refused)
     await prisma.efaRaterAssignment.deleteMany({ where: { courseId } });
     await prisma.knowledgeTestAssignment.deleteMany({ where: { courseId } });
     await prisma.knowledgeTestDefinition.deleteMany({ where: { courseId } });
@@ -386,15 +387,13 @@ describe('Knowledge tests (HTTP)', () => {
     await as(raterToken, http().post(url))
       .send({ dimensionScores: ones, role: 'ADJUDICATOR' })
       .expect(403); // an assigned rater who doesn't own the course can't adjudicate
-    const third = await http()
-      .post('/api/auth/register')
-      .send({
-        email: 'kt-admin2@test.com',
-        password: PASSWORD,
-        termsAccepted: true,
-        name: 'x',
-        role: 'teacher',
-      });
+    const third = await http().post('/api/auth/register').send({
+      email: 'kt-admin2@test.com',
+      password: PASSWORD,
+      termsAccepted: true,
+      name: 'x',
+      role: 'teacher',
+    });
     await as(third.body.accessToken, http().post(url))
       .send({ dimensionScores: ones, role: 'ADJUDICATOR' })
       .expect(403); // not course staff

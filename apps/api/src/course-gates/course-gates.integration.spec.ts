@@ -7,7 +7,7 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { PrismaService } from '../prisma';
-import { createTestApp, cleanDatabase } from '../test/setup';
+import { createTestApp, cleanDatabase, assertSafeToWipe } from '../test/setup';
 
 const PASSWORD = 'Test-Passw0rd!';
 
@@ -125,6 +125,7 @@ describe('Course gates (HTTP)', () => {
   }, 60_000);
 
   afterAll(async () => {
+    assertSafeToWipe(); // before any delete-by-id (ids are undefined if setup was refused)
     await prisma.courseGate.deleteMany({ where: { courseId } });
     await cleanDatabase(prisma);
     await app.close();
