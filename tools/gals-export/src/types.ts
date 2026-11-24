@@ -124,6 +124,9 @@ export type StreamKey = keyof typeof STREAM_FILES;
 /** Streams that may be large and are streamed row-by-row. */
 export const LARGE_STREAMS: StreamKey[] = ['webgazer', 'cursors', 'au_results', 'emotion_frames'];
 
+/** Per-student streams (queried by user, not session): never set the session's duration. */
+export const USER_SCOPED_STREAMS: StreamKey[] = ['cards', 'attempts'];
+
 /** Optional streams whose file is omitted entirely when empty. */
 export const OPTIONAL_STREAMS: StreamKey[] = [
   'probes',

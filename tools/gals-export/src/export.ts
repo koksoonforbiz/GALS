@@ -6,6 +6,7 @@ import {
   EXPORTER_VERSION,
   LARGE_STREAMS,
   OPTIONAL_STREAMS,
+  USER_SCOPED_STREAMS,
   STREAM_FILES,
   type BundleManifest,
   type ExportOptions,
@@ -125,7 +126,12 @@ export async function exportSession(
   for (const key of Object.keys(STREAM_FILES) as StreamKey[]) {
     const rel = STREAM_FILES[key];
     try {
-      const tapped = trackMaxWall(ds.getStream(sessionId, key), wallState);
+      // Cards and attempts are the student's state across ALL sessions (queried
+      // by user, not session): their timestamps must not stretch this session's
+      // duration (a 0 s session once got 41 days from a later card review).
+      const tapped = USER_SCOPED_STREAMS.includes(key)
+        ? ds.getStream(sessionId, key)
+        : trackMaxWall(ds.getStream(sessionId, key), wallState);
       const n = await writer.writeJsonl(rel, tapped);
       counts[key] = n;
       if (n === 0 && OPTIONAL_STREAMS.includes(key)) {
@@ -196,7 +202,8 @@ export async function exportSession(
   // ── Duration ─────────────────────────────────────────────────────────────
   let durationMs = wallState.max > baseWallClockMs ? wallState.max - baseWallClockMs : 0;
   if (durationMs === 0 && meta.durationSecs) durationMs = meta.durationSecs * 1000;
-  if (durationMs === 0 && meta.endedAtMs) durationMs = Math.max(0, meta.endedAtMs - baseWallClockMs);
+  if (durationMs === 0 && meta.endedAtMs)
+    durationMs = Math.max(0, meta.endedAtMs - baseWallClockMs);
 
   // ── manifest.json (written last; cannot checksum itself) ─────────────────
   const manifest: BundleManifest = {

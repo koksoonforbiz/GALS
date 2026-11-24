@@ -18,29 +18,65 @@ const BASE = 1_717_400_000_000;
 
 /** In-memory data source — no Postgres/MinIO needed to exercise the writer. */
 class FixtureSource implements SessionDataSource {
-  constructor(private readonly opts: { withScreenshot?: boolean; missingWebcam?: boolean } = {}) {}
+  constructor(
+    private readonly opts: {
+      withScreenshot?: boolean;
+      missingWebcam?: boolean;
+      lateCard?: boolean;
+    } = {},
+  ) {}
 
   async getSessionMeta(sessionId: string): Promise<SessionMeta> {
     return {
-      sessionId, userId: 'user-1', courseId: 'course-1', moduleId: 'mod-1',
-      timezone: 'Asia/Kuala_Lumpur', startedAtMs: BASE, endedAtMs: BASE + 60_000, durationSecs: 60,
+      sessionId,
+      userId: 'user-1',
+      courseId: 'course-1',
+      moduleId: 'mod-1',
+      timezone: 'Asia/Kuala_Lumpur',
+      startedAtMs: BASE,
+      endedAtMs: BASE + 60_000,
+      durationSecs: 60,
     };
   }
   async getSessionJson(sessionId: string): Promise<SessionJson> {
     return {
-      session: { id: sessionId, userId: 'user-1', courseId: 'course-1', startedAt: new Date(BASE).toISOString(), endedAt: new Date(BASE + 60_000).toISOString(), durationSecs: 60, userAgent: 'jsdom', device: null },
-      syncAnchor: { wallClockMs: BASE, monotonicMs: 1000, serverReceiveMs: BASE + 5, timezone: 'Asia/Kuala_Lumpur', userAgent: 'jsdom' },
+      session: {
+        id: sessionId,
+        userId: 'user-1',
+        courseId: 'course-1',
+        startedAt: new Date(BASE).toISOString(),
+        endedAt: new Date(BASE + 60_000).toISOString(),
+        durationSecs: 60,
+        userAgent: 'jsdom',
+        device: null,
+      },
+      syncAnchor: {
+        wallClockMs: BASE,
+        monotonicMs: 1000,
+        serverReceiveMs: BASE + 5,
+        timezone: 'Asia/Kuala_Lumpur',
+        userAgent: 'jsdom',
+      },
       context: { userDisplayName: 'Test Student', courseTitle: 'Algebra', moduleTitle: null },
     };
   }
-  async getSyncAnchorWallMs(): Promise<number | null> { return BASE; }
+  async getSyncAnchorWallMs(): Promise<number | null> {
+    return BASE;
+  }
   async *getSnapshots(): AsyncIterable<SnapshotRecord> {
     yield {
-      snapshotId: 'snap-1', wallMs: BASE + 1000, trigger: 'interval', pageUrl: 'http://x/lesson',
-      width: 1280, height: 720, scrollX: 0, scrollY: 0,
+      snapshotId: 'snap-1',
+      wallMs: BASE + 1000,
+      trigger: 'interval',
+      pageUrl: 'http://x/lesson',
+      width: 1280,
+      height: 720,
+      scrollX: 0,
+      scrollY: 0,
       aois: [{ region: 'lesson', x: 0, y: 0, width: 800, height: 720 }],
       scrollHosts: [{ region: 'lesson', scrollTop: 100, scrollHeight: 2000, clientHeight: 700 }],
-      pdfCurrentPage: null, pdfTotalPages: null,
+      pdfCurrentPage: null,
+      pdfTotalPages: null,
       html: '<html><body><h1>Lesson</h1></body></html>',
       screenshotDataUrl: this.opts.withScreenshot
         ? 'data:image/jpeg;base64,' + Buffer.from('fakejpeg').toString('base64')
@@ -48,32 +84,60 @@ class FixtureSource implements SessionDataSource {
     };
   }
   async getWebcamSegments(): Promise<WebcamSegmentSource[]> {
-    return [{ segmentId: 'seg-1', startWallMs: BASE, endWallMs: BASE + 30_000, durationMs: 30_000, mimeType: 'video/webm', blobKey: 'recordings/seg-1.webm' }];
+    return [
+      {
+        segmentId: 'seg-1',
+        startWallMs: BASE,
+        endWallMs: BASE + 30_000,
+        durationMs: 30_000,
+        mimeType: 'video/webm',
+        blobKey: 'recordings/seg-1.webm',
+      },
+    ];
   }
   async getBlob(): Promise<Buffer | null> {
     return this.opts.missingWebcam ? null : Buffer.from('fakewebmbytes');
   }
   async *getStream(_s: string, key: StreamKey): AsyncIterable<StreamRecord> {
     if (key === 'webgazer') {
-      for (let i = 0; i < 100; i++) yield { wallMs: BASE + i * 100, x: i, y: i * 2, confidence: 0.9 };
+      for (let i = 0; i < 100; i++)
+        yield { wallMs: BASE + i * 100, x: i, y: i * 2, confidence: 0.9 };
     } else if (key === 'clicks') {
       yield { wallMs: BASE + 5000, x: 10, y: 20, target: 'button', pageUrl: 'http://x/lesson' };
+    } else if (key === 'cards' && this.opts.lateCard) {
+      // reviewed 41 days later, in another session
+      yield { wallMs: BASE + 41 * 86_400_000, id: 'card-1' };
     } else if (key === 'emotion_frames') {
-      yield { wallMs: BASE + 2000, frameIndex: 0, faceDetected: true, dominant: 'neutral', dominantProbability: 0.8, pNeutral: 0.8 };
+      yield {
+        wallMs: BASE + 2000,
+        frameIndex: 0,
+        faceDetected: true,
+        dominant: 'neutral',
+        dominantProbability: 0.8,
+        pNeutral: 0.8,
+      };
     }
     // other streams empty
   }
 }
 
 const tmpDirs: string[] = [];
-afterAll(async () => { for (const d of tmpDirs) await rm(d, { recursive: true, force: true }); });
-async function tmp(): Promise<string> { const d = await mkdtemp(join(tmpdir(), 'gals-export-')); tmpDirs.push(d); return d; }
+afterAll(async () => {
+  for (const d of tmpDirs) await rm(d, { recursive: true, force: true });
+});
+async function tmp(): Promise<string> {
+  const d = await mkdtemp(join(tmpdir(), 'gals-export-'));
+  tmpDirs.push(d);
+  return d;
+}
 
 describe('exportSession', () => {
   it('produces a bundle that validates against the spec', async () => {
     const out = await tmp();
     const result = await exportSession(new FixtureSource({ withScreenshot: true }), {
-      sessionId: 's1', outDir: out, exportedAt: '2026-06-03T00:00:00.000Z',
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: '2026-06-03T00:00:00.000Z',
     });
     const report = await validateBundleDir(result.bundleDir);
     expect(report.errors).toEqual([]);
@@ -87,11 +151,20 @@ describe('exportSession', () => {
 
   it('refuses to overwrite without --force, reproduces identical bytes with it', async () => {
     const out = await tmp();
-    const r1 = await exportSession(new FixtureSource(), { sessionId: 's1', outDir: out, exportedAt: 'FIXED' });
+    const r1 = await exportSession(new FixtureSource(), {
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: 'FIXED',
+    });
     await expect(
       exportSession(new FixtureSource(), { sessionId: 's1', outDir: out, exportedAt: 'FIXED' }),
     ).rejects.toThrow(/force/);
-    const r2 = await exportSession(new FixtureSource(), { sessionId: 's1', outDir: out, exportedAt: 'FIXED', force: true });
+    const r2 = await exportSession(new FixtureSource(), {
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: 'FIXED',
+      force: true,
+    });
     // Checksums identical (exportedAt held fixed) -> byte-identical bundle.
     expect(r2.manifest.files).toEqual(r1.manifest.files);
   });
@@ -99,7 +172,9 @@ describe('exportSession', () => {
   it('records missing webcam segments without aborting', async () => {
     const out = await tmp();
     const result = await exportSession(new FixtureSource({ missingWebcam: true }), {
-      sessionId: 's1', outDir: out, exportedAt: 'FIXED',
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: 'FIXED',
     });
     expect(result.missingWebcamSegments).toEqual(['seg-1']);
     const idx = JSON.parse(await readFile(join(result.bundleDir, 'webcam/index.json'), 'utf8'));
@@ -108,9 +183,24 @@ describe('exportSession', () => {
     expect(report.ok).toBe(true);
   });
 
+  it('per-student streams (cards) are exported but do not set the session duration', async () => {
+    const out = await tmp();
+    const result = await exportSession(new FixtureSource({ lateCard: true }), {
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: 'FIXED',
+    });
+    expect(result.manifest.counts.cards).toBe(1);
+    expect(result.manifest.durationMs).toBe(30_000);
+  });
+
   it('omits optional empty files (no probes when none exist)', async () => {
     const out = await tmp();
-    const result = await exportSession(new FixtureSource(), { sessionId: 's1', outDir: out, exportedAt: 'FIXED' });
+    const result = await exportSession(new FixtureSource(), {
+      sessionId: 's1',
+      outDir: out,
+      exportedAt: 'FIXED',
+    });
     expect(result.manifest.files['probes/probes.jsonl']).toBeUndefined();
     expect(result.manifest.files['streams/clicks.jsonl']).toBeDefined();
   });

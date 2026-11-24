@@ -1,8 +1,8 @@
 import { mkdir, copyFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import AdmZip from 'adm-zip';
+import extractZip from 'extract-zip';
 import {
   validateBundle,
   readStreamRecords,
@@ -60,7 +60,9 @@ async function resolveBundleDir(
 ): Promise<{ dir: string; cleanup?: () => Promise<void> }> {
   if (path.toLowerCase().endsWith('.zip')) {
     const out = join(tmpdir(), `gals-import-${Date.now()}-${basename(path, '.zip')}`);
-    new AdmZip(path).extractAllTo(out, true);
+    // Streaming extract: a bundle with webcam video can exceed 2 GB, which
+    // whole-file readers (adm-zip, fs.readFileSync) cannot open.
+    await extractZip(resolve(path), { dir: out });
     // a bundle zip may contain a single session_<id>/ folder
     const fs = await import('node:fs/promises');
     const entries = await fs.readdir(out, { withFileTypes: true });
@@ -89,8 +91,12 @@ export async function importBundle(path: string): Promise<ImportReport> {
     checksumMismatches: [],
   };
 
-  const { dir, cleanup } = await resolveBundleDir(path);
+  let cleanup: (() => Promise<void>) | undefined;
   try {
+    // Inside the try: an unreadable zip is this bundle's error, not the batch's.
+    const resolved = await resolveBundleDir(path);
+    cleanup = resolved.cleanup;
+    const dir = resolved.dir;
     const v = await validateBundle(dir);
     report.validation = v;
     report.warnings.push(...v.warnings);
