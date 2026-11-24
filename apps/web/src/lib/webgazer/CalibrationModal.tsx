@@ -17,28 +17,38 @@ interface CalibrationModalProps {
   isFaceDetected?: () => boolean;
 }
 
-// 9-point training grid (percentage of viewport), clicked 5 times each while
-// looking at the dot (WebGazer's recommended procedure).
+// 13-point training grid (percentage of viewport): the 3x3 frame plus four
+// inner points — the jsPsych/WebGazer recommendation when 9 points give poor
+// accuracy. Clicked 5 times each while looking at the dot.
 const CALIBRATION_POINTS = [
   { x: 10, y: 10 },
   { x: 50, y: 10 },
   { x: 90, y: 10 },
+  { x: 30, y: 30 },
+  { x: 70, y: 30 },
   { x: 10, y: 50 },
   { x: 50, y: 50 },
   { x: 90, y: 50 },
+  { x: 30, y: 70 },
+  { x: 70, y: 70 },
   { x: 10, y: 90 },
   { x: 50, y: 90 },
   { x: 90, y: 90 },
 ];
+// Training per click: the first click on a dot is skipped (the eyes are
+// still landing), each later click is recorded on the click and on three
+// more camera frames over ~250 ms while the student keeps looking.
+const EXTRA_SAMPLES_PER_CLICK = 3;
+const EXTRA_SAMPLE_GAP_MS = 80;
 
-// Validation targets (not used for training): the student only LOOKS at
-// each dot; predictions sampled while they fixate give the error.
+// Validation targets, none of them a training point (a training point would
+// flatter the score): the student only LOOKS at each dot.
 const ACCURACY_TEST_POINTS = [
-  { x: 30, y: 30 },
-  { x: 70, y: 30 },
-  { x: 50, y: 50 },
-  { x: 30, y: 70 },
-  { x: 70, y: 70 },
+  { x: 50, y: 30 },
+  { x: 30, y: 50 },
+  { x: 70, y: 50 },
+  { x: 50, y: 70 },
+  { x: 40, y: 40 },
 ];
 const FIXATE_MS = 2000;
 const SETTLE_MS = 700;
@@ -135,8 +145,15 @@ export function CalibrationModal({
   const handlePointClick = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
-      onTrainPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
       clickCountRef.current += 1;
+      if (clickCountRef.current > 1) {
+        onTrainPoint(cx, cy);
+        for (let k = 1; k <= EXTRA_SAMPLES_PER_CLICK; k++) {
+          setTimeout(() => onTrainPoint(cx, cy), k * EXTRA_SAMPLE_GAP_MS);
+        }
+      }
       if (clickCountRef.current >= 5) {
         clickCountRef.current = 0;
         if (currentPoint < CALIBRATION_POINTS.length - 1) setCurrentPoint((prev) => prev + 1);
@@ -184,17 +201,19 @@ export function CalibrationModal({
 
   return (
     <div
-      className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center text-white"
+      // Light background: lessons are white and the screen lights the face —
+      // calibrating on black trained the model on darker eye images.
+      className="fixed inset-0 z-[200] bg-gray-100 flex flex-col items-center justify-center text-gray-900"
       data-gaze-calibration=""
     >
       {phase === 'instructions' && (
         <div className="text-center max-w-lg space-y-5 mt-56">
           <h2 className="text-2xl font-bold">Eye tracking calibration</h2>
-          <p className="text-gray-300">
+          <p className="text-gray-700">
             Your camera view is shown above. Move until your face is centred and the box around it
-            turns <span className="text-green-400 font-medium">green</span>.
+            turns <span className="text-green-700 font-medium">green</span>.
           </p>
-          <ul className="text-left text-sm text-gray-300 space-y-1 list-disc pl-6">
+          <ul className="text-left text-sm text-gray-700 space-y-1 list-disc pl-6">
             <li>Sit about an arm&apos;s length from the screen, at eye level with the camera.</li>
             <li>Light should be on your face (no bright window behind you).</li>
             <li>Keep your head still; move only your eyes.</li>
@@ -203,7 +222,7 @@ export function CalibrationModal({
           <div className="flex gap-4 justify-center">
             <button
               onClick={handleSkip}
-              className="px-6 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              className="px-6 py-2 text-sm bg-gray-300 hover:bg-gray-400 text-gray-900 rounded-lg transition-colors"
             >
               Skip
             </button>
@@ -223,13 +242,13 @@ export function CalibrationModal({
         <>
           <div
             className={`absolute bottom-4 right-4 rounded-full px-3 py-1 text-xs font-medium ${
-              faceOk ? 'bg-green-900/60 text-green-300' : 'bg-red-900/70 text-red-200'
+              faceOk ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
             }`}
             role="status"
           >
             {faceOk ? 'Face detected' : 'Face not found — face the camera'}
           </div>
-          <div className="absolute bottom-4 left-4 text-sm text-gray-400">
+          <div className="absolute bottom-4 left-4 text-sm text-gray-600">
             Point {currentPoint + 1} / {CALIBRATION_POINTS.length} — look at the dot and click it 5
             times
           </div>
@@ -243,7 +262,7 @@ export function CalibrationModal({
                   ? 'w-6 h-6 bg-red-500 animate-pulse cursor-pointer shadow-lg shadow-red-500/50'
                   : idx < currentPoint
                     ? 'w-3 h-3 bg-green-500 opacity-50'
-                    : 'w-3 h-3 bg-gray-600 opacity-30'
+                    : 'w-3 h-3 bg-gray-400 opacity-60'
               }`}
               style={{
                 left: `${point.x}%`,
@@ -257,12 +276,12 @@ export function CalibrationModal({
 
       {phase === 'accuracy_test' && (
         <>
-          <p className="absolute top-6 text-gray-300">
+          <p className="absolute top-6 text-gray-700">
             Now just <strong>look</strong> at the blue dot — do not click.
           </p>
           {testPoint != null && (
             <div
-              className="absolute w-5 h-5 rounded-full bg-sky-400 shadow-lg shadow-sky-400/60"
+              className="absolute w-5 h-5 rounded-full bg-sky-600 shadow-lg shadow-sky-600/40"
               style={{
                 left: `${ACCURACY_TEST_POINTS[testPoint]!.x}%`,
                 top: `${ACCURACY_TEST_POINTS[testPoint]!.y}%`,
@@ -276,7 +295,7 @@ export function CalibrationModal({
       {phase === 'done' && !accuracy && (
         <div className="text-center max-w-md space-y-4">
           <h2 className="text-xl font-bold">No gaze was detected</h2>
-          <p className="text-gray-300">
+          <p className="text-gray-700">
             The camera could not see your eyes during the check. Face the camera with light on your
             face, then try again.
           </p>
@@ -289,7 +308,7 @@ export function CalibrationModal({
             </button>
             <button
               onClick={handleSkip}
-              className="px-6 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              className="px-6 py-2 text-sm bg-gray-300 hover:bg-gray-400 text-gray-900 rounded-lg transition-colors"
             >
               Skip for now
             </button>
@@ -300,21 +319,21 @@ export function CalibrationModal({
       {phase === 'done' && accuracy && (
         <div className="text-center max-w-md space-y-4">
           <h2 className="text-xl font-bold">Calibration complete</h2>
-          <p className="text-gray-300">
-            Average error: <span className="font-mono text-yellow-400">{accuracy.px}px</span> (
+          <p className="text-gray-700">
+            Average error: <span className="font-mono text-amber-700">{accuracy.px}px</span> (
             {accuracy.pct}% of the screen)
           </p>
           {quality === 'good' && (
-            <p className="text-sm text-green-400">Good — eye tracking is ready.</p>
+            <p className="text-sm text-green-700">Good — eye tracking is ready.</p>
           )}
           {quality === 'ok' && (
-            <p className="text-sm text-yellow-300">
+            <p className="text-sm text-amber-700">
               Acceptable. Redo for better results if you can improve the lighting or sit more
               centrally.
             </p>
           )}
           {quality === 'weak' && (
-            <p className="text-sm text-orange-400">
+            <p className="text-sm text-orange-700">
               Weak. Please redo: face the camera directly, light your face from the front and keep
               your head still.
             </p>
@@ -323,7 +342,7 @@ export function CalibrationModal({
             {quality !== 'good' && (
               <button
                 onClick={redo}
-                className="px-6 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                className="px-6 py-2 text-sm bg-gray-300 hover:bg-gray-400 text-gray-900 rounded-lg transition-colors"
               >
                 Redo
               </button>

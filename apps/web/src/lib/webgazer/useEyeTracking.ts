@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { loadGazeModel, saveGazeModel } from './gazeModelStore';
 import { api } from '../api';
 import { mediaStreamRegistry } from '../biometrics/mediaStreamRegistry';
 
@@ -121,6 +122,19 @@ export function useEyeTracking(
     setNeedsCalibration(false);
   }, []);
 
+  /** Save this session's trained model (after calibration; then periodically). */
+  const persistModel = useCallback(() => {
+    try {
+      const data = webgazerRef.current?.getRegression?.()?.[0]?.getData?.();
+      if (Array.isArray(data) && data.length) void saveGazeModel(sessionId, data);
+    } catch {
+      // not ready yet
+    }
+  }, [sessionId]);
+
+  const persistModelRef = useRef(persistModel);
+  persistModelRef.current = persistModel;
+
   // "Calibration on new session" means once per session, not on every
   // reload: remember that it was completed or skipped for this session (the
   // trained model itself is kept by saveDataAcrossSessions below).
@@ -137,7 +151,8 @@ export function useEyeTracking(
     setIsCalibrating(false);
     setNeedsCalibration(false);
     rememberCalibration();
-  }, [rememberCalibration]);
+    persistModel();
+  }, [rememberCalibration, persistModel]);
 
   const skipCalibration = useCallback(() => {
     setIsCalibrating(false);
@@ -262,7 +277,11 @@ export function useEyeTracking(
       } catch {
         // not ready yet
       }
+      // Keep the saved model current with implicit training (debounced).
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(persistModelRef.current, 10_000);
     };
+    let persistTimer: ReturnType<typeof setTimeout> | undefined;
     if (!courseId || !sessionId) return;
     let cancelled = false;
 
@@ -306,10 +325,10 @@ export function useEyeTracking(
       if (!wg) return;
 
       wg.setRegression('weightedRidge');
-      // Keep the trained model in this browser (IndexedDB, never uploaded):
-      // calibration runs once per session, so a reload must not leave the
-      // tracker untrained (it then reports essentially random positions).
-      wg.saveDataAcrossSessions(true);
+      // WebGazer's own persistence only saves from its built-in click
+      // listener (removed below) and restores older sessions' data; the
+      // current session's model is kept in gazeModelStore instead.
+      wg.saveDataAcrossSessions(false);
       // Smooth predictions (WebGazer's Kalman filter); raw estimates jitter.
       wg.applyKalmanFilter?.(true);
       wg.params.faceMeshSolutionPath = '/mediapipe/face_mesh';
@@ -356,6 +375,11 @@ export function useEyeTracking(
       // are trained there, at the dot's centre (CalibrationModal).
       wg.removeMouseEventListeners?.();
       document.addEventListener('click', onTrainingClick, true);
+      // Reload within a calibrated session: continue with its model.
+      const stored = await loadGazeModel(sessionId);
+      if (stored?.length) {
+        for (const reg of wg.getRegression?.() ?? []) reg.setData(stored);
+      }
 
       wg.setGazeListener((data: { x: number; y: number; confidence?: number } | null) => {
         if (!data) return;
@@ -426,6 +450,7 @@ export function useEyeTracking(
     return () => {
       cancelled = true;
       document.removeEventListener('click', onTrainingClick, true);
+      clearTimeout(persistTimer);
       for (const ev of ['mousemove', 'keydown', 'scroll', 'click']) {
         document.removeEventListener(ev, resetTimer);
       }
