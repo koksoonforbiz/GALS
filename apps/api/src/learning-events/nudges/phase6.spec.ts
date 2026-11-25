@@ -58,6 +58,7 @@ function consentPrisma(rows: ConsentRow[]) {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     promptLabTestCase: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+    promptLabOutputRating: { updateMany: jest.fn().mockResolvedValue({ count: 4 }) },
   };
 }
 
@@ -79,6 +80,38 @@ describe('TextConsentService', () => {
     const [lesson, untouched] = await svc.stripUnconsentedText('stu', [lessonEvent('c1'), other]);
     expect(lesson!.metadata).toEqual({ libraryVersion: 'v2', event: 'answer_saved', chars: 9 });
     expect(untouched).toBe(other);
+  });
+
+  it('strips chatbot turns and strategy answers without consent (a), keeps lengths', async () => {
+    const svc = new TextConsentService(consentPrisma([]) as never);
+    const sent = {
+      action: 'CHATBOT_MESSAGE_SENT',
+      courseId: 'c1',
+      metadata: { message: 'hello bot', hasSelection: false } as Record<string, unknown>,
+    };
+    const got = {
+      action: 'CHATBOT_MESSAGE_RECEIVED',
+      courseId: 'c1',
+      metadata: { reply: 'hi', suggestedStrategy: null } as Record<string, unknown>,
+    };
+    const answer = {
+      action: 'QUESTION_ANSWERED',
+      courseId: 'c1',
+      metadata: { interventionType: 'PRACTICE_TESTING', answer: 'abc' } as Record<string, unknown>,
+    };
+    const noCourse = { action: 'CHATBOT_MESSAGE_SENT', metadata: { message: 'x' } };
+    const [a, b, c, d] = await svc.stripUnconsentedText('stu', [sent, got, answer, noCourse]);
+    expect(a!.metadata).toEqual({ messageChars: 9, hasSelection: false });
+    expect(b!.metadata).toEqual({ replyChars: 2, suggestedStrategy: null });
+    expect(c!.metadata).toEqual({ interventionType: 'PRACTICE_TESTING', answerChars: 3 });
+    expect(d!.metadata).toEqual({ messageChars: 1 });
+
+    const given = new TextConsentService(
+      consentPrisma([
+        { studentId: 'stu', courseId: 'c1', answerText: true, decidedAt: new Date(NOW) },
+      ]) as never,
+    );
+    expect((await given.stripUnconsentedText('stu', [sent]))[0]).toBe(sent);
   });
 
   it('keeps text when the latest decision gives (a); revocation wins', async () => {
@@ -127,7 +160,18 @@ describe('TextConsentService', () => {
       { studentId: 'stu', courseId: 'c2', promptsAndOutputs: true, decidedAt: new Date(NOW) },
     ]);
     const svc = new TextConsentService(prisma as never);
-    expect(await svc.scrubForSession('sess')).toEqual({ runs: 2, versions: 1, testCases: 3 });
+    expect(await svc.scrubForSession('sess')).toEqual({
+      runs: 2,
+      versions: 1,
+      testCases: 3,
+      claims: 4,
+    });
+    expect(prisma.promptLabOutputRating.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ studentId: 'stu', run: { retainText: false } }),
+        data: { verifiedClaim: '' },
+      }),
+    );
     expect(prisma.promptLabRun.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { studentId: 'stu', retainText: false, textScrubbedAt: null },

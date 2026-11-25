@@ -24,7 +24,14 @@ import { ActivityLogService } from './activity-log.service';
 import { SessionService } from './session.service';
 import { LogExportService } from './log-export.service';
 import { LogsService } from '../logs/logs.service';
-import { BatchLogEventsSchema, BatchLogEventsDto } from './dto/log-event.dto';
+import {
+  BatchEnvelopeSchema,
+  BatchEnvelopeDto,
+  LogEventDto,
+  LogEventSchema,
+  describeRejection,
+} from './dto/log-event.dto';
+import type { IngestIssueParams } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
 import { TextConsentService } from '../governance/text-consent.service';
 import type { UserRole } from '@ats/shared';
@@ -71,16 +78,49 @@ export class ActivityLogController {
   @Post('batch')
   @Roles('student', 'teacher')
   async batchLog(
-    @Body(new ZodValidationPipe(BatchLogEventsSchema)) dto: BatchLogEventsDto,
+    @Body(new ZodValidationPipe(BatchEnvelopeSchema)) dto: BatchEnvelopeDto,
     @Request() req: { user: RequestUser },
   ) {
     await this.sessionService.assertOwnsSession(dto.sessionId, req.user.id);
-    // Course (interactive-lesson) events keep free text only with consent (a);
-    // every other action passes through untouched.
+    // Validate each event on its own (CAP-41): keep the valid ones, record
+    // the rejected ones (action, validation path/code, size; never content).
+    const valid: LogEventDto[] = [];
+    const rejected = new Map<string, IngestIssueParams>();
+    for (const raw of dto.events) {
+      const r = LogEventSchema.safeParse(raw);
+      if (r.success) {
+        valid.push(r.data);
+        continue;
+      }
+      const { action, reason, rawBytes } = describeRejection(raw, r.error);
+      const key = `${action}|${reason}`;
+      const prev = rejected.get(key);
+      if (prev) {
+        prev.eventCount++;
+        prev.rawBytes = (prev.rawBytes ?? 0) + (rawBytes ?? 0);
+      } else {
+        rejected.set(key, {
+          stream: 'activity_log',
+          kind: 'rejected',
+          sessionId: dto.sessionId,
+          userId: req.user.id,
+          action,
+          reason,
+          eventCount: 1,
+          rawBytes,
+        });
+      }
+    }
+    if (rejected.size) {
+      const n = [...rejected.values()].reduce((a, i) => a + i.eventCount, 0);
+      this.logger.warn(`activity-log/batch: ${n}/${dto.events.length} events rejected`);
+      await this.activityLogService.recordIngestIssues([...rejected.values()]);
+    }
+    // Course events keep free text only with consent (a).
     const events = this.textConsent
-      ? await this.textConsent.stripUnconsentedText(req.user.id, dto.events)
-      : dto.events;
-    await this.activityLogService.recordBatch(
+      ? await this.textConsent.stripUnconsentedText(req.user.id, valid)
+      : valid;
+    const { inserted, failed } = await this.activityLogService.recordBatch(
       events.map((e) => ({
         sessionId: dto.sessionId,
         userId: req.user.id,
@@ -97,7 +137,7 @@ export class ActivityLogController {
         metadata: e.metadata,
       })),
     );
-    return { ok: true };
+    return { ok: true, accepted: inserted, rejected: dto.events.length - valid.length, failed };
   }
 
   /**

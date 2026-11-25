@@ -2880,7 +2880,11 @@ function EventTimelinePanel({
         detail = `${dur} ${score}${itype}`.trim();
       } else if (log.action === 'CHATBOT_MESSAGE_SENT' || log.action === 'DIALOGUE_MESSAGE_SENT') {
         const msg = (meta.message ?? meta.messageText ?? '') as string;
-        detail = msg ? `"${msg.slice(0, 80)}${msg.length > 80 ? '…' : ''}"` : '';
+        detail = msg
+          ? `"${msg.slice(0, 80)}${msg.length > 80 ? '…' : ''}"`
+          : typeof meta.messageChars === 'number'
+            ? `${meta.messageChars} characters (text not kept without consent)`
+            : '';
       } else if (log.action === 'CODE_DECOMP_TREE_CHECKED') {
         const nodeCount = typeof meta.nodeCount === 'number' ? meta.nodeCount : null;
         const correctCount = typeof meta.correctCount === 'number' ? meta.correctCount : null;

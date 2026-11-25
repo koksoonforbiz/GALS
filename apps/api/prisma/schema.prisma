@@ -1703,6 +1703,28 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+/// Data that reached the API but was not stored (CAP-40/41: no silent loss).
+/// One row per rejected event or failed insert group. Holds no payload text:
+/// `reason` is a validation issue code/path or a database error code.
+model IngestIssue {
+  id         String   @id @default(uuid()) @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+  /// activity_log | click_logs | cursor_logs | scroll_logs | ...
+  stream     String
+  /// rejected (failed validation) | insert_failed | dropped_escape
+  kind       String
+  sessionId  String?  @map("session_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  action     String?
+  reason     String
+  eventCount Int      @map("event_count")
+  rawBytes   Int?     @map("raw_bytes")
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("ingest_issues")
+}
+
 model SessionSummary {
   id String @id @default(uuid()) @db.Uuid
 

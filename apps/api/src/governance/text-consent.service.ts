@@ -7,6 +7,32 @@ import { PrismaService } from '../prisma';
 const TEXT_KEYS = ['text', 'parts'] as const;
 
 /**
+ * Free text other course events carry (CAP-30): chatbot turns and the
+ * answers typed into the practice-testing and stepwise strategies. Without
+ * consent (a) the text is dropped and only its length is kept as `<key>Chars`.
+ */
+const ACTION_TEXT_KEYS: Record<string, readonly string[]> = {
+  CHATBOT_MESSAGE_SENT: ['message'],
+  CHATBOT_MESSAGE_RECEIVED: ['reply'],
+  QUESTION_ANSWERED: ['answer'],
+};
+
+type TextEvent = {
+  action?: string;
+  courseId?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+/** The free-text keys present on this event (empty when it carries none). */
+function textKeysOf(e: TextEvent): string[] {
+  const m = e.metadata;
+  if (!m) return [];
+  const keys: readonly string[] =
+    'libraryVersion' in m ? TEXT_KEYS : (ACTION_TEXT_KEYS[e.action ?? ''] ?? []);
+  return keys.filter((k) => k in m);
+}
+
+/**
  * Text-capture consent (plan Phase 6.2 #1), per learner per course:
  *   (a) answerText        — keep submitted answer text in the activity log
  *   (b) promptsAndOutputs — keep Prompt Lab prompts/outputs beyond the session
@@ -65,23 +91,18 @@ export class TextConsentService {
   }
 
   /**
-   * Server-side gate for the activity-log batch (defence in depth behind the
-   * client): drops free text from course events unless (a) is given for that
-   * course. Only events that carry `libraryVersion` (lesson/Prompt Lab) are
-   * touched; every other action passes through unchanged.
+   * Server-side gate for the activity-log batch: drops free text from course
+   * events unless (a) is given for that course. Lesson/Prompt Lab events
+   * (they carry `libraryVersion`) lose `text`/`parts` and keep `chars`;
+   * chatbot turns and strategy answers lose the text and keep `<key>Chars`.
+   * An event without a courseId has no consent, so its text is dropped too.
+   * Every other action passes through unchanged.
    */
-  async stripUnconsentedText<
-    E extends { courseId?: string | null; metadata?: Record<string, unknown> | null },
-  >(studentId: string, events: E[]): Promise<E[]> {
+  async stripUnconsentedText<E extends TextEvent>(studentId: string, events: E[]): Promise<E[]> {
     const courses = [
       ...new Set(
         events
-          .filter(
-            (e) =>
-              e.metadata &&
-              'libraryVersion' in e.metadata &&
-              TEXT_KEYS.some((k) => k in e.metadata!),
-          )
+          .filter((e) => textKeysOf(e).length > 0)
           .map((e) => e.courseId)
           .filter((c): c is string => !!c),
       ),
@@ -89,11 +110,16 @@ export class TextConsentService {
     const allowed = new Set<string>();
     for (const c of courses) if ((await this.current(studentId, c))?.answerText) allowed.add(c);
     return events.map((e) => {
-      if (!e.metadata || !('libraryVersion' in e.metadata)) return e;
+      const keys = textKeysOf(e);
+      if (keys.length === 0) return e;
       if (e.courseId && allowed.has(e.courseId)) return e;
-      if (!TEXT_KEYS.some((k) => k in e.metadata!)) return e;
+      const lesson = 'libraryVersion' in e.metadata!;
       const meta = { ...e.metadata };
-      for (const k of TEXT_KEYS) delete meta[k];
+      for (const k of keys) {
+        const v = meta[k];
+        if (!lesson && typeof v === 'string') meta[`${k}Chars`] = v.length;
+        delete meta[k];
+      }
       return { ...e, metadata: meta };
     });
   }
@@ -119,7 +145,7 @@ export class TextConsentService {
       where: { id: sessionId },
       select: { userId: true },
     });
-    if (!session) return { runs: 0, versions: 0, testCases: 0 };
+    if (!session) return { runs: 0, versions: 0, testCases: 0, claims: 0 };
     const studentId = session.userId;
     const now = new Date();
     const runs = await this.prisma.promptLabRun.updateMany({
@@ -152,6 +178,17 @@ export class TextConsentService {
         })
       ).count;
     }
-    return { runs: runs.count, versions, testCases };
+    // The claim a learner checked against a run is their own text too: blank
+    // it wherever the run's text is not kept (CAP-30).
+    const claims = await this.prisma.promptLabOutputRating.updateMany({
+      where: {
+        studentId,
+        run: { retainText: false },
+        verifiedClaim: { not: null },
+        NOT: { verifiedClaim: '' },
+      },
+      data: { verifiedClaim: '' },
+    });
+    return { runs: runs.count, versions, testCases, claims: claims.count };
   }
 }

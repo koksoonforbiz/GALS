@@ -212,7 +212,11 @@ course allows research use are exported.
 ## `kc/`
 
 - `cards.jsonl` ← `spaced_repetition_cards`,
-  `attempts.jsonl` ← `attempts` for the user (+ course where applicable).
+  `attempts.jsonl` ← `attempts` by `student_id`, started or submitted during the
+  session, with `grading_results` (score, gradedBy, createdAt). Answer and
+  feedback text (`textResponse`, `autoFeedback`, `gradingResults[].feedback`)
+  only with research-use consent (c); `textResponseChars` is always present.
+  (Before 2026-11-25 this stream was always empty: CAP-83.)
   Each carries a `wallMs` (best-effort from the row's most relevant timestamp).
 - `mastery.jsonl` was removed (previously sourced from `user_mastery`,
   dropped from the schema along with the rest of the KC mastery-tracking

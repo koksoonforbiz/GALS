@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
@@ -10,16 +10,44 @@ export interface RecordEventParams {
   action: ActivityAction;
   occurredAt?: Date;
 
-  courseId?: string;
-  moduleId?: string;
-  moduleItemId?: string;
-  assessmentId?: string;
-  attemptId?: string;
-  questionId?: string;
-  dialogueSessionId?: string;
-  interventionId?: string;
+  courseId?: string | null;
+  moduleId?: string | null;
+  moduleItemId?: string | null;
+  assessmentId?: string | null;
+  attemptId?: string | null;
+  questionId?: string | null;
+  dialogueSessionId?: string | null;
+  interventionId?: string | null;
 
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
+}
+
+/** Data that reached the API but was not stored (see IngestIssue). */
+export interface IngestIssueParams {
+  stream: string;
+  kind: 'rejected' | 'insert_failed' | 'dropped_escape';
+  sessionId?: string | null;
+  userId?: string | null;
+  action?: string | null;
+  reason: string;
+  eventCount: number;
+  rawBytes?: number | null;
+}
+
+/** Prisma errors that mean "the database is not reachable": retry later. */
+const UNAVAILABLE_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024']);
+export function isDbUnavailable(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientInitializationError) return true;
+  if (err instanceof Prisma.PrismaClientRustPanicError) return true;
+  return err instanceof Prisma.PrismaClientKnownRequestError && UNAVAILABLE_CODES.has(err.code);
+}
+
+/** An error class or code, never the message (Prisma messages can quote values). */
+export function errorReason(err: unknown): string {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) return `prisma:${err.code}`;
+  if (err instanceof Prisma.PrismaClientValidationError) return 'prisma:validation';
+  if (err instanceof Prisma.PrismaClientUnknownRequestError) return 'prisma:unknown';
+  return `error:${(err as Error)?.constructor?.name ?? 'unknown'}`;
 }
 
 @Injectable()
@@ -62,32 +90,99 @@ export class ActivityLogService {
 
   /**
    * Batch insert a list of events (used by the frontend batch endpoint).
-   * Uses createMany for efficiency.
+   *
+   * No silent loss (CAP-40): when the database is unreachable this throws
+   * 503, so the client keeps the batch and retries. When a row is refused
+   * (one bad row fails the whole createMany), the rows are inserted one by
+   * one and every refused row is recorded in `ingest_issues`.
    */
-  async recordBatch(events: Array<RecordEventParams>): Promise<void> {
-    if (events.length === 0) return;
+  async recordBatch(
+    events: Array<RecordEventParams>,
+  ): Promise<{ inserted: number; failed: number }> {
+    if (events.length === 0) return { inserted: 0, failed: 0 };
+    const rows = events.map((e) => ({
+      sessionId: e.sessionId,
+      userId: e.userId,
+      action: e.action as any,
+      occurredAt: e.occurredAt ?? new Date(),
+      courseId: e.courseId ?? null,
+      moduleId: e.moduleId ?? null,
+      moduleItemId: e.moduleItemId ?? null,
+      assessmentId: e.assessmentId ?? null,
+      attemptId: e.attemptId ?? null,
+      questionId: e.questionId ?? null,
+      dialogueSessionId: e.dialogueSessionId ?? null,
+      interventionId: e.interventionId ?? null,
+      metadata: (e.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
+    }));
     try {
-      await this.prisma.activityLog.createMany({
-        data: events.map((e) => ({
-          sessionId: e.sessionId,
-          userId: e.userId,
-          action: e.action as any,
-          occurredAt: e.occurredAt ?? new Date(),
-          courseId: e.courseId ?? null,
-          moduleId: e.moduleId ?? null,
-          moduleItemId: e.moduleItemId ?? null,
-          assessmentId: e.assessmentId ?? null,
-          attemptId: e.attemptId ?? null,
-          questionId: e.questionId ?? null,
-          dialogueSessionId: e.dialogueSessionId ?? null,
-          interventionId: e.interventionId ?? null,
-          metadata: (e.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
+      const r = await this.prisma.activityLog.createMany({ data: rows });
+      return { inserted: r.count, failed: 0 };
+    } catch (err: unknown) {
+      if (isDbUnavailable(err)) {
+        this.logger.error(`Activity log store unavailable: ${errorReason(err)}`);
+        throw new ServiceUnavailableException('Activity log store unavailable, retry later');
+      }
+      this.logger.warn(`Batch insert refused (${errorReason(err)}), inserting rows one by one`);
+    }
+    let inserted = 0;
+    const failures = new Map<string, IngestIssueParams>();
+    for (const row of rows) {
+      try {
+        await this.prisma.activityLog.create({ data: row });
+        inserted++;
+      } catch (err: unknown) {
+        // Unreachable before anything was stored: let the client retry all.
+        if (isDbUnavailable(err) && inserted === 0) {
+          throw new ServiceUnavailableException('Activity log store unavailable, retry later');
+        }
+        const reason = errorReason(err);
+        const key = `${String(row.action)}|${reason}`;
+        const f = failures.get(key);
+        if (f) f.eventCount++;
+        else
+          failures.set(key, {
+            stream: 'activity_log',
+            kind: 'insert_failed',
+            sessionId: row.sessionId,
+            userId: row.userId,
+            action: String(row.action),
+            reason,
+            eventCount: 1,
+          });
+      }
+    }
+    if (failures.size) {
+      this.logger.error(
+        `Activity log: ${rows.length - inserted}/${rows.length} rows refused for session ${rows[0]!.sessionId}`,
+      );
+      await this.recordIngestIssues([...failures.values()]);
+    }
+    return { inserted, failed: rows.length - inserted };
+  }
+
+  /** Record data that was not stored. Never throws (it is the last resort). */
+  async recordIngestIssues(issues: IngestIssueParams[]): Promise<void> {
+    if (issues.length === 0) return;
+    try {
+      await this.prisma.ingestIssue.createMany({
+        data: issues.map((i) => ({
+          stream: i.stream,
+          kind: i.kind,
+          sessionId: i.sessionId ?? null,
+          userId: i.userId ?? null,
+          action: i.action ?? null,
+          reason: i.reason.slice(0, 500),
+          eventCount: i.eventCount,
+          rawBytes: i.rawBytes ?? null,
         })),
-        skipDuplicates: true,
       });
     } catch (err: unknown) {
-      const error = err as Error;
-      this.logger.error(`Failed to record batch activity logs: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to record ${issues.length} ingest issue(s): ${errorReason(err)} ${JSON.stringify(
+          issues.map((i) => [i.stream, i.kind, i.action, i.reason, i.eventCount]),
+        )}`,
+      );
     }
   }
 

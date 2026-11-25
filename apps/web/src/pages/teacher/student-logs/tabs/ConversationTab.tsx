@@ -1,3 +1,8 @@
+/** Text dropped by the server because the learner did not consent to keep it. */
+function notKept(chars: unknown): string {
+  return typeof chars === 'number' ? `(text not kept without consent, ${chars} characters)` : '';
+}
+
 export function ConversationTab({ logs }: { logs: any[] }) {
   const CHAT_ACTIONS = [
     'DIALOGUE_MESSAGE_SENT',
@@ -19,7 +24,7 @@ export function ConversationTab({ logs }: { logs: any[] }) {
         (typeof meta.messageText === 'string' && meta.messageText) ||
         (typeof meta.message === 'string' && meta.message) ||
         (typeof meta.reply === 'string' && meta.reply) ||
-        '';
+        notKept(meta.messageChars ?? meta.replyChars);
       return {
         id: l.id,
         role,

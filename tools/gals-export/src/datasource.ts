@@ -72,6 +72,15 @@ export interface PrismaLike {
   $disconnect?: () => Promise<void>;
 }
 
+/** The grading_results columns the attempts stream exports. */
+interface GradingRow {
+  id: string;
+  score: number;
+  gradedBy: string;
+  feedback: string;
+  createdAt: Date;
+}
+
 export class PrismaDataSource implements SessionDataSource {
   constructor(
     private readonly prisma: PrismaLike,
@@ -473,16 +482,49 @@ export class PrismaDataSource implements SessionDataSource {
         return;
       }
       case 'attempts': {
+        // CAP-83: the column is studentId (querying userId failed validation
+        // and the error was swallowed, so every bundle had 0 attempts).
+        // Scoped to attempts started or submitted during this session; errors
+        // now fail the export instead of yielding an empty stream.
         const s = await this.prisma.studentSession.findUnique({
           where: { id: sessionId },
-          select: { userId: true },
+          select: { userId: true, startedAt: true, endedAt: true },
         });
         if (!s) return;
-        const rows = await this.prisma.attempt
-          .findMany({ where: { userId: s.userId } })
-          .catch(() => []);
+        const window = { gte: s.startedAt, lte: s.endedAt ?? new Date() };
+        const rows = await this.prisma.attempt.findMany({
+          where: {
+            studentId: s.userId,
+            OR: [{ createdAt: window }, { submittedAt: window }],
+          },
+          include: {
+            question: { select: { courseId: true, type: true, maxScore: true } },
+            gradingResults: { orderBy: { createdAt: 'asc' } },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        const consent = new Map<string, boolean>();
         for (const r of rows) {
-          yield { wallMs: (r.createdAt ?? r.submittedAt)?.getTime?.() ?? 0, ...serializeRow(r) };
+          const { question, gradingResults, textResponse, autoFeedback, ...rest } = r;
+          // Answer and feedback text only with research-use consent (c).
+          const text = await this.researchUse(consent, r.studentId, question?.courseId ?? null);
+          yield {
+            wallMs: (r.submittedAt ?? r.createdAt).getTime(),
+            ...serializeRow(rest),
+            courseId: question?.courseId ?? null,
+            questionType: question?.type ?? null,
+            maxScore: question?.maxScore ?? null,
+            textResponse: text ? (textResponse ?? null) : null,
+            textResponseChars: textResponse?.length ?? 0,
+            autoFeedback: text ? (autoFeedback ?? null) : null,
+            gradingResults: (gradingResults as GradingRow[]).map((g) => ({
+              id: g.id,
+              score: g.score,
+              gradedBy: g.gradedBy,
+              createdAt: g.createdAt.toISOString(),
+              feedback: text ? g.feedback : null,
+            })),
+          };
         }
         return;
       }
@@ -497,21 +539,8 @@ export class PrismaDataSource implements SessionDataSource {
         // Prompting-course research use (text_capture_consents, latest row per
         // learner and course): without consent (c) the stream is omitted.
         const consentByCourse = new Map<string, boolean>();
-        const researchOk = async (studentId: string, courseId: string | null) => {
-          if (!courseId) return false;
-          const key = `${studentId}|${courseId}`;
-          if (!consentByCourse.has(key)) {
-            const res = (await this.prisma.$queryRawUnsafe(
-              'SELECT research_use FROM text_capture_consents WHERE student_id = $1::uuid AND course_id = $2::uuid ORDER BY decided_at DESC LIMIT 1',
-              studentId,
-              courseId,
-            )) as Array<{ research_use: boolean }>;
-            consentByCourse.set(key, res[0]?.research_use === true);
-          }
-          return consentByCourse.get(key)!;
-        };
         for (const r of rows) {
-          if (!(await researchOk(r.studentId, r.courseId ?? null))) continue;
+          if (!(await this.researchUse(consentByCourse, r.studentId, r.courseId ?? null))) continue;
           yield {
             wallMs: r.startAt.getTime(),
             endWallMs: r.endAt.getTime(),
@@ -533,6 +562,28 @@ export class PrismaDataSource implements SessionDataSource {
       case 'codes':
         return;
     }
+  }
+
+  /**
+   * Research use (c) for a learner in a course: latest text_capture_consents
+   * row. No decision or no course = no consent. Cached per export stream.
+   */
+  private async researchUse(
+    cache: Map<string, boolean>,
+    studentId: string,
+    courseId: string | null,
+  ): Promise<boolean> {
+    if (!courseId) return false;
+    const key = `${studentId}|${courseId}`;
+    if (!cache.has(key)) {
+      const res = (await this.prisma.$queryRawUnsafe(
+        'SELECT research_use FROM text_capture_consents WHERE student_id = $1::uuid AND course_id = $2::uuid ORDER BY decided_at DESC LIMIT 1',
+        studentId,
+        courseId,
+      )) as Array<{ research_use: boolean }>;
+      cache.set(key, res[0]?.research_use === true);
+    }
+    return cache.get(key)!;
   }
 
   private async *batched(

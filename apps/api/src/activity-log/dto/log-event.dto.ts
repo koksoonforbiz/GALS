@@ -15,16 +15,17 @@ export const LogEventSchema = z.object({
   action: z.enum(ActivityActionValues),
   occurredAt: z.string().datetime(),
 
-  courseId: z.string().uuid().optional(),
-  moduleId: z.string().uuid().optional(),
-  moduleItemId: z.string().uuid().optional(),
-  assessmentId: z.string().uuid().optional(),
-  attemptId: z.string().uuid().optional(),
-  questionId: z.string().uuid().optional(),
-  dialogueSessionId: z.string().optional(),
-  interventionId: z.string().uuid().optional(),
+  // `null` is accepted as "not set": one stray null must not lose an event.
+  courseId: z.string().uuid().nullish(),
+  moduleId: z.string().uuid().nullish(),
+  moduleItemId: z.string().uuid().nullish(),
+  assessmentId: z.string().uuid().nullish(),
+  attemptId: z.string().uuid().nullish(),
+  questionId: z.string().uuid().nullish(),
+  dialogueSessionId: z.string().nullish(),
+  interventionId: z.string().uuid().nullish(),
 
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.unknown()).nullish(),
 });
 
 export type LogEventDto = z.infer<typeof LogEventSchema>;
@@ -35,3 +36,31 @@ export const BatchLogEventsSchema = z.object({
 });
 
 export type BatchLogEventsDto = z.infer<typeof BatchLogEventsSchema>;
+
+/**
+ * The batch as received: the envelope is checked here, each event on its own
+ * in the controller (CAP-41), so one bad event no longer loses the batch.
+ */
+export const BatchEnvelopeSchema = z.object({
+  sessionId: z.string().uuid(),
+  events: z.array(z.unknown()).min(1).max(500),
+});
+
+export type BatchEnvelopeDto = z.infer<typeof BatchEnvelopeSchema>;
+
+/** A rejected event, described without its content (validation path + code only). */
+export function describeRejection(raw: unknown, error: z.ZodError) {
+  const a = raw && typeof raw === 'object' ? (raw as { action?: unknown }).action : undefined;
+  const action = typeof a === 'string' ? a.slice(0, 64) : null;
+  const reason = error.issues
+    .slice(0, 3)
+    .map((i) => `${i.path.join('.') || '(event)'}:${i.code}`)
+    .join(';');
+  let rawBytes: number | null = null;
+  try {
+    rawBytes = JSON.stringify(raw)?.length ?? null;
+  } catch {
+    rawBytes = null;
+  }
+  return { action, reason, rawBytes };
+}

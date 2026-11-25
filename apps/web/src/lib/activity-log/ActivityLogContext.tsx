@@ -113,7 +113,17 @@ export function ActivityLogProvider({ children, getToken }: Props) {
             body: JSON.stringify({ sessionId: sid, events: batch }),
             keepalive,
           });
-          if (res.ok) continue;
+          if (res.ok) {
+            // The server keeps the valid events and records the rest (CAP-41).
+            const r = (await res.json().catch(() => null)) as {
+              rejected?: number;
+              failed?: number;
+            } | null;
+            if (r && ((r.rejected ?? 0) > 0 || (r.failed ?? 0) > 0)) {
+              console.warn('[ActivityLog] some events not stored:', r);
+            }
+            continue;
+          }
           const detail = await res.text().catch(() => '');
           if (isPermanentRejection(res.status)) {
             console.warn('[ActivityLog] batch rejected, dropped:', res.status, detail);

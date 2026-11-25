@@ -290,12 +290,28 @@ describe('Knowledge tests (HTTP)', () => {
   });
 
   it('the browser cannot forge a submission event', async () => {
-    await asStudent(http().post('/api/activity-log/batch'))
+    // Each event is validated on its own (CAP-41): the forged one is
+    // rejected and recorded, never stored; the batch itself is answered.
+    const before = await prisma.activityLog.count({
+      where: { userId: studentId, action: 'KNOWLEDGE_TEST_SUBMITTED' },
+    });
+    const res = await asStudent(http().post('/api/activity-log/batch'))
       .send({
         sessionId,
         events: [{ action: 'KNOWLEDGE_TEST_SUBMITTED', occurredAt: new Date().toISOString() }],
       })
-      .expect(400);
+      .expect(201);
+    expect(res.body).toMatchObject({ accepted: 0, rejected: 1 });
+    expect(
+      await prisma.activityLog.count({
+        where: { userId: studentId, action: 'KNOWLEDGE_TEST_SUBMITTED' },
+      }),
+    ).toBe(before);
+    expect(
+      await prisma.ingestIssue.count({
+        where: { sessionId, kind: 'rejected', action: 'KNOWLEDGE_TEST_SUBMITTED' },
+      }),
+    ).toBeGreaterThan(0);
   });
 
   it('Session 1: lesson opens only after its pre-test; post-test only after the reflect slide; Session 2 only after that', async () => {
