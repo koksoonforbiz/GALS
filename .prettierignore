@@ -18,3 +18,6 @@ docs/EF_battery_v2/CHANGELOG.md
 # Knowledge-test item bank (docs/assessments/README.md): research material,
 # never reformat.
 docs/assessment
+
+# Generated (packages/shared/scripts/gen-action-catalogue.ts)
+docs/process-mining/ACTION_CATALOGUE.md

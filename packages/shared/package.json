@@ -13,7 +13,9 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "gen:catalogue": "ts-node --transpile-only scripts/gen-action-catalogue.ts",
+    "check:catalogue": "ts-node --transpile-only scripts/gen-action-catalogue.ts --check"
   },
   "dependencies": {
     "zod": "^3.23.0"
