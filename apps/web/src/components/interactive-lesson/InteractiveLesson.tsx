@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LessonSlide } from '@ats/shared';
 import { api } from '../../lib/api';
 import { useActivityLog } from '../../lib/activity-log';
-import { STUDY_FORM_NOTICE_VERSION } from '@ats/shared';
 import { ConsentPanel, NudgeCard, type ConsentChoice, type Nudge } from './governance';
 import { useLessonData } from './useLessonData';
 import { useLessonTracking } from './useLessonTracking';
@@ -10,6 +9,13 @@ import { Slide, type LessonEmit } from './slides';
 import { matchPaste, notePaste, takePaste } from './prompt-lab/aiOutputs';
 import { editRatio } from './prompt-lab/wordDiff';
 import './interactive-lesson.css';
+
+/**
+ * Same value as STUDY_FORM_NOTICE_VERSION in @ats/shared (the web bundle takes
+ * only types from that CommonJS package): the API reports this noticeVersion
+ * when consent was collected on the study consent form.
+ */
+const STUDY_FORM_NOTICE_VERSION = 'study-consent-form';
 
 /**
  * Renders an INTERACTIVE_LESSON item (one session of the prompting course)
