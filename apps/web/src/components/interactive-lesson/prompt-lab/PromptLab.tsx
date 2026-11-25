@@ -581,6 +581,7 @@ export function PromptLab({
                 className="pl-output"
                 data-replay-region="ai-output"
                 data-gals-ai-output={shownRun.id}
+                data-gals-ai-channel="prompt_lab"
                 data-replay-redact=""
                 onCopy={() => {
                   const chars = window.getSelection()?.toString().length ?? 0;

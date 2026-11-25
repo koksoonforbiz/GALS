@@ -4,6 +4,11 @@ export interface ClipboardEventDto {
   clientSeq?: number;
   /** Copied, cut or pasted text. */
   text?: string;
+  /** Copy provenance (WP5 G4). */
+  aiSimilarity?: number;
+  matchedTurnId?: string;
+  sourceChannel?: string;
+  targetField?: string;
   action: string;
   textLength: number;
   sourceElement?: string;

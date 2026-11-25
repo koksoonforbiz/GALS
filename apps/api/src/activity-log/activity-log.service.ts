@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { ActivityAction } from './activity-action.enum';
+import { initiatorFromMeta, ledgerFromTrigger, writeLedger } from './intervention-ledger';
 
 export interface RecordEventParams {
   sessionId: string;
@@ -64,6 +65,19 @@ export function payloadText(events: unknown[] | undefined): string | null {
 /** The API build (git SHA), set at image build time; stamped on rows the client didn't stamp. */
 export const APP_BUILD = process.env.APP_BUILD || null;
 
+/**
+ * Every INTERVENTION_TRIGGERED row says who started it (Prompt B, P5;
+ * CAP-01): learner-launched strategy or system suggestion.
+ */
+function withInitiator<
+  T extends { action: ActivityAction; metadata?: Record<string, unknown> | null },
+>(e: T): T {
+  if (e.action !== ActivityAction.INTERVENTION_TRIGGERED) return e;
+  const meta = e.metadata ?? {};
+  if (meta.initiator === 'learner' || meta.initiator === 'system') return e;
+  return { ...e, metadata: { ...meta, initiator: initiatorFromMeta(meta) } };
+}
+
 /** Prisma errors that mean "the database is not reachable": retry later. */
 const UNAVAILABLE_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024']);
 export function isDbUnavailable(err: unknown): boolean {
@@ -94,6 +108,7 @@ export class ActivityLogService {
    * Errors are caught and logged — they must never break the calling flow.
    */
   async record(params: RecordEventParams): Promise<void> {
+    params = withInitiator(params);
     try {
       await this.prisma.activityLog.create({
         data: {
@@ -112,6 +127,9 @@ export class ActivityLogService {
           metadata: (params.metadata as Prisma.InputJsonValue) ?? Prisma.JsonNull,
         },
       });
+      if (params.action === ActivityAction.INTERVENTION_TRIGGERED) {
+        await writeLedger(this.prisma, [ledgerFromTrigger(params)]);
+      }
     } catch (err: unknown) {
       const error = err as Error;
       this.logger.error(`Failed to record activity log: ${error.message}`, error.stack);
@@ -133,6 +151,7 @@ export class ActivityLogService {
     events: Array<RecordEventParams>,
   ): Promise<{ inserted: number; failed: number; duplicates: number }> {
     if (events.length === 0) return { inserted: 0, failed: 0, duplicates: 0 };
+    events = events.map(withInitiator);
     const rows = events.map((e) => ({
       sessionId: e.sessionId,
       userId: e.userId,

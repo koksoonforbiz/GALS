@@ -6,7 +6,7 @@ import { ConsentPanel, NudgeCard, type ConsentChoice, type Nudge } from './gover
 import { useLessonData } from './useLessonData';
 import { useLessonTracking } from './useLessonTracking';
 import { Slide, type LessonEmit } from './slides';
-import { matchPaste, notePaste, takePaste } from './prompt-lab/aiOutputs';
+import { matchPaste, notePaste, provenanceOf, takePaste } from './prompt-lab/aiOutputs';
 import { editRatio } from './prompt-lab/wordDiff';
 import './interactive-lesson.css';
 
@@ -292,6 +292,7 @@ export function InteractiveLesson({
         const fieldKey = field.dataset.fieldKey!;
         const match = matchPaste(text);
         if (match) notePaste(fieldKey, text, match.runId);
+        const prov = provenanceOf(text);
         scheduleNudgeCheck(current.key);
         tracking.emit(current, 'output_pasted', {
           targetField: fieldKey,
@@ -299,6 +300,10 @@ export function InteractiveLesson({
           matchesAiOutput: Boolean(match),
           matchKind: match?.kind ?? null,
           runId: match?.runId ?? null,
+          aiSimilarity: prov?.similarity ?? null,
+          aiContainment: prov?.containment ?? null,
+          matchedTurnId: prov?.matchedTurnId ?? null,
+          sourceChannel: prov?.sourceChannel ?? null,
         });
       }}
       onKeyDown={(e) => {

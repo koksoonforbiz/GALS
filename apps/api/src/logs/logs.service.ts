@@ -312,6 +312,13 @@ export class LogsService {
       timestamp: BigInt(e.timestamp),
       ...seqFields(e),
       text: capText(e.text),
+      aiSimilarity:
+        typeof e.aiSimilarity === 'number' && e.aiSimilarity >= 0 && e.aiSimilarity <= 1
+          ? e.aiSimilarity
+          : null,
+      matchedTurnId: typeof e.matchedTurnId === 'string' ? e.matchedTurnId.slice(0, 64) : null,
+      sourceChannel: typeof e.sourceChannel === 'string' ? e.sourceChannel.slice(0, 32) : null,
+      targetField: typeof e.targetField === 'string' ? e.targetField.slice(0, 200) : null,
     }));
     try {
       const result = await this.prisma.clipboard_logs.createMany({

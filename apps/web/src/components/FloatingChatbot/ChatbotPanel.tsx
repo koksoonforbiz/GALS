@@ -144,6 +144,7 @@ import { InterrogativeElaborationView } from './interventions/InterrogativeElabo
 import { StepwiseLearningView } from './interventions/StepwiseLearningView';
 import { CodeDecompositionView } from './interventions/CodeDecompositionView';
 import { DistributedPracticeView } from './interventions/DistributedPracticeView';
+import { rememberOutput } from '../interactive-lesson/prompt-lab/aiOutputs';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 import {
   GraduationCap,
@@ -463,6 +464,7 @@ export function ChatbotPanel({
         reply: string;
         suggestedStrategy: string | null;
         codeQuestion: { question: string; starterCode: string; language: string } | null;
+        turnId?: string;
       }>('/learning-interventions/chat', {
         message: textToSend,
         conversationHistory,
@@ -483,14 +485,17 @@ export function ChatbotPanel({
         activeCodeQuestion: activeCodeQuestion || undefined,
       });
 
+      // The reply's id is its llm_turns / chatbot_messages id (copy provenance).
+      const turnId = result.turnId || crypto.randomUUID();
       const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: turnId,
         role: 'assistant',
         content: result.reply,
         timestamp: new Date(),
         suggestedStrategy: result.suggestedStrategy || undefined,
         codeQuestion: result.codeQuestion || undefined,
       };
+      rememberOutput(turnId, result.reply, 'learning_assistant');
       setMessages((prev) => [...prev, assistantMsg]);
       if (result.codeQuestion) {
         setCodeContext(null);
@@ -501,6 +506,7 @@ export function ChatbotPanel({
         moduleItemId: contentId ?? undefined,
         metadata: {
           reply: result.reply.slice(0, 1000),
+          turnId,
           suggestedStrategy: result.suggestedStrategy ?? null,
           contentTitle: contentTitle ?? null,
         },
@@ -907,6 +913,12 @@ export function ChatbotPanel({
                   className={`max-w-[80%] min-w-0 overflow-hidden px-3 py-2 rounded-lg text-xs ${
                     msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800'
                   }`}
+                  {...(msg.role === 'assistant'
+                    ? {
+                        'data-gals-ai-output': msg.id,
+                        'data-gals-ai-channel': 'learning_assistant',
+                      }
+                    : {})}
                 >
                   {msg.role === 'user' ? (
                     /* User bubbles render verbatim — no markdown / math

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
 import { enqueue, flushStreams } from '../capture/streamQueues';
+import { provenanceOf } from '../../components/interactive-lesson/prompt-lab/aiOutputs';
 
 const FLUSH_INTERVAL_MS = 30_000;
 const CURSOR_THROTTLE_MS = 100;
@@ -386,7 +387,40 @@ export function useInteractionLogger({
         pageUrl: window.location.pathname,
         timestamp: Date.now(),
         ...(sensitive || !text ? {} : { text: text.slice(0, TEXT_CAP) }),
+        ...provenanceFields(action, e, el),
       });
+    };
+    // Copy provenance (Prompt B, P5 / WP5 G4). A paste: similarity to the
+    // last 3 AI outputs shown and the best match. A copy: the AI output it
+    // came from (an element marked data-gals-ai-output), if any.
+    const provenanceFields = (
+      action: 'copy' | 'cut' | 'paste',
+      e: ClipboardEvent,
+      el: Editable | null,
+    ): Record<string, unknown> => {
+      if (action === 'paste') {
+        const p = provenanceOf(e.clipboardData?.getData('text') ?? '');
+        return {
+          ...(el ? { targetField: fieldIdOf(el) } : {}),
+          ...(p
+            ? {
+                aiSimilarity: p.similarity,
+                matchedTurnId: p.matchedTurnId,
+                sourceChannel: p.sourceChannel,
+              }
+            : {}),
+        };
+      }
+      const anchor = window.getSelection()?.anchorNode ?? null;
+      const host = (
+        anchor instanceof Element ? anchor : anchor?.parentElement
+      )?.closest<HTMLElement>('[data-gals-ai-output]');
+      return host
+        ? {
+            matchedTurnId: host.dataset.galsAiOutput,
+            sourceChannel: host.dataset.galsAiChannel ?? 'prompt_lab',
+          }
+        : {};
     };
     const onCopy = (e: ClipboardEvent) => clip('copy', e, selectedText(e.target));
     const onCut = (e: ClipboardEvent) => clip('cut', e, selectedText(e.target));

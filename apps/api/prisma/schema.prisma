@@ -1791,6 +1791,74 @@ model SessionParseRun {
   @@map("session_parse_runs")
 }
 
+/// Intervention ledger (Prompt B, P5 / WP5 G5): one row per learner-launched
+/// strategy and per system decision on a suggestion, including NO_ACTION.
+model InterventionLedger {
+  id               String   @id @default(uuid()) @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  sessionId        String?  @map("session_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  courseId         String?  @map("course_id") @db.Uuid
+  moduleItemId     String?  @map("module_item_id") @db.Uuid
+  /// learner | system
+  initiator        String
+  /// launched | shown | withheld | no_action
+  decision         String
+  /// triggerReason, or why nothing was shown (no_policy, cooldown, cap, ...)
+  reason           String?
+  interventionType String?  @map("intervention_type")
+  interventionId   String?  @map("intervention_id")
+  ruleId           String?  @map("rule_id")
+  policyId         String?  @map("policy_id")
+  arm              String?
+
+  @@index([sessionId])
+  @@index([userId, createdAt])
+  @@map("intervention_ledger")
+}
+
+/// One row per Learning Assistant request and reply (Prompt B, P5 / R12,
+/// WP5 G3; CAP-06/25). Links to the two chatbot_messages rows by id; the
+/// reply id (turnId) is what copy provenance matches pastes to.
+model LlmTurn {
+  id                  String   @id @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+  sessionId           String?  @map("session_id") @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  courseId            String?  @map("course_id") @db.Uuid
+  moduleItemId        String?  @map("module_item_id") @db.Uuid
+  /// learning_assistant (the docked/floating chatbot)
+  channel             String
+  requestMessageId    String   @map("request_message_id") @db.Uuid
+  /// selection | none
+  selectionSource     String   @map("selection_source")
+  selectionLen        Int      @map("selection_len")
+  /// pdf-source | selection | student-rag | none
+  contextSource       String   @map("context_source")
+  currentPage         Int?     @map("current_page")
+  pageType            String?  @map("page_type")
+  /// an own attempt on this item earlier in the session
+  attemptBefore       Boolean  @map("attempt_before")
+  /// seconds since the last incorrect answer in the session (null: none)
+  timeSinceLastErrorS Int?     @map("time_since_last_error_s")
+  /// previous turn on the same item within 120 s
+  followUp            Boolean  @map("follow_up")
+  model               String?
+  latencyMs           Int      @map("latency_ms")
+  promptTokens        Int?     @map("prompt_tokens")
+  completionTokens    Int?     @map("completion_tokens")
+  responseRole        String   @map("response_role")
+  /// llm_error, pii_in_reply, code_practice, ...
+  guardrailFlags      String[] @default([]) @map("guardrail_flags")
+  suggestedStrategy   String?  @map("suggested_strategy")
+  /// null until an accepted intent classifier exists
+  intentLabel         String?  @map("intent_label")
+
+  @@index([sessionId])
+  @@index([userId, createdAt])
+  @@map("llm_turns")
+}
+
 /// Capture quality per session (Prompt B, B4): sequence gaps, duplicates and
 /// out-of-order arrivals per stream and tab. Rewritten for a session each time
 /// it is analysed (on close, and again when late events arrive).
@@ -2203,10 +2271,17 @@ model clipboard_logs {
   timestamp     BigInt
 
   /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
-  tabId     String?
-  clientSeq Int?
+  tabId         String?
+  clientSeq     Int?
   /// Copied, cut or pasted text, capped at 10,000 chars (textLength is the full length).
-  text      String? @db.Text
+  text          String? @db.Text
+  /// Copy provenance (Prompt B, P5 / WP5 G4): best 5-gram Jaccard similarity of
+  /// a paste to the last 3 AI outputs shown, and which output (turn/run id, channel).
+  /// For a copy: the AI output it was copied from, if any.
+  aiSimilarity  Float?
+  matchedTurnId String?
+  sourceChannel String?
+  targetField   String?
 
   @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])

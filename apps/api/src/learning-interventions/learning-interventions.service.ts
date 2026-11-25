@@ -4111,10 +4111,14 @@ export class LearningInterventionsService {
     reply: string;
     suggestedStrategy: string | null;
     codeQuestion: CodePracticeQuestion | null;
+    /** The reply's chatbot_messages / llm_turns id (copy provenance). */
+    turnId: string;
   }> {
     if (!dto.message || dto.message.trim().length < 2) {
       throw new BadRequestException('Message is too short');
     }
+    const requestMessageId = randomUUID();
+    const turnId = randomUUID();
     await this.gates?.assertContentAccess(userId, dto.courseId, dto.contentId ?? undefined);
 
     const teacherId = await this.getCourseTeacherIdWithApiKey(dto.courseId);
@@ -4412,6 +4416,8 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
     let llmPromptTokens: number | null = null;
     let llmCompletionTokens: number | null = null;
     let llmModel: string | null = null;
+    let llmFailed = false;
+    const llmStartedAt = Date.now();
     try {
       const result = await this.llmService.callLlmStructured(
         teacherId,
@@ -4430,9 +4436,11 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
       llmCompletionTokens = result.completionTokens;
       llmModel = result.model;
     } catch {
+      llmFailed = true;
       reply =
         "I'm having trouble responding right now. Try selecting some text and using one of the learning strategies instead!";
     }
+    const latencyMs = Date.now() - llmStartedAt;
 
     // Extract strategy suggestion if present
     let suggestedStrategy: string | null = null;
@@ -4512,6 +4520,7 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
       .createMany({
         data: [
           {
+            id: requestMessageId,
             studentId: userId,
             studentSessionId: activitySessionId ?? null,
             courseId: dto.courseId,
@@ -4528,6 +4537,7 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
             model: null,
           },
           {
+            id: turnId,
             studentId: userId,
             studentSessionId: activitySessionId ?? null,
             courseId: dto.courseId,
@@ -4553,6 +4563,133 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
         ),
       );
 
-    return { reply, suggestedStrategy, codeQuestion };
+    // LLM-turn record (Prompt B, P5 / R12): the context of the request and
+    // the facts of the reply, linked to both message rows. Best-effort.
+    void this.recordLlmTurn({
+      turnId,
+      requestMessageId,
+      userId,
+      activitySessionId,
+      dto,
+      contextSource,
+      model: llmModel,
+      latencyMs,
+      promptTokens: llmPromptTokens,
+      completionTokens: llmCompletionTokens,
+      suggestedStrategy,
+      flags: [
+        ...(llmFailed ? ['llm_error'] : []),
+        ...(piiFound.length ? ['pii_in_reply'] : []),
+        ...(codeQuestion ? ['code_practice'] : []),
+      ],
+    });
+
+    return { reply, suggestedStrategy, codeQuestion, turnId };
+  }
+
+  /** Actions that count as the learner's own attempt on an item (LLM-turn attemptBefore). */
+  private static readonly ATTEMPT_ACTIONS = [
+    'ATTEMPT_STARTED',
+    'MCQ_ANSWERED',
+    'QUESTION_ANSWERED',
+    'SELF_CHECK_SUBMITTED',
+    'PREDICTION_COMMITTED',
+    'RESULTS_RECORDED',
+    'PROMPT_SUBMITTED',
+    'KNOWLEDGE_TEST_ITEM_ANSWERED',
+  ];
+
+  private async recordLlmTurn(t: {
+    turnId: string;
+    requestMessageId: string;
+    userId: string;
+    activitySessionId?: string;
+    dto: ChatRequestDto;
+    contextSource: string;
+    model: string | null;
+    latencyMs: number;
+    promptTokens: number | null;
+    completionTokens: number | null;
+    suggestedStrategy: string | null;
+    flags: string[];
+  }) {
+    try {
+      const now = new Date();
+      const sid = t.activitySessionId ?? null;
+      const item = t.dto.contentId ?? null;
+      let attemptBefore = false;
+      let timeSinceLastErrorS: number | null = null;
+      let followUp = false;
+      if (sid) {
+        const attempt = await this.prisma.activityLog.findFirst({
+          where: {
+            sessionId: sid,
+            ...(item ? { moduleItemId: item } : {}),
+            action: { in: LearningInterventionsService.ATTEMPT_ACTIONS as never },
+            occurredAt: { lte: now },
+          },
+          select: { id: true },
+        });
+        attemptBefore = !!attempt;
+        const errors = await this.prisma.activityLog.findMany({
+          where: {
+            sessionId: sid,
+            action: { in: ['MCQ_ANSWERED', 'QUESTION_ANSWERED'] as never },
+            occurredAt: { lte: now },
+          },
+          select: { occurredAt: true, metadata: true },
+          orderBy: { occurredAt: 'desc' },
+          take: 50,
+        });
+        const lastError = errors.find((e) => {
+          const m = (e.metadata ?? {}) as Record<string, unknown>;
+          return m.correct === false || m.isCorrect === false;
+        });
+        if (lastError) {
+          timeSinceLastErrorS = Math.round((now.getTime() - lastError.occurredAt.getTime()) / 1000);
+        }
+        const previous = await this.prisma.llmTurn.findFirst({
+          where: {
+            sessionId: sid,
+            moduleItemId: item,
+            createdAt: { gte: new Date(now.getTime() - 120_000) },
+          },
+          select: { id: true },
+        });
+        followUp = !!previous;
+      }
+      const selectionLen = (t.dto.selectedText ?? '').trim().length;
+      await this.prisma.llmTurn.create({
+        data: {
+          id: t.turnId,
+          sessionId: sid,
+          userId: t.userId,
+          courseId: t.dto.courseId,
+          moduleItemId: item,
+          channel: 'learning_assistant',
+          requestMessageId: t.requestMessageId,
+          selectionSource: selectionLen > 0 ? 'selection' : 'none',
+          selectionLen,
+          contextSource: t.contextSource,
+          currentPage:
+            typeof t.dto.currentPage === 'number' && t.dto.currentPage > 0
+              ? Math.floor(t.dto.currentPage)
+              : null,
+          pageType: t.dto.pageType ?? null,
+          attemptBefore,
+          timeSinceLastErrorS,
+          followUp,
+          model: t.model,
+          latencyMs: t.latencyMs,
+          promptTokens: t.promptTokens,
+          completionTokens: t.completionTokens,
+          responseRole: 'assistant',
+          guardrailFlags: t.flags,
+          suggestedStrategy: t.suggestedStrategy,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`llm_turns record failed for user ${t.userId}: ${(err as Error).message}`);
+    }
   }
 }

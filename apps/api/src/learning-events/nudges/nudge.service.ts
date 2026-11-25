@@ -8,8 +8,9 @@ import {
 import { createHash } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma';
-import { resolveParams } from '../engine/params';
+import { CURRENT_LIBRARY, resolveParams } from '../engine/params';
 import { prepareActions } from '../engine/prepare';
+import { writeLedger } from '../../activity-log/intervention-ledger';
 import { runRules } from '../engine/rules';
 import type { Draft, RawAction } from '../engine/types';
 import { ValidationService } from '../validation/validation.service';
@@ -182,15 +183,30 @@ export class NudgeService {
     const policies = await this.prisma.interventionPolicy.findMany({
       where: { courseId, enabled: true },
     });
-    if (!policies.length) return { nudge: null };
+    // Every evaluation is in the ledger, also when it shows nothing (R9).
+    const noAction = async (reason: string) => {
+      await writeLedger(this.prisma, [
+        {
+          sessionId: body.sessionId,
+          userId: studentId,
+          courseId,
+          moduleItemId: body.moduleItemId,
+          initiator: 'system',
+          decision: 'no_action',
+          reason,
+        },
+      ]);
+      return { nudge: null };
+    };
+    if (!policies.length) return noAction('no_policy');
     const validated = await this.validation.validatedRuleIds();
     const active = policies.filter((p) => !p.requiresValidated || validated.has(p.ruleId));
-    if (!active.length) return { nudge: null };
+    if (!active.length) return noAction('no_validated_policy');
 
     const set = await this.prisma.learningEventParameterSet.findFirst({
       orderBy: { version: 'desc' },
     });
-    const params = resolveParams(set?.values);
+    const params = resolveParams(set?.values, CURRENT_LIBRARY);
     const since = new Date(Date.now() - LOOKBACK_MS);
     const rows = await this.prisma.activityLog.findMany({
       where: {
@@ -221,13 +237,14 @@ export class NudgeService {
         }),
       ),
     );
-    if (!actions.length) return { nudge: null };
+    if (!actions.length) return noAction('no_recent_actions');
     const latest = actions[actions.length - 1]!.at;
     const drafts = runRules({
       actions,
       visibility: [],
       prior: { visits: new Map(), commits: new Set() },
       params,
+      library: CURRENT_LIBRARY,
     });
 
     const candidates: Array<{ draft: Draft; policy: (typeof active)[number] }> = [];
@@ -246,6 +263,8 @@ export class NudgeService {
       }
     }
     candidates.sort((a, b) => b.draft.end - a.draft.end);
+    if (!candidates.length) return noAction('no_candidate');
+    const skipped: string[] = [];
 
     for (const { draft, policy } of candidates) {
       const sourceKey =
@@ -262,14 +281,22 @@ export class NudgeService {
         prior.some(
           (p) => (p.triggerDetail as { sourceKey?: string } | null)?.sourceKey === sourceKey,
         )
-      )
+      ) {
+        skipped.push('already_nudged');
         continue;
+      }
       const shownHere = prior.filter(
         (p) => p.moduleItemId === body.moduleItemId && p.status !== 'withheld',
       ).length;
-      if (shownHere >= policy.maxPerActivity) continue;
+      if (shownHere >= policy.maxPerActivity) {
+        skipped.push('cap');
+        continue;
+      }
       const last = prior[0];
-      if (last && Date.now() - last.createdAt.getTime() < policy.cooldownMinutes * 60_000) continue;
+      if (last && Date.now() - last.createdAt.getTime() < policy.cooldownMinutes * 60_000) {
+        skipped.push('cooldown');
+        continue;
+      }
 
       const arm = NudgeService.arm(studentId, policy.id, policy.abTreatmentShare);
       const nudge = await this.prisma.ruleNudge.create({
@@ -300,6 +327,7 @@ export class NudgeService {
           interventionId: nudge.id,
           metadata: {
             triggerReason: 'rule_triggered',
+            initiator: 'system',
             ruleId: policy.ruleId,
             policyId: policy.id,
             arm,
@@ -308,6 +336,21 @@ export class NudgeService {
           },
         },
       });
+      await writeLedger(this.prisma, [
+        {
+          sessionId: body.sessionId,
+          userId: studentId,
+          courseId,
+          moduleItemId: body.moduleItemId,
+          initiator: 'system',
+          decision: arm === 'treatment' ? 'shown' : 'withheld',
+          reason: 'rule_triggered',
+          interventionId: nudge.id,
+          ruleId: policy.ruleId,
+          policyId: policy.id,
+          arm,
+        },
+      ]);
       if (arm === 'control') return { nudge: null };
       return {
         nudge: {
@@ -319,7 +362,7 @@ export class NudgeService {
         },
       };
     }
-    return { nudge: null };
+    return noAction([...new Set(skipped)].join(',') || 'no_candidate');
   }
 
   async respond(studentId: string, nudgeId: string, status: 'accepted' | 'dismissed') {

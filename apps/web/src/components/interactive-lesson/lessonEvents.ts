@@ -390,6 +390,11 @@ export function mapLessonEvent(
           matchesAiOutput: data.matchesAiOutput === true,
           matchKind: data.matchKind ?? null,
           runId: data.runId ?? null,
+          // Copy provenance (WP5 G4): 5-gram similarity to the last 3 AI outputs.
+          aiSimilarity: data.aiSimilarity ?? null,
+          aiContainment: data.aiContainment ?? null,
+          matchedTurnId: data.matchedTurnId ?? null,
+          sourceChannel: data.sourceChannel ?? null,
         },
       };
     case 'transfer_task_submitted':
