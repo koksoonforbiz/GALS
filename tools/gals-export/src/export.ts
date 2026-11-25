@@ -7,6 +7,7 @@ import {
   LARGE_STREAMS,
   OPTIONAL_STREAMS,
   USER_SCOPED_STREAMS,
+  UNTIMED_STREAMS,
   STREAM_FILES,
   type BundleManifest,
   type ExportOptions,
@@ -129,9 +130,10 @@ export async function exportSession(
       // Cards and attempts are the student's state across ALL sessions (queried
       // by user, not session): their timestamps must not stretch this session's
       // duration (a 0 s session once got 41 days from a later card review).
-      const tapped = USER_SCOPED_STREAMS.includes(key)
-        ? ds.getStream(sessionId, key)
-        : trackMaxWall(ds.getStream(sessionId, key), wallState);
+      const tapped =
+        USER_SCOPED_STREAMS.includes(key) || UNTIMED_STREAMS.includes(key)
+          ? ds.getStream(sessionId, key)
+          : trackMaxWall(ds.getStream(sessionId, key), wallState);
       const n = await writer.writeJsonl(rel, tapped);
       counts[key] = n;
       if (n === 0 && OPTIONAL_STREAMS.includes(key)) {

@@ -3,6 +3,12 @@
  * Kept in one place so the importer, validators, and exporter agree.
  */
 export const BUNDLE_VERSION = 1 as const;
+/**
+ * Bundle versions the importer accepts. v2 (2026-11-26, Prompt B P7) keeps
+ * every v1 file and field and adds new files; this importer reads the v1
+ * files and ignores the rest until Prompt C models them.
+ */
+export const SUPPORTED_BUNDLE_VERSIONS = [1, 2] as const;
 
 export const STREAM_FILES = {
   webgazer: 'streams/webgazer.jsonl',

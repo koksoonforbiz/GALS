@@ -267,3 +267,7 @@ These are **reference only**. GALS Studio imports them into a separate
   bumped for this change — confirm with whoever maintains GALS Studio's
   import side whether it needs updating for bundles that no longer include
   this file.
+
+## Version 2 (2026-11-26)
+
+`bundleVersion` 2 adds files and fields and removes nothing; see `docs/process-mining/BUNDLE_SCHEMA.md`. Validators accept 1 and 2.

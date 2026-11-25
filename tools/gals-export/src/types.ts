@@ -1,13 +1,18 @@
 /**
- * Bundle format v1 types + the data-source contract the exporter consumes.
+ * Bundle format types (v2 since 2026-11-26) + the data-source contract the
+ * exporter consumes. v2 = v1 + ids and the event envelope on activity rows,
+ * keystroke/clipboard text and copy provenance, learning-event provenance,
+ * capture quality, the intervention ledger, LLM turns and outcomes
+ * (docs/process-mining/BUNDLE_SCHEMA.md). Every v1 file and field is kept,
+ * so a v1 reader still loads a v2 bundle (it ignores the new files).
  *
  * The export orchestration depends ONLY on `SessionDataSource`, never on
  * Prisma directly, so the smoke test can feed an in-memory fixture and the
  * real CLI can feed a Prisma-backed source — same bundle either way.
  */
 
-export const BUNDLE_VERSION = 1 as const;
-export const EXPORTER_VERSION = '1.0.0' as const;
+export const BUNDLE_VERSION = 2 as const;
+export const EXPORTER_VERSION = '2.0.0' as const;
 
 /** A single integrity entry for a written file. */
 export interface FileIntegrity {
@@ -42,6 +47,12 @@ export interface SessionJson {
     durationSecs?: number | null;
     userAgent?: string | null;
     device?: string | null;
+    /** v2: how the session ended and how to regroup it (Prompt B, P2). */
+    closeReason?: string | null;
+    paramsVersion?: string | null;
+    previousSessionId?: string | null;
+    episodeKey?: string | null;
+    clockOffsetMs?: number | null;
   };
   syncAnchor: {
     wallClockMs: number;
@@ -117,6 +128,29 @@ export const STREAM_FILES = {
   codes: 'annotations/codes.jsonl',
   // Prompting course: server-derived learning events (apps/api learning-events)
   learning_events: 'derived/learning_events.jsonl',
+  // ── v2 (Prompt B, P7) ──
+  parse_runs: 'derived/parse_runs.jsonl',
+  coverage: 'derived/coverage.jsonl',
+  parameter_snapshots: 'derived/parameter_snapshots.jsonl',
+  library: 'derived/library.jsonl',
+  ingest_issues: 'quality/ingest_issues.jsonl',
+  capture_quality: 'quality/capture_quality.jsonl',
+  intervention_ledger: 'interventions/ledger.jsonl',
+  llm_turns: 'messages/llm_turns.jsonl',
+  knowledge_tests: 'outcomes/knowledge_tests.jsonl',
+  knowledge_test_scores: 'outcomes/knowledge_test_scores.jsonl',
+  efa_occasions: 'outcomes/efa_occasions.jsonl',
+  efa_task_runs: 'outcomes/efa_task_runs.jsonl',
+  efa_trials: 'outcomes/efa_trials.jsonl',
+  efa_answers: 'outcomes/efa_answers.jsonl',
+  efa_task_scores: 'outcomes/efa_task_scores.jsonl',
+  promptlab_runs: 'promptlab/runs.jsonl',
+  promptlab_versions: 'promptlab/versions.jsonl',
+  promptlab_test_cases: 'promptlab/test_cases.jsonl',
+  promptlab_test_results: 'promptlab/test_results.jsonl',
+  promptlab_ratings: 'promptlab/ratings.jsonl',
+  slide_states: 'lesson/slide_states.jsonl',
+  study_notes: 'notes/study_notes.jsonl',
 } as const;
 
 export type StreamKey = keyof typeof STREAM_FILES;
@@ -127,6 +161,36 @@ export const LARGE_STREAMS: StreamKey[] = ['webgazer', 'cursors', 'au_results', 
 /** Per-student streams (queried by user, not session): never set the session's duration. */
 export const USER_SCOPED_STREAMS: StreamKey[] = ['cards', 'attempts'];
 
+/**
+ * Rows stamped when they were computed or recorded, not when the learner
+ * acted (quality, parse runs, outcomes): they never set the session's
+ * duration either.
+ */
+export const UNTIMED_STREAMS: StreamKey[] = [
+  'parse_runs',
+  'coverage',
+  'parameter_snapshots',
+  'library',
+  'ingest_issues',
+  'capture_quality',
+  'intervention_ledger',
+  'llm_turns',
+  'knowledge_tests',
+  'knowledge_test_scores',
+  'efa_occasions',
+  'efa_task_runs',
+  'efa_trials',
+  'efa_answers',
+  'efa_task_scores',
+  'promptlab_runs',
+  'promptlab_versions',
+  'promptlab_test_cases',
+  'promptlab_test_results',
+  'promptlab_ratings',
+  'slide_states',
+  'study_notes',
+];
+
 /** Optional streams whose file is omitted entirely when empty. */
 export const OPTIONAL_STREAMS: StreamKey[] = [
   'probes',
@@ -134,6 +198,28 @@ export const OPTIONAL_STREAMS: StreamKey[] = [
   'annotations',
   'codes',
   'learning_events',
+  'parse_runs',
+  'coverage',
+  'parameter_snapshots',
+  'library',
+  'ingest_issues',
+  'capture_quality',
+  'intervention_ledger',
+  'llm_turns',
+  'knowledge_tests',
+  'knowledge_test_scores',
+  'efa_occasions',
+  'efa_task_runs',
+  'efa_trials',
+  'efa_answers',
+  'efa_task_scores',
+  'promptlab_runs',
+  'promptlab_versions',
+  'promptlab_test_cases',
+  'promptlab_test_results',
+  'promptlab_ratings',
+  'slide_states',
+  'study_notes',
 ];
 
 export interface SessionMeta {

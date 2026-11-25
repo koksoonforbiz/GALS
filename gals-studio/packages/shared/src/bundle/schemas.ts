@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BUNDLE_VERSION } from './spec.js';
+import { SUPPORTED_BUNDLE_VERSIONS } from './spec.js';
 
 /** A finite wall-clock millisecond value. */
 export const wallMs = z.number().finite();
@@ -10,7 +10,10 @@ export const fileIntegritySchema = z.object({
 });
 
 export const manifestSchema = z.object({
-  bundleVersion: z.literal(BUNDLE_VERSION),
+  bundleVersion: z.union([
+    z.literal(SUPPORTED_BUNDLE_VERSIONS[0]),
+    z.literal(SUPPORTED_BUNDLE_VERSIONS[1]),
+  ]),
   exporterVersion: z.string(),
   exportedAt: z.string(),
   sessionId: z.string().min(1),
@@ -103,9 +106,7 @@ export type WebcamIndexEntry = z.infer<typeof webcamIndexEntrySchema>;
 export const webcamIndexSchema = z.array(webcamIndexEntrySchema);
 
 /** Base stream-record shape: a finite wallMs plus arbitrary native fields. */
-export const streamRecordSchema = z
-  .object({ wallMs })
-  .passthrough();
+export const streamRecordSchema = z.object({ wallMs }).passthrough();
 export type StreamRecord = z.infer<typeof streamRecordSchema>;
 
 /** AOI region names the analysis layer understands (nested-resolution order). */

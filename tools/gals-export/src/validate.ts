@@ -38,7 +38,9 @@ export async function validateBundleDir(dir: string): Promise<ValidationReport> 
     }
   }
 
-  if (manifest!.bundleVersion !== 1) errors.push(`unexpected bundleVersion ${manifest!.bundleVersion}`);
+  const version = manifest!.bundleVersion as number;
+  if (version !== 1 && version !== 2)
+    errors.push(`unexpected bundleVersion ${manifest!.bundleVersion}`);
 
   const { ok, mismatches } = await verifyChecksums(dir, manifest!.files ?? {});
   if (!ok) errors.push(`checksum mismatch on: ${mismatches.join(', ')}`);

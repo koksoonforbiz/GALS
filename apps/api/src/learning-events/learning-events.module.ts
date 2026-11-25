@@ -1,4 +1,5 @@
 import { CourseGatesModule } from '../course-gates';
+import { CaptureHealthService } from './capture-health/capture-health.service';
 import { Module } from '@nestjs/common';
 import { RagModule } from '../rag';
 import { GovernanceModule } from '../governance/governance.module';
@@ -28,6 +29,7 @@ export class LearningEventsCoreModule {}
     PromptClassifierService,
     TransferTaskService,
     NudgeService,
+    CaptureHealthService,
   ],
   exports: [LearningEventsCoreModule],
 })

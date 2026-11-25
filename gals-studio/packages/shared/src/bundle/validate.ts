@@ -59,7 +59,9 @@ export async function validateBundle(dir: string): Promise<BundleValidationRepor
     const raw = await readJson<unknown>(join(dir, 'manifest.json'));
     const parsed = manifestSchema.safeParse(raw);
     if (!parsed.success) {
-      errors.push(`manifest.json invalid: ${parsed.error.issues.map((i) => i.path.join('.') + ' ' + i.message).join('; ')}`);
+      errors.push(
+        `manifest.json invalid: ${parsed.error.issues.map((i) => i.path.join('.') + ' ' + i.message).join('; ')}`,
+      );
     } else {
       manifest = parsed.data;
     }
@@ -106,7 +108,8 @@ export async function validateBundle(dir: string): Promise<BundleValidationRepor
   let snapshots: SnapshotIndexEntry[] | undefined;
   try {
     const parsed = snapshotIndexSchema.safeParse(await readJson(join(dir, 'snapshots/index.json')));
-    if (!parsed.success) errors.push(`snapshots/index.json invalid: ${parsed.error.issues[0]?.message}`);
+    if (!parsed.success)
+      errors.push(`snapshots/index.json invalid: ${parsed.error.issues[0]?.message}`);
     else snapshots = parsed.data;
   } catch {
     errors.push('snapshots/index.json missing or unparseable');
@@ -116,7 +119,8 @@ export async function validateBundle(dir: string): Promise<BundleValidationRepor
   let webcam: WebcamIndexEntry[] | undefined;
   try {
     const parsed = webcamIndexSchema.safeParse(await readJson(join(dir, 'webcam/index.json')));
-    if (!parsed.success) errors.push(`webcam/index.json invalid: ${parsed.error.issues[0]?.message}`);
+    if (!parsed.success)
+      errors.push(`webcam/index.json invalid: ${parsed.error.issues[0]?.message}`);
     else {
       webcam = parsed.data;
       for (const seg of webcam) if (seg.status === 'missing') missingWebcam.push(seg.segmentId);

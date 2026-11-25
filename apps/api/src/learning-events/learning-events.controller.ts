@@ -21,6 +21,7 @@ import { JwtAuthGuard, RolesGuard, Roles } from '../auth';
 import { ZodValidationPipe } from '../common';
 import { PrismaService } from '../prisma';
 import { LearningEventsService } from './learning-events.service';
+import { CaptureHealthService } from './capture-health/capture-health.service';
 import { ValidationService } from './validation/validation.service';
 import {
   ResearchExportsService,
@@ -80,6 +81,7 @@ export class LearningEventsController {
     private readonly exportsService: ResearchExportsService,
     private readonly classifier: PromptClassifierService,
     private readonly transfer: TransferTaskService,
+    private readonly captureHealth: CaptureHealthService,
   ) {}
 
   /** Same rule as SessionService.assertTeacherOwnsSession; admins see all. */
@@ -152,6 +154,39 @@ export class LearningEventsController {
   ) {
     await this.assertCourse(req.user, courseId);
     return this.service.computeCourse(courseId, versionQuery(version));
+  }
+
+  // ── Capture health (Prompt B, P6 / B8) ───────────────────────────────────
+
+  /** How complete one session's data is: counts, schema, gaps, refusals, parse, sensing. */
+  @Get('sessions/:sessionId/capture-health')
+  async sessionCaptureHealth(
+    @Request() req: { user: RequestUser },
+    @Param('sessionId', new ParseUUIDPipe()) sessionId: string,
+  ) {
+    await this.assertSession(req.user, sessionId);
+    return this.captureHealth.session(sessionId);
+  }
+
+  /** The same per session of a course, with a summary. */
+  @Get('courses/:courseId/capture-health')
+  async courseCaptureHealth(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', new ParseUUIDPipe()) courseId: string,
+  ) {
+    await this.assertCourse(req.user, courseId);
+    return this.captureHealth.course(courseId);
+  }
+
+  @Get('courses/:courseId/capture-health.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="capture-health.csv"')
+  async courseCaptureHealthCsv(
+    @Request() req: { user: RequestUser },
+    @Param('courseId', new ParseUUIDPipe()) courseId: string,
+  ) {
+    await this.assertCourse(req.user, courseId);
+    return this.captureHealth.courseCsv(courseId);
   }
 
   @Get('courses/:courseId/coverage')

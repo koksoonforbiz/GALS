@@ -843,3 +843,7 @@ The six stream routes (cursor, clicks, scroll, keystrokes, visibility, clipboard
 | POST   | `/api/announcements`         | teacher, admin | JwtAuthGuard,RolesGuard | private    | Teacher: own courses only; admin: also every student.                       |
 | PATCH  | `/api/announcements/:id`     | teacher, admin | JwtAuthGuard,RolesGuard | private    | Edit own notice.                                                            |
 | DELETE | `/api/announcements/:id`     | teacher, admin | JwtAuthGuard,RolesGuard | private    | Archive (kept, hidden).                                                     |
+
+## Capture health (Prompt B, P6, 2026-11-26)
+
+`LearningEventsController`: `GET /api/learning-events/sessions/:sessionId/capture-health`, `GET /api/learning-events/courses/:courseId/capture-health`, `GET /api/learning-events/courses/:courseId/capture-health.csv`. Roles teacher, admin (class-level); **private** door, not allowlisted. Teacher: own course only.

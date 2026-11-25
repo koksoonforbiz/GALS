@@ -6,6 +6,7 @@
  * Connects directly to Postgres — the Nest app does NOT need to be running.
  */
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { V2_KEYS, v2Stream } from './v2streams.js';
 import type {
   SessionDataSource,
   SessionJson,
@@ -131,6 +132,7 @@ export class PrismaDataSource implements SessionDataSource {
         durationSecs: s.durationSecs ?? null,
         userAgent: s.userAgent ?? null,
         device: null,
+        ...(await this.lifecycle(sessionId)),
       },
       syncAnchor: anchor
         ? {
@@ -234,7 +236,51 @@ export class PrismaDataSource implements SessionDataSource {
     }
   }
 
+  /** v2 session fields (Prompt B, P2), read raw: the export schema predates them. */
+  private async lifecycle(sessionId: string) {
+    const [r] = (await this.prisma.$queryRawUnsafe(
+      'SELECT close_reason, params_version, previous_session_id, episode_key, clock_offset_ms FROM student_sessions WHERE id = $1::uuid',
+      sessionId,
+    )) as Array<Record<string, unknown>>;
+    return {
+      closeReason: (r?.close_reason as string | null) ?? null,
+      paramsVersion: (r?.params_version as string | null) ?? null,
+      previousSessionId: (r?.previous_session_id as string | null) ?? null,
+      episodeKey: (r?.episode_key as string | null) ?? null,
+      clockOffsetMs: r?.clock_offset_ms == null ? null : Number(r.clock_offset_ms),
+    };
+  }
+
+  private raw = (sql: string, ...params: unknown[]) =>
+    this.prisma.$queryRawUnsafe(sql, ...params) as Promise<Array<Record<string, unknown>>>;
+
+  /** An interaction stream with every column (v2: tabId, clientSeq, text, provenance). */
+  private async *rawStream(
+    table: string,
+    sessionId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map: (r: Record<string, any>) => StreamRecord,
+  ): AsyncIterable<StreamRecord> {
+    for (let offset = 0; ; offset += BATCH) {
+      const rows = await this.raw(
+        `SELECT * FROM "${table}" WHERE "sessionId" = $1 ORDER BY "timestamp", id LIMIT ${BATCH} OFFSET ${offset}`,
+        sessionId,
+      );
+      for (const r of rows) yield map(r);
+      if (rows.length < BATCH) return;
+    }
+  }
+
   async *getStream(sessionId: string, key: StreamKey): AsyncIterable<StreamRecord> {
+    if (V2_KEYS.has(key)) {
+      const s = await this.prisma.studentSession.findUnique({
+        where: { id: sessionId },
+        select: { userId: true },
+      });
+      if (!s) return;
+      yield* v2Stream(this.raw, key, sessionId, s.userId);
+      return;
+    }
     switch (key) {
       case 'webgazer':
         yield* this.batched(this.prisma.webgazerLog, sessionId, 'timestamp', (r) => ({
@@ -297,56 +343,84 @@ export class PrismaDataSource implements SessionDataSource {
         return;
       }
       case 'clicks':
-        yield* this.batched(this.prisma.click_logs, sessionId, 'timestamp', (r) => ({
+        yield* this.rawStream('click_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
+          id: r.id,
           x: r.x,
           y: r.y,
           target: r.elementSelector ?? null,
           text: r.elementText ?? null,
           pageUrl: r.pageUrl,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'scrolls':
-        yield* this.batched(this.prisma.scroll_logs, sessionId, 'timestamp', (r) => ({
+        yield* this.rawStream('scroll_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
+          id: r.id,
           scrollY: r.scrollY,
           scrollPercent: r.scrollPercent,
           pageUrl: r.pageUrl,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'cursors':
-        yield* this.batched(this.prisma.cursor_logs, sessionId, 'timestamp', (r) => ({
+        yield* this.rawStream('cursor_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
           x: r.x,
           y: r.y,
           target: r.elementTarget ?? null,
           pageUrl: r.pageUrl,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'keystrokes':
-        yield* this.batched(this.prisma.keystroke_logs, sessionId, 'timestamp', (r) => ({
+        // v2: the typed burst (keys with offsets, field text), PI decision 2026-11-25.
+        yield* this.rawStream('keystroke_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
+          id: r.id,
           fieldId: r.fieldId,
           keystrokeCount: r.keystrokeCount,
           pauseDurationMs: r.pauseDurationMs,
           typingSpeedWPM: r.typingSpeedWPM ?? null,
+          burstStartMs: r.burstStart == null ? null : num(r.burstStart),
+          fieldKind: r.fieldKind ?? null,
+          keys: r.keys ?? null,
+          text: r.text ?? null,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'clipboard':
-        yield* this.batched(this.prisma.clipboard_logs, sessionId, 'timestamp', (r) => ({
+        // v2: the text and copy provenance (similarity to the last AI outputs).
+        yield* this.rawStream('clipboard_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
+          id: r.id,
           action: r.action,
           textLength: r.textLength,
           sourceElement: r.sourceElement ?? null,
           pageUrl: r.pageUrl,
+          text: r.text ?? null,
+          aiSimilarity: r.aiSimilarity ?? null,
+          matchedTurnId: r.matchedTurnId ?? null,
+          sourceChannel: r.sourceChannel ?? null,
+          targetField: r.targetField ?? null,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'visibility':
-        yield* this.batched(this.prisma.visibility_logs, sessionId, 'timestamp', (r) => ({
+        yield* this.rawStream('visibility_logs', sessionId, (r) => ({
           wallMs: num(r.timestamp),
+          id: r.id,
           visibleState: r.visibleState,
           hiddenDurationMs: r.hiddenDurationMs ?? null,
           pageUrl: r.pageUrl,
+          tabId: r.tabId ?? null,
+          clientSeq: r.clientSeq ?? null,
         }));
         return;
       case 'viewport':
@@ -358,20 +432,39 @@ export class PrismaDataSource implements SessionDataSource {
         }));
         return;
       case 'activity': {
-        const rows = await this.prisma.activityLog.findMany({
-          where: { sessionId },
-          orderBy: { occurredAt: 'asc' },
-        });
+        // v2: row id and the envelope (CAP-81, Prompt B P1); v1 keys kept.
+        const rows = await this.raw(
+          'SELECT * FROM activity_logs WHERE session_id = $1::uuid ORDER BY occurred_at, id',
+          sessionId,
+        );
         for (const r of rows) {
+          const at = r.occurred_at as Date;
+          const recv = r.server_received_at as Date | null;
           yield {
-            wallMs: r.occurredAt.getTime(),
+            wallMs: at.getTime(),
+            id: r.id,
             action: r.action,
             metadata: r.metadata ?? null,
-            courseId: r.courseId ?? null,
-            moduleId: r.moduleId ?? null,
-            moduleItemId: r.moduleItemId ?? null,
-            interventionId: r.interventionId ?? null,
-            dialogueSessionId: r.dialogueSessionId ?? null,
+            courseId: r.course_id ?? null,
+            moduleId: r.module_id ?? null,
+            moduleItemId: r.module_item_id ?? null,
+            interventionId: r.intervention_id ?? null,
+            dialogueSessionId: r.dialogue_session_id ?? null,
+            assessmentId: r.assessment_id ?? null,
+            attemptId: r.attempt_id ?? null,
+            questionId: r.question_id ?? null,
+            clientEventId: r.client_event_id ?? null,
+            clientSeq: r.client_seq ?? null,
+            tabId: r.tab_id ?? null,
+            serverReceivedMs: recv ? recv.getTime() : null,
+            durationMs: r.duration_ms ?? null,
+            sourceChannel: r.source_channel ?? null,
+            appBuild: r.app_build ?? null,
+            consentScope: r.consent_scope ?? null,
+            slideKey: r.slide_key ?? null,
+            objectId: r.object_id ?? null,
+            contentVersion: r.content_version ?? null,
+            qualityCode: r.quality_code ?? null,
           };
         }
         return;
@@ -554,6 +647,19 @@ export class PrismaDataSource implements SessionDataSource {
             confidence: r.confidence,
             libraryVersion: r.libraryVersion,
             parameterSetVersion: r.parameterSetVersion,
+            // v2: provenance (CAP-69/80, Prompt B P4)
+            id: r.id,
+            detectionKey: r.detectionKey ?? null,
+            sourceActionIds: r.sourceActionIds,
+            sourceRefs: r.sourceRefs ?? [],
+            detail: r.detail ?? null,
+            computedValues: r.computedValues ?? null,
+            alternatives: r.alternatives ?? [],
+            evidenceClass: r.evidenceClass ?? null,
+            libraryHash: r.libraryHash ?? null,
+            parameterHash: r.parameterHash ?? null,
+            engineVersion: r.engineVersion ?? null,
+            computedAt: r.computedAt.toISOString(),
           };
         }
         return;
