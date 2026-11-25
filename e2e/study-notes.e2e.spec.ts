@@ -94,9 +94,11 @@ test('highlight, note, Notes tab, jump back, progress on the home page', async (
   await card.getByRole('link', { name: /Start/ }).click();
   await expect(page).toHaveURL(new RegExp(`/student/courses/${COURSE}\\?item=`));
 
-  // First visit: the privacy notice, then the theory slide.
+  // First visit, then the theory slide. The in-app privacy notice shows only
+  // when TEXT_CONSENT_IN_APP is on (default: consent is on the study form).
   await expect(page.getByText('Slide 1 of 3')).toBeVisible();
-  await page.getByRole('button', { name: 'Save my choices' }).click();
+  const consent = page.getByRole('button', { name: 'Save my choices' });
+  if (await consent.isVisible().catch(() => false)) await consent.click();
   await gotoSlide(page, 1);
   await expect(page.getByText('Missing context is the problem.')).toBeVisible();
 

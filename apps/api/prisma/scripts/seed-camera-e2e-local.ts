@@ -27,12 +27,14 @@ async function main() {
   const m = /^E2E_COURSE_ID=(.+)$/m.exec(fs.existsSync(ENV) ? fs.readFileSync(ENV, 'utf8') : '');
   if (!m) throw new Error(`E2E_COURSE_ID not found in ${ENV}: run seed:efa-e2e-local first`);
   const courseId = m[1]!.trim();
+  // --off: switch it off again (other e2e suites run without a camera).
+  const on = !process.argv.includes('--off');
   await prisma.recordingConfig.upsert({
     where: { courseId },
-    create: { courseId, isEnabled: true },
-    update: { isEnabled: true },
+    create: { courseId, isEnabled: on },
+    update: { isEnabled: on },
   });
-  console.log(`webcam recording enabled for course ${courseId}`);
+  console.log(`webcam recording ${on ? 'enabled' : 'disabled'} for course ${courseId}`);
 }
 
 main()

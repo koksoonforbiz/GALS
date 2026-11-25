@@ -1000,8 +1000,9 @@ export const ACTION_CATALOGUE = {
       form: 'string',
       kind: 'string',
       order: 'string',
-      sessionNo: 'number',
     },
+    // null for the pre-test and post-test (not tied to a session)
+    optional: { sessionNo: 'number' },
     observedN: 32,
   },
   KNOWLEDGE_TEST_ITEM_VIEWED: {

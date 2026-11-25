@@ -39,18 +39,20 @@ export function CameraGuard({
   }, []);
   const { problem: health } = useCameraHealth(stream, enabled && !signingOut);
   const problem = signingOut ? null : health;
-  const { track } = useActivityLog();
+  const { track, flush } = useActivityLog();
   const since = useRef<{ reason: Exclude<CameraProblem, null>; at: number } | null>(null);
 
   useEffect(() => {
     if (problem && !since.current) {
       since.current = { reason: problem, at: Date.now() };
       track('CAMERA_BLOCKED', { courseId, metadata: { reason: problem } });
+      void flush(); // send now: teachers see camera problems without the 30 s wait
     } else if (!problem && since.current) {
       track('CAMERA_RESTORED', {
         courseId,
         metadata: { reason: since.current.reason, blockedMs: Date.now() - since.current.at },
       });
+      void flush();
       since.current = null;
     }
   }, [problem]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -8,7 +8,7 @@ import {
   ReactNode,
 } from 'react';
 import { ActivityAction, ActivityEvent } from './types';
-import { DurableQueue, backoffMs } from '../capture/durableQueue';
+import { backoffMs, durableQueue } from '../capture/durableQueue';
 import { APP_BUILD, TAB_ID, newEventId, nextSeq } from '../capture/captureIds';
 import { currentUserId, decideOnInput, noteInput, setIdleTimeoutMs } from '../capture/sessionSync';
 import { T_IDLE_MS, lastInputAt } from '../capture/activeTime';
@@ -109,16 +109,13 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     sessionStorage.getItem(SESSION_KEY),
   );
   const sessionIdRef = useRef(sessionId);
-  const queueRef = useRef<DurableQueue<Queued> | null>(null);
-  if (!queueRef.current) {
-    queueRef.current = new DurableQueue<Queued>(
-      QUEUE_KEY,
-      (q) => q.event.clientEventId,
-      MAX_QUEUED_EVENTS,
-      TAB_ID,
-    );
-  }
-  const queue = queueRef.current;
+  // One queue per page load, shared by every mount of this provider.
+  const queue = durableQueue<Queued>(
+    QUEUE_KEY,
+    (q) => q.event.clientEventId,
+    MAX_QUEUED_EVENTS,
+    TAB_ID,
+  );
   const failures = useRef(0);
   const nextAttemptAt = useRef(0);
   const flushTimer = useRef<ReturnType<typeof setInterval> | null>(null);

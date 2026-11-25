@@ -24,6 +24,12 @@ test.use({
   // Optional: run on an installed browser (e.g. E2E_CHANNEL=msedge) instead
   // of Playwright's downloaded Chromium.
   ...(process.env.E2E_CHANNEL ? { channel: process.env.E2E_CHANNEL } : {}),
+  // The course records the webcam and blocks the page without a camera
+  // picture (CameraGuard): give Chromium its built-in fake camera.
+  permissions: ['camera', 'microphone'],
+  launchOptions: {
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+  },
 });
 test.skip(!LOGIN || !PASSWORD, 'set E2E_STUDENT_LOGIN and E2E_STUDENT_PASSWORD');
 
@@ -73,7 +79,30 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
   }, courseId);
   expect(consent).toBe(200);
   await page.goto(`/student/courses/${courseId}`);
-  await page.getByRole('button', { name: 'How Language Models See Text' }).click();
+  // The course runs eye tracking: skip its calibration screen if it shows.
+  const skipCalibration = page.getByRole('button', { name: 'Skip' });
+  if (
+    await skipCalibration.waitFor({ timeout: 8_000 }).then(
+      () => true,
+      () => false,
+    )
+  ) {
+    await skipCalibration.click();
+  }
+  // Learner prompts (goal card) sit bottom-left: close it so it covers nothing.
+  const goal = page.getByTestId('prompt-goal_card');
+  if (
+    await goal.waitFor({ timeout: 5_000 }).then(
+      () => true,
+      () => false,
+    )
+  ) {
+    await goal.getByRole('button', { name: 'Close' }).click();
+  }
+  // The course page may already have opened the first lesson.
+  if (!(await page.locator('.il-root').isVisible())) {
+    await page.getByRole('button', { name: 'How Language Models See Text' }).click();
+  }
   await expect(page.locator('.il-root')).toBeVisible();
 
   const batches: Array<{ events: Array<{ action: string; metadata?: Record<string, unknown> }> }> =
@@ -85,6 +114,18 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
       } catch {
         /* ignore */
       }
+    }
+  });
+  // Every batch must be stored: record the outcome of each one.
+  const outcomes: string[] = [];
+  page.on('response', async (res) => {
+    if (res.url().includes('/api/activity-log/batch') && res.request().method() === 'POST') {
+      outcomes.push(String(res.status()));
+    }
+  });
+  page.on('requestfailed', (req) => {
+    if (req.url().includes('/api/activity-log/batch')) {
+      outcomes.push(`failed:${req.failure()?.errorText ?? '?'}`);
     }
   });
 
@@ -155,6 +196,12 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
   await expect
     .poll(() => batches.flatMap((b) => b.events).length, { timeout: 15_000 })
     .toBeGreaterThan(10);
+  // Sent is not stored: the keepalive on navigation can be cut off; the next
+  // page load re-sends the queue from localStorage. Wait until the server
+  // has accepted it.
+  await expect
+    .poll(() => outcomes.filter((o) => o === '201').length, { timeout: 60_000 })
+    .toBeGreaterThan(0);
 
   const events = batches.flatMap((b) => b.events);
   const actions = new Set(events.map((e) => e.action));
@@ -177,6 +224,11 @@ test('Session 1: every interactive slide type gates, saves and logs', async ({ p
   ]) {
     expect(actions, a).toContain(a);
   }
-  // No learner text leaves the browser without text-capture consent.
-  for (const e of events) expect(e.metadata ?? {}).not.toHaveProperty('text');
+  // Consent is collected on the study consent form (2026-11-25), so the
+  // learner's answer text is recorded with the events (TEXT_CONSENT_IN_APP
+  // off). With the in-app panel on, the earlier PUT (all false) would strip it.
+  const withText = events.filter(
+    (e) => typeof (e.metadata as { text?: unknown })?.text === 'string',
+  );
+  expect(withText.length).toBeGreaterThan(0);
 });

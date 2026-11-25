@@ -315,7 +315,7 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | `KNOWLEDGE_TEST_ITEM_ANSWERED` | REF | client | instant |  | `attemptNo`: number, `changed`: boolean, `slot`: number, `type`: string | `chars`: number, `option`: string, `options`: array |
 | `KNOWLEDGE_TEST_ITEM_SKIPPED` | REF | client | instant |  | `slot`: number |  |
 | `KNOWLEDGE_TEST_ITEM_VIEWED` | REF | client | instant |  | `msFromOpen`: number, `slot`: number, `type`: string |  |
-| `KNOWLEDGE_TEST_OPENED` | REF | client | interval |  | `attemptId`: string, `form`: string, `kind`: string, `order`: string, `sessionNo`: number |  |
+| `KNOWLEDGE_TEST_OPENED` | REF | client | interval |  | `attemptId`: string, `form`: string, `kind`: string, `order`: string | `sessionNo`: number |
 | `KNOWLEDGE_TEST_SUBMITTED` | REF | server | interval |  | `attemptId`: string, `durationMs`: number, `form`: string, `kind`: string, `omitted`: number, `sessionNo` |  |
 
 ## G Course Notes tab / page highlights (study_notes)

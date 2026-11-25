@@ -38,6 +38,28 @@ const PERSIST_DELAY_MS = 500;
 const HEARTBEAT_MS = 15_000;
 const ABANDONED_AFTER_MS = 60_000;
 
+const instances = new Map<string, DurableQueue<unknown>>();
+
+/**
+ * The one queue for a prefix in this page load. Two instances on the same
+ * localStorage key would overwrite each other (the first adopts a closed
+ * tab's queue, the second starts empty and writes over it), so callers
+ * must get queues here, never with `new` in a React render.
+ */
+export function durableQueue<T>(
+  prefix: string,
+  idOf: (item: T) => string,
+  maxItems: number,
+  tabId: string,
+): DurableQueue<T> {
+  let q = instances.get(prefix) as DurableQueue<T> | undefined;
+  if (!q) {
+    q = new DurableQueue<T>(prefix, idOf, maxItems, tabId);
+    instances.set(prefix, q as DurableQueue<unknown>);
+  }
+  return q;
+}
+
 export class DurableQueue<T> {
   private items: T[] = [];
   private inFlight = new Set<string>();

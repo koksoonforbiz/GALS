@@ -9,7 +9,7 @@
  * API: about 8 requests a minute per learner in normal use, well inside the
  * per-learner telemetry budget (TelemetryRateGuard).
  */
-import { DurableQueue, backoffMs } from './durableQueue';
+import { type DurableQueue, backoffMs, durableQueue } from './durableQueue';
 import { TAB_ID, nextSeq } from './captureIds';
 
 export type StreamName = 'cursor' | 'clicks' | 'scroll' | 'keystrokes' | 'visibility' | 'clipboard';
@@ -50,7 +50,7 @@ const nextAttemptAt = new Map<StreamName, number>();
 function queue(stream: StreamName): DurableQueue<StreamItem> {
   let q = queues.get(stream);
   if (!q) {
-    q = new DurableQueue<StreamItem>(
+    q = durableQueue<StreamItem>(
       `gals.capture.${stream}.v1`,
       (it) => `${it.sid}:${it.e.tabId}:${it.e.clientSeq}`,
       CAP[stream],
