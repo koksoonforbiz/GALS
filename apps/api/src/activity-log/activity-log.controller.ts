@@ -1,3 +1,4 @@
+import { TelemetryRateGuard } from '../common/telemetry-rate.guard';
 import {
   Controller,
   Delete,
@@ -14,7 +15,7 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -33,7 +34,7 @@ import {
 } from './dto/log-event.dto';
 import type { IngestIssueParams } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
-import { TextConsentService } from '../governance/text-consent.service';
+import { TextConsentService, consentScope } from '../governance/text-consent.service';
 import type { UserRole } from '@ats/shared';
 
 interface RequestUser {
@@ -77,6 +78,8 @@ export class ActivityLogController {
    */
   @Post('batch')
   @Roles('student', 'teacher')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   async batchLog(
     @Body(new ZodValidationPipe(BatchEnvelopeSchema)) dto: BatchEnvelopeDto,
     @Request() req: { user: RequestUser },
@@ -113,8 +116,22 @@ export class ActivityLogController {
         });
       }
     }
+    // The browser's buffer overflowed (B3): it says how many it dropped.
+    if (dto.overflow) {
+      rejected.set('overflow', {
+        stream: 'activity_log',
+        kind: 'client_overflow',
+        sessionId: dto.sessionId,
+        userId: req.user.id,
+        action: null,
+        reason: `client buffer full since ${dto.overflow.sinceMs ?? 'unknown'}`,
+        eventCount: dto.overflow.dropped,
+      });
+    }
     if (rejected.size) {
-      const n = [...rejected.values()].reduce((a, i) => a + i.eventCount, 0);
+      const n = [...rejected.values()]
+        .filter((i) => i.kind === 'rejected')
+        .reduce((a, i) => a + i.eventCount, 0);
       this.logger.warn(`activity-log/batch: ${n}/${dto.events.length} events rejected`);
       await this.activityLogService.recordIngestIssues([...rejected.values()]);
     }
@@ -123,7 +140,7 @@ export class ActivityLogController {
     const events = this.textConsent
       ? await this.textConsent.stripUnconsentedText(req.user.id, valid)
       : valid;
-    const { inserted, failed } = await this.activityLogService.recordBatch(
+    const { inserted, failed, duplicates } = await this.activityLogService.recordBatch(
       events.map((e) => ({
         sessionId: dto.sessionId,
         userId: req.user.id,
@@ -138,9 +155,37 @@ export class ActivityLogController {
         dialogueSessionId: e.dialogueSessionId,
         interventionId: e.interventionId,
         metadata: e.metadata,
+        clientEventId: e.clientEventId,
+        clientSeq: e.clientSeq,
+        tabId: e.tabId,
+        durationMs: e.durationMs,
+        sourceChannel: e.sourceChannel,
+        appBuild: dto.appBuild,
+        consentScope: consentScope(),
+        slideKey: e.slideKey,
+        objectId: e.objectId,
+        contentVersion: e.contentVersion,
       })),
     );
-    return { ok: true, accepted: inserted, rejected: dto.events.length - valid.length, failed };
+    if (duplicates > 0) {
+      await this.activityLogService.recordIngestIssues([
+        {
+          stream: 'activity_log',
+          kind: 'duplicate',
+          sessionId: dto.sessionId,
+          userId: req.user.id,
+          reason: 'already stored (same clientEventId)',
+          eventCount: duplicates,
+        },
+      ]);
+    }
+    return {
+      ok: true,
+      accepted: inserted,
+      rejected: dto.events.length - valid.length,
+      failed,
+      duplicates,
+    };
   }
 
   /**

@@ -17,6 +17,11 @@ export function consentInApp(): boolean {
   return process.env.TEXT_CONSENT_IN_APP === 'true';
 }
 
+/** Which consent covers a row's text: stamped on each activity row (B2). */
+export function consentScope(): string {
+  return consentInApp() ? `in-app:${TEXT_CONSENT_NOTICE_VERSION}` : STUDY_FORM_NOTICE_VERSION;
+}
+
 const STUDY_FORM_DECISION: TextConsentDecision = {
   answerText: true,
   promptsAndOutputs: true,

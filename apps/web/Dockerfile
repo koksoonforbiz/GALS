@@ -83,6 +83,9 @@ EXPOSE 8080
 # deploy/nginx/templates by the image's envsubst entrypoint; only
 # ${GALS_*} variables are substituted (NGINX_ENVSUBST_FILTER).
 FROM web-src AS twodoor-build
+# Git SHA of the build, sent with each activity batch (Prompt B, B2).
+ARG APP_BUILD=unknown
+ENV APP_BUILD=$APP_BUILD
 RUN pnpm run build:student && pnpm run build:admin
 
 FROM nginx-base AS twodoor

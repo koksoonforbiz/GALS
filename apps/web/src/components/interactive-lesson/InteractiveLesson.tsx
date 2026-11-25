@@ -158,6 +158,17 @@ export function InteractiveLesson({
   }, [readOnly, lesson, consent]);
   // Consent collected on the study consent form: no in-app panel.
   const askInApp = consent?.noticeVersion !== STUDY_FORM_NOTICE_VERSION;
+  // DOM replay masks the answer fields only when consent is asked in the app
+  // and answer text was not agreed to (useSessionReplayRecorder).
+  const redactReplay = askInApp && consent?.answerText !== true;
+  useEffect(() => {
+    const root = document.documentElement;
+    if (redactReplay) root.dataset.replayRedact = 'on';
+    else delete root.dataset.replayRedact;
+    return () => {
+      delete root.dataset.replayRedact;
+    };
+  }, [redactReplay]);
 
   const saveConsent = async (choice: ConsentChoice) => {
     const cid = lessonCourseId ?? courseId;

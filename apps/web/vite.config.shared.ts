@@ -65,6 +65,8 @@ export function createDoorConfig(door: Door, build: DoorBuildOptions): UserConfi
     plugins,
     define: {
       __GALS_DOOR__: JSON.stringify(door),
+      // Git SHA of the build (docker --build-arg APP_BUILD), 'dev' locally.
+      __APP_BUILD__: JSON.stringify(process.env.APP_BUILD || 'dev'),
     },
     build: {
       outDir: build.outDir,

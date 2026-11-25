@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { api } from '../api';
+import { enqueue, flushStreams } from '../capture/streamQueues';
 
-const API_BASE = '/api';
 const FLUSH_INTERVAL_MS = 30_000;
 const CURSOR_THROTTLE_MS = 100;
 const SCROLL_THROTTLE_MS = 200;
@@ -55,22 +55,73 @@ function getTop10Resources(): object[] {
   }
 }
 
-function sendBeacon(path: string, body: object) {
-  try {
-    const token = localStorage.getItem('token');
-    // sendBeacon can't set Authorization header, fall back to fetch with keepalive
-    fetch(`${API_BASE}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify(body),
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    // Swallow errors on unload
+/** Typed text and clipboard text are kept up to this many characters. */
+const TEXT_CAP = 10_000;
+/** A typing burst ends after this pause, on blur, or at MAX_BURST_KEYS keys. */
+const BURST_IDLE_MS = 2_000;
+const MAX_BURST_KEYS = 500;
+
+type Editable = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
+
+/** The text field (input, textarea or rich-text editor) an event happened in. */
+function editableOf(el: EventTarget | null): Editable | null {
+  if (!(el instanceof HTMLElement)) return null;
+  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el;
+  if (el.isContentEditable) {
+    return (el.closest('[contenteditable="true"],[contenteditable=""]') as HTMLElement) ?? el;
   }
+  return null;
+}
+
+/** Password, one-time-code and payment fields: never record their keys or text. */
+function isSensitive(el: Editable): boolean {
+  if (el instanceof HTMLInputElement) {
+    if (['password', 'hidden'].includes(el.type)) return true;
+    const ac = (el.autocomplete || '').toLowerCase();
+    if (/(current-password|new-password|one-time-code|cc-)/.test(ac)) return true;
+  }
+  return el.closest('[data-no-capture]') !== null;
+}
+
+function fieldIdOf(el: Editable): string {
+  return (
+    (el as HTMLInputElement).id ||
+    (el as HTMLInputElement).name ||
+    el.getAttribute('data-field-id') ||
+    `field_${el.tagName}_${Array.from(el.parentElement?.children ?? []).indexOf(el)}`
+  );
+}
+
+function fieldKindOf(el: Editable): string {
+  if (el instanceof HTMLInputElement) return `input:${el.type || 'text'}`;
+  if (el instanceof HTMLTextAreaElement) return 'textarea';
+  return 'contenteditable';
+}
+
+function fieldText(el: Editable): string {
+  const v =
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value : el.innerText;
+  return (v ?? '').slice(0, TEXT_CAP);
+}
+
+/** Selected text for copy/cut, including a selection inside an input or textarea. */
+function selectedText(target: EventTarget | null): string {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    const { selectionStart: a, selectionEnd: b, value } = target;
+    if (a != null && b != null && b > a) return value.slice(a, b);
+  }
+  return window.getSelection()?.toString() ?? '';
+}
+
+interface Burst {
+  el: Editable;
+  sensitive: boolean;
+  count: number;
+  startTime: number;
+  lastTime: number;
+  longestGap: number;
+  keys: Array<{ k: string; t: number }>;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 // ─── Hook ───────────────────────────────────────────────
@@ -80,15 +131,8 @@ export function useInteractionLogger({
   userId,
   enabled = true,
 }: UseInteractionLoggerParams): { flushAll: () => Promise<void> } {
-  const cursorBuffer = useRef<any[]>([]);
-  const clickBuffer = useRef<any[]>([]);
-  const scrollBuffer = useRef<any[]>([]);
-  const keystrokeBuffer = useRef<any[]>([]);
-
-  // Keystroke tracking state
-  const keystrokeState = useRef<
-    Map<string, { count: number; lastTime: number; longestGap: number; startTime: number }>
-  >(new Map());
+  // Typing bursts in progress, per field (Collector 4).
+  const keystrokeState = useRef<Map<string, Burst>>(new Map());
 
   // Visibility tracking
   const hiddenAt = useRef<number>(0);
@@ -98,36 +142,11 @@ export function useInteractionLogger({
   const lastScrollTime = useRef(0);
   const resizeTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  const flush = useCallback(
-    async (path: string, buffer: React.MutableRefObject<any[]>, useBeacon = false) => {
-      if (buffer.current.length === 0) return;
-      const events = buffer.current.splice(0);
-      const body = { sessionId, userId, events };
-      if (useBeacon) {
-        sendBeacon(path, body);
-      } else {
-        try {
-          await api.post(path, body);
-        } catch {
-          // Re-add events on failure so next flush retries
-          buffer.current.unshift(...events);
-        }
-      }
-    },
-    [sessionId, userId],
-  );
-
-  const flushAll = useCallback(
-    async (useBeacon = false) => {
-      await Promise.all([
-        flush('/logs/cursor', cursorBuffer, useBeacon),
-        flush('/logs/clicks', clickBuffer, useBeacon),
-        flush('/logs/scroll', scrollBuffer, useBeacon),
-        flush('/logs/keystrokes', keystrokeBuffer, useBeacon),
-      ]);
-    },
-    [flush],
-  );
+  // Rows wait in persistent per-stream queues (lib/capture/streamQueues.ts)
+  // until the server has stored them; this sends them.
+  const flushAll = useCallback(async (useBeacon = false) => {
+    await flushStreams(useBeacon ? { keepalive: true } : { force: true });
+  }, []);
 
   useEffect(() => {
     if (!enabled || !sessionId || !userId) return;
@@ -190,7 +209,7 @@ export function useInteractionLogger({
       const now = Date.now();
       if (now - lastCursorTime.current < CURSOR_THROTTLE_MS) return;
       lastCursorTime.current = now;
-      cursorBuffer.current.push({
+      enqueue('cursor', sessionId, userId, {
         x: e.clientX,
         y: e.clientY,
         pageUrl: window.location.pathname,
@@ -204,7 +223,7 @@ export function useInteractionLogger({
 
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      clickBuffer.current.push({
+      enqueue('clicks', sessionId, userId, {
         x: e.clientX,
         y: e.clientY,
         pageUrl: window.location.pathname,
@@ -221,7 +240,7 @@ export function useInteractionLogger({
       const now = Date.now();
       if (now - lastScrollTime.current < SCROLL_THROTTLE_MS) return;
       lastScrollTime.current = now;
-      scrollBuffer.current.push({
+      enqueue('scroll', sessionId, userId, {
         scrollY: window.scrollY,
         scrollPercent: computeScrollPercent(),
         pageUrl: window.location.pathname,
@@ -230,90 +249,98 @@ export function useInteractionLogger({
     };
     window.addEventListener('scroll', onScroll);
 
-    // ─── Collector 4: Keystroke Metrics ───────────────
+    // ─── Collector 4: Keystrokes ──────────────────────
+    //
+    // One row per typing burst in a field: the keys pressed with their ms
+    // offsets, and the field's text when the burst ends (PI decision,
+    // 2026-11-25: record keystroke contents). A burst ends after a 2 s
+    // pause, on blur, or at 500 keys. Rows are queued and sent with the
+    // 30 s batch, never one request per key. Password and one-time-code
+    // fields record counts and timings only.
+
+    const endBurst = (fieldId: string) => {
+      const b = keystrokeState.current.get(fieldId);
+      if (!b) return;
+      if (b.timer) clearTimeout(b.timer);
+      keystrokeState.current.delete(fieldId);
+      if (b.count === 0) return;
+      const durationSec = Math.max(0.001, (b.lastTime - b.startTime) / 1000);
+      const wpm = (b.count / 5 / durationSec) * 60;
+      enqueue('keystrokes', sessionId, userId, {
+        fieldId,
+        keystrokeCount: b.count,
+        pauseDurationMs: b.longestGap,
+        typingSpeedWPM: Math.round(wpm * 10) / 10,
+        timestamp: b.lastTime,
+        burstStart: b.startTime,
+        fieldKind: fieldKindOf(b.el),
+        ...(b.sensitive ? {} : { keys: b.keys, text: fieldText(b.el) }),
+      });
+    };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target || (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA')) return;
-      const fieldId =
-        (target as HTMLInputElement).id ||
-        (target as HTMLInputElement).name ||
-        `field_${target.tagName}_${Array.from(target.parentElement?.children ?? []).indexOf(target)}`;
+      const el = editableOf(e.target);
+      if (!el) return;
+      const fieldId = fieldIdOf(el);
       const now = Date.now();
-      const state = keystrokeState.current.get(fieldId) || {
-        count: 0,
-        lastTime: now,
-        longestGap: 0,
-        startTime: now,
-      };
-      const gap = now - state.lastTime;
-      if (gap > state.longestGap && state.count > 0) state.longestGap = gap;
-      state.count++;
-      state.lastTime = now;
-      keystrokeState.current.set(fieldId, state);
+      let b = keystrokeState.current.get(fieldId);
+      if (!b) {
+        b = {
+          el,
+          sensitive: isSensitive(el),
+          count: 0,
+          startTime: now,
+          lastTime: now,
+          longestGap: 0,
+          keys: [],
+          timer: null,
+        };
+        keystrokeState.current.set(fieldId, b);
+      }
+      const gap = now - b.lastTime;
+      if (gap > b.longestGap && b.count > 0) b.longestGap = gap;
+      b.count++;
+      b.lastTime = now;
+      if (!b.sensitive) b.keys.push({ k: e.key, t: now - b.startTime });
+      if (b.timer) clearTimeout(b.timer);
+      if (b.count >= MAX_BURST_KEYS) endBurst(fieldId);
+      else b.timer = setTimeout(() => endBurst(fieldId), BURST_IDLE_MS);
     };
 
     const onBlur = (e: FocusEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target || (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA')) return;
-      const fieldId =
-        (target as HTMLInputElement).id ||
-        (target as HTMLInputElement).name ||
-        `field_${target.tagName}_${Array.from(target.parentElement?.children ?? []).indexOf(target)}`;
-      const state = keystrokeState.current.get(fieldId);
-      if (!state || state.count === 0) return;
-      const durationSec = Math.max(0.001, (Date.now() - state.startTime) / 1000);
-      const estimatedWords = state.count / 5;
-      const wpm = (estimatedWords / durationSec) * 60;
-      keystrokeBuffer.current.push({
-        fieldId,
-        keystrokeCount: state.count,
-        pauseDurationMs: state.longestGap,
-        typingSpeedWPM: Math.round(wpm * 10) / 10,
-        timestamp: Date.now(),
-      });
-      keystrokeState.current.delete(fieldId);
+      const el = editableOf(e.target);
+      if (el) endBurst(fieldIdOf(el));
     };
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('blur', onBlur, true);
 
     // ─── Collector 5: Page Visibility ─────────────────
+    //
+    // Queued like every stream (retried, deduped); a hidden page also
+    // flushes everything with keepalive.
+
+    const postVisibility = (
+      visibleState: string,
+      timestamp: number,
+      hiddenDurationMs: number | null,
+    ) =>
+      enqueue('visibility', sessionId, userId, {
+        visibleState,
+        pageUrl: window.location.pathname,
+        timestamp,
+        hiddenDurationMs,
+      });
 
     const onVisibilityChange = () => {
       const now = Date.now();
       if (document.visibilityState === 'hidden') {
         hiddenAt.current = now;
-        api
-          .post('/logs/visibility', {
-            sessionId,
-            userId,
-            events: [
-              {
-                visibleState: 'hidden',
-                pageUrl: window.location.pathname,
-                timestamp: now,
-                hiddenDurationMs: null,
-              },
-            ],
-          })
-          .catch(() => {});
+        for (const id of [...keystrokeState.current.keys()]) endBurst(id);
+        postVisibility('hidden', now, null);
+        void flushStreams({ keepalive: true });
       } else {
-        const duration = hiddenAt.current ? now - hiddenAt.current : null;
-        api
-          .post('/logs/visibility', {
-            sessionId,
-            userId,
-            events: [
-              {
-                visibleState: 'visible',
-                pageUrl: window.location.pathname,
-                timestamp: now,
-                hiddenDurationMs: duration,
-              },
-            ],
-          })
-          .catch(() => {});
+        postVisibility('visible', now, hiddenAt.current ? now - hiddenAt.current : null);
       }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
@@ -324,20 +351,6 @@ export function useInteractionLogger({
     // inattention interval; the next 'visible' row closes it.
     // (Prompting-course plan, PHASE0_DISCOVERY.md §9 #55.)
     const blurredAt = { current: null as number | null };
-    const postVisibility = (
-      visibleState: string,
-      timestamp: number,
-      hiddenDurationMs: number | null,
-    ) =>
-      api
-        .post('/logs/visibility', {
-          sessionId,
-          userId,
-          events: [
-            { visibleState, pageUrl: window.location.pathname, timestamp, hiddenDurationMs },
-          ],
-        })
-        .catch(() => {});
     const onWindowBlur = () => {
       // Defer: focus moving into an in-page iframe also blurs the window.
       window.setTimeout(() => {
@@ -357,59 +370,27 @@ export function useInteractionLogger({
     window.addEventListener('blur', onWindowBlur);
     window.addEventListener('focus', onWindowFocus);
 
-    // ─── Collector 6: Clipboard Tracker ───────────────
+    // ─── Collector 6: Clipboard ───────────────────────
+    //
+    // Copy, cut and paste with their text (PI decision, 2026-11-25), capped
+    // at 10,000 characters; textLength is always the full length. Nothing
+    // from password fields.
 
-    const onCopy = (e: ClipboardEvent) => {
-      api
-        .post('/logs/clipboard', {
-          sessionId,
-          userId,
-          events: [
-            {
-              action: 'copy',
-              textLength: window.getSelection()?.toString().length ?? 0,
-              sourceElement: buildElementTarget(e.target),
-              pageUrl: window.location.pathname,
-              timestamp: Date.now(),
-            },
-          ],
-        })
-        .catch(() => {});
+    const clip = (action: 'copy' | 'cut' | 'paste', e: ClipboardEvent, text: string) => {
+      const el = editableOf(e.target);
+      const sensitive = el ? isSensitive(el) : false;
+      enqueue('clipboard', sessionId, userId, {
+        action,
+        textLength: text.length,
+        sourceElement: buildElementTarget(e.target),
+        pageUrl: window.location.pathname,
+        timestamp: Date.now(),
+        ...(sensitive || !text ? {} : { text: text.slice(0, TEXT_CAP) }),
+      });
     };
-    const onCut = (e: ClipboardEvent) => {
-      api
-        .post('/logs/clipboard', {
-          sessionId,
-          userId,
-          events: [
-            {
-              action: 'cut',
-              textLength: window.getSelection()?.toString().length ?? 0,
-              sourceElement: buildElementTarget(e.target),
-              pageUrl: window.location.pathname,
-              timestamp: Date.now(),
-            },
-          ],
-        })
-        .catch(() => {});
-    };
-    const onPaste = (e: ClipboardEvent) => {
-      api
-        .post('/logs/clipboard', {
-          sessionId,
-          userId,
-          events: [
-            {
-              action: 'paste',
-              textLength: e.clipboardData?.getData('text').length ?? 0,
-              sourceElement: buildElementTarget(e.target),
-              pageUrl: window.location.pathname,
-              timestamp: Date.now(),
-            },
-          ],
-        })
-        .catch(() => {});
-    };
+    const onCopy = (e: ClipboardEvent) => clip('copy', e, selectedText(e.target));
+    const onCut = (e: ClipboardEvent) => clip('cut', e, selectedText(e.target));
+    const onPaste = (e: ClipboardEvent) => clip('paste', e, e.clipboardData?.getData('text') ?? '');
     window.addEventListener('copy', onCopy);
     window.addEventListener('cut', onCut);
     window.addEventListener('paste', onPaste);
@@ -478,15 +459,19 @@ export function useInteractionLogger({
     // ─── Periodic Flush ───────────────────────────────
 
     const flushInterval = setInterval(() => {
-      flushAll(false);
+      void flushStreams();
     }, FLUSH_INTERVAL_MS);
+    // Rows left from an earlier page load (closed tab, crash, offline).
+    void flushStreams();
 
     // ─── Unload Flush ─────────────────────────────────
 
     const onBeforeUnload = () => {
-      flushAll(true);
+      for (const id of [...keystrokeState.current.keys()]) endBurst(id);
+      void flushStreams({ keepalive: true });
     };
     window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', onBeforeUnload);
 
     // ─── Cleanup ──────────────────────────────────────
 
@@ -505,12 +490,14 @@ export function useInteractionLogger({
       window.removeEventListener('resize', onResize);
       window.removeEventListener('orientationchange', onResize);
       window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', onBeforeUnload);
+      for (const id of [...keystrokeState.current.keys()]) endBurst(id);
       clearInterval(flushInterval);
       clearTimeout(resizeTimer.current);
       window.onerror = null;
       window.onunhandledrejection = null;
     };
-  }, [enabled, sessionId, userId, flush, flushAll]);
+  }, [enabled, sessionId, userId]);
 
   if (!enabled) {
     return { flushAll: async () => {} };

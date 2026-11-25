@@ -20,12 +20,24 @@ export interface RecordEventParams {
   interventionId?: string | null;
 
   metadata?: Record<string, unknown> | null;
+
+  // Envelope (Prompt B, B2)
+  clientEventId?: string | null;
+  clientSeq?: number | null;
+  tabId?: string | null;
+  durationMs?: number | null;
+  sourceChannel?: string | null;
+  appBuild?: string | null;
+  consentScope?: string | null;
+  slideKey?: string | null;
+  objectId?: string | null;
+  contentVersion?: string | null;
 }
 
 /** Data that reached the API but was not stored (see IngestIssue). */
 export interface IngestIssueParams {
   stream: string;
-  kind: 'rejected' | 'insert_failed' | 'dropped_escape';
+  kind: 'rejected' | 'insert_failed' | 'dropped_escape' | 'client_overflow' | 'duplicate';
   sessionId?: string | null;
   userId?: string | null;
   action?: string | null;
@@ -48,6 +60,9 @@ export function payloadText(events: unknown[] | undefined): string | null {
     return null;
   }
 }
+
+/** The API build (git SHA), set at image build time; stamped on rows the client didn't stamp. */
+export const APP_BUILD = process.env.APP_BUILD || null;
 
 /** Prisma errors that mean "the database is not reachable": retry later. */
 const UNAVAILABLE_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017', 'P2024']);
@@ -110,11 +125,14 @@ export class ActivityLogService {
    * 503, so the client keeps the batch and retries. When a row is refused
    * (one bad row fails the whole createMany), the rows are inserted one by
    * one and every refused row is recorded in `ingest_issues`.
+   *
+   * Idempotent (B3): a row whose (sessionId, clientEventId) is already stored
+   * is skipped and counted as a duplicate, so retries never double a row.
    */
   async recordBatch(
     events: Array<RecordEventParams>,
-  ): Promise<{ inserted: number; failed: number }> {
-    if (events.length === 0) return { inserted: 0, failed: 0 };
+  ): Promise<{ inserted: number; failed: number; duplicates: number }> {
+    if (events.length === 0) return { inserted: 0, failed: 0, duplicates: 0 };
     const rows = events.map((e) => ({
       sessionId: e.sessionId,
       userId: e.userId,
@@ -129,10 +147,20 @@ export class ActivityLogService {
       dialogueSessionId: e.dialogueSessionId ?? null,
       interventionId: e.interventionId ?? null,
       metadata: (e.metadata as Prisma.InputJsonValue) ?? Prisma.DbNull,
+      clientEventId: e.clientEventId ?? null,
+      clientSeq: e.clientSeq ?? null,
+      tabId: e.tabId ?? null,
+      durationMs: e.durationMs ?? null,
+      sourceChannel: e.sourceChannel ?? null,
+      appBuild: e.appBuild ?? APP_BUILD,
+      consentScope: e.consentScope ?? null,
+      slideKey: e.slideKey ?? null,
+      objectId: e.objectId ?? null,
+      contentVersion: e.contentVersion ?? null,
     }));
     try {
-      const r = await this.prisma.activityLog.createMany({ data: rows });
-      return { inserted: r.count, failed: 0 };
+      const r = await this.prisma.activityLog.createMany({ data: rows, skipDuplicates: true });
+      return { inserted: r.count, failed: 0, duplicates: rows.length - r.count };
     } catch (err: unknown) {
       if (isDbUnavailable(err)) {
         this.logger.error(`Activity log store unavailable: ${errorReason(err)}`);
@@ -141,12 +169,18 @@ export class ActivityLogService {
       this.logger.warn(`Batch insert refused (${errorReason(err)}), inserting rows one by one`);
     }
     let inserted = 0;
+    let duplicates = 0;
     const failures = new Map<string, IngestIssueParams>();
     for (const row of rows) {
       try {
         await this.prisma.activityLog.create({ data: row });
         inserted++;
       } catch (err: unknown) {
+        // Already stored (same session + clientEventId): a retry, not a loss.
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          duplicates++;
+          continue;
+        }
         // Unreachable before anything was stored: let the client retry all.
         if (isDbUnavailable(err) && inserted === 0) {
           throw new ServiceUnavailableException('Activity log store unavailable, retry later');
@@ -180,7 +214,7 @@ export class ActivityLogService {
       );
       await this.recordIngestIssues([...failures.values()]);
     }
-    return { inserted, failed: rows.length - inserted };
+    return { inserted, failed: rows.length - inserted - duplicates, duplicates };
   }
 
   /** Record data that was not stored. Never throws (it is the last resort). */

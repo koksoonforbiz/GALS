@@ -7,3 +7,4 @@ export { sanitizeForLog } from './log-sanitizer';
 export { resolveEncryptionSecret } from './encryption-key';
 export { DoorGuard, PublicDoor, PrivateDoor, requestDoor, DOOR_KEY, DOOR_HEADER } from './door';
 export type { RequestDoor, DoorPolicy } from './door';
+export { TelemetryRateGuard, TELEMETRY_LIMIT_PER_MIN } from './telemetry-rate.guard';

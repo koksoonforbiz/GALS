@@ -1640,6 +1640,10 @@ model StudentSession {
   ipAddress String? @map("ip_address")
   userAgent String? @map("user_agent")
 
+  /// serverReceiveMs - client wallClockMs at the sync anchor (B4): add it to
+  /// client timestamps to put them on the server clock.
+  clockOffsetMs Int? @map("clock_offset_ms")
+
   activityLogs ActivityLog[]
   summary      SessionSummary?
 
@@ -1696,11 +1700,49 @@ model ActivityLog {
   // Free-form JSON payload — action-specific detail
   metadata Json?
 
+  // Event envelope (Prompt B, B2). Null on rows written before 2026-11-26.
+  /// Client-generated id; with sessionId it makes ingest idempotent.
+  clientEventId    String?   @map("client_event_id") @db.Uuid
+  /// Monotonic per session x tab (page load); gaps = lost events.
+  clientSeq        Int?      @map("client_seq")
+  tabId            String?   @map("tab_id")
+  serverReceivedAt DateTime? @default(now()) @map("server_received_at") @db.Timestamptz
+  durationMs       Int?      @map("duration_ms")
+  sourceChannel    String?   @map("source_channel")
+  appBuild         String?   @map("app_build")
+  consentScope     String?   @map("consent_scope")
+  qualityCode      String?   @map("quality_code")
+  slideKey         String?   @map("slide_key")
+  objectId         String?   @map("object_id")
+  contentVersion   String?   @map("content_version")
+
+  @@unique([sessionId, clientEventId])
   @@index([sessionId])
   @@index([userId, occurredAt])
   @@index([userId, action])
   @@index([occurredAt])
+  @@index([sessionId, tabId, clientSeq])
   @@map("activity_logs")
+}
+
+/// Capture quality per session (Prompt B, B4): sequence gaps, duplicates and
+/// out-of-order arrivals per stream and tab. Rewritten for a session each time
+/// it is analysed (on close, and again when late events arrive).
+model CaptureQuality {
+  id         String   @id @default(uuid()) @db.Uuid
+  sessionId  String   @map("session_id") @db.Uuid
+  /// activity_log | cursor_logs | click_logs | ...
+  stream     String
+  tabId      String?  @map("tab_id")
+  /// gap | duplicate | out_of_order
+  kind       String
+  fromSeq    Int?     @map("from_seq")
+  toSeq      Int?     @map("to_seq")
+  count      Int
+  detectedAt DateTime @default(now()) @map("detected_at") @db.Timestamptz
+
+  @@index([sessionId])
+  @@map("capture_quality")
 }
 
 /// Data that reached the API but was not stored (CAP-40/41: no silent loss).
@@ -1712,7 +1754,7 @@ model IngestIssue {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
   /// activity_log | click_logs | cursor_logs | scroll_logs | ...
   stream     String
-  /// rejected (failed validation) | insert_failed | dropped_escape
+  /// rejected (failed validation) | insert_failed | dropped_escape | client_overflow | duplicate
   kind       String
   sessionId  String?  @map("session_id") @db.Uuid
   userId     String?  @map("user_id") @db.Uuid
@@ -1999,6 +2041,11 @@ model cursor_logs {
   timestamp     BigInt
   batchId       String?
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId     String?
+  clientSeq Int?
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 
@@ -2013,6 +2060,11 @@ model click_logs {
   elementText     String?
   timestamp       BigInt
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId     String?
+  clientSeq Int?
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 
@@ -2025,6 +2077,11 @@ model scroll_logs {
   pageUrl       String
   timestamp     BigInt
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId     String?
+  clientSeq Int?
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 
@@ -2038,6 +2095,17 @@ model keystroke_logs {
   typingSpeedWPM  Float?
   timestamp       BigInt
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId      String?
+  clientSeq  Int?
+  /// Typed burst for this field: keys with ms offsets [{k,t}], and the field text
+  /// at the end of the burst (capped at 10,000 chars). Never for password fields.
+  keys       Json?
+  text       String? @db.Text
+  burstStart BigInt?
+  fieldKind  String?
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 
@@ -2050,6 +2118,11 @@ model visibility_logs {
   timestamp        BigInt
   hiddenDurationMs Int?
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId     String?
+  clientSeq Int?
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 
@@ -2063,6 +2136,13 @@ model clipboard_logs {
   pageUrl       String
   timestamp     BigInt
 
+  /// Page load id and per-stream sequence (Prompt B, B2/B4); null before 2026-11-26.
+  tabId     String?
+  clientSeq Int?
+  /// Copied, cut or pasted text, capped at 10,000 chars (textLength is the full length).
+  text      String? @db.Text
+
+  @@unique([sessionId, tabId, clientSeq])
   @@index([sessionId, timestamp])
 }
 

@@ -1,3 +1,5 @@
+import { TelemetryRateGuard } from '../common/telemetry-rate.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -46,6 +48,8 @@ export class WebgazerController {
 
   @Post('logs')
   @Roles('student')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   async bulkCreateLogs(@Request() req: { user: RequestUser }, @Body() dto: WebgazerBatchDto) {
     await this.webgazerService.bulkCreateLogs(
       req.user.id,

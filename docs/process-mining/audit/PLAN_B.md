@@ -1,6 +1,6 @@
 # PLAN_B: Capture completeness (Prompt B)
 
-Status: **draft for PI approval** (2026-11-25). No Prompt B code is written until this plan is approved.
+Status: **approved by the PI on 2026-11-25**, with the answers in §6.
 
 Inputs: `CAPTURE_AUDIT.md` (gap register A9, plan A10, PI decisions), `action_catalogue.csv`, `STUDIO_ARCHITECTURE.md`, and Prompt B in `gals-pm-prompts/`.
 
@@ -21,7 +21,7 @@ Prompt B's ground rules are followed except where the PI decided otherwise:
 | Mode B scripted test                                             | Mode B is not in the study                                                            | CAP-20 and CAP-31 are deferred. The Mode B e2e test (B10.3) is dropped.                                                                                                           |
 | Never deploy to lithium                                          | The PI deploys by saying "deploy"                                                     | Lithium is only touched after an explicit "deploy" (backup, tags, migrations, health checks), as for B0.                                                                          |
 
-**Unchanged:** keystroke contents and clipboard contents are still never stored. Only counts, lengths and timings are kept (see question Q1).
+**Keystroke and clipboard contents are recorded too (Q1).** This is subject to the rate limits in P1: typed text is batched per field (not one request per key), and clipboard text is capped per event. See §6.
 
 ---
 
@@ -291,14 +291,17 @@ These are on by default for the study course. Draft wording, plain and short, no
 
 ---
 
-## 6. Questions before I start
+## 6. PI answers (2026-11-25)
 
-- **Q1. Keystroke and clipboard contents.** "Record everything" could also mean storing what students type key by key, and what they copy and paste. My recommendation is to keep the current rule: counts, lengths and timings only, not the contents. Answers they submit and chat they send are already kept in full. Storing raw keystrokes or clipboard contents is unusual in an ethics application and adds little for process mining.
-- **Q2. Affordance timing.** Switching these on changes what students see in the middle of data collection. Should they start for all current students now, or only for students who start the course from now on? Either way, the switch-on time is logged so analysis can split before and after.
-- **Q3. Rule fixes in v2.1.** Are the fixes in §3 P4 item 2 the right set? Anything you don't want changed stays recorded only, in `RULE_ISSUES.md`.
-- **Q4. Affordance wording.** Is the wording in §5 OK, or will you send your own?
-
----
+- **Q1. Keystroke and clipboard contents: record them**, provided the request rate stays under control. How P1 does this:
+  - Keystrokes are buffered in the browser and sent as text bursts per field: the characters typed, the keys and timings, at most one burst per field every 2 s.
+  - They travel in the existing 30 s keystroke batch. There is no request per key.
+  - Clipboard copy, cut and paste events carry the text, capped at 10,000 characters per event (the length is always kept).
+  - Server side: per-session caps (events per minute, bytes per batch) on the stream routes. Anything over a cap is kept in `ingest_issues`, so it is visible and nothing is lost silently.
+  - Capture health reports the rates. Passwords and login fields are never captured.
+- **Q2. Affordances: switch them on for everyone now.** The switch-on time is logged per course.
+- **Q3. Rule fixes: as recommended** (§3 P4 item 2).
+- **Q4. Affordance wording: approved** (§5).
 
 ## 7. Acceptance (from Prompt B, adjusted for the PI's decisions)
 

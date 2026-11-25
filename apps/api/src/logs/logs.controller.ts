@@ -1,4 +1,6 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { TelemetryRateGuard } from '../common/telemetry-rate.guard';
+import { SkipThrottle } from '@nestjs/throttler';
+import { Controller, Post, Body, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -16,7 +18,9 @@ import type { CreateReplaySnapshotBatchDto } from './dto/create-replay-snapshot-
 import type { SyncAnchorDto } from './dto/sync-anchor.dto';
 
 @Controller('logs')
-@UseGuards(JwtAuthGuard, RolesGuard)
+// Learner telemetry: per-user budget instead of the per-IP global limit.
+@SkipThrottle()
+@UseGuards(JwtAuthGuard, RolesGuard, TelemetryRateGuard)
 @Roles('student', 'teacher')
 export class LogsController {
   constructor(private readonly logsService: LogsService) {}
@@ -24,32 +28,47 @@ export class LogsController {
   // ─── Batch Endpoints ──────────────────────────────────
 
   @Post('cursor')
-  batchCursor(@Body() dto: CreateCursorBatchDto) {
+  async batchCursor(@Body() dto: CreateCursorBatchDto, @Request() req: { user: { id: string } }) {
+    await this.logsService.noteOverflow('cursor_logs', own(dto, req));
     return this.logsService.batchCursor(dto);
   }
 
   @Post('clicks')
-  batchClicks(@Body() dto: CreateClickBatchDto) {
+  async batchClicks(@Body() dto: CreateClickBatchDto, @Request() req: { user: { id: string } }) {
+    await this.logsService.noteOverflow('click_logs', own(dto, req));
     return this.logsService.batchClicks(dto);
   }
 
   @Post('scroll')
-  batchScroll(@Body() dto: CreateScrollBatchDto) {
+  async batchScroll(@Body() dto: CreateScrollBatchDto, @Request() req: { user: { id: string } }) {
+    await this.logsService.noteOverflow('scroll_logs', own(dto, req));
     return this.logsService.batchScroll(dto);
   }
 
   @Post('keystrokes')
-  batchKeystrokes(@Body() dto: CreateKeystrokeBatchDto) {
+  async batchKeystrokes(
+    @Body() dto: CreateKeystrokeBatchDto,
+    @Request() req: { user: { id: string } },
+  ) {
+    await this.logsService.noteOverflow('keystroke_logs', own(dto, req));
     return this.logsService.batchKeystrokes(dto);
   }
 
   @Post('visibility')
-  batchVisibility(@Body() dto: CreateVisibilityBatchDto) {
+  async batchVisibility(
+    @Body() dto: CreateVisibilityBatchDto,
+    @Request() req: { user: { id: string } },
+  ) {
+    await this.logsService.noteOverflow('visibility_logs', own(dto, req));
     return this.logsService.batchVisibility(dto);
   }
 
   @Post('clipboard')
-  batchClipboard(@Body() dto: CreateClipboardBatchDto) {
+  async batchClipboard(
+    @Body() dto: CreateClipboardBatchDto,
+    @Request() req: { user: { id: string } },
+  ) {
+    await this.logsService.noteOverflow('clipboard_logs', own(dto, req));
     return this.logsService.batchClipboard(dto);
   }
 
@@ -81,4 +100,15 @@ export class LogsController {
   upsertSyncAnchor(@Body() dto: SyncAnchorDto) {
     return this.logsService.upsertSyncAnchor(dto);
   }
+}
+
+/**
+ * Stream rows are filed under the userId in the body: it must be the signed-in
+ * user. This refuses spoofing, and rows a different login left queued in this
+ * browser (the client then drops them rather than mis-attribute them).
+ */
+function own<T extends { userId: string }>(dto: T, req: { user: { id: string } }): T {
+  if (dto.userId !== req.user.id)
+    throw new ForbiddenException('userId does not match the signed-in user');
+  return dto;
 }

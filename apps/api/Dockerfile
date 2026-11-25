@@ -38,6 +38,9 @@ RUN pnpm exec nest build
 
 FROM base AS production
 ENV NODE_ENV=production
+# Git SHA of the build, stamped on activity rows (Prompt B, B2).
+ARG APP_BUILD=unknown
+ENV APP_BUILD=$APP_BUILD
 # node_modules from the BUILD stage, not deps: `prisma generate` writes the
 # client into node_modules/.pnpm/@prisma+client…/ (pnpm layout — there is
 # no node_modules/.prisma to copy separately), so only the post-generate

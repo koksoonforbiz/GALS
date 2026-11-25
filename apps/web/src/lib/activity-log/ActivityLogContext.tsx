@@ -8,6 +8,8 @@ import {
   ReactNode,
 } from 'react';
 import { ActivityAction, ActivityEvent } from './types';
+import { DurableQueue, backoffMs } from '../capture/durableQueue';
+import { APP_BUILD, TAB_ID, newEventId, nextSeq } from '../capture/captureIds';
 
 interface ActivityLogContextValue {
   sessionId: string | null;
@@ -37,14 +39,32 @@ export const ACTIVITY_FLUSH_EVENT = 'ats:activity-flush';
 const MAX_EVENTS_PER_BATCH = 500; // server DTO limit (log-event.dto.ts)
 // keepalive bodies are capped by the browser at ~64 KB in total.
 const MAX_KEEPALIVE_BYTES = 60_000;
+/** Events kept in the browser while the server can't be reached. */
+const MAX_QUEUED_EVENTS = 3_000;
+const QUEUE_KEY = 'gals.capture.activity.v1';
+
+/**
+ * A queued event: the event with its envelope (Prompt B, B2), plus the
+ * session it belongs to. Events tracked before a session exists (login page)
+ * get the next session; events never move to a later session once they
+ * have one (they are sent with their own session id).
+ */
+interface Queued {
+  sid: string | null;
+  event: ActivityEvent & {
+    clientEventId: string;
+    clientSeq?: number;
+    tabId: string;
+  };
+}
 
 /** Split into batches the server (≤500 events) and, for keepalive, the browser accept. */
-function chunk(events: ActivityEvent[], maxBytes: number): ActivityEvent[][] {
-  const out: ActivityEvent[][] = [];
-  let cur: ActivityEvent[] = [];
+function chunk(events: Queued[], maxBytes: number): Queued[][] {
+  const out: Queued[][] = [];
+  let cur: Queued[] = [];
   let bytes = 0;
   for (const e of events) {
-    const size = JSON.stringify(e).length + 1;
+    const size = JSON.stringify(e.event).length + 1;
     if (cur.length && (cur.length >= MAX_EVENTS_PER_BATCH || bytes + size > maxBytes)) {
       out.push(cur);
       cur = [];
@@ -57,9 +77,13 @@ function chunk(events: ActivityEvent[], maxBytes: number): ActivityEvent[][] {
   return out;
 }
 
-/** A 4xx other than auth/timeout/rate-limit will fail again: drop it rather than block the queue. */
+/**
+ * A 4xx other than auth/timeout/rate-limit will fail again: drop it rather
+ * than block the queue. 403/404 mean the session is not this user's (events
+ * left by another login on this browser), which retrying can't fix either.
+ */
 function isPermanentRejection(status: number): boolean {
-  return status >= 400 && status < 500 && ![401, 403, 408, 429].includes(status);
+  return status >= 400 && status < 500 && ![401, 408, 429].includes(status);
 }
 
 interface Props {
@@ -72,21 +96,43 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     sessionStorage.getItem(SESSION_KEY),
   );
   const sessionIdRef = useRef(sessionId);
-  const buffer = useRef<ActivityEvent[]>([]);
+  const queueRef = useRef<DurableQueue<Queued> | null>(null);
+  if (!queueRef.current) {
+    queueRef.current = new DurableQueue<Queued>(
+      QUEUE_KEY,
+      (q) => q.event.clientEventId,
+      MAX_QUEUED_EVENTS,
+      TAB_ID,
+    );
+  }
+  const queue = queueRef.current;
+  const failures = useRef(0);
+  const nextAttemptAt = useRef(0);
   const flushTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /** Give session-less events (tracked before login) the current session. */
+  const adoptOrphans = useCallback(
+    (sid: string | null) => {
+      if (!sid) return;
+      queue.update((q) =>
+        q.sid ? q : { sid, event: { ...q.event, clientSeq: nextSeq('activity', sid) } },
+      );
+    },
+    [queue],
+  );
 
   // Keep ref in sync with state
   useEffect(() => {
     sessionIdRef.current = sessionId;
-  }, [sessionId]);
+    adoptOrphans(sessionId);
+  }, [sessionId, adoptOrphans]);
 
-  // Listen for session changes dispatched by initActivitySession / clearActivitySession
+  // Listen for session changes dispatched by initActivitySession / clearActivitySession.
+  // Queued events keep their own session (logout flushes them first, see
+  // ACTIVITY_FLUSH_EVENT); anything still queued is sent later with it.
   useEffect(() => {
     const handler = () => {
       const next = sessionStorage.getItem(SESSION_KEY);
-      // Events belong to the session they happened in: never carry them
-      // into the next login (logout flushes them first, see ACTIVITY_FLUSH_EVENT).
-      if (next !== sessionIdRef.current) buffer.current = [];
       sessionIdRef.current = next;
       setSessionId(next);
     };
@@ -94,92 +140,121 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     return () => window.removeEventListener(SESSION_CHANGE_EVENT, handler);
   }, []);
 
-  // ── Flush buffer to API ──────────────────────────────────────────────────
+  // ── Send queued events ───────────────────────────────────────────────────
+  /** Sends what is queued; returns true when everything sent was accepted. */
   const send = useCallback(
-    async (events: ActivityEvent[], keepalive: boolean) => {
-      const sid = sessionIdRef.current;
+    async (keepalive: boolean): Promise<boolean> => {
       const token = getToken();
-      if (!sid || !token) return events;
-      const failed: ActivityEvent[] = [];
-      for (const batch of chunk(events, keepalive ? MAX_KEEPALIVE_BYTES : Infinity)) {
-        try {
-          const res = await fetch(API_BATCH_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-              'X-Session-Id': sid,
-            },
-            body: JSON.stringify({ sessionId: sid, events: batch }),
-            keepalive,
-          });
-          if (res.ok) {
-            // The server keeps the valid events and records the rest (CAP-41).
-            const r = (await res.json().catch(() => null)) as {
-              rejected?: number;
-              failed?: number;
-            } | null;
-            if (r && ((r.rejected ?? 0) > 0 || (r.failed ?? 0) > 0)) {
-              console.warn('[ActivityLog] some events not stored:', r);
+      if (!token) return false;
+      const items = queue.take(Infinity, (q) => q.sid !== null);
+      if (items.length === 0) return true;
+      const bySession = new Map<string, Queued[]>();
+      for (const q of items) bySession.set(q.sid!, [...(bySession.get(q.sid!) ?? []), q]);
+      let ok = true;
+      for (const [sid, list] of bySession) {
+        for (const batch of chunk(list, keepalive ? MAX_KEEPALIVE_BYTES : Infinity)) {
+          const overflow = queue.takeOverflow();
+          try {
+            const res = await fetch(API_BATCH_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+                'X-Session-Id': sid,
+              },
+              body: JSON.stringify({
+                sessionId: sid,
+                events: batch.map((q) => q.event),
+                appBuild: APP_BUILD,
+                ...(overflow ? { overflow } : {}),
+              }),
+              keepalive,
+            });
+            if (res.ok) {
+              queue.ack(batch);
+              // The server keeps the valid events and records the rest (CAP-41).
+              const r = (await res.json().catch(() => null)) as {
+                rejected?: number;
+                failed?: number;
+              } | null;
+              if (r && ((r.rejected ?? 0) > 0 || (r.failed ?? 0) > 0)) {
+                console.warn('[ActivityLog] some events not stored:', r);
+              }
+              continue;
             }
-            continue;
+            const detail = await res.text().catch(() => '');
+            if (isPermanentRejection(res.status)) {
+              console.warn('[ActivityLog] batch rejected, dropped:', res.status, detail);
+              queue.ack(batch);
+            } else {
+              console.warn('[ActivityLog] batch flush failed:', res.status, detail);
+              queue.release(batch);
+              queue.restoreOverflow(overflow);
+              ok = false;
+            }
+          } catch {
+            queue.release(batch); // network error: keep for the next flush
+            queue.restoreOverflow(overflow);
+            ok = false;
           }
-          const detail = await res.text().catch(() => '');
-          if (isPermanentRejection(res.status)) {
-            console.warn('[ActivityLog] batch rejected, dropped:', res.status, detail);
-          } else {
-            console.warn('[ActivityLog] batch flush failed:', res.status, detail);
-            failed.push(...batch);
-          }
-        } catch {
-          failed.push(...batch); // network error: keep for the next flush
         }
       }
-      return failed;
+      return ok;
     },
-    [getToken],
+    [getToken, queue],
   );
 
-  const flush = useCallback(async () => {
-    if (!sessionIdRef.current || buffer.current.length === 0) return;
-    const events = buffer.current;
-    buffer.current = [];
-    const failed = await send(events, false);
-    if (failed.length) buffer.current = [...failed, ...buffer.current];
-  }, [send]);
+  /** Flush unless backing off; `force` (logout, manual flush) ignores the back-off. */
+  const flushNow = useCallback(
+    async (force: boolean) => {
+      queue.adoptAbandoned(); // queues of page loads that have closed since
+      if (queue.length === 0) return;
+      if (!force && Date.now() < nextAttemptAt.current) return;
+      const ok = await send(false);
+      failures.current = ok ? 0 : failures.current + 1;
+      nextAttemptAt.current = Date.now() + backoffMs(failures.current);
+    },
+    [queue, send],
+  );
+
+  const flush = useCallback(() => flushNow(true), [flushNow]);
 
   // ── Track a single event ─────────────────────────────────────────────────
   const track = useCallback(
     (action: ActivityAction, extras: Omit<ActivityEvent, 'action' | 'occurredAt'> = {}) => {
-      console.log('[ActivityLog] track:', action, 'buffer size:', buffer.current.length + 1);
-      buffer.current.push({
-        action,
-        occurredAt: new Date().toISOString(),
-        ...extras,
+      const sid = sessionIdRef.current;
+      queue.push({
+        sid,
+        event: {
+          action,
+          occurredAt: new Date().toISOString(),
+          ...extras,
+          clientEventId: newEventId(),
+          tabId: TAB_ID,
+          ...(sid ? { clientSeq: nextSeq('activity', sid) } : {}),
+        },
       });
     },
-    [],
+    [queue],
   );
 
   // ── Start flush timer ────────────────────────────────────────────────────
   useEffect(() => {
-    flushTimer.current = setInterval(flush, FLUSH_INTERVAL_MS);
+    flushTimer.current = setInterval(() => void flushNow(false), FLUSH_INTERVAL_MS);
+    // Events left from an earlier page load (closed tab, crash, offline).
+    void flushNow(false);
     return () => {
       if (flushTimer.current) clearInterval(flushTimer.current);
     };
-  }, [flush]);
+  }, [flushNow]);
 
   // ── Flush on hide / unload (keepalive fetch) ────────────────────────────
-  // Take the buffer before sending: re-sending it on every tab switch
-  // without clearing it duplicated rows in the raw log.
+  // The queue is written to localStorage first, so whatever the keepalive
+  // request doesn't deliver is sent from the next page load.
   useEffect(() => {
     const handleUnload = () => {
-      if (!sessionIdRef.current || buffer.current.length === 0) return;
-      const events = buffer.current;
-      buffer.current = [];
-      void send(events, true).then((failed) => {
-        if (failed.length) buffer.current = [...failed, ...buffer.current];
-      });
+      queue.persistNow();
+      if (queue.length > 0) void send(true);
     };
 
     const handleVisibilityChange = () => {
@@ -194,15 +269,20 @@ export function ActivityLogProvider({ children, getToken }: Props) {
       if (Array.isArray(waits)) waits.push(p);
     };
 
+    // Back online: send what queued up while offline.
+    const handleOnline = () => void flush();
+
     window.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', handleUnload);
     window.addEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
+    window.addEventListener('online', handleOnline);
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handleUnload);
       window.removeEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
+      window.removeEventListener('online', handleOnline);
     };
-  }, [send, flush]);
+  }, [send, flush, queue]);
 
   return (
     <ActivityLogContext.Provider value={{ sessionId, track, flush }}>

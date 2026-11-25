@@ -1,3 +1,5 @@
+import { TelemetryRateGuard } from '../common/telemetry-rate.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Controller, Get, Post, Patch, Param, Body, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -60,6 +62,8 @@ export class RecordingController {
 
   @Post('segments/initiate')
   @Roles('student')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   initiateSegment(
     @Request() req: { user: RequestUser },
     @Body(new ZodValidationPipe(CreateSegmentSchema)) dto: CreateSegmentDto,
@@ -69,6 +73,8 @@ export class RecordingController {
 
   @Patch('segments/:segmentId/complete')
   @Roles('student')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   completeSegment(
     @Request() req: { user: RequestUser },
     @Param('segmentId') segmentId: string,
@@ -79,6 +85,8 @@ export class RecordingController {
 
   @Patch('segments/:segmentId/fail')
   @Roles('student')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   failSegment(
     @Request() req: { user: RequestUser },
     @Param('segmentId') segmentId: string,

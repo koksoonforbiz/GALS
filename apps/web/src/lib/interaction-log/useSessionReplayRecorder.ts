@@ -200,6 +200,35 @@ function captureAois(): ReplayAoiRect[] | undefined {
   }
 }
 
+/** Browsers cap all in-flight keepalive bodies together at about 64 KB. */
+const KEEPALIVE_BUDGET_BYTES = 60_000;
+/** Snapshots that could not be sent as the page closed, reported on the next load. */
+const LOST_KEY = 'gals.capture.replayLost.v1';
+
+function noteUnloadLoss(sessionId: string, n: number) {
+  try {
+    const lost = JSON.parse(localStorage.getItem(LOST_KEY) ?? '{}') as Record<string, number>;
+    lost[sessionId] = (lost[sessionId] ?? 0) + n;
+    localStorage.setItem(LOST_KEY, JSON.stringify(lost));
+  } catch {
+    // Storage unavailable: nothing more we can do while the page closes.
+  }
+}
+
+function takeUnloadLoss(sessionId: string): number {
+  try {
+    const lost = JSON.parse(localStorage.getItem(LOST_KEY) ?? '{}') as Record<string, number>;
+    const n = lost[sessionId] ?? 0;
+    if (n) {
+      delete lost[sessionId];
+      localStorage.setItem(LOST_KEY, JSON.stringify(lost));
+    }
+    return n;
+  } catch {
+    return 0;
+  }
+}
+
 function sendKeepalive(body: object) {
   try {
     const token = localStorage.getItem('token');
@@ -221,6 +250,7 @@ function splitIntoSizedChunks(
   sessionId: string,
   userId: string,
   events: ReplaySnapshotPayload[],
+  maxBytes = MAX_BATCH_BYTES,
 ): ReplaySnapshotPayload[][] {
   const chunks: ReplaySnapshotPayload[][] = [];
   let currentChunk: ReplaySnapshotPayload[] = [];
@@ -233,7 +263,7 @@ function splitIntoSizedChunks(
       events: candidateChunk,
     }).length;
 
-    if (currentChunk.length > 0 && candidateSize > MAX_BATCH_BYTES) {
+    if (currentChunk.length > 0 && candidateSize > maxBytes) {
       chunks.push(currentChunk);
       currentChunk = [event];
     } else {
@@ -252,7 +282,12 @@ function splitIntoSizedChunks(
 // in docs/process-mining/PHASE0_DISCOVERY.md): any field inside an
 // element marked `data-replay-redact` is stored like a password field, so
 // DOM snapshots never carry text the learner has not consented to share.
-const REDACT_SELECTOR = '[data-replay-redact]';
+//
+// Since 2026-11-25 consent comes from the study consent form and all text is
+// recorded, so this applies only while a lesson asks for consent in the app
+// and the learner has not given it: the lesson then sets
+// <html data-replay-redact="on">.
+const REDACT_SELECTOR = 'html[data-replay-redact="on"] [data-replay-redact]';
 
 function syncInputState(sourceRoot: ParentNode, cloneRoot: ParentNode) {
   const inputs = Array.from(sourceRoot.querySelectorAll('input'));
@@ -929,14 +964,28 @@ export function useSessionReplayRecorder({
       if (bufferRef.current.length === 0) return;
       if (!useKeepalive && flushingRef.current) return;
       const events = bufferRef.current.splice(0);
-      const chunks = splitIntoSizedChunks(sessionId, userId, events);
 
       if (useKeepalive) {
-        chunks.forEach((chunk) => {
-          sendKeepalive({ sessionId, userId, events: chunk });
-        });
+        // The page is closing: only what fits the keepalive budget can still
+        // be sent (snapshots with a screenshot are usually larger). The rest
+        // is counted and reported as a loss on the next load (CAP-46), so it
+        // shows in capture health instead of vanishing.
+        let budget = KEEPALIVE_BUDGET_BYTES;
+        let lost = 0;
+        for (const chunk of splitIntoSizedChunks(sessionId, userId, events, budget)) {
+          const size = JSON.stringify({ sessionId, userId, events: chunk }).length;
+          if (size <= budget) {
+            sendKeepalive({ sessionId, userId, events: chunk });
+            budget -= size;
+          } else {
+            lost += chunk.length;
+          }
+        }
+        if (lost) noteUnloadLoss(sessionId, lost);
         return;
       }
+      const chunks = splitIntoSizedChunks(sessionId, userId, events);
+      const lostBefore = takeUnloadLoss(sessionId);
 
       flushingRef.current = true;
       try {
@@ -947,12 +996,18 @@ export function useSessionReplayRecorder({
           // fire reliably more than they need to save bandwidth.
           await api.postCompressed(
             '/logs/replay-snapshots',
-            { sessionId, userId, events: chunk },
+            {
+              sessionId,
+              userId,
+              events: chunk,
+              ...(lostBefore && chunk === chunks[0] ? { overflow: { dropped: lostBefore } } : {}),
+            },
             { timeoutMs: 60_000 }, // large background upload, not the 15 s UI default
           );
         }
       } catch {
         bufferRef.current.unshift(...events);
+        if (lostBefore) noteUnloadLoss(sessionId, lostBefore);
       } finally {
         flushingRef.current = false;
       }
@@ -1107,10 +1162,13 @@ export function useSessionReplayRecorder({
       captureSnapshot('beforeunload');
       flush(true);
     };
+    // A hidden tab is still alive: upload normally (compressed, retried on
+    // failure). keepalive is only for pagehide/beforeunload, where it is the
+    // only option and its ~64 KB budget can't hold most snapshots (CAP-46).
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         captureSnapshot('hidden');
-        flush(true);
+        void flush(false);
       }
     };
     const onRouteChange = () => captureSnapshot('route');

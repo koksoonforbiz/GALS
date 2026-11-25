@@ -28,6 +28,25 @@ function isPostgresHexEscapeError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return /unexpected end of hex escape/i.test(msg);
 }
+
+/** Typed and clipboard text is kept up to this many characters per row. */
+export const TEXT_CAP = 10_000;
+const MAX_KEYS_PER_BURST = 2_000;
+
+/** Text for a TEXT column: capped, NUL removed (Postgres refuses it). */
+function capText(v: unknown): string | null {
+  if (typeof v !== 'string' || v.length === 0) return null;
+  return v.split('\u0000').join('').slice(0, TEXT_CAP);
+}
+
+/** Page-load id and per-stream sequence, when the client sent them. */
+function seqFields(e: { tabId?: unknown; clientSeq?: unknown }) {
+  return {
+    tabId: typeof e.tabId === 'string' ? e.tabId.slice(0, 64) : null,
+    clientSeq:
+      typeof e.clientSeq === 'number' && Number.isInteger(e.clientSeq) ? e.clientSeq : null,
+  };
+}
 import type { CreateCursorBatchDto } from './dto/create-cursor-batch.dto';
 import type { CreateClickBatchDto } from './dto/create-click-batch.dto';
 import type { CreateScrollBatchDto } from './dto/create-scroll-batch.dto';
@@ -77,7 +96,40 @@ export class LogsService {
     }
   }
 
+  /** The browser dropped rows because its queue was full (B3): record the loss. */
+  async noteOverflow(
+    stream: string,
+    dto: {
+      sessionId: string;
+      userId: string;
+      overflow?: { dropped?: number; sinceMs?: number | null };
+    },
+  ) {
+    const n = Number(dto.overflow?.dropped ?? 0);
+    if (!Number.isInteger(n) || n <= 0) return;
+    try {
+      await this.prisma.ingestIssue.create({
+        data: {
+          stream,
+          kind: 'client_overflow',
+          sessionId: dto.sessionId,
+          userId: dto.userId,
+          reason: `client queue full since ${dto.overflow?.sinceMs ?? 'unknown'}`,
+          eventCount: n,
+        },
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to record ${stream} overflow: ${(err as Error)?.constructor?.name}`,
+      );
+    }
+  }
+
   // ─── Batch Inserts ──────────────────────────────────────
+  //
+  // Every stream row carries the page-load id and a per-stream sequence
+  // (seqFields). With the unique (sessionId, tabId, clientSeq) index a retried
+  // batch is stored once (skipDuplicates), and gaps show lost rows.
 
   async batchCursor(dto: CreateCursorBatchDto) {
     this.validateBatch(dto.sessionId, dto.userId);
@@ -90,6 +142,7 @@ export class LogsService {
       elementTarget: sanitizeForPostgresJson(e.elementTarget),
       timestamp: BigInt(e.timestamp),
       batchId: e.batchId,
+      ...seqFields(e),
     }));
     try {
       const result = await this.prisma.cursor_logs.createMany({
@@ -126,6 +179,7 @@ export class LogsService {
       elementSelector: sanitizeForPostgresJson(e.elementSelector) ?? '',
       elementText: sanitizeForPostgresJson(e.elementText),
       timestamp: BigInt(e.timestamp),
+      ...seqFields(e),
     }));
     try {
       const result = await this.prisma.click_logs.createMany({
@@ -163,6 +217,7 @@ export class LogsService {
       scrollPercent: e.scrollPercent,
       pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
       timestamp: BigInt(e.timestamp),
+      ...seqFields(e),
     }));
     try {
       const result = await this.prisma.scroll_logs.createMany({
@@ -196,6 +251,13 @@ export class LogsService {
           pauseDurationMs: e.pauseDurationMs,
           typingSpeedWPM: e.typingSpeedWPM,
           timestamp: BigInt(e.timestamp),
+          ...seqFields(e),
+          keys: Array.isArray(e.keys)
+            ? (e.keys.slice(0, MAX_KEYS_PER_BURST) as Prisma.InputJsonValue)
+            : Prisma.DbNull,
+          text: capText(e.text),
+          burstStart: typeof e.burstStart === 'number' ? BigInt(Math.round(e.burstStart)) : null,
+          fieldKind: typeof e.fieldKind === 'string' ? e.fieldKind.slice(0, 32) : null,
         })),
         skipDuplicates: true,
       });
@@ -216,6 +278,7 @@ export class LogsService {
       pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
       timestamp: BigInt(e.timestamp),
       hiddenDurationMs: e.hiddenDurationMs,
+      ...seqFields(e),
     }));
     try {
       const result = await this.prisma.visibility_logs.createMany({
@@ -247,6 +310,8 @@ export class LogsService {
       sourceElement: sanitizeForPostgresJson(e.sourceElement),
       pageUrl: sanitizeForPostgresJson(e.pageUrl) ?? '',
       timestamp: BigInt(e.timestamp),
+      ...seqFields(e),
+      text: capText(e.text),
     }));
     try {
       const result = await this.prisma.clipboard_logs.createMany({
@@ -421,6 +486,15 @@ export class LogsService {
           "timezone" = EXCLUDED."timezone",
           "userAgent" = EXCLUDED."userAgent"
         WHERE "session_sync_anchors"."wallClockMs" > EXCLUDED."wallClockMs"`;
+      // Clock offset (B4): server time minus client time at this anchor
+      // (includes one-way latency, typically tens of ms). The latest page
+      // load wins, as the client clock can be changed between loads.
+      const offset = serverReceiveMs - Number(dto.wallClockMs);
+      if (Number.isFinite(offset) && Math.abs(offset) < 2_000_000_000) {
+        await this.prisma.studentSession
+          .update({ where: { id: dto.sessionId }, data: { clockOffsetMs: Math.round(offset) } })
+          .catch(() => undefined);
+      }
       return { success: true, serverReceiveMs };
     } catch (error: unknown) {
       throw new InternalServerErrorException(

@@ -809,3 +809,14 @@ Neither layer needed a change for these — both already had the right answer be
 Decision applied in Phase 3/4: `POST /api/auth/register` is **PRIVATE** (students are provisioned by a teacher; nginx `= /api/auth/register { return 404; }`, `@PrivateDoor()` on the handler).
 
 Phase 4 also made the log-export presigned URLs relative (`/s3/...`, signed against the internal MinIO endpoint, like `BlobService`) — under the two-door stack MinIO is not published, so the previous absolute `BLOB_STORAGE_PUBLIC_ENDPOINT` URLs would have been unreachable from the teacher's browser.
+
+## Telemetry rate limit (Prompt B, P1, 2026-11-26)
+
+No route changed door. The learner telemetry routes below skip the global per-IP limit (30 requests per minute, which a lab behind one NAT address would share) and use `TelemetryRateGuard` instead: 600 requests per minute **per signed-in user** (`TELEMETRY_RATE_PER_MIN`), checked after `JwtAuthGuard`. Over the limit they answer 429 with `Retry-After`; the browser keeps the rows in its persistent queue and retries with back-off.
+
+- `POST /api/activity-log/batch`
+- `POST /api/logs/*` (cursor, clicks, scroll, keystrokes, visibility, clipboard, replay-snapshots, viewport, performance, errors, sync-anchor)
+- `POST /api/recording/segments/initiate`, `PATCH /api/recording/segments/:segmentId/complete`, `PATCH /api/recording/segments/:segmentId/fail`
+- `POST /api/webgazer/logs`, `POST /api/pupil-size/logs`
+
+The six stream routes (cursor, clicks, scroll, keystrokes, visibility, clipboard) now also refuse a body whose `userId` is not the signed-in user (403).

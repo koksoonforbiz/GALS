@@ -57,7 +57,7 @@ describe('activity-log batch ingest', () => {
       },
       req,
     );
-    expect(res).toEqual({ ok: true, accepted: 2, rejected: 1, failed: 0 });
+    expect(res).toEqual({ ok: true, accepted: 2, rejected: 1, failed: 0, duplicates: 0 });
     expect(prisma.activityLog.createMany.mock.calls[0][0].data).toHaveLength(2);
     const issue = prisma.ingestIssue.createMany.mock.calls[0][0].data[0];
     expect(issue).toMatchObject({
@@ -89,7 +89,7 @@ describe('activity-log batch ingest', () => {
       },
       req,
     );
-    expect(res).toEqual({ ok: true, accepted: 2, rejected: 0, failed: 1 });
+    expect(res).toEqual({ ok: true, accepted: 2, rejected: 0, failed: 1, duplicates: 0 });
     expect(prisma.ingestIssue.createMany.mock.calls[0][0].data[0]).toMatchObject({
       kind: 'insert_failed',
       action: 'MODULE_ITEM_VIEWED',

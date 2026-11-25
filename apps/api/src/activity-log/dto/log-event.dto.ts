@@ -26,6 +26,16 @@ export const LogEventSchema = z.object({
   interventionId: z.string().uuid().nullish(),
 
   metadata: z.record(z.unknown()).nullish(),
+
+  // Envelope (Prompt B, B2). Optional so older clients keep working.
+  clientEventId: z.string().uuid().nullish(),
+  clientSeq: z.number().int().nonnegative().nullish(),
+  tabId: z.string().max(64).nullish(),
+  durationMs: z.number().int().nonnegative().nullish(),
+  sourceChannel: z.string().max(64).nullish(),
+  slideKey: z.string().max(200).nullish(),
+  objectId: z.string().max(200).nullish(),
+  contentVersion: z.string().max(100).nullish(),
 });
 
 export type LogEventDto = z.infer<typeof LogEventSchema>;
@@ -44,6 +54,12 @@ export type BatchLogEventsDto = z.infer<typeof BatchLogEventsSchema>;
 export const BatchEnvelopeSchema = z.object({
   sessionId: z.string().uuid(),
   events: z.array(z.unknown()).min(1).max(500),
+  /** Events the browser had to drop because its buffer was full (B3). */
+  overflow: z
+    .object({ dropped: z.number().int().positive(), sinceMs: z.number().nullish() })
+    .nullish(),
+  /** The web build that sent the batch. */
+  appBuild: z.string().max(64).nullish(),
 });
 
 export type BatchEnvelopeDto = z.infer<typeof BatchEnvelopeSchema>;

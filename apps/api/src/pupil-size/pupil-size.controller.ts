@@ -1,3 +1,5 @@
+import { TelemetryRateGuard } from '../common/telemetry-rate.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   Controller,
   Get,
@@ -45,6 +47,8 @@ export class PupilSizeController {
 
   @Post('logs')
   @Roles('student')
+  @SkipThrottle()
+  @UseGuards(TelemetryRateGuard)
   async bulkCreateLogs(@Request() req: { user: RequestUser }, @Body() dto: PupilSizeBatchDto) {
     await this.pupilSizeService.bulkCreateLogs(
       req.user.id,
