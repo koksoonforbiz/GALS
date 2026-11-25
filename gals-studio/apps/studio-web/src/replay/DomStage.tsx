@@ -26,9 +26,20 @@ export function DomStage(props: {
   locked?: boolean;
   /** Extra absolutely-positioned overlays (e.g. researcher AOI rects / draw layer). */
   overlay?: React.ReactNode;
+  /** When the current snapshot marks a recording pause, the time the next frame arrives. */
+  resumesAt?: string | null;
 }) {
-  const { sessionId, snapshot, gaze, lastClick, aoiVisible, showScreenshot, locked, overlay } =
-    props;
+  const {
+    sessionId,
+    snapshot,
+    gaze,
+    lastClick,
+    aoiVisible,
+    showScreenshot,
+    locked,
+    overlay,
+    resumesAt,
+  } = props;
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
@@ -50,6 +61,35 @@ export function DomStage(props: {
     return (
       <div className="flex h-full items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-400">
         No DOM snapshot at this moment
+      </div>
+    );
+  }
+
+  // A 'cleanup' snapshot is the recorder stopping: the student left the page,
+  // logged out, or opened a page that pauses replay on purpose (attention and
+  // memory puzzles, knowledge tests). Nothing was recorded until the next frame,
+  // so say so instead of showing a stale or empty frame.
+  if (snapshot.trigger === 'cleanup') {
+    const path = (() => {
+      try {
+        return new URL(snapshot.pageUrl).pathname;
+      } catch {
+        return snapshot.pageUrl;
+      }
+    })();
+    const why = /\/puzzles(\/|$)/.test(path)
+      ? 'The student was on the attention and memory puzzles, which are not screen-recorded.'
+      : /\/knowledge-check(\/|$)/.test(path)
+        ? 'The student was on a knowledge test, which is not screen-recorded.'
+        : 'The student left the recorded page.';
+    return (
+      <div className="flex min-h-[320px] flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-6 text-center text-sm text-slate-500">
+        <div className="font-medium text-slate-600">Screen recording paused here</div>
+        <div>{why}</div>
+        <div className="text-xs text-slate-400">
+          {resumesAt ? `Recording resumes at ${resumesAt}.` : 'No more frames after this point.'}
+          {path ? ` Page: ${path}` : ''}
+        </div>
       </div>
     );
   }
@@ -174,7 +214,9 @@ function Screenshot({ url, width, height }: { url: string | null; width: number;
   }, [url]);
   if (!shown)
     return (
-      <div className="flex h-full items-center justify-center text-slate-400">Loading frame…</div>
+      <div className="flex h-full items-center justify-center text-slate-400">
+        {url ? 'Loading frame…' : 'No screenshot for this moment (switch to DOM view)'}
+      </div>
     );
   return <img src={shown} alt="snapshot" style={{ width, height }} />;
 }

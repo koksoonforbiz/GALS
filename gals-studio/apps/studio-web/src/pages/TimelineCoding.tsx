@@ -28,6 +28,7 @@ import { formatDateTimeSGT, formatTimeSGT } from '../lib/formatDateTime';
 import { PlayheadStore, usePlayhead, fmtRel } from '../replay/clock';
 import { snapshotAt, type SnapshotLite, type WebcamSeg } from '../replay/lookup';
 import { DomStage } from '../replay/DomStage';
+import { CreateCoder } from '../components/CreateCoder';
 import { WebcamPanel } from '../replay/WebcamPanel';
 import { affectScores, type AffectThresholds, type EmotionProbs } from '../replay/affect';
 
@@ -539,6 +540,12 @@ export function TimelineCoding() {
 
   const absoluteMs = base + ph.offsetMs;
   const currentSnapshot = useMemo(() => snapshotAt(snaps, absoluteMs), [snaps, absoluteMs]);
+  // When screen recording was paused (puzzles, knowledge tests), say when it resumes.
+  const resumesAtMs = useMemo(() => {
+    if (currentSnapshot?.trigger !== 'cleanup') return null;
+    const next = snaps.find((x) => x.wallMs > currentSnapshot.wallMs);
+    return next ? next.wallMs - base : null;
+  }, [snaps, currentSnapshot, base]);
   const currentGaze = useMemo(
     () => (sparse?.gaze ? nearestGaze(sparse.gaze, absoluteMs) : null),
     [sparse, absoluteMs],
@@ -758,6 +765,12 @@ export function TimelineCoding() {
             </option>
           ))}
         </select>
+        <CreateCoder
+          onCreated={(c) => {
+            setCoders((cs) => [...cs, c]);
+            setCoderId(c.id);
+          }}
+        />
         <Link
           to={`/coding/${sessionId}`}
           className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs"
@@ -898,6 +911,7 @@ export function TimelineCoding() {
             showScreenshot={showScreenshot}
             locked
             overlay={aoiOverlay}
+            resumesAt={resumesAtMs != null ? fmtRel(resumesAtMs) : null}
           />
         </div>
         <div className="space-y-2">
