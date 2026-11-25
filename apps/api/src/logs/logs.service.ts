@@ -7,6 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { payloadText } from '../activity-log/activity-log.service';
 
 /**
  * Strip / escape backslash-x sequences that aren't valid 2-digit hex,
@@ -47,10 +48,16 @@ export class LogsService {
 
   /**
    * A batch Postgres refused for a bad byte escape is still acknowledged (a
-   * retry would fail the same way), but the loss is recorded in
-   * `ingest_issues` instead of vanishing (CAP-40).
+   * retry would fail the same way), but the batch is kept in `ingest_issues`
+   * (as text, which has no such limit) instead of vanishing (CAP-40).
    */
-  private async recordDropped(stream: string, sessionId: string, userId: string, count: number) {
+  private async recordDropped(
+    stream: string,
+    sessionId: string,
+    userId: string,
+    rows: Array<Record<string, unknown>>,
+  ) {
+    const count = rows.length;
     try {
       await this.prisma.ingestIssue.create({
         data: {
@@ -60,6 +67,7 @@ export class LogsService {
           userId,
           reason: 'postgres:invalid_byte_escape',
           eventCount: count,
+          payload: payloadText(rows),
         },
       });
     } catch (err) {
@@ -94,7 +102,7 @@ export class LogsService {
         this.logger.warn(
           `Dropped ${data.length} cursor logs for session ${dto.sessionId} — payload contained an invalid byte escape`,
         );
-        await this.recordDropped('cursor_logs', dto.sessionId, dto.userId, data.length);
+        await this.recordDropped('cursor_logs', dto.sessionId, dto.userId, data);
         return { success: true, count: 0, dropped: data.length };
       }
       throw new InternalServerErrorException(
@@ -137,7 +145,7 @@ export class LogsService {
         this.logger.warn(
           `Dropped ${data.length} click logs for session ${dto.sessionId} — payload contained an invalid byte escape Postgres couldn't parse (preview: "${data[0]?.elementSelector?.slice(0, 80) ?? ''}")`,
         );
-        await this.recordDropped('click_logs', dto.sessionId, dto.userId, data.length);
+        await this.recordDropped('click_logs', dto.sessionId, dto.userId, data);
         return { success: true, count: 0, dropped: data.length };
       }
       throw new InternalServerErrorException(
@@ -167,7 +175,7 @@ export class LogsService {
         this.logger.warn(
           `Dropped ${data.length} scroll logs for session ${dto.sessionId} — invalid byte escape in payload`,
         );
-        await this.recordDropped('scroll_logs', dto.sessionId, dto.userId, data.length);
+        await this.recordDropped('scroll_logs', dto.sessionId, dto.userId, data);
         return { success: true, count: 0, dropped: data.length };
       }
       throw new InternalServerErrorException(
@@ -220,7 +228,7 @@ export class LogsService {
         this.logger.warn(
           `Dropped ${data.length} visibility logs for session ${dto.sessionId} — invalid byte escape in payload`,
         );
-        await this.recordDropped('visibility_logs', dto.sessionId, dto.userId, data.length);
+        await this.recordDropped('visibility_logs', dto.sessionId, dto.userId, data);
         return { success: true, count: 0, dropped: data.length };
       }
       throw new InternalServerErrorException(
@@ -251,7 +259,7 @@ export class LogsService {
         this.logger.warn(
           `Dropped ${data.length} clipboard logs for session ${dto.sessionId} — invalid byte escape in payload`,
         );
-        await this.recordDropped('clipboard_logs', dto.sessionId, dto.userId, data.length);
+        await this.recordDropped('clipboard_logs', dto.sessionId, dto.userId, data);
         return { success: true, count: 0, dropped: data.length };
       }
       throw new InternalServerErrorException(

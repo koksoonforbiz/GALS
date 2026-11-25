@@ -48,7 +48,7 @@ export const BatchEnvelopeSchema = z.object({
 
 export type BatchEnvelopeDto = z.infer<typeof BatchEnvelopeSchema>;
 
-/** A rejected event, described without its content (validation path + code only). */
+/** Why an event was rejected: its action, the validation path + code, its size. */
 export function describeRejection(raw: unknown, error: z.ZodError) {
   const a = raw && typeof raw === 'object' ? (raw as { action?: unknown }).action : undefined;
   const action = typeof a === 'string' ? a.slice(0, 64) : null;

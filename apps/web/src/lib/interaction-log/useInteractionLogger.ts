@@ -75,21 +75,6 @@ function sendBeacon(path: string, body: object) {
 
 // ─── Hook ───────────────────────────────────────────────
 
-/**
- * The label of the control that was clicked (a button, link, tab, menu item
- * or option), at most 50 characters. Clicks elsewhere (paragraphs, chat
- * bubbles, answer fields) keep no text, so learner and chatbot text never
- * reaches the click log (CAP-30).
- */
-const CONTROL_SELECTOR =
-  'button, a[href], summary, label, [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], select';
-function controlLabel(target: HTMLElement | null): string | undefined {
-  const control = target?.closest?.(CONTROL_SELECTOR) as HTMLElement | null | undefined;
-  if (!control || control.isContentEditable) return undefined;
-  const label = (control.getAttribute('aria-label') || control.innerText || '').trim();
-  return label ? label.slice(0, 50) : undefined;
-}
-
 export function useInteractionLogger({
   sessionId,
   userId,
@@ -224,7 +209,7 @@ export function useInteractionLogger({
         y: e.clientY,
         pageUrl: window.location.pathname,
         elementSelector: buildCssSelector(target),
-        elementText: controlLabel(target),
+        elementText: (target?.innerText || '').slice(0, 50),
         timestamp: Date.now(),
       });
     };

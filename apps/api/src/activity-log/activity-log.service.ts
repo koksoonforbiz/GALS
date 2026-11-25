@@ -32,6 +32,21 @@ export interface IngestIssueParams {
   reason: string;
   eventCount: number;
   rawBytes?: number | null;
+  /** The events that were not stored, kept as received. */
+  payload?: unknown[];
+}
+
+const PAYLOAD_MAX = 1_000_000;
+
+/** The events as JSON text (bigint as number; a TEXT column takes any escape), at most 1 MB. */
+export function payloadText(events: unknown[] | undefined): string | null {
+  if (!events || events.length === 0) return null;
+  try {
+    const t = JSON.stringify(events, (_k, v: unknown) => (typeof v === 'bigint' ? Number(v) : v));
+    return t.length > PAYLOAD_MAX ? t.slice(0, PAYLOAD_MAX) : t;
+  } catch {
+    return null;
+  }
 }
 
 /** Prisma errors that mean "the database is not reachable": retry later. */
@@ -139,8 +154,14 @@ export class ActivityLogService {
         const reason = errorReason(err);
         const key = `${String(row.action)}|${reason}`;
         const f = failures.get(key);
-        if (f) f.eventCount++;
-        else
+        const kept = {
+          ...row,
+          metadata: (row.metadata as unknown) === Prisma.DbNull ? null : row.metadata,
+        };
+        if (f) {
+          f.eventCount++;
+          f.payload!.push(kept);
+        } else
           failures.set(key, {
             stream: 'activity_log',
             kind: 'insert_failed',
@@ -149,6 +170,7 @@ export class ActivityLogService {
             action: String(row.action),
             reason,
             eventCount: 1,
+            payload: [kept],
           });
       }
     }
@@ -175,6 +197,7 @@ export class ActivityLogService {
           reason: i.reason.slice(0, 500),
           eventCount: i.eventCount,
           rawBytes: i.rawBytes ?? null,
+          payload: payloadText(i.payload),
         })),
       });
     } catch (err: unknown) {

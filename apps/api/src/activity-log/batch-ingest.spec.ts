@@ -1,9 +1,9 @@
 /**
  * CAP-40/41: no silent loss on POST /activity-log/batch.
  *  - one invalid event no longer loses the batch: it is rejected on its own
- *    and recorded (without content) in ingest_issues;
+ *    and kept, as received, in ingest_issues;
  *  - a refused insert falls back to row-by-row inserts and records the rows
- *    that still fail;
+ *    that still fail, with their content;
  *  - an unreachable database answers 503 so the client keeps and retries.
  */
 import { ServiceUnavailableException } from '@nestjs/common';
@@ -44,14 +44,14 @@ const known = (code: string) =>
   new Prisma.PrismaClientKnownRequestError('boom', { code, clientVersion: 'test' });
 
 describe('activity-log batch ingest', () => {
-  it('keeps the valid events and records the invalid one without its content', async () => {
+  it('keeps the valid events and records the invalid one as received', async () => {
     const { prisma, controller, req } = setup();
     const res = await controller.batchLog(
       {
         sessionId: SID,
         events: [
           { action: 'MODULE_ITEM_VIEWED', occurredAt: at, courseId: null },
-          { action: 'NOT_AN_ACTION', occurredAt: at, metadata: { secret: 'do not store' } },
+          { action: 'NOT_AN_ACTION', occurredAt: at, metadata: { note: 'kept for recovery' } },
           { action: 'MODULE_ITEM_VIEWED', occurredAt: at, courseId: COURSE },
         ],
       },
@@ -69,7 +69,9 @@ describe('activity-log batch ingest', () => {
       reason: 'action:invalid_enum_value',
       eventCount: 1,
     });
-    expect(JSON.stringify(issue)).not.toContain('do not store');
+    expect(JSON.parse(issue.payload)).toEqual([
+      { action: 'NOT_AN_ACTION', occurredAt: at, metadata: { note: 'kept for recovery' } },
+    ]);
   });
 
   it('falls back to row-by-row inserts and records the rows that fail', async () => {
@@ -94,6 +96,9 @@ describe('activity-log batch ingest', () => {
       reason: 'prisma:P2007',
       eventCount: 1,
     });
+    expect(
+      JSON.parse(prisma.ingestIssue.createMany.mock.calls[0][0].data[0].payload)[0],
+    ).toMatchObject({ sessionId: SID, action: 'MODULE_ITEM_VIEWED', metadata: null });
   });
 
   it('answers 503 when the database is unreachable, so the client retries', async () => {

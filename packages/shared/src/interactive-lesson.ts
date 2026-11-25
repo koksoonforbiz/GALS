@@ -151,6 +151,13 @@ export interface CheckpointFeedback {
 /** Bump when the learner notice text changes; stored with every decision. */
 export const TEXT_CONSENT_NOTICE_VERSION = 'prompting-course-notice-v1';
 
+/**
+ * noticeVersion of the decision the API reports when consent was collected on
+ * the study consent form before the learner joined (the default). The lesson
+ * then shows no in-app consent panel and all text is recorded.
+ */
+export const STUDY_FORM_NOTICE_VERSION = 'study-consent-form';
+
 export interface TextConsentDecision {
   /** (a) keep submitted answer text in the activity log */
   answerText: boolean;

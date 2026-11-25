@@ -62,7 +62,51 @@ function consentPrisma(rows: ConsentRow[]) {
   };
 }
 
-describe('TextConsentService', () => {
+describe('TextConsentService (study consent form, the default)', () => {
+  it('treats every learner as consented: text kept, nothing scrubbed, all enrolled exported', async () => {
+    const prev = process.env.TEXT_CONSENT_IN_APP;
+    delete process.env.TEXT_CONSENT_IN_APP;
+    try {
+      const prisma = consentPrisma([]);
+      (prisma.enrollment as Record<string, unknown>).findMany = jest
+        .fn()
+        .mockResolvedValue([{ studentId: 'a' }, { studentId: 'b' }]);
+      const svc = new TextConsentService(prisma as never);
+      expect(await svc.current('stu', 'c1')).toMatchObject({
+        answerText: true,
+        promptsAndOutputs: true,
+        researchUse: true,
+        noticeVersion: 'study-consent-form',
+      });
+      const chat = {
+        action: 'CHATBOT_MESSAGE_SENT',
+        metadata: { message: 'kept' } as Record<string, unknown>,
+      };
+      expect((await svc.stripUnconsentedText('stu', [chat]))[0]).toBe(chat);
+      expect(await svc.scrubForSession('sess')).toEqual({
+        runs: 0,
+        versions: 0,
+        testCases: 0,
+        claims: 0,
+      });
+      expect(prisma.promptLabRun.updateMany).not.toHaveBeenCalled();
+      expect([...(await svc.researchConsenting('c1'))]).toEqual(['a', 'b']);
+    } finally {
+      if (prev === undefined) delete process.env.TEXT_CONSENT_IN_APP;
+      else process.env.TEXT_CONSENT_IN_APP = prev;
+    }
+  });
+});
+
+describe('TextConsentService (in-app panel, TEXT_CONSENT_IN_APP=true)', () => {
+  const prev = process.env.TEXT_CONSENT_IN_APP;
+  beforeAll(() => {
+    process.env.TEXT_CONSENT_IN_APP = 'true';
+  });
+  afterAll(() => {
+    if (prev === undefined) delete process.env.TEXT_CONSENT_IN_APP;
+    else process.env.TEXT_CONSENT_IN_APP = prev;
+  });
   const lessonEvent = (courseId: string) => ({
     courseId,
     metadata: {

@@ -1704,8 +1704,9 @@ model ActivityLog {
 }
 
 /// Data that reached the API but was not stored (CAP-40/41: no silent loss).
-/// One row per rejected event or failed insert group. Holds no payload text:
-/// `reason` is a validation issue code/path or a database error code.
+/// One row per group of rejected events or failed inserts (same action and
+/// reason). `reason` is a validation issue code/path or a database error code;
+/// `payload` keeps the events themselves (a JSON array) so nothing is lost.
 model IngestIssue {
   id         String   @id @default(uuid()) @db.Uuid
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
@@ -1719,6 +1720,8 @@ model IngestIssue {
   reason     String
   eventCount Int      @map("event_count")
   rawBytes   Int?     @map("raw_bytes")
+  /// The events as received (JSON array text, at most 1 MB).
+  payload    String?  @db.Text
 
   @@index([sessionId])
   @@index([createdAt])

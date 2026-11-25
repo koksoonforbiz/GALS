@@ -83,7 +83,7 @@ export class ActivityLogController {
   ) {
     await this.sessionService.assertOwnsSession(dto.sessionId, req.user.id);
     // Validate each event on its own (CAP-41): keep the valid ones, record
-    // the rejected ones (action, validation path/code, size; never content).
+    // the rejected ones with the reason and the events as received.
     const valid: LogEventDto[] = [];
     const rejected = new Map<string, IngestIssueParams>();
     for (const raw of dto.events) {
@@ -98,6 +98,7 @@ export class ActivityLogController {
       if (prev) {
         prev.eventCount++;
         prev.rawBytes = (prev.rawBytes ?? 0) + (rawBytes ?? 0);
+        prev.payload!.push(raw);
       } else {
         rejected.set(key, {
           stream: 'activity_log',
@@ -108,6 +109,7 @@ export class ActivityLogController {
           reason,
           eventCount: 1,
           rawBytes,
+          payload: [raw],
         });
       }
     }
@@ -116,7 +118,8 @@ export class ActivityLogController {
       this.logger.warn(`activity-log/batch: ${n}/${dto.events.length} events rejected`);
       await this.activityLogService.recordIngestIssues([...rejected.values()]);
     }
-    // Course events keep free text only with consent (a).
+    // Free text: kept (consent is on the study consent form) unless the
+    // in-app consent panel is switched on (TEXT_CONSENT_IN_APP).
     const events = this.textConsent
       ? await this.textConsent.stripUnconsentedText(req.user.id, valid)
       : valid;

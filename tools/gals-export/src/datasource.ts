@@ -565,14 +565,18 @@ export class PrismaDataSource implements SessionDataSource {
   }
 
   /**
-   * Research use (c) for a learner in a course: latest text_capture_consents
-   * row. No decision or no course = no consent. Cached per export stream.
+   * Research use (c) for a learner in a course. By default consent comes from
+   * the study consent form, so it is always true. With TEXT_CONSENT_IN_APP=true
+   * it is the latest text_capture_consents row (no decision or no course = no
+   * consent). Cached per export stream.
    */
   private async researchUse(
     cache: Map<string, boolean>,
     studentId: string,
     courseId: string | null,
   ): Promise<boolean> {
+    // Study consent form (default): covers research use for every learner.
+    if (process.env.TEXT_CONSENT_IN_APP !== 'true') return true;
     if (!courseId) return false;
     const key = `${studentId}|${courseId}`;
     if (!cache.has(key)) {

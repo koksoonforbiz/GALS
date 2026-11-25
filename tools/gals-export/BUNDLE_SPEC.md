@@ -215,7 +215,9 @@ course allows research use are exported.
   `attempts.jsonl` ← `attempts` by `student_id`, started or submitted during the
   session, with `grading_results` (score, gradedBy, createdAt). Answer and
   feedback text (`textResponse`, `autoFeedback`, `gradingResults[].feedback`)
-  only with research-use consent (c); `textResponseChars` is always present.
+  is included: consent comes from the study consent form. Only when the
+  in-app panel is switched on (`TEXT_CONSENT_IN_APP=true`) does it follow
+  research-use consent (c). `textResponseChars` is always present.
   (Before 2026-11-25 this stream was always empty: CAP-83.)
   Each carries a `wallMs` (best-effort from the row's most relevant timestamp).
 - `mastery.jsonl` was removed (previously sourced from `user_mastery`,

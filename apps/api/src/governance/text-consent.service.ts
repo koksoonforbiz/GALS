@@ -1,7 +1,29 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { TEXT_CONSENT_NOTICE_VERSION, type TextConsentDecision } from '@ats/shared';
+import {
+  STUDY_FORM_NOTICE_VERSION,
+  TEXT_CONSENT_NOTICE_VERSION,
+  type TextConsentDecision,
+} from '@ats/shared';
 import { PrismaService } from '../prisma';
+
+/**
+ * Where consent comes from. By default the study consent form, signed before
+ * a learner joins, covers all three uses below: every learner counts as having
+ * agreed, no in-app panel is shown and all text is recorded and exported.
+ * Set TEXT_CONSENT_IN_APP=true to ask in the app instead (the Phase 6 panel).
+ */
+export function consentInApp(): boolean {
+  return process.env.TEXT_CONSENT_IN_APP === 'true';
+}
+
+const STUDY_FORM_DECISION: TextConsentDecision = {
+  answerText: true,
+  promptsAndOutputs: true,
+  researchUse: true,
+  noticeVersion: STUDY_FORM_NOTICE_VERSION,
+  decidedAt: new Date(0).toISOString(),
+};
 
 /** Free-text metadata keys a lesson/Prompt Lab event may carry (lessonEvents.ts). */
 const TEXT_KEYS = ['text', 'parts'] as const;
@@ -46,6 +68,7 @@ export class TextConsentService {
   constructor(private readonly prisma: PrismaService) {}
 
   async current(studentId: string, courseId: string): Promise<TextConsentDecision | null> {
+    if (!consentInApp()) return STUDY_FORM_DECISION;
     const row = await this.prisma.textCaptureConsent.findFirst({
       where: { studentId, courseId },
       orderBy: { decidedAt: 'desc' },
@@ -66,6 +89,7 @@ export class TextConsentService {
     courseId: string,
     d: Omit<TextConsentDecision, 'noticeVersion' | 'decidedAt'>,
   ) {
+    if (!consentInApp()) return STUDY_FORM_DECISION;
     const enrolled = await this.prisma.enrollment.findUnique({
       where: { studentId_courseId: { studentId, courseId } },
       select: { status: true },
@@ -80,6 +104,14 @@ export class TextConsentService {
 
   /** Students whose latest decision for the course allows research use. */
   async researchConsenting(courseId: string): Promise<Set<string>> {
+    if (!consentInApp()) {
+      // Study consent form: everyone enrolled in the course.
+      const enrolled = await this.prisma.enrollment.findMany({
+        where: { courseId },
+        select: { studentId: true },
+      });
+      return new Set(enrolled.map((e) => e.studentId));
+    }
     const rows = await this.prisma.textCaptureConsent.findMany({
       where: { courseId },
       orderBy: { decidedAt: 'asc' },
@@ -99,6 +131,7 @@ export class TextConsentService {
    * Every other action passes through unchanged.
    */
   async stripUnconsentedText<E extends TextEvent>(studentId: string, events: E[]): Promise<E[]> {
+    if (!consentInApp()) return events;
     const courses = [
       ...new Set(
         events
@@ -141,6 +174,8 @@ export class TextConsentService {
   }
 
   async scrubForSession(sessionId: string) {
+    // Study consent form: text is kept, nothing is scrubbed.
+    if (!consentInApp()) return { runs: 0, versions: 0, testCases: 0, claims: 0 };
     const session = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
       select: { userId: true },

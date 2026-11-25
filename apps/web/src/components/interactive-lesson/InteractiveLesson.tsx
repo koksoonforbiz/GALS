@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LessonSlide } from '@ats/shared';
 import { api } from '../../lib/api';
 import { useActivityLog } from '../../lib/activity-log';
+import { STUDY_FORM_NOTICE_VERSION } from '@ats/shared';
 import { ConsentPanel, NudgeCard, type ConsentChoice, type Nudge } from './governance';
 import { useLessonData } from './useLessonData';
 import { useLessonTracking } from './useLessonTracking';
@@ -134,7 +135,7 @@ export function InteractiveLesson({
     itemId,
     courseId,
     moduleId,
-    // Phase 6.2: free text only with consent (a); otherwise chars only.
+    // Free text with consent (a): always, when the study consent form covers it.
     captureText: consent?.answerText === true,
     onIdleEnded: () => scheduleNudgeCheck(),
   });
@@ -149,6 +150,8 @@ export function InteractiveLesson({
   useEffect(() => {
     if (!readOnly && lesson && consent === null) setShowConsent(true);
   }, [readOnly, lesson, consent]);
+  // Consent collected on the study consent form: no in-app panel.
+  const askInApp = consent?.noticeVersion !== STUDY_FORM_NOTICE_VERSION;
 
   const saveConsent = async (choice: ConsentChoice) => {
     const cid = lessonCourseId ?? courseId;
@@ -322,7 +325,7 @@ export function InteractiveLesson({
           <i style={{ width: `${((pos + 1) / total) * 100}%` }} />
         </div>
         {readOnly && <span className="il-readonly">Preview · nothing is saved</span>}
-        {!readOnly && (
+        {!readOnly && askInApp && (
           <button type="button" className="il-privacy" onClick={() => setShowConsent((v) => !v)}>
             Privacy &amp; data
           </button>
@@ -335,7 +338,7 @@ export function InteractiveLesson({
           ))}
         </select>
       </div>
-      {showConsent && !readOnly && (
+      {showConsent && !readOnly && askInApp && (
         <ConsentPanel
           current={consent}
           onSave={saveConsent}

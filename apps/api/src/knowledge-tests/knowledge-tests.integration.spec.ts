@@ -291,7 +291,8 @@ describe('Knowledge tests (HTTP)', () => {
 
   it('the browser cannot forge a submission event', async () => {
     // Each event is validated on its own (CAP-41): the forged one is
-    // rejected and recorded, never stored; the batch itself is answered.
+    // rejected (kept in ingest_issues, never stored as an activity event);
+    // the batch itself is answered.
     const before = await prisma.activityLog.count({
       where: { userId: studentId, action: 'KNOWLEDGE_TEST_SUBMITTED' },
     });

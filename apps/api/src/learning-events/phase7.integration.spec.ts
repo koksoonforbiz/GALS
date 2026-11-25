@@ -128,6 +128,16 @@ function bupaEventlogProblems(rows: Array<Record<string, string>>): string[] {
 }
 
 describe('Phase 7 verification — prompting course (API)', () => {
+  // These checks cover the in-app consent panel (the default is the study
+  // consent form, which records everything).
+  const inApp = process.env.TEXT_CONSENT_IN_APP;
+  beforeAll(() => {
+    process.env.TEXT_CONSENT_IN_APP = 'true';
+  });
+  afterAll(() => {
+    if (inApp === undefined) delete process.env.TEXT_CONSENT_IN_APP;
+    else process.env.TEXT_CONSENT_IN_APP = inApp;
+  });
   let app: INestApplication;
   let prisma: PrismaService;
   let teacherToken: string;

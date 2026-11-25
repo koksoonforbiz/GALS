@@ -79,7 +79,13 @@ describe('attempts stream', () => {
     });
   });
 
-  it('drops answer and feedback text without research-use consent', async () => {
+  it('keeps all text by default (consent is on the study consent form)', async () => {
+    const [row] = await collect(fakePrisma(false));
+    expect(row).toMatchObject({ textResponse: 'my answer', autoFeedback: 'good' });
+  });
+
+  it('with in-app consent, drops answer and feedback text without research use', async () => {
+    process.env.TEXT_CONSENT_IN_APP = 'true';
     for (const consent of [false, null]) {
       const [row] = await collect(fakePrisma(consent));
       expect(row).toMatchObject({
@@ -89,6 +95,7 @@ describe('attempts stream', () => {
         gradingResults: [{ score: 2, feedback: null }],
       });
     }
+    delete process.env.TEXT_CONSENT_IN_APP;
   });
 
   it('fails loudly instead of yielding an empty stream', async () => {
