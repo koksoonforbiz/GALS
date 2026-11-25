@@ -9,6 +9,7 @@ import { SurveyHoldContext } from './surveyHold';
 import { useAuth } from '../contexts/AuthContext';
 import { usePageViewTracker, useActivityLog } from '../lib/activity-log';
 import { LearnerPrompts } from './student/LearnerPrompts';
+import { AnnouncementBanner } from './student/AnnouncementBanner';
 import { currentCourseId, usePromptFlags } from '../lib/capture/learnerPrompts';
 
 const SURVEY_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
@@ -124,6 +125,7 @@ export function Layout() {
         </div>
       </div>
       <Header onLogoutRequest={user?.role === 'student' ? handleLogoutRequest : undefined} />
+      {user?.role === 'student' && <AnnouncementBanner />}
       {user?.role === 'student' && <LearnerPrompts />}
       {reflecting && <ReflectionModal onDone={finishReflection} />}
       {showSurvey && (!surveyHeld || pendingLogout) && (

@@ -2,7 +2,7 @@
 
 _Generated from `packages/shared/src/action-catalogue.ts` by `pnpm --filter @ats/shared run gen:catalogue`. Do not edit by hand._
 
-131 platform actions (123 with an emitter, 8 deprecated), plus 50 library v2 terms that are realised by other actions or not emitted.
+133 platform actions (125 with an emitter, 8 deprecated), plus 50 library v2 terms that are realised by other actions or not emitted.
 
 Level: **ACT** learner action · **SYS** system · **QUALITY** capture health · **REF** reference outcome. Side: who writes it. Text fields hold free text (recorded; consent is on the study consent form). Required and optional metadata keys with their JSON type; other keys are allowed.
 
@@ -239,6 +239,13 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | `SESSION_END` | SYS | server | instant |  | `durationSecs`: number | `reason`: string |
 | ~~SESSION_HEARTBEAT~~ (deprecated) | SYS | client | instant |  |  |  |
 | `SESSION_START` | SYS | server | instant |  | `ipAddress`: string, `userAgent`: string |  |
+
+## D Cross-cutting (announcements)
+
+| Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ANNOUNCEMENT_ACKNOWLEDGED` | ACT | client | instant |  | `announcementId`: string, `kind`: string |  |
+| `ANNOUNCEMENT_VIEWED` | SYS | client | instant |  | `announcementId`: string, `kind`: string |  |
 
 ## D Cross-cutting (course gates, staff override)
 

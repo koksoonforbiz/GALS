@@ -29,7 +29,7 @@ export class CourseFlagsController {
   constructor(private readonly service: CourseFlagsService) {}
 
   @Get(':courseId')
-  @Roles('student', 'teacher')
+  @Roles('student', 'teacher', 'admin')
   async get(
     @Request() req: { user: RequestUser },
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
@@ -39,7 +39,7 @@ export class CourseFlagsController {
   }
 
   @Patch(':courseId')
-  @Roles('teacher')
+  @Roles('teacher', 'admin')
   async set(
     @Request() req: { user: RequestUser },
     @Param('courseId', new ParseUUIDPipe()) courseId: string,
@@ -50,7 +50,7 @@ export class CourseFlagsController {
   }
 
   @Get(':courseId/history')
-  @Roles('teacher')
+  @Roles('teacher', 'admin')
   async history(
     @Request() req: { user: RequestUser },
     @Param('courseId', new ParseUUIDPipe()) courseId: string,

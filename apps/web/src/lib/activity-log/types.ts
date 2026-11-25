@@ -122,7 +122,9 @@ export type ActivityAction =
   | 'PROGRESS_CHECKED'
   | 'ANSWER_CONFIDENCE_RATED'
   | 'RESUME_ANSWERED'
-  | 'SESSION_REFLECTION_SUBMITTED';
+  | 'SESSION_REFLECTION_SUBMITTED'
+  | 'ANNOUNCEMENT_VIEWED'
+  | 'ANNOUNCEMENT_ACKNOWLEDGED';
 
 export interface ActivityEvent {
   action: ActivityAction;

@@ -353,6 +353,8 @@ enum ActivityAction {
   ANSWER_CONFIDENCE_RATED
   RESUME_ANSWERED
   SESSION_REFLECTION_SUBMITTED
+  ANNOUNCEMENT_VIEWED
+  ANNOUNCEMENT_ACKNOWLEDGED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -1895,6 +1897,46 @@ model CourseFeatureFlag {
 
   @@index([courseId, flag, changedAt])
   @@map("course_feature_flags")
+}
+
+/// Notices to students (2026-11-26): scheduled maintenance, things to do,
+/// security or data incidents, general information. courseId null = every
+/// student. Shown between startsAt and endsAt; archived ones never.
+model Announcement {
+  id               String    @id @default(uuid()) @db.Uuid
+  /// maintenance | action_required | security_incident | info
+  kind             String
+  /// info | warning | critical
+  severity         String
+  title            String
+  body             String    @db.Text
+  courseId         String?   @map("course_id") @db.Uuid
+  startsAt         DateTime  @default(now()) @map("starts_at") @db.Timestamptz
+  endsAt           DateTime? @map("ends_at") @db.Timestamptz
+  maintenanceStart DateTime? @map("maintenance_start") @db.Timestamptz
+  maintenanceEnd   DateTime? @map("maintenance_end") @db.Timestamptz
+  /// the student must acknowledge it before going on (security incidents always)
+  requireAck       Boolean   @default(false) @map("require_ack")
+  createdBy        String    @map("created_by") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  archivedAt       DateTime? @map("archived_at") @db.Timestamptz
+
+  acks AnnouncementAck[]
+
+  @@index([startsAt, endsAt])
+  @@map("announcements")
+}
+
+model AnnouncementAck {
+  id             String       @id @default(uuid()) @db.Uuid
+  announcementId String       @map("announcement_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  ackAt          DateTime     @default(now()) @map("ack_at") @db.Timestamptz
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@map("announcement_acks")
 }
 
 /// Capture quality per session (Prompt B, B4): sequence gaps, duplicates and

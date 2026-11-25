@@ -267,6 +267,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // cleanup is harmless to defer a few seconds (see finishLogout), so it
   // stays there instead.
   const stopBiometrics = useCallback(() => {
+    // First: guards that react to the camera stopping (CameraGuard) stand
+    // down before the streams below are stopped on purpose.
+    window.dispatchEvent(new CustomEvent('ats:signing-out'));
     // Close the activity session on the backend — after the buffered
     // activity events are sent, so the session's parse includes them.
     const sid = sessionStorage.getItem('ats_session_id');

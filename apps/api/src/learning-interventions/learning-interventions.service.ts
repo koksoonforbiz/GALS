@@ -4230,7 +4230,7 @@ export class LearningInterventionsService {
     // the grounding contract still applies (the model is reminded
     // to cite [Source 1: …] when quoting).
     let evidence: GroundedEvidence | null = null;
-    let contextSource: 'pdf-source' | 'selection' | 'student-rag' | 'none' = 'none';
+    let contextSource: 'pdf-source' | 'selection' | 'lesson' | 'student-rag' | 'none' = 'none';
 
     {
       const sel = stripSlideBoilerplate((dto.selectedText ?? '').trim());
@@ -4248,6 +4248,28 @@ export class LearningInterventionsService {
           totalImageBytes: 0,
         };
         contextSource = 'selection';
+      }
+    }
+
+    // INTERACTIVE LESSON / PAGE (2026-11-26): the prompting course's lessons
+    // have no PDF, so without this the assistant answered with no course
+    // material at all ("not enough information"). Ground on the slide on
+    // screen (sent by the browser) and, for an interactive lesson, the
+    // whole lesson's text.
+    if (!evidence && dto.contentId) {
+      try {
+        const lesson = await this.lessonContext(dto.contentId, dto.pageText);
+        if (lesson) {
+          evidence = {
+            contextChunks: lesson,
+            images: [],
+            hasImages: false,
+            totalImageBytes: 0,
+          };
+          contextSource = 'lesson';
+        }
+      } catch (err) {
+        this.logger.warn(`chat() lesson context failed: ${(err as Error).message}`);
       }
     }
 
@@ -4642,6 +4664,40 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
     return { reply, suggestedStrategy, codeQuestion, turnId };
   }
 
+  /**
+   * Course material for an interactive lesson or a PAGE item: the slide on
+   * screen first (Source 1), then the whole lesson (Source 2). Null when
+   * the item has neither (PDF items use the PDF path).
+   */
+  private async lessonContext(
+    contentId: string,
+    pageText?: string,
+  ): Promise<Array<{ id: string; text: string; citationLabel: string }> | null> {
+    const item = await this.prisma.moduleItem.findUnique({
+      where: { id: contentId },
+      select: { type: true, title: true, lessonJson: true },
+    });
+    if (!item || (item.type !== 'INTERACTIVE_LESSON' && item.type !== 'PAGE')) return null;
+    const chunks: Array<{ id: string; text: string; citationLabel: string }> = [];
+    const onScreen = stripSlideBoilerplate((pageText ?? '').trim()).slice(0, 12_000);
+    if (onScreen.length >= 20) {
+      chunks.push({
+        id: `slide:${contentId}`,
+        text: onScreen,
+        citationLabel: `Source ${chunks.length + 1}: the slide on screen (${item.title})`,
+      });
+    }
+    const whole = lessonPlainText(item.lessonJson).slice(0, 40_000);
+    if (whole.length >= 20) {
+      chunks.push({
+        id: `lesson:${contentId}`,
+        text: whole,
+        citationLabel: `Source ${chunks.length + 1}: the whole lesson (${item.title})`,
+      });
+    }
+    return chunks.length ? chunks : null;
+  }
+
   /** Actions that count as the learner's own attempt on an item (LLM-turn attemptBefore). */
   private static readonly ATTEMPT_ACTIONS = [
     'ATTEMPT_STARTED',
@@ -4747,4 +4803,55 @@ If they ask for the answer, a hint, or help with "it" / "this" / "the coding que
       this.logger.warn(`llm_turns record failed for user ${t.userId}: ${(err as Error).message}`);
     }
   }
+}
+
+/** Keys of an interactive-lesson slide that are layout or ids, not content. */
+const LESSON_SKIP_KEYS = new Set([
+  'key',
+  't',
+  'id',
+  'kind',
+  'version',
+  'session',
+  'image',
+  'src',
+  'href',
+]);
+
+/**
+ * All readable text of an interactive lesson (lessonJson), slide by slide:
+ * titles, bodies, prompts, reveals, options, explanations. HTML stripped.
+ */
+export function lessonPlainText(lessonJson: unknown): string {
+  const out: string[] = [];
+  const strip = (h: string) =>
+    h
+      .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const walk = (v: unknown, into: string[]) => {
+    if (typeof v === 'string') {
+      const t = strip(v);
+      if (t) into.push(t);
+    } else if (Array.isArray(v)) {
+      for (const x of v) walk(x, into);
+    } else if (v && typeof v === 'object') {
+      for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+        if (!LESSON_SKIP_KEYS.has(k)) walk(x, into);
+      }
+    }
+  };
+  const slides = (lessonJson as { slides?: unknown[] } | null)?.slides;
+  if (!Array.isArray(slides)) return '';
+  slides.forEach((slide, i) => {
+    const parts: string[] = [];
+    walk(slide, parts);
+    if (parts.length) out.push(`[Slide ${i + 1}] ${parts.join(' ')}`);
+  });
+  return out.join('\n');
 }

@@ -61,7 +61,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Exit explicitly: background clients (Redis, queues) keep the event loop
+// alive after app.close(), so the script would otherwise never return.
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

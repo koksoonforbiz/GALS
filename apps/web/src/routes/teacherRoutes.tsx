@@ -20,6 +20,7 @@ import { StudentTextMiningPage } from '../features/text-mining/pages/StudentText
 import { EfaAdminPage } from '../pages/teacher/efa/EfaAdminPage';
 import { EfaCodingPage } from '../pages/teacher/efa/EfaCodingPage';
 import { KnowledgeTestsAdminPage } from '../pages/teacher/knowledge/KnowledgeTestsAdminPage';
+import { AnnouncementsPage } from '../pages/teacher/AnnouncementsPage';
 
 // Teacher/admin routes, moved verbatim from App.tsx. Only ever mounted by
 // the admin entry; the student bundle must not import this module
@@ -45,6 +46,7 @@ export const teacherRoutes: RouteObject[] = [
     element: staff(<QuestionGenerationPage />),
   },
   { path: '/teacher/ai-settings', element: staff(<AiSettingsPage />) },
+  { path: '/teacher/announcements', element: staff(<AnnouncementsPage />) },
   { path: '/teacher/questions', element: staff(<QuestionsPage />) },
   { path: '/teacher/assessments', element: staff(<AssessmentsPage />) },
   { path: '/teacher/review', element: staff(<ReviewPage />) },

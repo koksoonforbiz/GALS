@@ -1348,6 +1348,22 @@ export const ACTION_CATALOGUE = {
     required: { learnedChars: 'number', unclearChars: 'number' },
     optional: { learned: 'string', unclear: 'string' },
   },
+  /** An announcement (maintenance, incident, notice) was shown to the learner. */
+  ANNOUNCEMENT_VIEWED: {
+    level: 'SYS',
+    side: 'client',
+    kind: 'instant',
+    surface: 'D Cross-cutting (announcements)',
+    required: { announcementId: 'string', kind: 'string' },
+  },
+  /** The learner acknowledged an announcement. */
+  ANNOUNCEMENT_ACKNOWLEDGED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'D Cross-cutting (announcements)',
+    required: { announcementId: 'string', kind: 'string' },
+  },
 } satisfies Record<string, ActionSpec>;
 
 export type CatalogueAction = keyof typeof ACTION_CATALOGUE;

@@ -326,6 +326,8 @@ enum ActivityAction {
   ANSWER_CONFIDENCE_RATED
   RESUME_ANSWERED
   SESSION_REFLECTION_SUBMITTED
+  ANNOUNCEMENT_VIEWED
+  ANNOUNCEMENT_ACKNOWLEDGED
 }
 
 // ─── Models ──────────────────────────────────────────────

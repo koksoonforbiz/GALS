@@ -24,7 +24,21 @@ export function CameraGuard({
   restart: () => Promise<void>;
   error: string | null;
 }) {
-  const { problem } = useCameraHealth(stream, enabled);
+  // Signing out stops the webcam on purpose (AuthContext.stopBiometrics
+  // dispatches 'ats:logout'): that is not "camera turned off", so the guard
+  // stands down instead of asking the learner to turn it back on.
+  const [signingOut, setSigningOut] = useState(false);
+  useEffect(() => {
+    const onLogout = () => setSigningOut(true);
+    window.addEventListener('ats:signing-out', onLogout);
+    window.addEventListener('ats:logout', onLogout);
+    return () => {
+      window.removeEventListener('ats:signing-out', onLogout);
+      window.removeEventListener('ats:logout', onLogout);
+    };
+  }, []);
+  const { problem: health } = useCameraHealth(stream, enabled && !signingOut);
+  const problem = signingOut ? null : health;
   const { track } = useActivityLog();
   const since = useRef<{ reason: Exclude<CameraProblem, null>; at: number } | null>(null);
 

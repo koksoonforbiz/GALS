@@ -12,6 +12,7 @@ import {
   Download,
   Image,
   Lock,
+  Unlock,
   Pause,
   Pencil,
   Play,
@@ -241,6 +242,9 @@ export function TimelineCoding() {
   const [showSummary, setShowSummary] = useState(false);
   const [aois, setAois] = useState<Aoi[]>([]);
   const [aoiDraw, setAoiDraw] = useState(false);
+  // The replay shows exactly the student's viewport (locked). Unlocked, the
+  // coder can scroll and look around inside the recorded page.
+  const [lockedView, setLockedView] = useState(true);
   const [utterCodings, setUtterCodings] = useState<Record<string, any>>({});
   const [codingUtter, setCodingUtter] = useState<UtterRef | null>(null);
   const [trim, setTrim] = useState<{ startMs: number | null; endMs: number | null }>({
@@ -898,9 +902,26 @@ export function TimelineCoding() {
                 </>
               )}
             </button>
-            <span className="ml-auto inline-flex items-center gap-1 text-slate-400">
-              <Lock size={13} /> locked to student view
-            </span>
+            <button
+              type="button"
+              onClick={() => setLockedView((v) => !v)}
+              title={
+                lockedView
+                  ? "Showing exactly the student's view. Click to scroll around the recorded page."
+                  : "Free view: scroll inside the recorded page. Click to go back to the student's view."
+              }
+              className={`ml-auto inline-flex items-center gap-1 rounded border px-2 py-0.5 ${lockedView ? 'border-slate-300 text-slate-500' : 'border-blue-400 bg-blue-50 text-blue-700'}`}
+            >
+              {lockedView ? (
+                <>
+                  <Lock size={13} /> locked to student view
+                </>
+              ) : (
+                <>
+                  <Unlock size={13} /> free view (click to lock)
+                </>
+              )}
+            </button>
           </div>
           <DomStage
             sessionId={sessionId}
@@ -909,7 +930,7 @@ export function TimelineCoding() {
             lastClick={null}
             aoiVisible={{}}
             showScreenshot={showScreenshot}
-            locked
+            locked={lockedView}
             overlay={aoiOverlay}
             resumesAt={resumesAtMs != null ? fmtRel(resumesAtMs) : null}
           />

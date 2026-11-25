@@ -77,10 +77,12 @@ export function DomStage(props: {
         return snapshot.pageUrl;
       }
     })();
+    // Since 2026-11-25 the puzzles and knowledge checks are recorded too
+    // (lighter snapshots), so a pause there means the recorder restarted.
     const why = /\/puzzles(\/|$)/.test(path)
-      ? 'The student was on the attention and memory puzzles, which are not screen-recorded.'
+      ? 'The recorder restarted around the attention and memory puzzles (older sessions did not record them).'
       : /\/knowledge-check(\/|$)/.test(path)
-        ? 'The student was on a knowledge test, which is not screen-recorded.'
+        ? 'The recorder restarted around a knowledge check (older sessions did not record them).'
         : 'The student left the recorded page.';
     return (
       <div className="flex min-h-[320px] flex-col items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-6 text-center text-sm text-slate-500">
@@ -295,6 +297,8 @@ function DomFrame({
             height,
             border: 'none',
             opacity: i === visible ? 1 : 0,
+            // Only the visible frame takes input (free view scrolls it).
+            pointerEvents: i === visible ? 'auto' : 'none',
             transition: 'opacity 120ms',
           }}
         />

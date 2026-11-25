@@ -5,6 +5,11 @@ export interface ChatMessageDto {
 
 export interface ChatRequestDto {
   message: string;
+  /**
+   * Plain text of the page or slide on screen (interactive lessons and PAGE
+   * items have no PDF to ground on). Used when nothing is selected.
+   */
+  pageText?: string;
   conversationHistory: ChatMessageDto[];
   courseId: string;
   pageType?: string;

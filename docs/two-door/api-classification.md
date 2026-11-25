@@ -830,3 +830,16 @@ The six stream routes (cursor, clicks, scroll, keystrokes, visibility, clipboard
 | GET    | `/api/course-flags/:courseId`         | student, teacher | JwtAuthGuard,RolesGuard | **PUBLIC** | Which learner prompts are on. Student: enrolled; teacher: own course. |
 | PATCH  | `/api/course-flags/:courseId`         | teacher          | JwtAuthGuard,RolesGuard | private    | Switch one prompt on or off (append-only history).                    |
 | GET    | `/api/course-flags/:courseId/history` | teacher          | JwtAuthGuard,RolesGuard | private    | When each prompt was switched.                                        |
+
+## Announcements (2026-11-26)
+
+`AnnouncementsController` (`announcements/announcements.controller.ts`). Allowlist: `location = /api/announcements/active` (GET), `location ~ ^/api/announcements/[^/]+/ack$` (POST).
+
+| Method | Path                         | Roles          | Guards                  | Door       | Notes                                                                       |
+| ------ | ---------------------------- | -------------- | ----------------------- | ---------- | --------------------------------------------------------------------------- |
+| GET    | `/api/announcements/active`  | student        | JwtAuthGuard,RolesGuard | **PUBLIC** | Notices for the student's courses and everyone, with their acknowledgement. |
+| POST   | `/api/announcements/:id/ack` | student        | JwtAuthGuard,RolesGuard | **PUBLIC** | Acknowledge a notice (idempotent).                                          |
+| GET    | `/api/announcements`         | teacher, admin | JwtAuthGuard,RolesGuard | private    | Own notices (admin: all) with acknowledgement counts.                       |
+| POST   | `/api/announcements`         | teacher, admin | JwtAuthGuard,RolesGuard | private    | Teacher: own courses only; admin: also every student.                       |
+| PATCH  | `/api/announcements/:id`     | teacher, admin | JwtAuthGuard,RolesGuard | private    | Edit own notice.                                                            |
+| DELETE | `/api/announcements/:id`     | teacher, admin | JwtAuthGuard,RolesGuard | private    | Archive (kept, hidden).                                                     |

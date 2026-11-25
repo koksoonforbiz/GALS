@@ -506,6 +506,9 @@ export function ChatbotPanel({
         contentId: contentId || undefined,
         contentTitle: contentTitle || undefined,
         selectedText: effectiveSelectedText || undefined,
+        // The slide or page on screen: grounds the reply when nothing is
+        // selected (interactive lessons have no PDF).
+        pageText: contentText ? stripMdxToPlainText(contentText).slice(0, 12_000) : undefined,
         // Bug 1/5/6 (2026-06-12): tell the backend which PDF slide the
         // student is currently viewing so chat() can narrow the
         // grounded PDF text to a small window around it. Without this,
