@@ -2,11 +2,29 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma';
-import library from './config/library.v2.json';
-import { LIBRARY_VERSION, defaultParams, resolveParams } from './engine/params';
+import {
+  CURRENT_LIBRARY,
+  LIBRARIES,
+  LIBRARY_HASH,
+  LIBRARY_VERSION,
+  defaultParams,
+  engineVersion,
+  resolveParams,
+  sha256,
+} from './engine/params';
 import { prepareActions } from './engine/prepare';
+import {
+  NO_PATTERN,
+  UNRESOLVED,
+  detectionKey,
+  enrich,
+  residuals,
+  stableJson,
+} from './engine/provenance';
 import { RULES, runRules } from './engine/rules';
-import type { PriorHistory, RawAction } from './engine/types';
+import type { LibraryVersion, PriorHistory, RawAction } from './engine/types';
+
+const library = LIBRARIES[CURRENT_LIBRARY];
 
 /** Actions the engine needs from earlier sessions (visit numbers, revisions). */
 const PRIOR_ACTIONS = [
@@ -135,13 +153,16 @@ export class LearningEventsService {
       })
       .catch(() => null);
     try {
-      const r = await this.computeSession(sessionId);
+      const r = await this.computeSession(sessionId, undefined, { parseRunId: run?.id });
       if (run) {
         await this.prisma.sessionParseRun.update({
           where: { id: run.id },
           data: {
             status: 'ok',
             finishedAt: new Date(),
+            libraryVersion: r.libraryVersion,
+            libraryHash: r.libraryHash,
+            parameterHash: r.parameterHash,
             parameterSetVersion: r.parameterSetVersion,
             rawActions: r.rawActions,
             detections: r.learningEvents,
@@ -164,7 +185,24 @@ export class LearningEventsService {
     }
   }
 
-  async computeSession(sessionId: string, parameterSetVersion?: number) {
+  /**
+   * Parse one session with a library version (default: the current one) and
+   * a parameter set (default: the latest), and store the detections with
+   * their provenance (Prompt B, P4): stable key, library hash, engine
+   * version, parameter snapshot, measured values and thresholds, other
+   * rules on the same evidence, non-activity sources, plus residual outputs
+   * (NO_PATTERN, UNRESOLVED) and a coverage record.
+   *
+   * Earlier versions are kept (PI decision 8): only rows of the same
+   * library hash + parameter snapshot are replaced; every other row of the
+   * session is marked is_current = false.
+   */
+  async computeSession(
+    sessionId: string,
+    parameterSetVersion?: number,
+    opts: { library?: LibraryVersion; parseRunId?: string } = {},
+  ) {
+    const version = opts.library ?? CURRENT_LIBRARY;
     const session = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
       select: { id: true, userId: true, courseId: true },
@@ -177,8 +215,21 @@ export class LearningEventsService {
         })
       : await this.currentParameterSet();
     if (!set) throw new BadRequestException(`No parameter set version ${parameterSetVersion}`);
-    const params = resolveParams(set.values);
+    const params = resolveParams(set.values, version);
+    const libraryHash = LIBRARY_HASH[version];
+    const parameterHash = sha256(stableJson({ library: version, params }));
+    await this.prisma.parameterSetSnapshot.upsert({
+      where: { hash: parameterHash },
+      create: {
+        hash: parameterHash,
+        libraryVersion: version,
+        values: params as unknown as Prisma.InputJsonValue,
+      },
+      update: {},
+    });
 
+    // Ordered by time then id, so which copy of a double-posted row is kept
+    // (and so the source ids) is the same on every recompute (CAP-72).
     const rows = await this.prisma.activityLog.findMany({
       where: { sessionId },
       select: {
@@ -190,15 +241,17 @@ export class LearningEventsService {
         interventionId: true,
         metadata: true,
       },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     });
     const { actions, duplicates } = prepareActions(rows.map((r) => toRaw(r as Row)));
 
     const visibilityRows = await this.prisma.visibility_logs.findMany({
       where: { sessionId },
-      select: { timestamp: true, visibleState: true },
-      orderBy: { timestamp: 'asc' },
+      select: { id: true, timestamp: true, visibleState: true },
+      orderBy: [{ timestamp: 'asc' }, { id: 'asc' }],
     });
     const visibility = visibilityRows.map((v) => ({
+      id: v.id,
       at: Number(v.timestamp),
       state: v.visibleState,
     }));
@@ -215,46 +268,108 @@ export class LearningEventsService {
       ? (
           await this.prisma.aiPromptClassification.findMany({
             where: { studentId: session.userId, occurredAt: span },
-            select: { sourceType: true, sourceId: true, occurredAt: true, label: true },
+            select: { id: true, sourceType: true, sourceId: true, occurredAt: true, label: true },
+            orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
           })
         ).map((c) => ({
+          id: c.id,
           sourceType: c.sourceType,
           sourceId: c.sourceId,
           at: c.occurredAt.getTime(),
           label: c.label,
         }))
       : [];
-    const drafts = runRules({ actions, visibility, prior, params, classifications });
+    const input = { actions, visibility, prior, params, classifications, library: version };
+    const drafts = runRules(input);
+    const enriched = enrich(drafts, input, version);
+    const { residual, coverage } = residuals(drafts, input);
 
+    const family = new Map(LIBRARIES[version].rules.map((r) => [r.id, r.family ?? r.id]));
+    const engine = engineVersion();
     const courseId = session.courseId ?? actions.find((a) => a.courseId)?.courseId ?? null;
-    const data: Prisma.LearningEventCreateManyInput[] = drafts.map((d) => ({
-      studentId: session.userId,
-      sessionId,
-      courseId,
-      moduleItemId: d.moduleItemId ?? null,
-      slideKey: d.slideKey ?? null,
-      ruleId: d.ruleId,
-      eventFamily: FAMILY.get(d.ruleId) ?? d.ruleId,
-      outcome: d.outcome ?? null,
-      startAt: new Date(d.start),
-      endAt: new Date(d.end),
-      sourceActionIds: d.sources.map((s) => s.id),
-      confidence: validated.has(d.ruleId) ? 'validated' : 'candidate',
-      libraryVersion: LIBRARY_VERSION,
-      parameterSetVersion: set.version,
-      detail: (d.detail ?? undefined) as Prisma.InputJsonValue | undefined,
-    }));
+    const seen = new Set<string>();
+    const data: Prisma.LearningEventCreateManyInput[] = [];
+    for (const d of [...enriched, ...residual]) {
+      const sourceIds = d.sources.map((x) => x.id);
+      const key = detectionKey({
+        sessionId,
+        ruleId: d.ruleId,
+        outcome: d.outcome,
+        parameterHash,
+        libraryHash,
+        start: d.start,
+        sourceIds: [...sourceIds, ...(d.sourceRefs ?? [])],
+      });
+      if (seen.has(key)) continue; // the same detection twice in one run
+      seen.add(key);
+      data.push({
+        studentId: session.userId,
+        sessionId,
+        courseId,
+        moduleItemId: d.moduleItemId ?? null,
+        slideKey: d.slideKey ?? null,
+        ruleId: d.ruleId,
+        eventFamily:
+          d.ruleId === NO_PATTERN || d.ruleId === UNRESOLVED
+            ? 'Residual'
+            : (family.get(d.ruleId) ?? d.ruleId),
+        outcome: d.outcome ?? null,
+        startAt: new Date(d.start),
+        endAt: new Date(d.end),
+        sourceActionIds: sourceIds,
+        confidence: validated.has(d.ruleId) ? 'validated' : 'candidate',
+        libraryVersion: LIBRARIES[version].libraryVersion,
+        parameterSetVersion: set.version,
+        detail: (d.detail ?? undefined) as Prisma.InputJsonValue | undefined,
+        detectionKey: key,
+        libraryHash,
+        engineVersion: engine,
+        parameterHash,
+        computedValues: d.computedValues as unknown as Prisma.InputJsonValue,
+        alternatives: d.alternatives,
+        evidenceClass: d.evidenceClass,
+        sourceRefs: d.sourceRefs ?? [],
+        isCurrent: true,
+        parseRunId: opts.parseRunId ?? null,
+      });
+    }
 
+    const sameVersion = { sessionId, libraryHash, parameterHash };
     await this.prisma.$transaction([
-      this.prisma.learningEvent.deleteMany({ where: { sessionId } }),
+      this.prisma.learningEvent.updateMany({
+        where: { sessionId, isCurrent: true },
+        data: { isCurrent: false },
+      }),
+      // Rows computed before provenance (library_hash null) are kept too,
+      // marked not current: they are the v2 results as first stored.
+      this.prisma.learningEvent.deleteMany({ where: sameVersion }),
       this.prisma.learningEvent.createMany({ data }),
+      this.prisma.learningEventCoverage.updateMany({
+        where: { sessionId, isCurrent: true },
+        data: { isCurrent: false },
+      }),
+      this.prisma.learningEventCoverage.deleteMany({ where: sameVersion }),
+      this.prisma.learningEventCoverage.create({
+        data: {
+          sessionId,
+          libraryVersion: LIBRARIES[version].libraryVersion,
+          libraryHash,
+          parameterHash,
+          ...coverage,
+          isCurrent: true,
+        },
+      }),
     ]);
     return {
       sessionId,
+      libraryVersion: LIBRARIES[version].libraryVersion,
+      libraryHash,
+      parameterHash,
       parameterSetVersion: set.version,
       rawActions: rows.length,
       duplicatesRemoved: duplicates,
       learningEvents: data.length,
+      coverage,
       byRule: data.reduce<Record<string, number>>(
         (acc, d) => ((acc[d.ruleId] = (acc[d.ruleId] ?? 0) + 1), acc),
         {},
@@ -334,7 +449,7 @@ export class LearningEventsService {
 
   async sessionEvents(sessionId: string) {
     return this.prisma.learningEvent.findMany({
-      where: { sessionId },
+      where: { sessionId, isCurrent: true },
       orderBy: [{ startAt: 'asc' }, { ruleId: 'asc' }],
     });
   }
@@ -358,7 +473,7 @@ export class LearningEventsService {
     }
     const fired = await this.prisma.learningEvent.groupBy({
       by: ['ruleId', 'sessionId'],
-      where: { sessionId: { in: sessionIds } },
+      where: { sessionId: { in: sessionIds }, isCurrent: true },
     });
     const firedBy = new Map<string, Set<string>>();
     for (const f of fired) {

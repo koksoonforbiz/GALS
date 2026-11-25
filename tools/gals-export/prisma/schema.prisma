@@ -2355,6 +2355,16 @@ model LearningEvent {
   parameterSetVersion Int      @map("parameter_set_version")
   detail              Json?
   computedAt          DateTime @map("computed_at") @db.Timestamptz
+  detectionKey        String?  @map("detection_key")
+  libraryHash         String?  @map("library_hash")
+  engineVersion       String?  @map("engine_version")
+  parameterHash       String?  @map("parameter_hash")
+  computedValues      Json?    @map("computed_values")
+  alternatives        String[]
+  evidenceClass       String?  @map("evidence_class")
+  sourceRefs          String[] @map("source_refs")
+  isCurrent           Boolean  @default(true) @map("is_current")
+  parseRunId          String?  @map("parse_run_id") @db.Uuid
 
   @@index([sessionId])
   @@map("learning_events")

@@ -19,7 +19,12 @@ export interface RawAction {
 export interface VisibilitySignal {
   at: number;
   state: string;
+  /** visibility_logs.id, kept as provenance (source ref `visibility_logs:<id>`). */
+  id?: string;
 }
+
+/** Library versions the engine can run (config/library.*.json). */
+export type LibraryVersion = 'v2' | 'v2.1';
 
 export interface Params {
   T_read: number;
@@ -34,6 +39,8 @@ export interface Params {
   W_recover: number;
   N_fail: number;
   E_edit: number;
+  /** v2.1: a gap this long is a break (M20); shorter idle gaps are M25. */
+  T_break: number;
 }
 
 /** What the learner already did before this session (for visitNo / revisions). */
@@ -53,10 +60,14 @@ export interface Draft {
   moduleItemId?: string | null;
   slideKey?: string | null;
   detail?: Record<string, unknown>;
+  /** Evidence that is not an activity row: `visibility_logs:<id>`, `ai_prompt_classifications:<id>`. */
+  sourceRefs?: string[];
 }
 
 /** Help-type labels from the prompt classifier (rule M33; types M08). */
 export interface PromptClassification {
+  /** ai_prompt_classifications.id (provenance). */
+  id?: string;
   sourceType: string;
   sourceId: string;
   at: number;
@@ -69,6 +80,8 @@ export interface EngineInput {
   prior: PriorHistory;
   params: Params;
   classifications?: PromptClassification[];
+  /** Which library's rule semantics to apply (default v2). */
+  library?: LibraryVersion;
 }
 
 export interface RuleDef {

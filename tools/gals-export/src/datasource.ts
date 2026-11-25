@@ -532,9 +532,11 @@ export class PrismaDataSource implements SessionDataSource {
       // present when the live platform has those tables. Yield nothing by
       // default; a future schema can wire them in here.
       case 'learning_events': {
+        // The current library/parameter version only; earlier versions stay
+        // in the database (Prompt B, P4). Provenance is added in bundle v2 (P7).
         const rows = await this.prisma.learningEvent.findMany({
-          where: { sessionId },
-          orderBy: { startAt: 'asc' },
+          where: { sessionId, isCurrent: true },
+          orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
         });
         // Prompting-course research use (text_capture_consents, latest row per
         // learner and course): without consent (c) the stream is omitted.

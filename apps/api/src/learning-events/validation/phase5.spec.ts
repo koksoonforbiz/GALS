@@ -84,13 +84,11 @@ describe('ValidationService.report', () => {
       ]),
     },
     activityLog: {
-      findFirst: jest
-        .fn()
-        .mockImplementation(({ orderBy }) =>
-          Promise.resolve({
-            occurredAt: new Date(base + (orderBy.occurredAt === 'desc' ? 120_000 : 0)),
-          }),
-        ),
+      findFirst: jest.fn().mockImplementation(({ orderBy }) =>
+        Promise.resolve({
+          occurredAt: new Date(base + (orderBy.occurredAt === 'desc' ? 120_000 : 0)),
+        }),
+      ),
     },
     replayCode: {
       findMany: jest.fn().mockResolvedValue([{ label: 'Orientation' }]),

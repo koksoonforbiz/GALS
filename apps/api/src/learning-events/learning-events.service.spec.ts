@@ -19,6 +19,7 @@ function createPrisma(rows: ReturnType<typeof row>[]) {
   const learningEvent = {
     deleteMany: jest.fn().mockReturnValue('delete-op'),
     createMany: jest.fn().mockReturnValue('create-op'),
+    updateMany: jest.fn().mockReturnValue('retire-op'),
     groupBy: jest.fn().mockResolvedValue([{ ruleId: 'M05', sessionId: 's1' }]),
     findMany: jest.fn(),
   };
@@ -49,12 +50,18 @@ function createPrisma(rows: ReturnType<typeof row>[]) {
     learningEventRuleStatusChange: { findMany: jest.fn().mockResolvedValue([]) },
     aiPromptClassification: { findMany: jest.fn().mockResolvedValue([]) },
     learningEvent,
+    learningEventCoverage: {
+      updateMany: jest.fn().mockReturnValue('coverage-retire-op'),
+      deleteMany: jest.fn().mockReturnValue('coverage-delete-op'),
+      create: jest.fn().mockReturnValue('coverage-create-op'),
+    },
+    parameterSetSnapshot: { upsert: jest.fn().mockResolvedValue({}) },
     $transaction: jest.fn().mockResolvedValue([]),
   };
 }
 
 describe('LearningEventsService', () => {
-  it('replaces a session’s rows in one transaction, stamped with library and parameter versions', async () => {
+  it('replaces only the same version in one transaction, with provenance; older versions are kept', async () => {
     const pred = row('r1', 'PREDICTION_COMMITTED', 0, {
       slideKey: 's1-3',
       kind: 'think',
@@ -73,7 +80,16 @@ describe('LearningEventsService', () => {
       parameterSetVersion: 3,
       byRule: { M05: 1 },
     });
-    expect(prisma.learningEvent.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 's1' } });
+    const { libraryHash, parameterHash } = res;
+    expect(libraryHash).toMatch(/^[0-9a-f]{64}$/);
+    // Other versions stay, marked not current; only this version is replaced.
+    expect(prisma.learningEvent.updateMany).toHaveBeenCalledWith({
+      where: { sessionId: 's1', isCurrent: true },
+      data: { isCurrent: false },
+    });
+    expect(prisma.learningEvent.deleteMany).toHaveBeenCalledWith({
+      where: { sessionId: 's1', libraryHash, parameterHash },
+    });
     const data = prisma.learningEvent.createMany.mock.calls[0][0].data;
     expect(data[0]).toMatchObject({
       ruleId: 'M05',
@@ -82,11 +98,29 @@ describe('LearningEventsService', () => {
       courseId: 'course-1',
       slideKey: 's1-3',
       confidence: 'candidate',
-      libraryVersion: 'v2',
+      libraryVersion: 'v2.1',
       parameterSetVersion: 3,
       sourceActionIds: ['r1'],
+      libraryHash,
+      parameterHash,
+      isCurrent: true,
+      detectionKey: expect.stringMatching(/^[0-9a-f]{64}$/),
+      computedValues: {
+        measured: expect.objectContaining({ chars: 120 }),
+        thresholds: expect.objectContaining({ T_rapid: 30_000 }),
+      },
     });
-    expect(prisma.$transaction).toHaveBeenCalledWith(['delete-op', 'create-op']);
+    expect(prisma.parameterSetSnapshot.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { hash: parameterHash } }),
+    );
+    expect(prisma.$transaction).toHaveBeenCalledWith([
+      'retire-op',
+      'delete-op',
+      'create-op',
+      'coverage-retire-op',
+      'coverage-delete-op',
+      'coverage-create-op',
+    ]);
   });
 
   it('reports coverage per rule, including no-input rules', async () => {

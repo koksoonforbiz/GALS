@@ -39,8 +39,9 @@ const EXPECTED: Array<[string, string, string | null]> = [
   ['M15', 'self_identified_gap', 's1-18'],
   ['M14', 'self_scored', 's1-24'],
   ['M14', 'rubric_after_attempt', 's1-24'],
+  // Library v2.1: an idle gap shorter than T_break (5 min) is idle time
+  // only (M25); v2 also labelled it an interruption (M20).
   ['M25', 'idle', null],
-  ['M20', 'interruption_resumed', null],
 ];
 
 const key = (r: { ruleId: string; outcome: string | null; slideKey: string | null }) =>

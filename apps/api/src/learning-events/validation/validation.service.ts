@@ -97,7 +97,8 @@ export class ValidationService {
     const base = await this.baseWallClockMs(sessionId);
     const [events, annotations, lastAction, firstAction] = await Promise.all([
       this.prisma.learningEvent.findMany({
-        where: { sessionId },
+        // Current version only; residual outputs are not rule detections.
+        where: { sessionId, isCurrent: true, ruleId: { notIn: ['NO_PATTERN', 'UNRESOLVED'] } },
         select: { ruleId: true, startAt: true, endAt: true },
       }),
       this.prisma.replayAnnotation.findMany({

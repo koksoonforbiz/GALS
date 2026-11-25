@@ -194,7 +194,7 @@ export class ResearchExportsService {
     } else {
       const sessionIds = await this.courseSessions(courseId);
       const events = await this.prisma.learningEvent.findMany({
-        where: { sessionId: { in: sessionIds } },
+        where: { sessionId: { in: sessionIds }, isCurrent: true },
         orderBy: { startAt: 'asc' },
       });
       const allowed = await this.researchFilter(courseId);

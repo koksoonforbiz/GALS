@@ -1736,6 +1736,38 @@ model ActivityLog {
   @@map("activity_logs")
 }
 
+/// The exact parameter values a parse used, keyed by their hash (Prompt B,
+/// P4): a parameter set can change later, a snapshot cannot (CAP-63).
+model ParameterSetSnapshot {
+  hash           String   @id
+  libraryVersion String   @map("library_version")
+  values         Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("parameter_set_snapshots")
+}
+
+/// How much of a session's active time the rules explain (Prompt B, P4).
+model LearningEventCoverage {
+  id               String   @id @default(uuid()) @db.Uuid
+  sessionId        String   @map("session_id") @db.Uuid
+  libraryVersion   String   @map("library_version")
+  libraryHash      String   @map("library_hash")
+  parameterHash    String   @map("parameter_hash")
+  activeMs         Int      @map("active_ms")
+  explainedMs      Int      @map("explained_ms")
+  actions          Int
+  explainedActions Int      @map("explained_actions")
+  noPatternSpans   Int      @map("no_pattern_spans")
+  unresolved       Int
+  notApplicable    String[] @default([]) @map("not_applicable")
+  isCurrent        Boolean  @default(true) @map("is_current")
+  computedAt       DateTime @default(now()) @map("computed_at") @db.Timestamptz
+
+  @@index([sessionId, isCurrent])
+  @@map("learning_event_coverage")
+}
+
 /// One run of the learning-event parser on a session (Prompt B, P2), so
 /// "never parsed" differs from "parsed, no detections" (CAP-82).
 model SessionParseRun {
@@ -1745,6 +1777,8 @@ model SessionParseRun {
   trigger             String
   libraryVersion      String?   @map("library_version")
   parameterSetVersion Int?      @map("parameter_set_version")
+  libraryHash         String?   @map("library_hash")
+  parameterHash       String?   @map("parameter_hash")
   startedAt           DateTime  @default(now()) @map("started_at") @db.Timestamptz
   finishedAt          DateTime? @map("finished_at") @db.Timestamptz
   /// running | ok | error
@@ -2879,11 +2913,32 @@ model LearningEvent {
   detail              Json?
   computedAt          DateTime @default(now()) @map("computed_at") @db.Timestamptz
 
+  // Provenance (Prompt B, P4). Null on rows computed before 2026-11-26.
+  /// sha256(session, rule, outcome, parameters, library, start, sources): stable across recomputes
+  detectionKey   String?  @unique @map("detection_key")
+  /// sha256 of the library JSON the rule came from
+  libraryHash    String?  @map("library_hash")
+  /// ENGINE_VERSION+git build
+  engineVersion  String?  @map("engine_version")
+  /// parameter_set_snapshots.hash: the exact values used
+  parameterHash  String?  @map("parameter_hash")
+  /// { measured: {...}, thresholds: {...} }
+  computedValues Json?    @map("computed_values")
+  /// other rules that fired on the same source actions
+  alternatives   String[] @default([])
+  evidenceClass  String?  @map("evidence_class")
+  /// non-activity evidence: visibility_logs:<id>, ai_prompt_classifications:<id>
+  sourceRefs     String[] @default([]) @map("source_refs")
+  /// false once a newer library/parameter version was computed for the session
+  isCurrent      Boolean  @default(true) @map("is_current")
+  parseRunId     String?  @map("parse_run_id") @db.Uuid
+
   session StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([studentId, startAt])
   @@index([courseId, ruleId])
+  @@index([sessionId, isCurrent])
   @@map("learning_events")
 }
 

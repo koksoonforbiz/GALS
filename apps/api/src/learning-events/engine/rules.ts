@@ -12,7 +12,14 @@
  * - predict / misconception reveals are automatic (`auto: true`).
  * - Every misconception claim is false, so "agree" is the wrong commit (M16).
  */
-import { type Draft, type EngineInput, type RawAction, type RuleDef, tOutMs } from './types';
+import {
+  type Draft,
+  type EngineInput,
+  type Params,
+  type RawAction,
+  type RuleDef,
+  tOutMs,
+} from './types';
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -265,15 +272,29 @@ const M04: RuleDef = {
 const M05: RuleDef = {
   id: 'M05',
   inputs: ['PREDICTION_COMMITTED'],
-  run: ({ actions, params }) =>
-    actions
-      .filter((a) => a.action === 'PREDICTION_COMMITTED' && !isLowEffort(a, params))
-      .map((a) =>
-        draft('M05', [a], {
-          outcome: String(a.meta.kind ?? 'prediction'),
-          detail: { chars: a.meta.chars },
-        }),
-      ),
+  run: (input) => {
+    const { actions, params } = input;
+    const out: Draft[] = [];
+    for (const a of actions) {
+      if (a.action !== 'PREDICTION_COMMITTED') continue;
+      const kind = String(a.meta.kind ?? 'prediction');
+      if (!isLowEffort(a, params)) {
+        out.push(draft('M05', [a], { outcome: kind, detail: { chars: a.meta.chars } }));
+        continue;
+      }
+      // v2.1: low effort but no reveal follows, so M24 can't flag it; keep
+      // it as forethought, marked low effort, instead of losing it.
+      if (input.library === 'v2.1' && !m24Reveal(actions, a, params)) {
+        out.push(
+          draft('M05', [a], {
+            outcome: `${kind}_low_effort`,
+            detail: { chars: a.meta.chars, msOnSlide: a.meta.msOnSlide, lowEffort: true },
+          }),
+        );
+      }
+    }
+    return out;
+  },
 };
 
 const M06: RuleDef = {
@@ -339,6 +360,7 @@ const M33: RuleDef = {
       start: c.at,
       end: c.at,
       sources: [],
+      sourceRefs: c.id ? [`ai_prompt_classifications:${c.id}`] : [],
       detail: { sourceType: c.sourceType, sourceId: c.sourceId },
     })),
 };
@@ -479,11 +501,20 @@ const M16: RuleDef = {
 };
 
 /** Off-task intervals from idle events and visibility logs (M25), interruptions (M20). */
-function offTaskIntervals(
-  input: EngineInput,
-): Array<{ start: number; end: number | null; source: string; actions: RawAction[] }> {
-  const out: Array<{ start: number; end: number | null; source: string; actions: RawAction[] }> =
-    [];
+function offTaskIntervals(input: EngineInput): Array<{
+  start: number;
+  end: number | null;
+  source: string;
+  actions: RawAction[];
+  refs: string[];
+}> {
+  const out: Array<{
+    start: number;
+    end: number | null;
+    source: string;
+    actions: RawAction[];
+    refs: string[];
+  }> = [];
   let idle: RawAction | null = null;
   for (const a of input.actions) {
     if (a.action === 'IDLE_STARTED') idle = a;
@@ -494,40 +525,54 @@ function offTaskIntervals(
         end: a.at,
         source: 'idle',
         actions: [idle, a],
+        refs: [],
       });
       idle = null;
     }
   }
-  if (idle) out.push({ start: idle.at, end: null, source: 'idle', actions: [idle] });
+  if (idle) out.push({ start: idle.at, end: null, source: 'idle', actions: [idle], refs: [] });
   let hiddenSince: number | null = null;
   let hiddenState = '';
+  let hiddenRef: string[] = [];
+  const ref = (v: { id?: string }) => (v.id ? [`visibility_logs:${v.id}`] : []);
   for (const v of input.visibility) {
     const away = v.state === 'hidden' || v.state === 'blurred';
     if (away && hiddenSince == null) {
       hiddenSince = v.at;
       hiddenState = v.state;
+      hiddenRef = ref(v);
     } else if (!away && hiddenSince != null) {
-      out.push({ start: hiddenSince, end: v.at, source: hiddenState, actions: [] });
+      out.push({
+        start: hiddenSince,
+        end: v.at,
+        source: hiddenState,
+        actions: [],
+        refs: [...hiddenRef, ...ref(v)],
+      });
       hiddenSince = null;
     }
   }
   if (hiddenSince != null)
-    out.push({ start: hiddenSince, end: null, source: hiddenState, actions: [] });
+    out.push({ start: hiddenSince, end: null, source: hiddenState, actions: [], refs: hiddenRef });
   return out.sort((a, b) => a.start - b.start);
 }
 
 const M25: RuleDef = {
   id: 'M25',
   inputs: ['IDLE_STARTED', 'SLIDE_ENTERED'],
+  // v2.1: one label per interval. Below T_break it is idle time (here);
+  // from T_break on it is an interruption (M20).
   run: (input) =>
     offTaskIntervals(input)
       .filter((iv) => iv.end != null && iv.end - iv.start >= input.params.T_idle)
+      .filter((iv) => !(input.library === 'v2.1') || iv.end! - iv.start < input.params.T_break)
       .map((iv) => ({
         ruleId: 'M25',
         outcome: iv.source,
         start: iv.start,
         end: iv.end!,
         sources: iv.actions,
+        sourceRefs: iv.refs,
         detail: { durationMs: iv.end! - iv.start, excludedFromTimeOnTask: true },
       })),
 };
@@ -552,17 +597,26 @@ const M20: RuleDef = {
             start: iv.start,
             end: iv.start,
             sources: iv.actions,
+            sourceRefs: iv.refs,
             detail: { source: iv.source },
           });
         }
-      } else if (iv.end - iv.start >= input.params.T_idle) {
+      } else if (
+        iv.end - iv.start >=
+        (input.library === 'v2.1' ? input.params.T_break : input.params.T_idle)
+      ) {
         out.push({
           ruleId: 'M20',
           outcome: 'interruption_resumed',
           start: iv.start,
           end: iv.end,
           sources: iv.actions,
-          detail: { source: iv.source, durationMs: iv.end - iv.start },
+          sourceRefs: iv.refs,
+          detail: {
+            source: iv.source,
+            durationMs: iv.end - iv.start,
+            ...(input.library === 'v2.1' ? { excludedFromTimeOnTask: true } : {}),
+          },
         });
       }
     }
@@ -646,6 +700,18 @@ const M23: RuleDef = {
     return out;
   },
 };
+
+/** The reveal that makes a low-effort commit an M24 candidate, if any. */
+function m24Reveal(actions: RawAction[], c: RawAction, params: Params): RawAction | undefined {
+  const kind = revealKindFor(c);
+  if (!kind) return undefined;
+  return findAfter(
+    actions,
+    c,
+    params.W_seq,
+    (a) => a.action === 'REFERENCE_REVEALED' && a.meta.revealKind === kind && sameSlideItem(a, c),
+  );
+}
 
 const M24: RuleDef = {
   id: 'M24',
@@ -822,13 +888,16 @@ const M29: RuleDef = {
 const M30: RuleDef = {
   id: 'M30',
   inputs: ['OUTPUT_VERIFIED'],
-  run: ({ actions }) => {
+  run: (input) => {
+    const { actions } = input;
     const out: Draft[] = [];
     for (const v of actions) {
       if (v.action !== 'OUTPUT_VERIFIED') continue;
       const viewed = actions.find(
         (a) => a.action === 'AI_OUTPUT_VIEWED' && a.meta.runId === v.meta.runId && a.at <= v.at,
       );
+      // v2.1: verifying an output the learner never viewed is not evaluation.
+      if (input.library === 'v2.1' && !viewed) continue;
       out.push(
         draft('M30', viewed ? [viewed, v] : [v], { outcome: String(v.meta.verdict ?? 'verified') }),
       );
@@ -838,19 +907,21 @@ const M30: RuleDef = {
 };
 
 /** M31 passive reliance / M32 active use, from AI-matched pastes. */
-function relianceRules({ actions, params }: EngineInput): Draft[] {
+function relianceRules(input: EngineInput): Draft[] {
+  const { actions, params } = input;
   const out: Draft[] = [];
   for (const p of actions) {
     if (p.action !== 'OUTPUT_PASTED' || p.meta.matchesAiOutput !== true) continue;
-    const edited = findAfter(
-      actions,
-      p,
-      params.W_seq,
-      (a) =>
-        a.action === 'OUTPUT_EDITED' &&
-        a.meta.targetField === p.meta.targetField &&
-        sameSlide(a, p),
-    );
+    const isEdit = (a: RawAction) =>
+      a.action === 'OUTPUT_EDITED' && a.meta.targetField === p.meta.targetField && sameSlide(a, p);
+    // v2: the first edit only. v2.1: every edit within W_seq, largest ratio.
+    let edited = findAfter(actions, p, params.W_seq, isEdit);
+    if (input.library === 'v2.1') {
+      for (const a of actions) {
+        if (a.at <= p.at || a.at - p.at > params.W_seq || !isEdit(a)) continue;
+        if (!edited || num(a.meta.editRatio) > num(edited.meta.editRatio)) edited = a;
+      }
+    }
     const ratio = edited ? num(edited.meta.editRatio) : 0;
     if (edited && ratio >= params.E_edit) {
       out.push(
@@ -911,25 +982,59 @@ const M12: RuleDef = {
       ),
 };
 
+/**
+ * Who started an intervention. `initiator` is on every row since Prompt B
+ * (P5); older rows: a nudge carries triggerReason 'rule_triggered' or an
+ * experiment arm, anything else was launched by the learner.
+ */
+export function initiatorOf(t: RawAction): 'learner' | 'system' {
+  if (t.meta.initiator === 'learner' || t.meta.initiator === 'system') return t.meta.initiator;
+  return t.meta.triggerReason === 'rule_triggered' || t.meta.arm != null ? 'system' : 'learner';
+}
+
+/** Uptake of interventions: v2 all of them (M34); v2.1 system ones (M34), learner ones (M34L). */
+function uptake(input: EngineInput, ruleId: 'M34' | 'M34L'): Draft[] {
+  const { actions, params } = input;
+  const v21 = input.library === 'v2.1';
+  const out: Draft[] = [];
+  for (const t of actions) {
+    if (t.action !== 'INTERVENTION_TRIGGERED') continue;
+    if (v21 && initiatorOf(t) !== (ruleId === 'M34' ? 'system' : 'learner')) continue;
+    out.push(...uptakeOf(t, actions, params, ruleId));
+  }
+  return out;
+}
+
 const M34: RuleDef = {
   id: 'M34',
   inputs: ['INTERVENTION_TRIGGERED'],
-  run: ({ actions, params }) => {
-    const out: Draft[] = [];
-    for (const t of actions) {
-      if (t.action !== 'INTERVENTION_TRIGGERED') continue;
+  run: (input) => uptake(input, 'M34'),
+};
+
+/** v2.1 only: a strategy the learner launched, followed through or not. */
+export const M34L: RuleDef = {
+  id: 'M34L',
+  inputs: ['INTERVENTION_TRIGGERED'],
+  run: (input) => (input.library === 'v2.1' ? uptake(input, 'M34L') : []),
+};
+
+function uptakeOf(t: RawAction, actions: RawAction[], params: Params, ruleId: string): Draft[] {
+  const out: Draft[] = [];
+  {
+    {
       // Control arm: the nudge was withheld, so there was nothing to take up.
       if (t.meta.shown === false) {
         out.push(
-          draft('M34', [t], {
+          draft(ruleId, [t], {
             outcome: 'withheld',
             detail: {
               triggerReason: t.meta.triggerReason ?? null,
               interventionType: t.meta.interventionType ?? null,
+              initiator: initiatorOf(t),
             },
           }),
         );
-        continue;
+        return out;
       }
       const matches = (a: RawAction) =>
         t.interventionId ? a.interventionId === t.interventionId : true;
@@ -947,18 +1052,19 @@ const M34: RuleDef = {
       );
       const end = done ?? viewed;
       out.push(
-        draft('M34', end ? [t, end] : [t], {
+        draft(ruleId, end ? [t, end] : [t], {
           outcome: done ? 'completed' : viewed ? 'viewed_only' : 'not_taken_up',
           detail: {
             triggerReason: t.meta.triggerReason ?? null,
             interventionType: t.meta.interventionType ?? null,
+            initiator: initiatorOf(t),
           },
         }),
       );
     }
-    return out;
-  },
-};
+  }
+  return out;
+}
 
 const M35: RuleDef = {
   id: 'M35',
@@ -1024,8 +1130,13 @@ export const RULES: RuleDef[] = [
   M35,
 ];
 
+/** The rules of a library version: v2.1 adds M34L. */
+export function rulesFor(input: EngineInput): RuleDef[] {
+  return input.library === 'v2.1' ? [...RULES, M34L] : RULES;
+}
+
 export function runRules(input: EngineInput): Draft[] {
-  return RULES.flatMap((r) => r.run(input)).sort(
-    (a, b) => a.start - b.start || a.ruleId.localeCompare(b.ruleId),
-  );
+  return rulesFor(input)
+    .flatMap((r) => r.run(input))
+    .sort((a, b) => a.start - b.start || a.ruleId.localeCompare(b.ruleId));
 }
