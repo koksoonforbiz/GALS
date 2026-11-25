@@ -141,6 +141,11 @@ export enum ActivityAction {
   HIGHLIGHT_CREATED = 'HIGHLIGHT_CREATED',
   HIGHLIGHT_DELETED = 'HIGHLIGHT_DELETED',
   NOTES_VIEWED = 'NOTES_VIEWED',
+  // Camera guard (CameraGuard.tsx): the recorded webcam stopped giving a
+  // picture (metadata.reason 'off' | 'covered') and when it came back
+  // (metadata.blockedMs). No image data.
+  CAMERA_BLOCKED = 'CAMERA_BLOCKED',
+  CAMERA_RESTORED = 'CAMERA_RESTORED',
 }
 
 /**

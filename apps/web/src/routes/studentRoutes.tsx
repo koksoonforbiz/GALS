@@ -27,6 +27,11 @@ function studentBiometric(page: ReactNode): ReactNode {
   return student(<BiometricsWrapper>{page}</BiometricsWrapper>);
 }
 
+// Timed pages: webcam recording (camera must stay on) without eye tracking.
+function studentWebcam(page: ReactNode): ReactNode {
+  return student(<BiometricsWrapper mode="webcam">{page}</BiometricsWrapper>);
+}
+
 export const studentRoutes: RouteObject[] = [
   { path: '/student', element: student(<StudentDashboard />) },
   { path: '/student/assessments', element: student(<StudentAssessmentsPage />) },
@@ -39,18 +44,22 @@ export const studentRoutes: RouteObject[] = [
   { path: '/student/catalog', element: student(<CatalogPage />) },
   { path: '/student/courses', element: student(<MyCoursesPage />) },
   { path: '/student/courses/:courseId', element: studentBiometric(<StudentCourseViewPage />) },
-  // Attention and memory puzzles: student(), NOT studentBiometric() — no eye
-  // tracking / webcam recording during the puzzles (docs/EF_battery_v2).
-  { path: '/student/courses/:courseId/puzzles/:occasion', element: student(<PuzzlesPage />) },
-  // Knowledge checks (docs/assessments/): student(), no camera gate. Not
+  // Attention and memory puzzles: studentWebcam(): webcam recorded and kept on,
+  // no eye tracking; screen + DOM in the gentle replay mode (notice v2,
+  // docs/EF_battery_v2/CONSENT_NOTICE.md).
+  {
+    path: '/student/courses/:courseId/puzzles/:occasion',
+    element: studentWebcam(<PuzzlesPage />),
+  },
+  // Knowledge checks (docs/assessments/): recorded like the puzzles. Not
   // /assessment/…: that path belongs to the quiz feature above.
   {
     path: '/student/courses/:courseId/knowledge-check/:kind',
-    element: student(<KnowledgeTestPage />),
+    element: studentWebcam(<KnowledgeTestPage />),
   },
   {
     path: '/student/courses/:courseId/knowledge-check/:kind/:sessionNo',
-    element: student(<KnowledgeTestPage />),
+    element: studentWebcam(<KnowledgeTestPage />),
   },
   { path: '/student/review-queue', element: student(<ReviewQueuePage />) },
   { path: '/student/courses/:courseId/dialogue', element: studentBiometric(<DialogueLearning />) },

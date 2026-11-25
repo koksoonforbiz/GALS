@@ -10,11 +10,14 @@ import { CalibrationModal } from '../../lib/webgazer/CalibrationModal';
 import { BiometricsActiveBanner } from './BiometricsActiveBanner';
 import { BiometricsPanel } from './BiometricsPanel';
 import { WebcamPreviewWindow } from './WebcamPreviewWindow';
+import { CameraGuard } from './CameraGuard';
+
+export type BiometricsMode = 'full' | 'webcam';
 
 /**
  * Inner component that uses BiometricsSync context to activate all hooks.
  */
-function BiometricsHooks({ children }: { children: ReactNode }) {
+function BiometricsHooks({ children, mode }: { children: ReactNode; mode: BiometricsMode }) {
   const sync = useBiometricsSync();
   if (!sync) return <>{children}</>;
 
@@ -26,6 +29,21 @@ function BiometricsHooks({ children }: { children: ReactNode }) {
     hasConsent,
     setRecordingActive,
   } = sync;
+
+  if (mode === 'webcam') {
+    return (
+      <WebcamOnlyHooks
+        sessionId={sessionId}
+        courseId={courseId}
+        wallClockOffset={wallClockOffset}
+        isRecordingEnabled={isRecordingEnabled}
+        hasConsent={hasConsent}
+        onRecordingActiveChange={setRecordingActive}
+      >
+        {children}
+      </WebcamOnlyHooks>
+    );
+  }
 
   return (
     <BiometricsHooksInner
@@ -149,6 +167,14 @@ function BiometricsHooksInner({
         />
       )}
 
+      <CameraGuard
+        courseId={courseId}
+        stream={recording.stream}
+        enabled={isRecordingEnabled && hasConsent}
+        restart={recording.restart}
+        error={recording.error}
+      />
+
       {/* WebGazer calibration modal */}
       {webgazer.needsCalibration && !webgazer.isCalibrating && (
         <CalibrationModal
@@ -177,10 +203,72 @@ function BiometricsHooksInner({
 }
 
 /**
+ * Timed pages (attention and memory puzzles, knowledge checks): webcam
+ * recording plus the camera guard only. No eye tracking (its model runs on
+ * the main thread and would disturb response timing), no pupil monitoring,
+ * no calibration and no floating preview over the task.
+ */
+function WebcamOnlyHooks({
+  sessionId,
+  courseId,
+  wallClockOffset,
+  isRecordingEnabled,
+  hasConsent,
+  onRecordingActiveChange,
+  children,
+}: {
+  sessionId: string;
+  courseId: string;
+  wallClockOffset: number;
+  isRecordingEnabled: boolean;
+  hasConsent: boolean;
+  onRecordingActiveChange: (active: boolean) => void;
+  children: ReactNode;
+}) {
+  const recording = useWebcamRecording(
+    courseId,
+    sessionId,
+    wallClockOffset,
+    isRecordingEnabled,
+    hasConsent,
+    onRecordingActiveChange,
+  );
+  const { track } = useActivityLog();
+  const prevRecording = useRef(false);
+  useEffect(() => {
+    if (recording.isActive && !prevRecording.current)
+      track('RECORDING_STARTED', { courseId, metadata: { wallClockOffset } });
+    if (!recording.isActive && prevRecording.current) track('RECORDING_STOPPED', { courseId });
+    prevRecording.current = recording.isActive;
+  }, [recording.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      <BiometricsActiveBanner activeFeatures={recording.isActive ? ['Session recording'] : []} />
+      <CameraGuard
+        courseId={courseId}
+        stream={recording.stream}
+        enabled={isRecordingEnabled && hasConsent}
+        restart={recording.restart}
+        error={recording.error}
+      />
+      {children}
+    </>
+  );
+}
+
+/**
  * Wrap any student course page with this component to activate all biometric hooks.
  * It reads courseId from URL params and sessionId from the activity log context.
+ * mode="webcam" records the webcam only (timed pages); see WebcamOnlyHooks.
  */
-export function BiometricsWrapper({ children }: { children: ReactNode }) {
+export function BiometricsWrapper({
+  children,
+  mode = 'full',
+}: {
+  children: ReactNode;
+  mode?: BiometricsMode;
+}) {
   const { courseId } = useParams<{ courseId: string }>();
   const { sessionId } = useActivityLog();
 
@@ -191,7 +279,7 @@ export function BiometricsWrapper({ children }: { children: ReactNode }) {
 
   return (
     <BiometricsSyncProvider sessionId={sessionId} courseId={courseId}>
-      <BiometricsHooks>{children}</BiometricsHooks>
+      <BiometricsHooks mode={mode}>{children}</BiometricsHooks>
     </BiometricsSyncProvider>
   );
 }

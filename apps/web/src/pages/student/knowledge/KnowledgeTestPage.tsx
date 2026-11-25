@@ -16,7 +16,7 @@ import type {
 } from '@ats/shared';
 import { api, ApiError } from '../../../lib/api';
 import { useActivityLog } from '../../../lib/activity-log';
-import { usePauseReplay } from '../../../components/replayPause';
+import { useGentleReplay } from '../../../components/replayPause';
 import { useHoldSurvey } from '../../../components/surveyHold';
 
 const KIND: Record<string, KnowledgeTestKind> = {
@@ -60,7 +60,9 @@ export function KnowledgeTestPage() {
   } = useParams<{ courseId: string; kind: string; sessionNo?: string }>();
   const kind = KIND[slug];
   const { track, flush } = useActivityLog();
-  usePauseReplay(true); // items are test content: keep them out of replay snapshots
+  // Recorded like the puzzles (screen + DOM in the gentle mode, webcam via
+  // studentWebcam()); the items do appear in replay snapshots.
+  useGentleReplay(true);
   useHoldSurvey(true);
 
   const [view, setView] = useState<View>({ at: 'loading' });

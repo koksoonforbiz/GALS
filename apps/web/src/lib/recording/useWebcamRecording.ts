@@ -11,6 +11,10 @@ export interface RecordingState {
   startWallTime: Date | null;
   wallClockOffset: number;
   error: string | null;
+  /** The live camera stream being recorded (null when not recording). */
+  stream: MediaStream | null;
+  /** Stop and start again with a fresh camera stream (after it was turned off). */
+  restart: () => Promise<void>;
 }
 
 // Upload volume shares the student's uplink with every other request
@@ -41,6 +45,7 @@ export function useWebcamRecording(
   const [segmentId, setSegmentId] = useState<string | null>(null);
   const [startWallTime, setStartWallTime] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -113,13 +118,18 @@ export function useWebcamRecording(
       // takePermittedWebcamStream() returns null on subsequent navigations
       // (already consumed) — getUserMedia() then succeeds silently because the
       // browser cached the permission from the gate.
+      // On a segment rotation the current camera stream is still live: keep
+      // it (a new getUserMedia each rotation left the old stream running).
+      const live = streamRef.current?.getVideoTracks()[0]?.readyState === 'live';
       const stream =
+        (live ? streamRef.current : null) ??
         takePermittedWebcamStream() ??
         (await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, frameRate: 30 },
           audio: false,
         }));
       streamRef.current = stream;
+      setStream(stream);
       mediaStreamRegistry.register('recording', stream);
 
       const startWall = toWall(performance.now());
@@ -203,10 +213,17 @@ export function useWebcamRecording(
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setStream(null);
     mediaStreamRegistry.unregister('recording');
     setIsActive(false);
     onRecordingActiveChange?.(false);
   }, [onRecordingActiveChange]);
+
+  const restart = useCallback(async () => {
+    stopRecording();
+    segmentIndexRef.current += 1;
+    await startRecording();
+  }, [stopRecording, startRecording]);
 
   // Start recording on mount if enabled + consent
   useEffect(() => {
@@ -257,5 +274,7 @@ export function useWebcamRecording(
     startWallTime,
     wallClockOffset,
     error,
+    stream,
+    restart,
   };
 }

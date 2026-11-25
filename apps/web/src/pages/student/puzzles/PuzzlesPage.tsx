@@ -1,16 +1,18 @@
 /**
  * Attention and memory puzzles: one occasion (route /student/courses/:courseId/puzzles/:occasion).
  *
- * Mounted with student(), not studentBiometric(): eye tracking, pupil and
- * webcam recording never start here, and replay snapshots are paused while
- * the page is open. Everything shown comes from /api/puzzles in neutral
- * wording; the page never receives scores or answer keys.
+ * Mounted with studentWebcam(): the webcam is recorded (and must stay on and
+ * uncovered) but eye tracking and pupil monitoring do not run, and replay
+ * snapshots (screen + DOM) are taken in the gentle mode so they rarely touch
+ * response timing (notice ef-assessment-notice-v2 tells students). Everything
+ * shown comes from /api/puzzles in neutral wording; the page never receives
+ * scores or answer keys.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { PuzzleNextStep, PuzzleOccasion } from '@ats/shared';
 import { api, ApiError } from '../../../lib/api';
-import { usePauseReplay } from '../../../components/replayPause';
+import { useGentleReplay } from '../../../components/replayPause';
 import { useHoldSurvey } from '../../../components/surveyHold';
 import { NoticeStep } from './NoticeStep';
 import { QuestionnaireStep } from './QuestionnaireStep';
@@ -58,7 +60,7 @@ export function PuzzlesPage() {
   const navigate = useNavigate();
   const [view, setView] = useState<OccasionView | null>(null);
   const [error, setError] = useState('');
-  usePauseReplay(true);
+  useGentleReplay(true);
   useHoldSurvey(true);
 
   const back = () => navigate(`/student/courses/${courseId}`);

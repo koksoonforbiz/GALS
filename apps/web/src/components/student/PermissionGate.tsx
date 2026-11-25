@@ -7,6 +7,7 @@ import {
 } from '../../lib/biometrics/permittedStreams';
 import { useAuth } from '../../contexts/AuthContext';
 import { useExtendedDisplay } from '../../lib/screens';
+import { useCameraHealth } from '../../lib/biometrics/cameraHealth';
 
 type Status = 'idle' | 'requesting' | 'active' | 'denied';
 
@@ -70,6 +71,9 @@ export function PermissionGate({ onGranted }: Props) {
   const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
   const grantedRef = useRef(false);
   const [wrongShare, setWrongShare] = useState(false);
+  // The live camera stream, so the gate can check it gives a real picture
+  // (not covered, not dark, not stopped) before letting the student in.
+  const [webcamStream, setWebcamStream] = useState<MediaStream | null>(null);
 
   useEffect(tagThisTab, []);
 
@@ -160,6 +164,7 @@ export function PermissionGate({ onGranted }: Props) {
   const requestWebcam = useCallback(async () => {
     webcamStreamRef.current?.getTracks().forEach((t) => t.stop());
     webcamStreamRef.current = null;
+    setWebcamStream(null);
     if (webcamVideoRef.current) webcamVideoRef.current.srcObject = null;
     setWebcamError(null);
     setWebcamStatus('requesting');
@@ -170,6 +175,7 @@ export function PermissionGate({ onGranted }: Props) {
         audio: false,
       });
       webcamStreamRef.current = stream;
+      setWebcamStream(stream);
       if (webcamVideoRef.current) webcamVideoRef.current.srcObject = stream;
       setWebcamStatus('active');
     } catch (err) {
@@ -205,6 +211,9 @@ export function PermissionGate({ onGranted }: Props) {
   }, [onGranted]);
 
   const bothActive = screenStatus === 'active' && webcamStatus === 'active';
+  const camera = useCameraHealth(webcamStream, webcamStatus === 'active');
+  const cameraOk = camera.verified && !camera.problem;
+  const canContinue = bothActive && cameraOk;
   // Phones and tablets cannot share a browser tab at all.
   const canShareScreen = !!navigator.mediaDevices?.getDisplayMedia;
   // One screen only (study rule): a connected second display blocks entry.
@@ -216,10 +225,10 @@ export function PermissionGate({ onGranted }: Props) {
     if (screenStreamRef.current && !webcamStreamRef.current) await requestWebcam();
   }, [requestScreen, requestWebcam]);
 
-  // Both granted on one screen → carry on without a second click.
+  // Both granted, camera picture confirmed, one screen → carry on without a second click.
   useEffect(() => {
-    if (bothActive && !extended && !grantedRef.current) handleContinue();
-  }, [bothActive, extended, handleContinue]);
+    if (canContinue && !extended && !grantedRef.current) handleContinue();
+  }, [canContinue, extended, handleContinue]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-gray-900/80 p-4 backdrop-blur-sm sm:items-center">
@@ -278,9 +287,43 @@ export function PermissionGate({ onGranted }: Props) {
           onRequest={requestWebcam}
           mirrorVideo
         />
+        {webcamStatus === 'active' && !cameraOk && (
+          <p
+            className={`-mt-3 rounded-lg border p-3 text-sm ${
+              camera.problem
+                ? 'border-red-300 bg-red-50 text-red-800'
+                : 'border-gray-200 bg-gray-50 text-gray-600'
+            }`}
+            data-testid="camera-check"
+            data-problem={camera.problem ?? 'checking'}
+          >
+            {camera.problem === 'covered' ? (
+              <>
+                <strong>Your camera looks covered.</strong> Open the camera cover or shutter, move
+                anything in front of the lens, and turn on a light if the room is dark. This page
+                continues by itself once we can see a picture.
+              </>
+            ) : camera.problem === 'off' ? (
+              <>
+                <strong>Your camera stopped.</strong> Turn it on (or close apps that use it, such as
+                Teams or Zoom), then{' '}
+                <button
+                  type="button"
+                  onClick={() => void requestWebcam()}
+                  className="font-semibold underline"
+                >
+                  turn the camera on again
+                </button>
+                .
+              </>
+            ) : (
+              'Checking your camera picture…'
+            )}
+          </p>
+        )}
 
         <button
-          disabled={!bothActive || extended}
+          disabled={!canContinue || extended}
           onClick={handleContinue}
           className="w-full rounded-xl py-3 text-sm font-medium transition-colors
             disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400

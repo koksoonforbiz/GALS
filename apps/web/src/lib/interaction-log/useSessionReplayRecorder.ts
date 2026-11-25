@@ -6,6 +6,9 @@ const API_BASE = '/api';
 const FLUSH_INTERVAL_MS = 10_000;
 // Shared cadence for both screenshot and DOM capture — they fire together.
 const PERIODIC_SNAPSHOT_MS = 1_000;
+// Gentle mode (puzzles, knowledge checks): periodic snapshots every 3 s, run
+// in an idle callback, so serialisation rarely overlaps a timed key handler.
+const GENTLE_PERIODIC_MS = 3_000;
 // A scroll (e.g. between two PDF slides) that completes faster than
 // PERIODIC_SNAPSHOT_MS can fall entirely inside the gap between two
 // periodic captures — replay then jumps straight from the pre-scroll state
@@ -59,6 +62,8 @@ interface UseSessionReplayRecorderParams {
    * required for research — pixel screenshots are always captured regardless.
    */
   captureDom?: boolean;
+  /** Timing-sensitive page: periodic snapshots less often and only when idle. */
+  gentle?: boolean;
 }
 
 interface ReplayAoiRect {
@@ -889,7 +894,13 @@ export function useSessionReplayRecorder({
   userId,
   enabled = true,
   captureDom = false,
+  gentle = false,
 }: UseSessionReplayRecorderParams) {
+  // Read by the periodic timer, so switching modes never restarts recording
+  // (a restart would add cleanup/initial snapshots at every page change).
+  const gentleRef = useRef(gentle);
+  gentleRef.current = gentle;
+  const lastGentleRef = useRef(0);
   const bufferRef = useRef<ReplaySnapshotPayload[]>([]);
   const lastSerializedRef = useRef('');
   // Session-scoped: which PDF page numbers have already had their image
@@ -1146,7 +1157,20 @@ export function useSessionReplayRecorder({
       void flush(false);
     }, FLUSH_INTERVAL_MS);
     periodicTimerRef.current = setInterval(() => {
-      captureSnapshot('periodic');
+      if (!gentleRef.current) {
+        captureSnapshot('periodic');
+        return;
+      }
+      const t = performance.now();
+      if (t - lastGentleRef.current < GENTLE_PERIODIC_MS) return;
+      lastGentleRef.current = t;
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => captureSnapshot('periodic'), {
+          timeout: GENTLE_PERIODIC_MS,
+        });
+      } else {
+        captureSnapshot('periodic');
+      }
     }, PERIODIC_SNAPSHOT_MS);
 
     return () => {

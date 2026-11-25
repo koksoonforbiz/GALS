@@ -299,6 +299,8 @@ enum ActivityAction {
   HIGHLIGHT_CREATED
   HIGHLIGHT_DELETED
   NOTES_VIEWED
+  CAMERA_BLOCKED
+  CAMERA_RESTORED
 }
 
 // ─── Models ──────────────────────────────────────────────

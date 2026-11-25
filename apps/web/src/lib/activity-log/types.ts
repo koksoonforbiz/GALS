@@ -99,7 +99,9 @@ export type ActivityAction =
   | 'NOTE_DELETED'
   | 'HIGHLIGHT_CREATED'
   | 'HIGHLIGHT_DELETED'
-  | 'NOTES_VIEWED';
+  | 'NOTES_VIEWED'
+  | 'CAMERA_BLOCKED'
+  | 'CAMERA_RESTORED';
 
 export interface ActivityEvent {
   action: ActivityAction;
