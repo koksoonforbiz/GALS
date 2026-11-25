@@ -820,3 +820,13 @@ No route changed door. The learner telemetry routes below skip the global per-IP
 - `POST /api/webgazer/logs`, `POST /api/pupil-size/logs`
 
 The six stream routes (cursor, clicks, scroll, keystrokes, visibility, clipboard) now also refuse a body whose `userId` is not the signed-in user (403).
+
+## Learner prompt switches (Prompt B, P5d, 2026-11-26)
+
+`CourseFlagsController` (`course-flags/course-flags.controller.ts`). Allowlist: `location ~ ^/api/course-flags/[^/]+$` (GET only).
+
+| Method | Path                                  | Roles            | Guards                  | Door       | Notes                                                                 |
+| ------ | ------------------------------------- | ---------------- | ----------------------- | ---------- | --------------------------------------------------------------------- |
+| GET    | `/api/course-flags/:courseId`         | student, teacher | JwtAuthGuard,RolesGuard | **PUBLIC** | Which learner prompts are on. Student: enrolled; teacher: own course. |
+| PATCH  | `/api/course-flags/:courseId`         | teacher          | JwtAuthGuard,RolesGuard | private    | Switch one prompt on or off (append-only history).                    |
+| GET    | `/api/course-flags/:courseId/history` | teacher          | JwtAuthGuard,RolesGuard | private    | When each prompt was switched.                                        |

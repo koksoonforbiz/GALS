@@ -45,7 +45,9 @@ export default function SourceSelector({
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const indexed = sources.filter((d) => d.indexedAt && (d.chunkCount ?? 0) > 0);
@@ -62,9 +64,7 @@ export default function SourceSelector({
 
   if (loading) return <span className="text-xs text-gray-400">Loading sources...</span>;
   if (indexed.length === 0) {
-    return (
-      <span className="text-xs text-yellow-600">No indexed sources available.</span>
-    );
+    return <span className="text-xs text-yellow-600">No indexed sources available.</span>;
   }
 
   // Compact: show chips
@@ -72,14 +72,19 @@ export default function SourceSelector({
     return (
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-gray-500">{selectedSourceIds.size} source(s)</span>
-        {Array.from(selectedSourceIds).slice(0, 3).map((id) => {
-          const doc = indexed.find((d) => d.id === id);
-          return doc ? (
-            <span key={id} className="inline-flex items-center px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px]">
-              {doc.title || doc.filename}
-            </span>
-          ) : null;
-        })}
+        {Array.from(selectedSourceIds)
+          .slice(0, 3)
+          .map((id) => {
+            const doc = indexed.find((d) => d.id === id);
+            return doc ? (
+              <span
+                key={id}
+                className="inline-flex items-center px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[10px]"
+              >
+                {doc.title || doc.filename}
+              </span>
+            ) : null;
+          })}
         {selectedSourceIds.size > 3 && (
           <span className="text-[10px] text-gray-400">+{selectedSourceIds.size - 3} more</span>
         )}
@@ -107,7 +112,10 @@ export default function SourceSelector({
             None
           </button>
           {compact && (
-            <button onClick={() => setExpanded(false)} className="text-gray-400 hover:text-gray-600">
+            <button
+              onClick={() => setExpanded(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
               Collapse
             </button>
           )}

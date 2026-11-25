@@ -33,7 +33,9 @@ export default function PromptComposerModal({
   const [prompt, setPrompt] = useState('');
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [strictSources, setStrictSources] = useState(true);
-  const [scopePreference, setScopePreference] = useState<'module_only' | 'module_then_course' | 'course_only'>('module_then_course');
+  const [scopePreference, setScopePreference] = useState<
+    'module_only' | 'module_then_course' | 'course_only'
+  >('module_then_course');
   const [sourceIds, setSourceIds] = useState<Set<string>>(initialSourceIds);
   const [showSourcePanel, setShowSourcePanel] = useState(false);
 
@@ -53,7 +55,9 @@ export default function PromptComposerModal({
       });
       setPrompt(res.suggestedPrompt);
     } catch (err) {
-      setPrompt(`Generate detailed lesson content for the selected page(s) in module "${moduleTitle}".`);
+      setPrompt(
+        `Generate detailed lesson content for the selected page(s) in module "${moduleTitle}".`,
+      );
     } finally {
       setLoadingSuggestion(false);
     }
@@ -81,7 +85,9 @@ export default function PromptComposerModal({
                 : `Generating for ${selectedPageIds.length} pages`}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">
+            &times;
+          </button>
         </div>
 
         {/* Body */}
@@ -89,10 +95,15 @@ export default function PromptComposerModal({
           {/* Pages summary */}
           {selectedPageIds.length > 1 && (
             <div className="p-2 bg-blue-50 rounded-lg">
-              <div className="text-xs font-medium text-blue-800 mb-1">Pages to generate ({selectedPageIds.length})</div>
+              <div className="text-xs font-medium text-blue-800 mb-1">
+                Pages to generate ({selectedPageIds.length})
+              </div>
               <div className="flex flex-wrap gap-1">
                 {selectedPageTitles.map((title, i) => (
-                  <span key={i} className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]">
+                  <span
+                    key={i}
+                    className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px]"
+                  >
                     {title}
                   </span>
                 ))}
@@ -118,9 +129,7 @@ export default function PromptComposerModal({
                 onSelectionChange={setSourceIds}
               />
             ) : (
-              <div className="text-xs text-gray-500">
-                {sourceIds.size} source(s) selected
-              </div>
+              <div className="text-xs text-gray-500">{sourceIds.size} source(s) selected</div>
             )}
           </div>
 

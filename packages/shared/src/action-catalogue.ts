@@ -86,7 +86,7 @@ export const ACTION_CATALOGUE = {
   },
   ASSESSMENT_STARTED: {
     level: 'REF',
-    side: 'both',
+    side: 'server', // one writer per action (CAP-02/21)
     kind: 'instant',
     surface: 'B legacy assessments (quiz)',
     required: { summary: 'string' },
@@ -150,7 +150,7 @@ export const ACTION_CATALOGUE = {
   },
   ASSESSMENT_SUBMITTED: {
     level: 'REF',
-    side: 'both',
+    side: 'server', // one writer per action (CAP-02/21)
     kind: 'instant',
     surface: 'B legacy assessments (quiz)',
     required: { summary: 'string' },
@@ -324,7 +324,7 @@ export const ACTION_CATALOGUE = {
   },
   SPACED_REP_CARD_RATED: {
     level: 'ACT',
-    side: 'both',
+    side: 'server', // one writer per action (CAP-02/21)
     kind: 'instant',
     surface: 'B review queue',
     required: { cardId: 'string', summary: 'string' },
@@ -363,10 +363,12 @@ export const ACTION_CATALOGUE = {
   },
   FEEDBACK_RECEIVED: {
     level: 'ACT',
-    side: 'client',
+    side: 'server',
     kind: 'instant',
     surface: 'B assessments; A Checkpoint AI feedback',
-    deprecated: true,
+    textFields: ['feedback'],
+    required: { source: 'string', slideKey: 'string', status: 'string', latencyMs: 'number' },
+    optional: { verdict: 'string', model: 'string', feedback: 'string', answerChars: 'number' },
   },
   RECORDING_STARTED: {
     level: 'SYS',
@@ -444,7 +446,7 @@ export const ACTION_CATALOGUE = {
   },
   WEBGAZER_CALIBRATION_STARTED: {
     level: 'SYS',
-    side: 'both',
+    side: 'server', // one writer per action (CAP-02/21)
     kind: 'instant',
     surface: 'D Cross-cutting (sensing)',
     required: { triggeredBy: 'string' },
@@ -452,7 +454,7 @@ export const ACTION_CATALOGUE = {
   },
   WEBGAZER_CALIBRATION_COMPLETED: {
     level: 'SYS',
-    side: 'both',
+    side: 'server', // one writer per action (CAP-02/21)
     kind: 'instant',
     surface: 'D Cross-cutting (sensing)',
     optional: { accuracy: 'number', triggeredBy: 'string' },
@@ -769,20 +771,17 @@ export const ACTION_CATALOGUE = {
     level: 'ACT',
     side: 'client',
     kind: 'interval',
-    surface: 'A Interactive lesson only',
-    required: {
-      idleThresholdMs: 'number',
-      libraryVersion: 'string',
-      seq: 'number',
-      slideKey: 'string',
-    },
+    surface: 'A Interactive lesson; D every other surface (metadata.surface)',
+    required: { idleThresholdMs: 'number' },
+    optional: { libraryVersion: 'string', seq: 'number', slideKey: 'string', surface: 'string' },
     observedN: 5,
   },
   IDLE_ENDED: {
     level: 'ACT',
     side: 'client',
     kind: 'interval',
-    surface: 'A Interactive lesson only',
+    surface: 'A Interactive lesson; D every other surface (metadata.surface)',
+    optional: { idleMs: 'number', libraryVersion: 'string', slideKey: 'string', surface: 'string' },
   },
   RUN_SETTINGS_RECORDED: {
     level: 'ACT',
@@ -1133,6 +1132,221 @@ export const ACTION_CATALOGUE = {
     kind: 'instant',
     surface: 'D Cross-cutting',
     required: { path: 'string' },
+  },
+  /** Practice-test item graded (correct, grader). */
+  QUESTION_GRADED: {
+    level: 'REF',
+    side: 'server',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: {
+      interventionType: 'string',
+      questionIndex: 'number',
+      correct: 'boolean',
+      graderType: 'string',
+    },
+    optional: { questionType: 'string', answered: 'boolean' },
+  },
+  /** Stepwise comprehension check judged correct. */
+  STEP_CHECK_PASS: {
+    level: 'REF',
+    side: 'server',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { stepNumber: 'number', attempt: 'number', graderStatus: 'string' },
+  },
+  /** Stepwise check judged incorrect, or the grader failed (graderStatus error; the attempt is not counted). */
+  STEP_CHECK_FAIL: {
+    level: 'REF',
+    side: 'server',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { stepNumber: 'number', attempt: 'number', graderStatus: 'string' },
+  },
+  /** Step passed after the last allowed attempt (answer shown), not by a correct answer. */
+  STEP_FORCE_PASS: {
+    level: 'SYS',
+    side: 'server',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { stepNumber: 'number', attempt: 'number' },
+  },
+  /** Stepwise hint opened. */
+  STEP_HINT_VIEWED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { stepNumber: 'number' },
+    optional: { level: 'number' },
+  },
+  /** Practice-test results shown. */
+  PRACTICE_RESULTS_VIEWED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { score: 'number' },
+    optional: { totalQuestions: 'number' },
+  },
+  /** Explanation of a practice item expanded. */
+  PRACTICE_EXPLANATION_VIEWED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    required: { questionIndex: 'number' },
+    optional: { correct: 'boolean' },
+  },
+  /** Note written on a practice result. */
+  PRACTICE_NOTE_ADDED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    textFields: ['text'],
+    required: { chars: 'number' },
+    optional: { text: 'string', questionIndex: 'number' },
+  },
+  /** Practice test saved to My Reviews. */
+  PRACTICE_SAVED_TO_REVIEWS: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    optional: { reviewId: 'string' },
+  },
+  /** Try again: a new attempt at the practice test. */
+  PRACTICE_RETRY_STARTED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant strategies',
+    optional: { attemptNo: 'number', previousInterventionId: 'string' },
+  },
+  /** Review queue (SM-2) opened. */
+  REVIEW_QUEUE_OPENED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'C Review queue',
+    required: { dueCards: 'number' },
+  },
+  /** A review card shown (front). */
+  CARD_VIEWED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'C Review queue',
+    required: { cardId: 'string' },
+    optional: { flipped: 'boolean' },
+  },
+  /** Left a module item: dwell and active time (closes MODULE_ITEM_VIEWED). */
+  ITEM_EXITED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'interval',
+    surface: 'D Course pages (Mode A)',
+    required: { dwellMs: 'number', activeMs: 'number', reason: 'string' },
+  },
+  /** A PDF page was on screen: page and active time. */
+  PDF_PAGE_VIEWED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'interval',
+    surface: 'D Course pages (Mode A)',
+    required: { page: 'number', activeMs: 'number' },
+    optional: { pageCount: 'number' },
+  },
+  /** Text selected on a page (with the text: study consent form). */
+  TEXT_SELECTED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'D Course pages (Mode A)',
+    textFields: ['text'],
+    required: { chars: 'number', source: 'string' },
+    optional: { page: 'number', text: 'string' },
+  },
+  /** A learning-strategy chip clicked in the chatbot. */
+  STRATEGY_CHIP_CLICKED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'B Learning Assistant (docked chatbot, also beside lessons)',
+    required: { strategy: 'string', hasSelection: 'boolean' },
+    optional: { selectionLength: 'number' },
+  },
+  /** A learner prompt was shown. */
+  AFFORDANCE_SHOWN: {
+    level: 'SYS',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { affordance: 'string' },
+  },
+  /** A learner prompt was closed without an answer. */
+  AFFORDANCE_DISMISSED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { affordance: 'string' },
+    optional: { msShown: 'number' },
+  },
+  /** Session goal chosen or written (goal card). */
+  GOAL_SET: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    textFields: ['goal'],
+    required: { goal: 'string', source: 'string' },
+    optional: { chars: 'number' },
+  },
+  /** Why the learner opens help (intention tag). */
+  INTENTION_TAGGED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { intention: 'string', target: 'string' },
+  },
+  /** Progress check answered: on track / stuck / not sure. */
+  PROGRESS_CHECKED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { status: 'string' },
+    optional: { activeMinutes: 'number' },
+  },
+  /** Confidence slider after a graded answer (0-100). */
+  ANSWER_CONFIDENCE_RATED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { value: 'number', target: 'string' },
+    optional: { questionIndex: 'number', interventionId: 'string' },
+  },
+  /** Back after a break: pick up where you left off, or not. */
+  RESUME_ANSWERED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    required: { choice: 'string', awayMs: 'number' },
+  },
+  /** End-of-session reflection (learned / still unclear). */
+  SESSION_REFLECTION_SUBMITTED: {
+    level: 'ACT',
+    side: 'client',
+    kind: 'instant',
+    surface: 'E Learner prompts (WP5 G1, G2, G9)',
+    textFields: ['learned', 'unclear'],
+    required: { learnedChars: 'number', unclearChars: 'number' },
+    optional: { learned: 'string', unclear: 'string' },
   },
 } satisfies Record<string, ActionSpec>;
 

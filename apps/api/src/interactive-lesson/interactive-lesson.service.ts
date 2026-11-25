@@ -169,7 +169,37 @@ export class InteractiveLessonService {
     const slide = lesson.slides.find((s) => s.key === slideKey);
     if (!slide) throw new BadRequestException(`Unknown slide "${slideKey}"`);
     if (slide.t !== 'predict') throw new BadRequestException('Feedback is only for checkpoints');
-    if (!this.llm) return null;
+    // FEEDBACK_RECEIVED (Prompt B, P5; CAP-27): every request, also when no
+    // feedback could be given, with the verdict, model and latency.
+    const startedAt = Date.now();
+    const logFeedback = async (status: string, extra: Record<string, unknown> = {}) => {
+      if (!sessionId) return;
+      await this.prisma.activityLog
+        .create({
+          data: {
+            sessionId,
+            userId: studentId,
+            action: 'FEEDBACK_RECEIVED',
+            courseId,
+            moduleItemId: itemId,
+            slideKey,
+            durationMs: Date.now() - startedAt,
+            metadata: {
+              source: 'checkpoint',
+              slideKey,
+              status,
+              latencyMs: Date.now() - startedAt,
+              answerChars: answer.trim().length,
+              ...extra,
+            } as Prisma.InputJsonValue,
+          },
+        })
+        .catch(() => undefined);
+    };
+    if (!this.llm) {
+      await logFeedback('unavailable');
+      return null;
+    }
 
     const systemPrompt = [
       'You are a supportive tutor in a university course on prompt engineering.',
@@ -202,9 +232,13 @@ export class InteractiveLessonService {
       );
     } catch {
       // Provider error: feedback is a support, never a gate — the reveal shows.
+      await logFeedback('error');
       return null;
     }
-    if (!result.provider || result.provider === 'template') return null;
+    if (!result.provider || result.provider === 'template') {
+      await logFeedback('unavailable');
+      return null;
+    }
 
     let parsed: { verdict?: unknown; feedback?: unknown } = {};
     try {
@@ -215,7 +249,10 @@ export class InteractiveLessonService {
     }
     const feedback =
       typeof parsed.feedback === 'string' ? parsed.feedback.trim().slice(0, 800) : '';
-    if (!feedback) return null;
+    if (!feedback) {
+      await logFeedback('empty', { model: result.model });
+      return null;
+    }
     const verdict = VERDICTS.includes(parsed.verdict as CheckpointVerdict)
       ? (parsed.verdict as CheckpointVerdict)
       : 'partly';
@@ -225,6 +262,7 @@ export class InteractiveLessonService {
       at: new Date().toISOString(),
       model: result.model,
     };
+    await logFeedback('ok', { verdict, model: result.model, feedback });
 
     // Keep it with the slide so it survives a reload (merged, not replaced).
     const where = {

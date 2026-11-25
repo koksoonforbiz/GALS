@@ -1,3 +1,4 @@
+import { activeMs } from '../../lib/capture/activeTime';
 import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -563,6 +564,34 @@ function CourseView() {
         pdfFilename: item.pdfFilename ?? null,
       },
     });
+  }, [selectedItemId, course?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ITEM_EXITED (Prompt B, P5; CAP-28): closes each MODULE_ITEM_VIEWED with
+  // its dwell and active time, on switching items, leaving, or page hide.
+  const itemView = useRef<{ itemId: string; at: number; active: number } | null>(null);
+  useEffect(() => {
+    if (!course || !selectedItemId) return;
+    itemView.current = { itemId: selectedItemId, at: Date.now(), active: activeMs() };
+    const close = (reason: string) => {
+      const v = itemView.current;
+      if (!v || v.itemId !== selectedItemId) return;
+      itemView.current = null;
+      track('ITEM_EXITED', {
+        courseId: course.id,
+        moduleItemId: v.itemId,
+        metadata: {
+          dwellMs: Date.now() - v.at,
+          activeMs: Math.max(0, activeMs() - v.active),
+          reason,
+        },
+      });
+    };
+    const onHide = () => close('pagehide');
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      close('switch_or_leave');
+    };
   }, [selectedItemId, course?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Update page context when course or selected item changes

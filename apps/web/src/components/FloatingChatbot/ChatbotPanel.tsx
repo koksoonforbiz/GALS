@@ -145,6 +145,7 @@ import { StepwiseLearningView } from './interventions/StepwiseLearningView';
 import { CodeDecompositionView } from './interventions/CodeDecompositionView';
 import { DistributedPracticeView } from './interventions/DistributedPracticeView';
 import { rememberOutput } from '../interactive-lesson/prompt-lab/aiOutputs';
+import { markShown, shownThisSession, usePromptFlags } from '../../lib/capture/learnerPrompts';
 import type { ChatbotMode, ChatMessage, SaveForReviewInput } from './types';
 import {
   GraduationCap,
@@ -223,6 +224,14 @@ interface ChatbotPanelProps {
   headerTitle?: React.ReactNode;
 }
 
+/** Intention tag choices (PLAN_B §5 wording). */
+const INTENTIONS: Array<[string, string]> = [
+  ['explain', 'Explain'],
+  ['check_answer', 'Check my answer'],
+  ['hint', 'Give me a hint'],
+  ['other', 'Something else'],
+];
+
 export function ChatbotPanel({
   onMinimize,
   onToggleMaximize,
@@ -281,6 +290,21 @@ export function ChatbotPanel({
     }
   }, [messages, storageKey]);
   const [inputValue, setInputValue] = useState('');
+  // Intention tag (Prompt B, P5d; WP5 G1): once per item per session.
+  const promptFlags = usePromptFlags(courseId ?? null);
+  const { sessionId: activitySid } = useActivityLog();
+  const [intentionOpen, setIntentionOpen] = useState(false);
+  const intentionKey = `intention_tag.${contentId ?? 'course'}`;
+  useEffect(() => {
+    if (!promptFlags.intention_tag || shownThisSession(activitySid, intentionKey)) return;
+    markShown(activitySid, intentionKey);
+    setIntentionOpen(true);
+    track('AFFORDANCE_SHOWN', {
+      courseId: courseId ?? undefined,
+      moduleItemId: contentId ?? undefined,
+      metadata: { affordance: 'intention_tag' },
+    });
+  }, [promptFlags.intention_tag, activitySid, intentionKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const chatInputRef = useRef<HTMLInputElement>(null);
   // "Ask" from a highlight or a note: the panel switches to the assistant
   // and the question box takes focus (the selection is already the context).
@@ -387,6 +411,15 @@ export function ChatbotPanel({
   // and click "Step" themselves.
   const handleSend = async (overrideText?: string): Promise<boolean> => {
     const textToSend = overrideText ?? inputValue;
+    if (intentionOpen) {
+      // Sent without choosing: the tag was skipped.
+      setIntentionOpen(false);
+      track('AFFORDANCE_DISMISSED', {
+        courseId: courseId ?? undefined,
+        moduleItemId: contentId ?? undefined,
+        metadata: { affordance: 'intention_tag' },
+      });
+    }
     if (!textToSend.trim() || isSending) return false;
 
     // Resolve VLM descriptions for any checked image slides so the chat
@@ -536,6 +569,15 @@ export function ChatbotPanel({
 
   const handleInterventionClick = async (type: ChatbotMode) => {
     if (!courseId) return;
+    track('STRATEGY_CHIP_CLICKED', {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      metadata: {
+        strategy: type,
+        hasSelection: Boolean(selectedText && selectedText.length >= 20),
+        selectionLength: selectedText?.length ?? 0,
+      },
+    });
 
     // Resolve VLM descriptions for any checked image slides before launching
     // (also feeds the coding-course check below, so the exercise it
@@ -1190,6 +1232,31 @@ export function ChatbotPanel({
           >
             <TextSelect size={12} /> Ask about this slide
           </button>
+        )}
+        {intentionOpen && (
+          <div className="mb-1.5" data-testid="prompt-intention_tag">
+            <div className="mb-1 text-[11px] text-gray-600">What do you need right now?</div>
+            <div className="flex flex-wrap gap-1">
+              {INTENTIONS.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    track('INTENTION_TAGGED', {
+                      courseId: courseId ?? undefined,
+                      moduleItemId: contentId ?? undefined,
+                      metadata: { intention: id, target: 'chatbot' },
+                    });
+                    setIntentionOpen(false);
+                    chatInputRef.current?.focus();
+                  }}
+                  className="rounded-full border border-gray-300 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-blue-50"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         <div className="flex gap-2">
           <input

@@ -40,25 +40,13 @@ const sanitizeSchema = {
     ...defaultSchema.attributes,
     // Allow class on every element so highlight.js theme classes survive
     // (hljs / language-*, plus KaTeX's many internal classes).
-    '*': [
-      ...(defaultSchema.attributes?.['*'] ?? []),
-      'className',
-      'style',
-    ],
+    '*': [...(defaultSchema.attributes?.['*'] ?? []), 'className', 'style'],
     code: [
       ...(defaultSchema.attributes?.code ?? []),
       ['className', /^language-./, 'hljs', /^hljs-./],
     ],
-    span: [
-      ...(defaultSchema.attributes?.span ?? []),
-      'className',
-      'style',
-    ],
-    div: [
-      ...(defaultSchema.attributes?.div ?? []),
-      'className',
-      'style',
-    ],
+    span: [...(defaultSchema.attributes?.span ?? []), 'className', 'style'],
+    div: [...(defaultSchema.attributes?.div ?? []), 'className', 'style'],
   },
   // KaTeX emits a lot of tag names that defaultSchema strips. Allow them.
   tagNames: [
@@ -156,9 +144,7 @@ function CodeBlock({
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3 text-xs leading-snug">
-        {children}
-      </pre>
+      <pre className="overflow-x-auto p-3 text-xs leading-snug">{children}</pre>
     </div>
   );
 }
@@ -173,37 +159,19 @@ const markdownComponents: Components = {
       <table className="min-w-full border-collapse text-xs">{children}</table>
     </div>
   ),
-  thead: ({ children }) => (
-    <thead className="bg-gray-100 text-gray-700">{children}</thead>
-  ),
+  thead: ({ children }) => <thead className="bg-gray-100 text-gray-700">{children}</thead>,
   th: ({ children }) => (
-    <th className="border border-gray-300 px-2 py-1 text-left font-semibold">
-      {children}
-    </th>
+    <th className="border border-gray-300 px-2 py-1 text-left font-semibold">{children}</th>
   ),
-  td: ({ children }) => (
-    <td className="border border-gray-300 px-2 py-1 align-top">{children}</td>
-  ),
+  td: ({ children }) => <td className="border border-gray-300 px-2 py-1 align-top">{children}</td>,
   // Block-level styling. Keep margins tight for chat density.
-  h1: ({ children }) => (
-    <h1 className="text-base font-semibold mt-2 mb-1">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="text-sm font-semibold mt-2 mb-1">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
-  ),
-  h4: ({ children }) => (
-    <h4 className="text-sm font-semibold mt-1.5 mb-1">{children}</h4>
-  ),
+  h1: ({ children }) => <h1 className="text-base font-semibold mt-2 mb-1">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-sm font-semibold mt-2 mb-1">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>,
+  h4: ({ children }) => <h4 className="text-sm font-semibold mt-1.5 mb-1">{children}</h4>,
   p: ({ children }) => <p className="my-1 leading-relaxed">{children}</p>,
-  ul: ({ children }) => (
-    <ul className="list-disc pl-5 my-1 space-y-0.5">{children}</ul>
-  ),
-  ol: ({ children }) => (
-    <ol className="list-decimal pl-5 my-1 space-y-0.5">{children}</ol>
-  ),
+  ul: ({ children }) => <ul className="list-disc pl-5 my-1 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-5 my-1 space-y-0.5">{children}</ol>,
   li: ({ children }) => <li className="leading-snug">{children}</li>,
   blockquote: ({ children }) => (
     <blockquote className="border-l-4 border-gray-300 pl-3 my-2 text-gray-600 italic">
@@ -302,9 +270,7 @@ export function ChatMessageContent({
 
   // Plain-text fallback used by both the error boundary and as the
   // user-bubble render path. Preserves whitespace so newlines survive.
-  const plainFallback = (
-    <p className="whitespace-pre-wrap break-words">{content}</p>
-  );
+  const plainFallback = <p className="whitespace-pre-wrap break-words">{content}</p>;
 
   return (
     <div

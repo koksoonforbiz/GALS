@@ -290,12 +290,7 @@ export function AttemptPage() {
         }),
       });
 
-      track('ASSESSMENT_SUBMITTED', {
-        attemptId,
-        assessmentId: attempt.assessmentId,
-        questionId: attempt.questionId,
-        metadata: { summary: `Submitted attempt ${attemptId}` },
-      });
+      // ASSESSMENT_SUBMITTED is written by the API on submit (one writer, CAP-02).
 
       // Update local state from server response (contains autoFeedback / currentScore for MCQ)
       if (response && typeof response === 'object' && 'id' in response) {

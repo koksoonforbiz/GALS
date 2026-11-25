@@ -329,6 +329,30 @@ enum ActivityAction {
   CAMERA_BLOCKED
   CAMERA_RESTORED
   PAGE_LEFT
+  QUESTION_GRADED
+  STEP_CHECK_PASS
+  STEP_CHECK_FAIL
+  STEP_FORCE_PASS
+  STEP_HINT_VIEWED
+  PRACTICE_RESULTS_VIEWED
+  PRACTICE_EXPLANATION_VIEWED
+  PRACTICE_NOTE_ADDED
+  PRACTICE_SAVED_TO_REVIEWS
+  PRACTICE_RETRY_STARTED
+  REVIEW_QUEUE_OPENED
+  CARD_VIEWED
+  ITEM_EXITED
+  PDF_PAGE_VIEWED
+  TEXT_SELECTED
+  STRATEGY_CHIP_CLICKED
+  AFFORDANCE_SHOWN
+  AFFORDANCE_DISMISSED
+  GOAL_SET
+  INTENTION_TAGGED
+  PROGRESS_CHECKED
+  ANSWER_CONFIDENCE_RATED
+  RESUME_ANSWERED
+  SESSION_REFLECTION_SUBMITTED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -1857,6 +1881,20 @@ model LlmTurn {
   @@index([sessionId])
   @@index([userId, createdAt])
   @@map("llm_turns")
+}
+
+/// Learner-visible prompt switches per course (Prompt B, P5d). Append-only:
+/// the latest row per (course, flag) wins; no row means on (PI decision).
+model CourseFeatureFlag {
+  id        String   @id @default(uuid()) @db.Uuid
+  courseId  String   @map("course_id") @db.Uuid
+  flag      String
+  enabled   Boolean
+  changedAt DateTime @default(now()) @map("changed_at") @db.Timestamptz
+  changedBy String?  @map("changed_by") @db.Uuid
+
+  @@index([courseId, flag, changedAt])
+  @@map("course_feature_flags")
 }
 
 /// Capture quality per session (Prompt B, B4): sequence gaps, duplicates and

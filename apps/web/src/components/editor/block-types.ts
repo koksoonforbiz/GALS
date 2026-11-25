@@ -77,10 +77,19 @@ export function genBlockId(): string {
   return `blk_${Date.now().toString(36)}_${(++_counter).toString(36)}`;
 }
 
-export function createBlock<T extends BlockType>(type: T, data?: Partial<BlockDataMap[T]>): Block<T> {
+export function createBlock<T extends BlockType>(
+  type: T,
+  data?: Partial<BlockDataMap[T]>,
+): Block<T> {
   const defaults: Record<BlockType, unknown> = {
     text: { html: '' } satisfies TextBlockData,
-    image: { src: '', caption: '', alt: '', size: 'medium', align: 'center' } satisfies ImageBlockData,
+    image: {
+      src: '',
+      caption: '',
+      alt: '',
+      size: 'medium',
+      align: 'center',
+    } satisfies ImageBlockData,
     video: { url: '', startTime: 0 } satisfies VideoBlockData,
     diagram: { code: 'graph TD\n  A --> B' } satisfies DiagramBlockData,
     callout: { variant: 'tip', html: '' } satisfies CalloutBlockData,

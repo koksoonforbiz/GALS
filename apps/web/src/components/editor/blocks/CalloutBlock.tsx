@@ -10,11 +10,38 @@ interface Props {
   readOnly?: boolean;
 }
 
-const VARIANTS: Record<CalloutVariant, { label: string; icon: string; bg: string; border: string; text: string }> = {
-  tip: { label: 'Tip', icon: '💡', bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900' },
-  warning: { label: 'Warning', icon: '⚠️', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900' },
-  'exam-hint': { label: 'Exam Hint', icon: '📝', bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-900' },
-  'common-mistake': { label: 'Common Mistake', icon: '❌', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-900' },
+const VARIANTS: Record<
+  CalloutVariant,
+  { label: string; icon: string; bg: string; border: string; text: string }
+> = {
+  tip: {
+    label: 'Tip',
+    icon: '💡',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    text: 'text-blue-900',
+  },
+  warning: {
+    label: 'Warning',
+    icon: '⚠️',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-900',
+  },
+  'exam-hint': {
+    label: 'Exam Hint',
+    icon: '📝',
+    bg: 'bg-purple-50',
+    border: 'border-purple-200',
+    text: 'text-purple-900',
+  },
+  'common-mistake': {
+    label: 'Common Mistake',
+    icon: '❌',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    text: 'text-red-900',
+  },
 };
 
 export default function CalloutBlock({ data, onChange, readOnly }: Props) {

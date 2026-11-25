@@ -134,11 +134,11 @@ function BiometricsHooksInner({
     prevWebgazer.current = webgazer.isActive;
   }, [webgazer.isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // WEBGAZER_CALIBRATION_STARTED / _COMPLETED are written by the API when the
+  // calibration is posted (one writer per action, CAP-02).
   useEffect(() => {
-    if (webgazer.isCalibrating && !prevCalibrating.current)
-      track('WEBGAZER_CALIBRATION_STARTED', { courseId });
     prevCalibrating.current = webgazer.isCalibrating;
-  }, [webgazer.isCalibrating]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [webgazer.isCalibrating]);
 
   // Build active features list for banner
   const activeFeatures: string[] = [];
@@ -188,7 +188,6 @@ function BiometricsHooksInner({
           isFaceDetected={webgazer.isFaceDetected}
           onComplete={() => {
             webgazer.completeCalibration();
-            track('WEBGAZER_CALIBRATION_COMPLETED', { courseId });
           }}
           onSkip={() => {
             webgazer.skipCalibration();

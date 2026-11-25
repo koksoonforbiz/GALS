@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../../lib/api';
 import { useActivityLog } from '../../../lib/activity-log';
+import { usePromptFlags } from '../../../lib/capture/learnerPrompts';
 import { usePageContext } from '../../../contexts/PageContext';
 import type { SaveForReviewInput } from '../types';
 import { FlaskConical, Trophy, AlertTriangle, Settings } from 'lucide-react';
@@ -73,6 +74,13 @@ export function PracticeTestingView({
   const [saved, setSaved] = useState(false);
   const [userNotes, setUserNotes] = useState('');
   const [expandedResult, setExpandedResult] = useState<number | null>(null);
+  // Practice-test events (Prompt B, P5; CAP-22).
+  const attemptNoRef = useRef(1);
+  // Confidence slider (Prompt B, P5d; WP5 G2), optional, per question.
+  const promptFlags = usePromptFlags(courseId ?? null);
+  const [confidence, setConfidence] = useState<Record<number, number>>({});
+  const sliderShownRef = useRef<string | null>(null);
+  const lastNoteRef = useRef('');
 
   // ── Configuration state ────────────────────────────────────
   // Defaults match the backend's defaults (3 MCQ + 2 short = 5 total)
@@ -316,6 +324,20 @@ export function PracticeTestingView({
     const latencyMs = Date.now() - questionShownAtRef.current;
     const q = questions[currentIndex]!;
     const answeredText = userAnswers[currentIndex] ?? '';
+    const sure = confidence[currentIndex];
+    if (promptFlags.confidence_slider && sure != null) {
+      track('ANSWER_CONFIDENCE_RATED', {
+        courseId,
+        moduleItemId: contentId ?? undefined,
+        interventionId: interventionId ?? undefined,
+        metadata: {
+          value: sure,
+          target: 'practice_test',
+          questionIndex: currentIndex,
+          interventionId: interventionId ?? undefined,
+        },
+      });
+    }
     track('QUESTION_ANSWERED', {
       courseId,
       moduleItemId: contentId ?? undefined,
@@ -357,6 +379,10 @@ export function PracticeTestingView({
       setGradedResults(result.results);
       setScore(result.score);
       setPhase('results');
+      trackPractice('PRACTICE_RESULTS_VIEWED', {
+        score: result.score,
+        totalQuestions: result.totalQuestions,
+      });
 
       // Emit INTERVENTION_COMPLETED with rollup metrics. Pairs with the
       // earlier INTERVENTION_TRIGGERED (server-side on generate) and
@@ -389,6 +415,7 @@ export function PracticeTestingView({
 
   const handleSave = () => {
     if (!interventionId) return;
+    trackPractice('PRACTICE_SAVED_TO_REVIEWS', {});
     onSaveForReview({
       interventionId,
       interventionType: 'PRACTICE_TESTING',
@@ -413,7 +440,39 @@ export function PracticeTestingView({
     setSaved(true);
   };
 
+  const trackPractice = (
+    action:
+      | 'PRACTICE_RESULTS_VIEWED'
+      | 'PRACTICE_SAVED_TO_REVIEWS'
+      | 'PRACTICE_RETRY_STARTED'
+      | 'PRACTICE_NOTE_ADDED'
+      | 'PRACTICE_EXPLANATION_VIEWED',
+    metadata: Record<string, unknown>,
+  ) =>
+    track(action, {
+      courseId,
+      moduleItemId: contentId ?? undefined,
+      interventionId: interventionId ?? undefined,
+      metadata: { interventionType: 'PRACTICE_TESTING', ...metadata },
+    });
+
+  const toggleResult = (i: number) => {
+    const opening = expandedResult !== i;
+    setExpandedResult(opening ? i : null);
+    if (opening) {
+      trackPractice('PRACTICE_EXPLANATION_VIEWED', {
+        questionIndex: i,
+        correct: gradedResults[i]?.correct ?? null,
+      });
+    }
+  };
+
   const handleRetry = () => {
+    attemptNoRef.current += 1;
+    trackPractice('PRACTICE_RETRY_STARTED', {
+      attemptNo: attemptNoRef.current,
+      previousInterventionId: interventionId ?? undefined,
+    });
     setQuestions([]);
     setCurrentIndex(0);
     setUserAnswers({});
@@ -731,6 +790,35 @@ export function PracticeTestingView({
 
         {/* Submit button */}
         <div className="px-3 py-2 border-t border-gray-200">
+          {promptFlags.confidence_slider && (
+            <label
+              className="block text-xs text-gray-600 mb-2"
+              data-testid="prompt-confidence_slider"
+            >
+              How sure are you about this answer?{' '}
+              <span className="font-medium">{confidence[currentIndex] ?? '-'}</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={10}
+                value={confidence[currentIndex] ?? 50}
+                onChange={(e) => {
+                  if (sliderShownRef.current !== interventionId) {
+                    sliderShownRef.current = interventionId ?? '';
+                    track('AFFORDANCE_SHOWN', {
+                      courseId,
+                      interventionId: interventionId ?? undefined,
+                      metadata: { affordance: 'confidence_slider' },
+                    });
+                  }
+                  const v = Number(e.target.value);
+                  setConfidence((c) => ({ ...c, [currentIndex]: v }));
+                }}
+                className="w-full"
+              />
+            </label>
+          )}
           <button
             onClick={handleSubmitAnswer}
             disabled={!answered || submitting}
@@ -772,7 +860,7 @@ export function PracticeTestingView({
           {gradedResults.map((r, i) => (
             <button
               key={i}
-              onClick={() => setExpandedResult(expandedResult === i ? null : i)}
+              onClick={() => toggleResult(i)}
               className={`text-xs w-6 h-6 rounded-full flex items-center justify-center ${
                 r.correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
               }`}
@@ -789,7 +877,7 @@ export function PracticeTestingView({
         {gradedResults.map((r, i) => (
           <div key={i} className="border border-gray-200 rounded-lg overflow-hidden">
             <button
-              onClick={() => setExpandedResult(expandedResult === i ? null : i)}
+              onClick={() => toggleResult(i)}
               className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition-colors"
             >
               <span className={`text-xs ${r.correct ? 'text-green-600' : 'text-red-600'}`}>
@@ -824,6 +912,12 @@ export function PracticeTestingView({
           <textarea
             value={userNotes}
             onChange={(e) => setUserNotes(e.target.value)}
+            onBlur={() => {
+              const text = userNotes.trim();
+              if (!text || text === lastNoteRef.current) return;
+              lastNoteRef.current = text;
+              trackPractice('PRACTICE_NOTE_ADDED', { chars: text.length, text });
+            }}
             placeholder="Reflect on what you learned..."
             className="w-full text-xs border border-gray-300 rounded p-2 h-16 resize-none"
           />

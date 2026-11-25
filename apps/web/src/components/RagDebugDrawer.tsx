@@ -69,10 +69,7 @@ export function RagDebugDrawer({ data, isOpen, onClose }: Props) {
             Query: &quot;{data.query}&quot;
           </p>
         </div>
-        <button
-          onClick={onClose}
-          className="text-gray-400 hover:text-gray-600 text-lg"
-        >
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg">
           &times;
         </button>
       </div>
@@ -212,10 +209,7 @@ export function RagDebugDrawer({ data, isOpen, onClose }: Props) {
               <p className="text-sm text-gray-400">No citations found.</p>
             ) : (
               data.citations.map((citation, i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-gray-200 rounded-lg p-3"
-                >
+                <div key={i} className="bg-white border border-gray-200 rounded-lg p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold text-indigo-600">[{i + 1}]</span>
                     <span className="text-xs font-medium text-gray-900">
@@ -254,9 +248,7 @@ function ChunkCard({
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-gray-400">#{rank}</span>
           <span className="text-xs font-medium text-gray-900">{chunk.documentTitle}</span>
-          {chunk.pageNumber && (
-            <span className="text-xs text-gray-500">p.{chunk.pageNumber}</span>
-          )}
+          {chunk.pageNumber && <span className="text-xs text-gray-500">p.{chunk.pageNumber}</span>}
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">

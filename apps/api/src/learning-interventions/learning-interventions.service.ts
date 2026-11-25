@@ -2342,6 +2342,7 @@ export class LearningInterventionsService {
     userId: string,
     interventionId: string,
     dto: SubmitPracticeTestAnswersDto,
+    activitySessionId?: string,
   ): Promise<GradedResult> {
     const intervention = await this.prisma.learningIntervention.findUnique({
       where: { id: interventionId },
@@ -2416,6 +2417,28 @@ export class LearningInterventionsService {
 
     const correctCount = results.filter((r) => r.correct).length;
     const score = Math.round((correctCount / questions.length) * 100);
+
+    // QUESTION_GRADED per item (Prompt B, P5; CAP-07/22): correctness is
+    // otherwise only in the mutable session_data.
+    if (activitySessionId) {
+      for (const r of results) {
+        void this.activityLogService.record({
+          sessionId: activitySessionId,
+          userId,
+          action: ActivityAction.QUESTION_GRADED,
+          courseId: intervention.courseId,
+          interventionId,
+          metadata: {
+            interventionType: 'PRACTICE_TESTING',
+            questionIndex: r.questionIndex,
+            questionType: r.type,
+            correct: r.correct,
+            answered: !!r.userAnswer?.trim(),
+            graderType: r.type === 'short_answer' && r.userAnswer?.trim() ? 'llm' : 'deterministic',
+          },
+        });
+      }
+    }
 
     // Update intervention status
     await this.prisma.learningIntervention.update({
@@ -3082,6 +3105,7 @@ export class LearningInterventionsService {
     userId: string,
     sessionId: string,
     dto: SubmitStepCheckDto,
+    activitySessionId?: string,
   ): Promise<StepCheckResponse> {
     if (!dto.userResponse || dto.userResponse.trim().length < 10) {
       throw new BadRequestException('Response must be at least 10 characters');
@@ -3135,6 +3159,7 @@ export class LearningInterventionsService {
     let isCorrect = false;
     let feedback = '';
     let encouragement = '';
+    let graderStatus: 'ok' | 'error' = 'ok';
 
     try {
       const result = await this.llmService.callLlmForUser(
@@ -3157,28 +3182,58 @@ export class LearningInterventionsService {
       feedback = validated.feedback;
       encouragement = validated.encouragement;
     } catch {
+      graderStatus = 'error';
       feedback = 'We had trouble evaluating your answer. Please try again.';
       encouragement = 'Keep going!';
     }
 
-    const showAnswer = !isCorrect && currentAttempts >= maxAttemptsAllowed;
+    // A grader failure is not the learner's wrong answer (CAP-24): it does
+    // not use up an attempt and cannot force-pass the step.
+    const attemptsCounted = graderStatus === 'ok' ? currentAttempts : currentAttempts - 1;
+    const showAnswer = graderStatus === 'ok' && !isCorrect && currentAttempts >= maxAttemptsAllowed;
 
-    const userResponse: StepUserResponse = {
+    const userResponse: StepUserResponse & { graderStatus: string } = {
       response: dto.userResponse,
       feedback,
       isCorrect,
       timestamp: new Date().toISOString(),
+      graderStatus,
     };
 
-    const updatedResult: StepResult = {
-      attempts: currentAttempts,
+    const updatedResult: StepResult & { passedBy?: 'correct' | 'force' } = {
+      attempts: attemptsCounted,
       passed: isCorrect,
       userResponses: [...(existingResult?.userResponses || []), userResponse],
+      ...(isCorrect ? { passedBy: 'correct' as const } : {}),
     };
 
     // If showing answer after max attempts, mark as passed so student can proceed
     if (showAnswer) {
       updatedResult.passed = true;
+      updatedResult.passedBy = 'force';
+    }
+
+    // Stepwise check events (Prompt B, P5; CAP-07/24).
+    if (activitySessionId) {
+      const base = {
+        sessionId: activitySessionId,
+        userId,
+        courseId: intervention.courseId,
+        interventionId: sessionId,
+      };
+      const meta = { stepNumber: dto.stepNumber, attempt: currentAttempts, graderStatus };
+      void this.activityLogService.record({
+        ...base,
+        action: isCorrect ? ActivityAction.STEP_CHECK_PASS : ActivityAction.STEP_CHECK_FAIL,
+        metadata: meta,
+      });
+      if (showAnswer) {
+        void this.activityLogService.record({
+          ...base,
+          action: ActivityAction.STEP_FORCE_PASS,
+          metadata: { stepNumber: dto.stepNumber, attempt: currentAttempts },
+        });
+      }
     }
 
     const updatedStepResults = {
@@ -3200,7 +3255,7 @@ export class LearningInterventionsService {
       isCorrect,
       feedback,
       encouragement,
-      attempts: currentAttempts,
+      attempts: attemptsCounted,
       showAnswer,
       sampleAnswer: showAnswer ? step.comprehensionCheck.sampleAnswer : undefined,
     };

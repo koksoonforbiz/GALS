@@ -32,7 +32,10 @@ function parseVideoEmbed(url: string, startTime: number): string | null {
 export default function VideoBlock({ data, onChange, readOnly }: Props) {
   const [urlInput, setUrlInput] = useState(data.url);
 
-  const embedUrl = useMemo(() => parseVideoEmbed(data.url, data.startTime), [data.url, data.startTime]);
+  const embedUrl = useMemo(
+    () => parseVideoEmbed(data.url, data.startTime),
+    [data.url, data.startTime],
+  );
 
   const handleSubmit = () => {
     onChange({ ...data, url: urlInput.trim() });

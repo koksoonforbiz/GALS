@@ -66,9 +66,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
         <h3 className="text-base font-semibold text-gray-800 mb-1">
           Something went wrong in {label}.
         </h3>
-        <p className="text-xs text-gray-600 mb-4 max-w-md font-mono break-words">
-          {error.message}
-        </p>
+        <p className="text-xs text-gray-600 mb-4 max-w-md font-mono break-words">{error.message}</p>
         <div className="flex gap-2">
           <button
             onClick={this.reset}

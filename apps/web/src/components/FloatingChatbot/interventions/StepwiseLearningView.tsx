@@ -728,7 +728,19 @@ export function StepwiseLearningView({
                       // the QUESTION_ANSWERED metadata correctly reports
                       // whether a hint was consulted at all during the
                       // student's attempt at this step.
-                      if (!showHint) hintShownThisStepRef.current = true;
+                      if (!showHint) {
+                        hintShownThisStepRef.current = true;
+                        track('STEP_HINT_VIEWED', {
+                          courseId,
+                          moduleItemId: contentId ?? undefined,
+                          interventionId: interventionId ?? undefined,
+                          metadata: {
+                            interventionType: 'STEPWISE_LEARNING',
+                            stepNumber: currentStep,
+                            level: 1,
+                          },
+                        });
+                      }
                       setShowHint(!showHint);
                     }}
                     className="text-[10px] text-blue-600 hover:text-blue-800"

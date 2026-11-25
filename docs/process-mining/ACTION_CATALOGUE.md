@@ -2,7 +2,7 @@
 
 _Generated from `packages/shared/src/action-catalogue.ts` by `pnpm --filter @ats/shared run gen:catalogue`. Do not edit by hand._
 
-107 platform actions (98 with an emitter, 9 deprecated), plus 50 library v2 terms that are realised by other actions or not emitted.
+131 platform actions (123 with an emitter, 8 deprecated), plus 50 library v2 terms that are realised by other actions or not emitted.
 
 Level: **ACT** learner action · **SYS** system · **QUALITY** capture health · **REF** reference outcome. Side: who writes it. Text fields hold free text (recorded; consent is on the study consent form). Required and optional metadata keys with their JSON type; other keys are allowed.
 
@@ -57,12 +57,12 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | --- | --- | --- | --- | --- | --- | --- |
 | `INTERVENTION_TRIGGERED` | SYS | server | instant |  | `interventionType`: string, `triggerReason`: string | `config`: object, `summary`: string |
 
-## A Interactive lesson only
+## A Interactive lesson; D every other surface (metadata.surface)
 
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
 | --- | --- | --- | --- | --- | --- | --- |
-| `IDLE_ENDED` | ACT | client | interval |  |  |  |
-| `IDLE_STARTED` | ACT | client | interval |  | `idleThresholdMs`: number, `libraryVersion`: string, `seq`: number, `slideKey`: string |  |
+| `IDLE_ENDED` | ACT | client | interval |  |  | `idleMs`: number, `libraryVersion`: string, `slideKey`: string, `surface`: string |
+| `IDLE_STARTED` | ACT | client | interval |  | `idleThresholdMs`: number | `libraryVersion`: string, `seq`: number, `slideKey`: string, `surface`: string |
 
 ## A Prompt Lab (exercise/task/stretch slides)
 
@@ -87,7 +87,7 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
 | --- | --- | --- | --- | --- | --- | --- |
-| ~~FEEDBACK_RECEIVED~~ (deprecated) | ACT | client | instant |  |  |  |
+| `FEEDBACK_RECEIVED` | ACT | server | instant | `feedback` | `source`: string, `slideKey`: string, `status`: string, `latencyMs`: number | `verdict`: string, `model`: string, `feedback`: string, `answerChars`: number |
 
 ## B Learning Assistant
 
@@ -100,6 +100,22 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
 | --- | --- | --- | --- | --- | --- | --- |
 | `CHATBOT_MESSAGE_SENT` | ACT | client | instant | `message` | `hasSelection`: boolean | `contentTitle`: string, `message`: string, `messageChars`: number, `pageType`: string, `selectionLength`: number |
+| `STRATEGY_CHIP_CLICKED` | ACT | client | instant |  | `strategy`: string, `hasSelection`: boolean | `selectionLength`: number |
+
+## B Learning Assistant strategies
+
+| Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
+| --- | --- | --- | --- | --- | --- | --- |
+| `PRACTICE_EXPLANATION_VIEWED` | ACT | client | instant |  | `questionIndex`: number | `correct`: boolean |
+| `PRACTICE_NOTE_ADDED` | ACT | client | instant | `text` | `chars`: number | `text`: string, `questionIndex`: number |
+| `PRACTICE_RESULTS_VIEWED` | ACT | client | instant |  | `score`: number | `totalQuestions`: number |
+| `PRACTICE_RETRY_STARTED` | ACT | client | instant |  |  | `attemptNo`: number, `previousInterventionId`: string |
+| `PRACTICE_SAVED_TO_REVIEWS` | ACT | client | instant |  |  | `reviewId`: string |
+| `QUESTION_GRADED` | REF | server | instant |  | `interventionType`: string, `questionIndex`: number, `correct`: boolean, `graderType`: string | `questionType`: string, `answered`: boolean |
+| `STEP_CHECK_FAIL` | REF | server | instant |  | `stepNumber`: number, `attempt`: number, `graderStatus`: string |  |
+| `STEP_CHECK_PASS` | REF | server | instant |  | `stepNumber`: number, `attempt`: number, `graderStatus`: string |  |
+| `STEP_FORCE_PASS` | SYS | server | instant |  | `stepNumber`: number, `attempt`: number |  |
+| `STEP_HINT_VIEWED` | ACT | client | instant |  | `stepNumber`: number | `level`: number |
 
 ## B legacy assessments
 
@@ -111,8 +127,8 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ASSESSMENT_STARTED` | REF | both | instant |  | `summary`: string |  |
-| `ASSESSMENT_SUBMITTED` | REF | both | instant |  | `summary`: string |  |
+| `ASSESSMENT_STARTED` | REF | server | instant |  | `summary`: string |  |
+| `ASSESSMENT_SUBMITTED` | REF | server | instant |  | `summary`: string |  |
 
 ## B Mode A / C Mode B practice testing
 
@@ -164,7 +180,7 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
 | --- | --- | --- | --- | --- | --- | --- |
-| `SPACED_REP_CARD_RATED` | ACT | both | instant |  | `cardId`: string, `summary`: string | `nextReviewAt`: string, `quality`: string, `rating`: number |
+| `SPACED_REP_CARD_RATED` | ACT | server | instant |  | `cardId`: string, `summary`: string | `nextReviewAt`: string, `quality`: string, `rating`: number |
 
 ## C Mode B "Studio" tab
 
@@ -199,6 +215,21 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | --- | --- | --- | --- | --- | --- | --- |
 | `STUDY_MATERIAL_UPLOADED` | ACT | client | instant |  | `documentId`: string, `fileName`: string, `summary`: string |  |
 
+## C Review queue
+
+| Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
+| --- | --- | --- | --- | --- | --- | --- |
+| `CARD_VIEWED` | ACT | client | instant |  | `cardId`: string | `flipped`: boolean |
+| `REVIEW_QUEUE_OPENED` | ACT | client | instant |  | `dueCards`: number |  |
+
+## D Course pages (Mode A)
+
+| Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ITEM_EXITED` | ACT | client | interval |  | `dwellMs`: number, `activeMs`: number, `reason`: string |  |
+| `PDF_PAGE_VIEWED` | ACT | client | interval |  | `page`: number, `activeMs`: number | `pageCount`: number |
+| `TEXT_SELECTED` | ACT | client | instant | `text` | `chars`: number, `source`: string | `page`: number, `text`: string |
+
 ## D Cross-cutting
 
 | Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
@@ -231,9 +262,9 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | `RECORDING_STOPPED` | SYS | client | interval |  |  |  |
 | `RECORDING_UPLOAD_FAILED` | QUALITY | server | instant |  | `error`: string, `segmentId`: string |  |
 | `WEBGAZER_BATCH_SUBMITTED` | SYS | server | instant |  | `readingCount`: number |  |
-| `WEBGAZER_CALIBRATION_COMPLETED` | SYS | both | instant |  |  | `accuracy`: number, `triggeredBy`: string |
+| `WEBGAZER_CALIBRATION_COMPLETED` | SYS | server | instant |  |  | `accuracy`: number, `triggeredBy`: string |
 | `WEBGAZER_CALIBRATION_SKIPPED` | SYS | client | instant |  |  |  |
-| `WEBGAZER_CALIBRATION_STARTED` | SYS | both | instant |  | `triggeredBy`: string |  |
+| `WEBGAZER_CALIBRATION_STARTED` | SYS | server | instant |  | `triggeredBy`: string |  |
 | ~~WEBGAZER_RECALIBRATION_PROMPTED~~ (deprecated) | SYS | client | instant |  |  |  |
 | `WEBGAZER_TRACKING_STARTED` | SYS | client | interval |  |  |  |
 | `WEBGAZER_TRACKING_STOPPED` | SYS | client | interval |  |  |  |
@@ -255,6 +286,19 @@ Level: **ACT** learner action · **SYS** system · **QUALITY** capture health ·
 | `EF_TASK_COMPLETED` | REF | server | interval |  | `attempt`: number, `durationMs`: number, `occasion`: string, `task`: string |  |
 | `EF_TASK_INTERRUPTED` | QUALITY | server | instant |  | `attempt`: number, `occasion`: string, `task`: string |  |
 | `EF_TASK_STARTED` | REF | server | interval |  | `attempt`: number, `occasion`: string, `of`: number, `task`: string |  |
+
+## E Learner prompts (WP5 G1, G2, G9)
+
+| Action | Level | Side | Kind | Text fields | Required metadata | Optional metadata |
+| --- | --- | --- | --- | --- | --- | --- |
+| `AFFORDANCE_DISMISSED` | ACT | client | instant |  | `affordance`: string | `msShown`: number |
+| `AFFORDANCE_SHOWN` | SYS | client | instant |  | `affordance`: string |  |
+| `ANSWER_CONFIDENCE_RATED` | ACT | client | instant |  | `value`: number, `target`: string | `questionIndex`: number, `interventionId`: string |
+| `GOAL_SET` | ACT | client | instant | `goal` | `goal`: string, `source`: string | `chars`: number |
+| `INTENTION_TAGGED` | ACT | client | instant |  | `intention`: string, `target`: string |  |
+| `PROGRESS_CHECKED` | ACT | client | instant |  | `status`: string | `activeMinutes`: number |
+| `RESUME_ANSWERED` | ACT | client | instant |  | `choice`: string, `awayMs`: number |  |
+| `SESSION_REFLECTION_SUBMITTED` | ACT | client | instant | `learned`, `unclear` | `learnedChars`: number, `unclearChars`: number | `learned`: string, `unclear`: string |
 
 ## F Knowledge tests (/knowledge-check)
 

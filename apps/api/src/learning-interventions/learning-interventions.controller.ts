@@ -147,8 +147,14 @@ export class LearningInterventionsController {
     @Request() req: { user: RequestUser },
     @Param('interventionId') interventionId: string,
     @Body() dto: SubmitPracticeTestAnswersDto,
+    @SessionId() activitySessionId?: string,
   ) {
-    return this.service.submitPracticeTestAnswers(req.user.id, interventionId, dto);
+    return this.service.submitPracticeTestAnswers(
+      req.user.id,
+      interventionId,
+      dto,
+      activitySessionId,
+    );
   }
 
   @Get('practice-testing/:interventionId')
@@ -221,8 +227,9 @@ export class LearningInterventionsController {
     @Request() req: { user: RequestUser },
     @Param('sessionId') sessionId: string,
     @Body() dto: SubmitStepCheckDto,
+    @SessionId() activitySessionId?: string,
   ) {
-    return this.service.checkStepResponse(req.user.id, sessionId, dto);
+    return this.service.checkStepResponse(req.user.id, sessionId, dto, activitySessionId);
   }
 
   @Patch('stepwise-learning/:sessionId/advance')

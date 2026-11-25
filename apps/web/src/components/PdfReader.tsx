@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useActivityLog } from '../lib/activity-log';
+import { activeMs } from '../lib/capture/activeTime';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { Loader2, AlertCircle } from 'lucide-react';
 
@@ -90,6 +92,30 @@ export function PdfReader({
 }: PdfReaderProps) {
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // PDF_PAGE_VIEWED (Prompt B, P5; CAP-28): each page the learner had on
+  // screen, with active time, when they move to another page or leave.
+  const { track } = useActivityLog();
+  const pageView = useRef<{ page: number; activeAt: number; enteredAt: number } | null>(null);
+  const closePageView = useCallback(
+    (reason: string) => {
+      const v = pageView.current;
+      if (!v) return;
+      pageView.current = null;
+      track('PDF_PAGE_VIEWED', {
+        courseId: _courseId || undefined,
+        metadata: {
+          page: v.page,
+          activeMs: Math.max(0, activeMs() - v.activeAt),
+          dwellMs: Date.now() - v.enteredAt,
+          pageCount: numPagesRef.current,
+          reason,
+        },
+      });
+    },
+    [track, _courseId],
+  );
+  const numPagesRef = useRef(0);
   // Zoom is intentionally disabled — see comment above the toolbar.
   // The PDF is rendered at the column's CSS width via <Page width={...}>
   // (no `scale` prop), so it always fits the column without a manual
@@ -206,6 +232,22 @@ export function PdfReader({
   useEffect(() => {
     if (numPages > 0) onPdfMetaRef.current?.({ currentPage, numPages });
   }, [currentPage, numPages]);
+
+  useEffect(() => {
+    numPagesRef.current = numPages;
+    if (numPages === 0) return;
+    closePageView('page_change');
+    pageView.current = { page: currentPage, activeAt: activeMs(), enteredAt: Date.now() };
+  }, [currentPage, numPages, closePageView]);
+
+  useEffect(() => {
+    const onHide = () => closePageView('pagehide');
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      closePageView('left');
+    };
+  }, [closePageView]);
 
   const onDocumentLoadError = useCallback(() => {
     setLoadError(true);
@@ -335,7 +377,7 @@ export function PdfReader({
           the user can scroll horizontally inside the reader when they
           zoom the PDF in past 100% via the toolbar. At scale=1.0 the
           page fits exactly and no horizontal scrollbar appears. */}
-      <div ref={scrollContainerRef} className="flex-1 bg-gray-100 overflow-auto">
+      <div ref={scrollContainerRef} className="flex-1 bg-gray-100 overflow-auto" data-pdf-reader="">
         {isLoading && (
           <div className="flex items-center justify-center h-full">
             <Loader2 size={32} className="text-blue-600 animate-spin" />
@@ -365,6 +407,7 @@ export function PdfReader({
                     if (el) pageRefs.current.set(pageNum, el);
                   }}
                   data-replay-pdf-page={pageNum}
+                  data-page-number={pageNum}
                   className={`mx-auto max-w-full transition-shadow ${
                     checkedPages?.has(pageNum) ? 'ring-2 ring-amber-400 rounded' : ''
                   }`}

@@ -117,6 +117,13 @@ export class DurableQueue<T> {
     for (const it of items) this.inFlight.delete(this.idOf(it));
   }
 
+  /** Remove items for good (not sent), e.g. another user's leftover events. */
+  drop(pred: (item: T) => boolean): void {
+    const before = this.items.length;
+    this.items = this.items.filter((it) => !pred(it));
+    if (this.items.length !== before) this.schedulePersist();
+  }
+
   /** Change queued items in place (e.g. give session-less events a session). */
   update(fn: (item: T) => T): void {
     this.items = this.items.map(fn);

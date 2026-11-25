@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { LessonSlide } from '@ats/shared';
-import { useActivityLog } from '../../lib/activity-log';
+import { ACTIVITY_FLUSH_EVENT, useActivityLog } from '../../lib/activity-log';
 import type { ActivityAction } from '../../lib/activity-log/types';
 import {
   LIBRARY_VERSION,
@@ -210,6 +210,10 @@ export function useLessonTracking({
     // Capture phase so this runs before ActivityLogProvider's own pagehide
     // flush, which then carries the SLIDE_EXITED out with keepalive.
     const onPageHide = () => exitSlide('pagehide');
+    // Logout: AuthContext dispatches ACTIVITY_FLUSH_EVENT before it closes
+    // the session. Capture phase, so this runs before the provider's flush
+    // and the last SLIDE_EXITED goes out with the session (CAP-04).
+    const onFlush = () => exitSlide('logout');
     const onActivity = () => {
       const now = performance.now();
       lastActivity.current = now;
@@ -239,12 +243,14 @@ export function useLessonTracking({
     }, 5_000);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onPageHide, { capture: true });
+    window.addEventListener(ACTIVITY_FLUSH_EVENT, onFlush, { capture: true });
     for (const ev of ACTIVITY_EVENTS)
       document.addEventListener(ev, onActivity, { capture: true, passive: true });
     return () => {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onPageHide, { capture: true });
+      window.removeEventListener(ACTIVITY_FLUSH_EVENT, onFlush, { capture: true });
       for (const ev of ACTIVITY_EVENTS)
         document.removeEventListener(ev, onActivity, { capture: true });
     };

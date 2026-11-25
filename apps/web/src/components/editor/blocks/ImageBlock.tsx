@@ -93,18 +93,13 @@ export default function ImageBlock({ data, onChange, readOnly }: Props) {
 
   const sizeClass =
     data.size === 'small' ? 'max-w-xs' : data.size === 'full' ? 'w-full' : 'max-w-lg';
-  const alignClass =
-    data.align === 'left' ? '' : data.align === 'right' ? 'ml-auto' : 'mx-auto';
+  const alignClass = data.align === 'left' ? '' : data.align === 'right' ? 'ml-auto' : 'mx-auto';
 
   return (
     <div>
       {data.src && (
         <figure className={`${sizeClass} ${alignClass}`}>
-          <img
-            src={data.src}
-            alt={data.alt || ''}
-            className="rounded-lg w-full"
-          />
+          <img src={data.src} alt={data.alt || ''} className="rounded-lg w-full" />
           {data.caption && (
             <figcaption className="text-xs text-gray-500 text-center mt-1 italic">
               {data.caption}
@@ -140,7 +135,9 @@ export default function ImageBlock({ data, onChange, readOnly }: Props) {
           </select>
           <select
             value={data.align}
-            onChange={(e) => onChange({ ...data, align: e.target.value as ImageBlockData['align'] })}
+            onChange={(e) =>
+              onChange({ ...data, align: e.target.value as ImageBlockData['align'] })
+            }
             className="px-2 py-1 border border-gray-200 rounded text-xs"
           >
             <option value="left">Left</option>

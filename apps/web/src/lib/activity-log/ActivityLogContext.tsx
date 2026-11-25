@@ -10,7 +10,8 @@ import {
 import { ActivityAction, ActivityEvent } from './types';
 import { DurableQueue, backoffMs } from '../capture/durableQueue';
 import { APP_BUILD, TAB_ID, newEventId, nextSeq } from '../capture/captureIds';
-import { decideOnInput, noteInput, setIdleTimeoutMs } from '../capture/sessionSync';
+import { currentUserId, decideOnInput, noteInput, setIdleTimeoutMs } from '../capture/sessionSync';
+import { T_IDLE_MS, lastInputAt } from '../capture/activeTime';
 
 interface ActivityLogContextValue {
   sessionId: string | null;
@@ -52,11 +53,22 @@ const QUEUE_KEY = 'gals.capture.activity.v1';
  */
 interface Queued {
   sid: string | null;
+  /** Signed-in user when tracked: a session-less event only joins that user's next session. */
+  uid?: string | null;
   event: ActivityEvent & {
     clientEventId: string;
     clientSeq?: number;
     tabId: string;
   };
+}
+
+/** Where the learner is, for idle events outside lessons. */
+function surfaceOf(path: string): string {
+  if (path.includes('/puzzles')) return 'ef_puzzles';
+  if (path.includes('/knowledge')) return 'knowledge_check';
+  if (path.includes('/review')) return 'review_queue';
+  if (path.includes('/courses/')) return 'course_page';
+  return 'other';
 }
 
 /** Split into batches the server (≤500 events) and, for keepalive, the browser accept. */
@@ -115,8 +127,11 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   const adoptOrphans = useCallback(
     (sid: string | null) => {
       if (!sid) return;
+      const me = currentUserId();
+      // Events tracked after another user logged out are not this session's.
+      queue.drop((q) => !q.sid && !!q.uid && !!me && q.uid !== me);
       queue.update((q) =>
-        q.sid ? q : { sid, event: { ...q.event, clientSeq: nextSeq('activity', sid) } },
+        q.sid ? q : { sid, uid: q.uid, event: { ...q.event, clientSeq: nextSeq('activity', sid) } },
       );
     },
     [queue],
@@ -278,6 +293,7 @@ export function ActivityLogProvider({ children, getToken }: Props) {
       const sid = sessionIdRef.current;
       queue.push({
         sid,
+        uid: sid ? undefined : currentUserId(),
         event: {
           action,
           occurredAt: new Date().toISOString(),
@@ -290,6 +306,73 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     },
     [queue],
   );
+
+  // ── Idle outside interactive lessons (CAP-29) ────────────────────────────
+  // Same T_idle as the lesson tracker, tagged with the surface. Lessons
+  // report their own idle time, so this stays quiet while one is open.
+  useEffect(() => {
+    let idleSince: number | null = null;
+    const inLesson = () => document.querySelector('[data-interactive-lesson]') !== null;
+    const timer = window.setInterval(() => {
+      const last = lastInputAt();
+      if (idleSince != null || last == null || document.hidden || inLesson()) return;
+      if (Date.now() - last >= T_IDLE_MS) {
+        idleSince = last;
+        track('IDLE_STARTED', {
+          metadata: { surface: surfaceOf(window.location.pathname), idleThresholdMs: T_IDLE_MS },
+        });
+      }
+    }, 5_000);
+    const onInput = () => {
+      if (idleSince == null) return;
+      const idleMs = Date.now() - idleSince;
+      idleSince = null;
+      track('IDLE_ENDED', { metadata: { surface: surfaceOf(window.location.pathname), idleMs } });
+    };
+    const opts = { capture: true, passive: true } as const;
+    const kinds = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'];
+    for (const k of kinds) window.addEventListener(k, onInput, opts);
+    return () => {
+      window.clearInterval(timer);
+      for (const k of kinds) window.removeEventListener(k, onInput, opts);
+    };
+  }, [track]);
+
+  // ── Text selection anywhere on a page (CAP-28) ───────────────────────────
+  // With the selected text (consent is on the study consent form). Fields
+  // the learner types in are covered by the keystroke stream instead.
+  useEffect(() => {
+    let last = '';
+    const onSelectEnd = () => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? '';
+      if (text.length < 3 || text === last) return;
+      const node = sel?.anchorNode ?? null;
+      const el = node instanceof Element ? node : node?.parentElement;
+      if (!el || el.closest('input, textarea, [contenteditable="true"]')) return;
+      last = text;
+      const pageAttr = el.closest<HTMLElement>('[data-page-number]')?.dataset.pageNumber;
+      track('TEXT_SELECTED', {
+        metadata: {
+          chars: text.length,
+          text: text.slice(0, 10_000),
+          source: el.closest('[data-pdf-reader]')
+            ? 'pdf'
+            : el.closest('[data-gals-ai-output]')
+              ? 'ai_output'
+              : 'page',
+          ...(pageAttr ? { page: Number(pageAttr) } : {}),
+          path: window.location.pathname,
+        },
+      });
+    };
+    document.addEventListener('mouseup', onSelectEnd, true);
+    document.addEventListener('keyup', onSelectEnd, true);
+    return () => {
+      document.removeEventListener('mouseup', onSelectEnd, true);
+      document.removeEventListener('keyup', onSelectEnd, true);
+    };
+  }, [track]);
 
   // ── Start flush timer ────────────────────────────────────────────────────
   useEffect(() => {

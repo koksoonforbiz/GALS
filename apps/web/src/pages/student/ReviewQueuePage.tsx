@@ -378,6 +378,7 @@ function FlashcardsTab() {
       setCards(dueData.cards);
       setCurrentIndex(0);
       setSessionResults([]);
+      track('REVIEW_QUEUE_OPENED', { metadata: { dueCards: dueData.cards.length } });
 
       if (dueData.cards.length === 0) {
         setPhase('empty');
@@ -389,13 +390,22 @@ function FlashcardsTab() {
       setCards([]);
       setPhase('empty');
     }
-  }, []);
+  }, [track]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
 
   const currentCard = cards[currentIndex];
+
+  // CARD_VIEWED: each card the learner was shown (front), once per card.
+  useEffect(() => {
+    if (!currentCard || phase !== 'front') return;
+    track('CARD_VIEWED', {
+      courseId: currentCard.courseId,
+      metadata: { cardId: currentCard.id, flipped: false },
+    });
+  }, [currentCard?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleShowAnswer = async () => {
     if (!currentCard) return;
@@ -431,14 +441,7 @@ function FlashcardsTab() {
       // Still advance even if the API fails
     }
 
-    track('SPACED_REP_CARD_RATED', {
-      courseId: currentCard.courseId,
-      metadata: {
-        cardId: currentCard.id,
-        quality,
-        summary: `Rated ${quality}: ${currentCard.front.slice(0, 60)}`,
-      },
-    });
+    // SPACED_REP_CARD_RATED is written by the API with the review (CAP-02).
     setSessionResults((prev) => [...prev, { quality, front: currentCard.front }]);
 
     const nextIndex = currentIndex + 1;
