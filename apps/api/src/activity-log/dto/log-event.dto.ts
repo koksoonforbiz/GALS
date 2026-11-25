@@ -80,3 +80,11 @@ export function describeRejection(raw: unknown, error: z.ZodError) {
   }
   return { action, reason, rawBytes };
 }
+
+/** POST /activity-log/session/open (body optional). */
+export const OpenSessionSchema = z
+  .object({ previousSessionId: z.string().uuid().nullish() })
+  .nullish()
+  .transform((v) => v ?? {});
+
+export type OpenSessionDto = z.infer<typeof OpenSessionSchema>;

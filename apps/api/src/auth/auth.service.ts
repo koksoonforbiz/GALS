@@ -1,3 +1,4 @@
+import { SESSION_PARAMS } from '../activity-log/session-params';
 import {
   Injectable,
   ConflictException,
@@ -42,6 +43,8 @@ interface AuthResponse {
   accessToken: string;
   user: UserWithoutPassword;
   sessionId?: string;
+  /** T2: the browser starts a new session after this long without input. */
+  idleTimeoutMs?: number;
 }
 
 interface TwoFactorPendingResponse {
@@ -524,6 +527,7 @@ export class AuthService {
       accessToken: token,
       user,
       sessionId,
+      idleTimeoutMs: SESSION_PARAMS.T2_ms,
     };
   }
 

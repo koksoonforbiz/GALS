@@ -10,6 +10,7 @@ import {
 import { ActivityAction, ActivityEvent } from './types';
 import { DurableQueue, backoffMs } from '../capture/durableQueue';
 import { APP_BUILD, TAB_ID, newEventId, nextSeq } from '../capture/captureIds';
+import { decideOnInput, noteInput, setIdleTimeoutMs } from '../capture/sessionSync';
 
 interface ActivityLogContextValue {
   sessionId: string | null;
@@ -125,6 +126,7 @@ export function ActivityLogProvider({ children, getToken }: Props) {
   useEffect(() => {
     sessionIdRef.current = sessionId;
     adoptOrphans(sessionId);
+    if (sessionId) noteInput(sessionId, Date.now(), true);
   }, [sessionId, adoptOrphans]);
 
   // Listen for session changes dispatched by initActivitySession / clearActivitySession.
@@ -139,6 +141,57 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     window.addEventListener(SESSION_CHANGE_EVENT, handler);
     return () => window.removeEventListener(SESSION_CHANGE_EVENT, handler);
   }, []);
+
+  // ── New session after T2 idle; one session across tabs (sessionSync) ────
+  const rolling = useRef(false);
+  const rollover = useCallback(
+    async (previous: string) => {
+      if (rolling.current) return;
+      rolling.current = true;
+      sessionIdRef.current = null; // events tracked meanwhile join the new session
+      try {
+        const res = await fetch('/api/activity-log/session/open', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+          body: JSON.stringify({ previousSessionId: previous }),
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        const j = (await res.json()) as { sessionId: string; idleTimeoutMs?: number };
+        setIdleTimeoutMs(j.idleTimeoutMs);
+        noteInput(j.sessionId, Date.now(), true);
+        initActivitySession(j.sessionId);
+      } catch {
+        sessionIdRef.current = previous; // try again on the next input
+      } finally {
+        rolling.current = false;
+      }
+    },
+    [getToken],
+  );
+
+  useEffect(() => {
+    let lastCheck = 0;
+    const onInput = () => {
+      const now = Date.now();
+      if (now - lastCheck < 1_000) return;
+      lastCheck = now;
+      const sid = sessionIdRef.current;
+      if (!sid || rolling.current) return;
+      const d = decideOnInput(sid, now);
+      if (d.kind === 'rollover') {
+        void rollover(d.previous);
+        return;
+      }
+      if (d.kind === 'join') initActivitySession(d.sid);
+      noteInput(d.kind === 'join' ? d.sid : sid, now);
+    };
+    const opts = { capture: true, passive: true } as const;
+    const kinds = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove', 'scroll'];
+    for (const k of kinds) window.addEventListener(k, onInput, opts);
+    return () => {
+      for (const k of kinds) window.removeEventListener(k, onInput, opts);
+    };
+  }, [rollover]);
 
   // ── Send queued events ───────────────────────────────────────────────────
   /** Sends what is queued; returns true when everything sent was accepted. */
@@ -256,6 +309,12 @@ export function ActivityLogProvider({ children, getToken }: Props) {
       queue.persistNow();
       if (queue.length > 0) void send(true);
     };
+    // Closed or navigated away: if nothing follows, the session's close
+    // reason is tab_closed (Prompt B, P2). A reload is followed by events.
+    const handlePageHide = () => {
+      track('PAGE_LEFT', { metadata: { path: window.location.pathname } });
+      handleUnload();
+    };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') handleUnload();
@@ -273,16 +332,16 @@ export function ActivityLogProvider({ children, getToken }: Props) {
     const handleOnline = () => void flush();
 
     window.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('pagehide', handlePageHide);
     window.addEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
     window.addEventListener('online', handleOnline);
     return () => {
       window.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('pagehide', handlePageHide);
       window.removeEventListener(ACTIVITY_FLUSH_EVENT, handleFlushRequest);
       window.removeEventListener('online', handleOnline);
     };
-  }, [send, flush, queue]);
+  }, [send, flush, queue, track]);
 
   return (
     <ActivityLogContext.Provider value={{ sessionId, track, flush }}>

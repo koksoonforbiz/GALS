@@ -1,10 +1,11 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionService } from './session.service';
+import { SESSION_PARAMS } from './session-params';
 
-/** No activity event and no replay snapshot for this long → the session is over. */
-export const SESSION_IDLE_TIMEOUT_MS = 2 * 3600_000;
-const SWEEP_EVERY_MS = 10 * 60_000;
+/** T2 (session-params.ts): no learner input for this long closes the session. */
+export const SESSION_IDLE_TIMEOUT_MS = SESSION_PARAMS.T2_ms;
+const SWEEP_EVERY_MS = 2 * 60_000;
 const MAX_PER_SWEEP = 50;
 
 /**
@@ -42,22 +43,50 @@ export class SessionTimeoutSweeper implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const cutoff = new Date(now.getTime() - SESSION_IDLE_TIMEOUT_MS);
-      const idle = await this.prisma.$queryRaw<Array<{ id: string; last_at: Date }>>`
-        SELECT s.id, GREATEST(s.started_at, a.last_at, r.last_at) AS last_at
+      // Last learner input per open session (see SessionService.lastInputAt;
+      // same definition, set-based). Periodic replay snapshots of an
+      // untouched tab don't count. `last_action` tells a closed tab
+      // (PAGE_LEFT and nothing after) from a tab left open.
+      const cutoffMs = BigInt(cutoff.getTime());
+      const idle = await this.prisma.$queryRaw<
+        Array<{ id: string; last_at: Date; last_action: string | null }>
+      >`
+        SELECT s.id, GREATEST(s.started_at, a.last_at,
+                 to_timestamp(c.t / 1000.0), to_timestamp(k.t / 1000.0),
+                 to_timestamp(sc.t / 1000.0), to_timestamp(cu.t / 1000.0)) AS last_at,
+               la.action AS last_action
         FROM student_sessions s
         LEFT JOIN LATERAL (
-          SELECT max(occurred_at) AS last_at FROM activity_logs WHERE session_id = s.id
+          SELECT max(occurred_at) AS last_at FROM activity_logs
+          WHERE session_id = s.id
+            AND action::text NOT IN ('SESSION_START', 'SESSION_END', 'SESSION_HEARTBEAT')
         ) a ON true
         LEFT JOIN LATERAL (
-          SELECT max("createdAt") AS last_at FROM session_replay_snapshots WHERE "sessionId" = s.id
-        ) r ON true
+          SELECT action::text AS action FROM activity_logs
+          WHERE session_id = s.id
+            AND action::text NOT IN ('SESSION_START', 'SESSION_END', 'SESSION_HEARTBEAT')
+          ORDER BY occurred_at DESC LIMIT 1
+        ) la ON true
+        LEFT JOIN LATERAL (SELECT max("timestamp") AS t FROM click_logs WHERE "sessionId" = s.id::text) c ON true
+        LEFT JOIN LATERAL (SELECT max("timestamp") AS t FROM keystroke_logs WHERE "sessionId" = s.id::text) k ON true
+        LEFT JOIN LATERAL (SELECT max("timestamp") AS t FROM scroll_logs WHERE "sessionId" = s.id::text) sc ON true
+        LEFT JOIN LATERAL (SELECT max("timestamp") AS t FROM cursor_logs WHERE "sessionId" = s.id::text) cu ON true
         WHERE s.ended_at IS NULL
           AND s.started_at < ${cutoff}
-          AND GREATEST(s.started_at, a.last_at, r.last_at) < ${cutoff}
+          AND COALESCE(a.last_at, s.started_at) < ${cutoff}
+          AND COALESCE(c.t, 0) < ${cutoffMs}
+          AND COALESCE(k.t, 0) < ${cutoffMs}
+          AND COALESCE(sc.t, 0) < ${cutoffMs}
+          AND COALESCE(cu.t, 0) < ${cutoffMs}
         ORDER BY s.started_at
         LIMIT ${MAX_PER_SWEEP}`;
       for (const s of idle) {
-        await this.sessions.closeSession(s.id, { endedAt: s.last_at, reason: 'timeout' });
+        const last = s.last_at;
+        const lastActivityLeft = s.last_action === 'PAGE_LEFT';
+        await this.sessions.closeSession(s.id, {
+          endedAt: last,
+          reason: lastActivityLeft ? 'tab_closed' : 'idle_timeout',
+        });
       }
       if (idle.length) this.logger.log(`Closed ${idle.length} idle session(s)`);
       return idle.length;

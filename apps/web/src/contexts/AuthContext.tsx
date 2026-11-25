@@ -6,6 +6,7 @@ import {
   clearActivitySession,
   ACTIVITY_FLUSH_EVENT,
 } from '../lib/activity-log';
+import { noteInput, reusableSession, setIdleTimeoutMs } from '../lib/capture/sessionSync';
 import { mediaStreamRegistry } from '../lib/biometrics/mediaStreamRegistry';
 import type { UserRole, TwoFactorMethod } from '@ats/shared';
 import {
@@ -37,6 +38,7 @@ interface AuthResponse {
   accessToken: string;
   user: User;
   sessionId?: string;
+  idleTimeoutMs?: number;
 }
 
 interface TwoFactorPendingResponse {
@@ -113,12 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (parsedUser.role === 'student') {
           joinStudentRoom(parsedUser.id);
 
-          // If no activity session exists in sessionStorage, open a new one
-          if (!sessionStorage.getItem('ats_session_id')) {
+          // If no activity session exists in sessionStorage, join the one
+          // another tab is using (if it had input within T2), else open one.
+          const shared = sessionStorage.getItem('ats_session_id') ? null : reusableSession();
+          if (shared) {
+            initActivitySession(shared);
+          } else if (!sessionStorage.getItem('ats_session_id')) {
             api
-              .post<{ sessionId: string }>('/activity-log/session/open')
+              .post<{ sessionId: string; idleTimeoutMs?: number }>('/activity-log/session/open')
               .then((res) => {
                 if (res.sessionId) {
+                  setIdleTimeoutMs(res.idleTimeoutMs);
+                  noteInput(res.sessionId, Date.now(), true);
                   initActivitySession(res.sessionId);
                 }
               })
@@ -161,6 +169,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (response.user.role === 'student') {
       if (response.sessionId) {
+        setIdleTimeoutMs(response.idleTimeoutMs);
+        noteInput(response.sessionId, Date.now(), true);
         initActivitySession(response.sessionId);
       }
       joinStudentRoom(response.user.id);

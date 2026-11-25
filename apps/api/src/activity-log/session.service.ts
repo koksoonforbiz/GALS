@@ -9,6 +9,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActivityLogService } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
+import { SESSION_PARAMS, episodeKey, type CloseReason } from './session-params';
 
 function convertBigInts<T>(value: T): T {
   if (typeof value === 'bigint') {
@@ -89,13 +90,37 @@ export class SessionService {
     courseId?: string;
     ipAddress?: string;
     userAgent?: string;
+    /** The session this one follows (a return after T2); defaults to the learner's latest. */
+    previousSessionId?: string;
   }): Promise<string> {
+    // A return after T2 idle (Prompt B, P2): close the session it follows,
+    // dated at its last learner input, before opening the new one.
+    let previous = params.previousSessionId
+      ? await this.prisma.studentSession.findFirst({
+          where: { id: params.previousSessionId, userId: params.userId },
+          select: { id: true, endedAt: true },
+        })
+      : null;
+    if (previous && !previous.endedAt) {
+      const last = await this.lastInputAt(previous.id);
+      await this.closeSession(previous.id, { endedAt: last ?? undefined, reason: 'idle_timeout' });
+    }
+    previous ??= await this.prisma.studentSession.findFirst({
+      where: { userId: params.userId },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true, endedAt: true },
+    });
+    const startedAt = new Date();
     const session = await this.prisma.studentSession.create({
       data: {
         userId: params.userId,
         courseId: params.courseId ?? null,
         ipAddress: params.ipAddress ?? null,
         userAgent: params.userAgent ?? null,
+        startedAt,
+        paramsVersion: SESSION_PARAMS.version,
+        previousSessionId: previous?.id ?? null,
+        episodeKey: episodeKey(params.userId, params.courseId ?? null, startedAt),
       },
     });
     this.logger.log(`Session opened: ${session.id} for user ${params.userId}`);
@@ -120,11 +145,15 @@ export class SessionService {
 
   /** Associate a courseId with an existing session (idempotent). */
   async setCourseId(sessionId: string, courseId: string): Promise<void> {
+    const s = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: { userId: true, startedAt: true },
+    });
+    if (!s) return;
     await this.prisma.studentSession.update({
       where: { id: sessionId },
-      data: { courseId },
+      data: { courseId, episodeKey: episodeKey(s.userId, courseId, s.startedAt) },
     });
-    this.logger.log(`Session ${sessionId} linked to course ${courseId}`);
   }
 
   /**
@@ -133,16 +162,17 @@ export class SessionService {
    */
   async closeSession(
     sessionId: string,
-    opts: { endedAt?: Date; reason?: 'logout' | 'timeout' } = {},
+    opts: { endedAt?: Date; reason?: CloseReason } = {},
   ): Promise<void> {
     const session = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
       select: { startedAt: true, userId: true, courseId: true, endedAt: true },
     });
     if (!session) return;
-    // A timeout never re-closes; a logout after one still closes again so
-    // the parse sees the events that came later.
-    if (opts.reason === 'timeout' && session.endedAt) return;
+    // An idle or tab close never re-closes; a logout after one still closes
+    // again so the parse sees the events that came later.
+    const reason: CloseReason = opts.reason ?? 'logout';
+    if ((reason === 'idle_timeout' || reason === 'tab_closed') && session.endedAt) return;
 
     const endedAt = opts.endedAt ?? new Date();
     const durationSecs = Math.max(
@@ -152,7 +182,7 @@ export class SessionService {
 
     await this.prisma.studentSession.update({
       where: { id: sessionId },
-      data: { endedAt, durationSecs },
+      data: { endedAt, durationSecs, closeReason: reason },
     });
 
     // Emit SESSION_END BEFORE buildSummary so it's included in the
@@ -163,7 +193,7 @@ export class SessionService {
       action: ActivityAction.SESSION_END,
       occurredAt: endedAt,
       courseId: session.courseId ?? undefined,
-      metadata: { durationSecs, reason: opts.reason ?? 'logout' },
+      metadata: { durationSecs, reason },
     });
 
     await this.buildSummary(sessionId);
@@ -175,6 +205,57 @@ export class SessionService {
 
     // Fire-and-forget export trigger
     this.triggerExport(sessionId);
+  }
+
+  /**
+   * The last learner input in a session: activity events (not heartbeats or
+   * server bookkeeping), clicks, keystrokes, scrolling, cursor movement.
+   * Periodic replay snapshots of an untouched tab do not count.
+   */
+  async lastInputAt(sessionId: string): Promise<Date | null> {
+    const [row] = await this.prisma.$queryRaw<Array<{ last_at: Date | null }>>`
+      SELECT GREATEST(
+        (SELECT max(occurred_at) FROM activity_logs
+          WHERE session_id = ${sessionId}::uuid
+            AND action::text NOT IN ('SESSION_START', 'SESSION_END', 'SESSION_HEARTBEAT')),
+        (SELECT to_timestamp(max("timestamp") / 1000.0) FROM click_logs WHERE "sessionId" = ${sessionId}),
+        (SELECT to_timestamp(max("timestamp") / 1000.0) FROM keystroke_logs WHERE "sessionId" = ${sessionId}),
+        (SELECT to_timestamp(max("timestamp") / 1000.0) FROM scroll_logs WHERE "sessionId" = ${sessionId}),
+        (SELECT to_timestamp(max("timestamp") / 1000.0) FROM cursor_logs WHERE "sessionId" = ${sessionId})
+      ) AS last_at`;
+    return row?.last_at ?? null;
+  }
+
+  async isClosed(sessionId: string): Promise<boolean> {
+    const s = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: { endedAt: true },
+    });
+    return !!s?.endedAt;
+  }
+
+  private reparseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /**
+   * Events arrived for a closed session (sent late: offline, a queue left
+   * by a closed tab). They are stored; re-parse once they stop arriving
+   * (5 min debounce) so the learning events include them.
+   */
+  scheduleReparse(sessionId: string, delayMs = 5 * 60_000): void {
+    const t = this.reparseTimers.get(sessionId);
+    if (t) clearTimeout(t);
+    this.reparseTimers.set(
+      sessionId,
+      setTimeout(() => {
+        this.reparseTimers.delete(sessionId);
+        this.events?.emit('session.reparse', { sessionId, trigger: 'late_events' });
+      }, delayMs),
+    );
+  }
+
+  onModuleDestroy(): void {
+    for (const t of this.reparseTimers.values()) clearTimeout(t);
+    this.reparseTimers.clear();
   }
 
   private triggerExport(sessionId: string): void {

@@ -146,6 +146,10 @@ export enum ActivityAction {
   // (metadata.blockedMs). No image data.
   CAMERA_BLOCKED = 'CAMERA_BLOCKED',
   CAMERA_RESTORED = 'CAMERA_RESTORED',
+
+  // The page was closed or navigated away (pagehide). If nothing follows it,
+  // the session's close reason is tab_closed (Prompt B, P2).
+  PAGE_LEFT = 'PAGE_LEFT',
 }
 
 /**

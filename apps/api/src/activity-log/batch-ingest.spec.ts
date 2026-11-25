@@ -29,7 +29,11 @@ function fakePrisma() {
 
 function setup(prisma = fakePrisma()) {
   const service = new ActivityLogService(prisma as never, {} as never);
-  const sessions = { assertOwnsSession: jest.fn().mockResolvedValue(undefined) };
+  const sessions = {
+    assertOwnsSession: jest.fn().mockResolvedValue(undefined),
+    isClosed: jest.fn().mockResolvedValue(false),
+    scheduleReparse: jest.fn(),
+  };
   const controller = new ActivityLogController(
     service,
     sessions as never,

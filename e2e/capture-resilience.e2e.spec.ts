@@ -139,3 +139,39 @@ test('typing, paste and clicks survive going offline and a reload, stored once',
     ),
   ).toBeGreaterThan(0);
 });
+
+/**
+ * Return after T2 = a new, linked session; a second tab joins the open one
+ * (Prompt B, P2). Needs the API started with a short T2, e.g.
+ * SESSION_T2_MS=20000, and E2E_SHORT_T2_MS set to the same value.
+ */
+test('a second tab joins the session; input after T2 idle starts a linked one', async ({
+  page,
+  context,
+}) => {
+  const t2 = Number(env.E2E_SHORT_T2_MS);
+  test.skip(!t2, 'start the API with SESSION_T2_MS and set E2E_SHORT_T2_MS');
+  test.setTimeout(120_000);
+  await loginStudent(page, env.E2E_STUDENT_LOGIN!, env.E2E_STUDENT_PASSWORD!);
+  await page.goto(`/student/courses/${env.E2E_COURSE_ID}`);
+  const first = await sessionIdOf(page);
+  await page.mouse.click(500, 300);
+
+  // A fresh second tab (no sessionStorage) joins the same session.
+  const tab2 = await context.newPage();
+  await tab2.goto(`/student/courses/${env.E2E_COURSE_ID}`);
+  await expect
+    .poll(() => tab2.evaluate(() => sessionStorage.getItem('ats_session_id')))
+    .toBe(first);
+  await tab2.close();
+
+  // No input for longer than T2, then a click: a new session, linked.
+  await page.waitForTimeout(t2 + 3_000);
+  await page.mouse.click(520, 320);
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem('ats_session_id')), { timeout: 15_000 })
+    .not.toBe(first);
+  const second = await sessionIdOf(page);
+  expect(sql(`select close_reason from student_sessions where id='${first}'`)).toBe('idle_timeout');
+  expect(sql(`select previous_session_id from student_sessions where id='${second}'`)).toBe(first);
+});

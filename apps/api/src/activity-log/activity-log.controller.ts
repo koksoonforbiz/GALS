@@ -34,6 +34,8 @@ import {
 } from './dto/log-event.dto';
 import type { IngestIssueParams } from './activity-log.service';
 import { ActivityAction } from './activity-action.enum';
+import { SESSION_PARAMS } from './session-params';
+import { OpenSessionSchema, type OpenSessionDto } from './dto/log-event.dto';
 import { TextConsentService, consentScope } from '../governance/text-consent.service';
 import type { UserRole } from '@ats/shared';
 
@@ -61,15 +63,22 @@ export class ActivityLogController {
 
   /**
    * POST /activity-log/session/open
-   * Called by the frontend on page refresh when no session ID exists in sessionStorage.
+   * Called by the frontend on page refresh when no session ID exists in
+   * sessionStorage, and when the learner returns after T2 idle
+   * (`previousSessionId`: that session is closed and linked to the new one).
+   * Returns T2 so the browser rolls over on the same threshold.
    */
   @Post('session/open')
   @Roles('student')
-  async openSession(@Request() req: { user: RequestUser }) {
+  async openSession(
+    @Request() req: { user: RequestUser },
+    @Body(new ZodValidationPipe(OpenSessionSchema)) body: OpenSessionDto,
+  ) {
     const sessionId = await this.sessionService.openSession({
       userId: req.user.id,
+      previousSessionId: body?.previousSessionId ?? undefined,
     });
-    return { sessionId };
+    return { sessionId, idleTimeoutMs: SESSION_PARAMS.T2_ms };
   }
 
   /**
@@ -167,6 +176,10 @@ export class ActivityLogController {
         contentVersion: e.contentVersion,
       })),
     );
+    // Late events for a closed session are stored; re-parse it once they stop.
+    if (inserted > 0 && (await this.sessionService.isClosed(dto.sessionId))) {
+      this.sessionService.scheduleReparse(dto.sessionId);
+    }
     if (duplicates > 0) {
       await this.activityLogService.recordIngestIssues([
         {

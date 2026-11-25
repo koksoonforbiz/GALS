@@ -328,6 +328,7 @@ enum ActivityAction {
   NOTES_VIEWED
   CAMERA_BLOCKED
   CAMERA_RESTORED
+  PAGE_LEFT
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -1644,6 +1645,16 @@ model StudentSession {
   /// client timestamps to put them on the server clock.
   clockOffsetMs Int? @map("clock_offset_ms")
 
+  // Lifecycle (Prompt B, P2). Null on sessions before 2026-11-26.
+  /// logout | explicit | idle_timeout | tab_closed
+  closeReason       String? @map("close_reason")
+  /// SESSION_PARAMS.version that applied (session-params.ts)
+  paramsVersion     String? @map("params_version")
+  /// The learner's previous session (a return after T2 starts a new one)
+  previousSessionId String? @map("previous_session_id") @db.Uuid
+  /// learner|course|day (Asia/Singapore): regroup sessions in analysis
+  episodeKey        String? @map("episode_key")
+
   activityLogs ActivityLog[]
   summary      SessionSummary?
 
@@ -1723,6 +1734,27 @@ model ActivityLog {
   @@index([occurredAt])
   @@index([sessionId, tabId, clientSeq])
   @@map("activity_logs")
+}
+
+/// One run of the learning-event parser on a session (Prompt B, P2), so
+/// "never parsed" differs from "parsed, no detections" (CAP-82).
+model SessionParseRun {
+  id                  String    @id @default(uuid()) @db.Uuid
+  sessionId           String    @map("session_id") @db.Uuid
+  /// close | late_events | manual | recompute
+  trigger             String
+  libraryVersion      String?   @map("library_version")
+  parameterSetVersion Int?      @map("parameter_set_version")
+  startedAt           DateTime  @default(now()) @map("started_at") @db.Timestamptz
+  finishedAt          DateTime? @map("finished_at") @db.Timestamptz
+  /// running | ok | error
+  status              String
+  rawActions          Int?      @map("raw_actions")
+  detections          Int?
+  error               String?
+
+  @@index([sessionId, startedAt])
+  @@map("session_parse_runs")
 }
 
 /// Capture quality per session (Prompt B, B4): sequence gaps, duplicates and

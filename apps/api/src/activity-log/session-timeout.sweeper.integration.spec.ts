@@ -4,9 +4,12 @@ import { createTestApp, cleanDatabase } from '../test/setup';
 import { SessionTimeoutSweeper, SESSION_IDLE_TIMEOUT_MS } from './session-timeout.sweeper';
 
 /**
- * Sessions the student never logged out of are closed after 2 h without
- * activity (events or replay snapshots), dated at the last activity, with
- * SESSION_END { reason: 'timeout' }; active and already-closed ones are left alone.
+ * Sessions the student never logged out of are closed after T2 (30 min)
+ * without learner input (Prompt B, P2): activity events, clicks, keystrokes,
+ * scrolling or cursor movement. Periodic replay snapshots of an untouched
+ * tab don't count. The close is dated at the last input, with reason
+ * idle_timeout, or tab_closed when the last event was PAGE_LEFT. Active and
+ * already-closed sessions are left alone.
  */
 describe('SessionTimeoutSweeper', () => {
   let app: INestApplication;
@@ -29,23 +32,39 @@ describe('SessionTimeoutSweeper', () => {
   }, 30_000);
 
   afterAll(async () => {
+    await prisma.click_logs.deleteMany({ where: { userId } });
     await cleanDatabase(prisma);
     await app.close();
   });
 
   const session = (startedAt: Date, endedAt?: Date) =>
     prisma.studentSession.create({ data: { userId, startedAt, endedAt } });
-  const event = (sessionId: string, occurredAt: Date) =>
-    prisma.activityLog.create({
-      data: { sessionId, userId, action: 'SLIDE_ENTERED', occurredAt },
-    });
+  const event = (
+    sessionId: string,
+    occurredAt: Date,
+    action: 'SLIDE_ENTERED' | 'PAGE_LEFT' = 'SLIDE_ENTERED',
+  ) => prisma.activityLog.create({ data: { sessionId, userId, action, occurredAt } });
 
-  it('closes only sessions idle for longer than the timeout', async () => {
+  it('closes sessions with no learner input for T2, with the right reason', async () => {
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(30 * 60_000);
     const idle = await session(ago(5 * H));
     await event(idle.id, ago(3 * H));
     const active = await session(ago(5 * H));
     await event(active.id, ago(10 * 60_000));
-    const watching = await session(ago(5 * H)); // only replay snapshots recently
+    const clicking = await session(ago(5 * H)); // old events, recent clicks
+    await event(clicking.id, ago(2 * H));
+    await prisma.click_logs.create({
+      data: {
+        sessionId: clicking.id,
+        userId,
+        x: 1,
+        y: 1,
+        pageUrl: '/p',
+        elementSelector: 'button',
+        timestamp: BigInt(ago(5 * 60_000).getTime()),
+      },
+    });
+    const watching = await session(ago(5 * H)); // only replay snapshots recently: idle
     await prisma.sessionReplaySnapshot.create({
       data: {
         sessionId: watching.id,
@@ -58,20 +77,31 @@ describe('SessionTimeoutSweeper', () => {
         createdAt: ago(60_000),
       },
     });
+    const tabClosed = await session(ago(5 * H));
+    await event(tabClosed.id, ago(2 * H + 60_000));
+    await event(tabClosed.id, ago(2 * H), 'PAGE_LEFT');
     const fresh = await session(ago(SESSION_IDLE_TIMEOUT_MS / 2)); // no events yet
     const closed = await session(ago(6 * H), ago(5 * H));
 
-    expect(await sweeper.sweep(now)).toBe(1);
+    expect(await sweeper.sweep(now)).toBe(3);
 
     const got = await prisma.studentSession.findUniqueOrThrow({ where: { id: idle.id } });
     expect(got.endedAt?.getTime()).toBe(ago(3 * H).getTime());
     expect(got.durationSecs).toBe(2 * 3600);
+    expect(got.closeReason).toBe('idle_timeout');
     const end = await prisma.activityLog.findFirstOrThrow({
       where: { sessionId: idle.id, action: 'SESSION_END' },
     });
-    expect(end.metadata).toEqual(expect.objectContaining({ reason: 'timeout' }));
+    expect(end.metadata).toEqual(expect.objectContaining({ reason: 'idle_timeout' }));
 
-    for (const s of [active, watching, fresh]) {
+    const w = await prisma.studentSession.findUniqueOrThrow({ where: { id: watching.id } });
+    expect(w.closeReason).toBe('idle_timeout');
+    expect(w.endedAt?.getTime()).toBe(ago(5 * H).getTime()); // never had input
+    const t = await prisma.studentSession.findUniqueOrThrow({ where: { id: tabClosed.id } });
+    expect(t.closeReason).toBe('tab_closed');
+    expect(t.endedAt?.getTime()).toBe(ago(2 * H).getTime());
+
+    for (const s of [active, clicking, fresh]) {
       const row = await prisma.studentSession.findUniqueOrThrow({ where: { id: s.id } });
       expect(row.endedAt).toBeNull();
     }

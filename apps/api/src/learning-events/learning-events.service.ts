@@ -114,13 +114,53 @@ export class LearningEventsService {
 
   @OnEvent('session.closed', { async: true })
   async onSessionClosed(payload: { sessionId: string }) {
+    await this.parseWithRun(payload.sessionId, 'close');
+  }
+
+  /** Late events arrived for a closed session (SessionService.scheduleReparse). */
+  @OnEvent('session.reparse', { async: true })
+  async onSessionReparse(payload: { sessionId: string; trigger?: string }) {
+    await this.parseWithRun(payload.sessionId, payload.trigger ?? 'late_events');
+  }
+
+  /**
+   * Parse a session and record the run (session_parse_runs), so "never
+   * parsed" differs from "parsed, no detections" (CAP-82). Never throws:
+   * the parser must not affect session close.
+   */
+  async parseWithRun(sessionId: string, trigger: string) {
+    const run = await this.prisma.sessionParseRun
+      .create({
+        data: { sessionId, trigger, status: 'running', libraryVersion: LIBRARY_VERSION },
+      })
+      .catch(() => null);
     try {
-      await this.computeSession(payload.sessionId);
+      const r = await this.computeSession(sessionId);
+      if (run) {
+        await this.prisma.sessionParseRun.update({
+          where: { id: run.id },
+          data: {
+            status: 'ok',
+            finishedAt: new Date(),
+            parameterSetVersion: r.parameterSetVersion,
+            rawActions: r.rawActions,
+            detections: r.learningEvents,
+          },
+        });
+      }
+      return r;
     } catch (err) {
-      // Never let the parser affect session close.
-      this.logger.warn(
-        `learning-event parse failed for ${payload.sessionId}: ${(err as Error).message}`,
-      );
+      const msg = (err as Error).message;
+      this.logger.warn(`learning-event parse failed for ${sessionId}: ${msg}`);
+      if (run) {
+        await this.prisma.sessionParseRun
+          .update({
+            where: { id: run.id },
+            data: { status: 'error', finishedAt: new Date(), error: msg.slice(0, 1000) },
+          })
+          .catch(() => undefined);
+      }
+      return null;
     }
   }
 

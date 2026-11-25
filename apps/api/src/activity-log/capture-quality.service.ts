@@ -43,6 +43,7 @@ export class CaptureQualityService {
   constructor(private readonly prisma: PrismaService) {}
 
   @OnEvent('session.closed', { async: true })
+  @OnEvent('session.reparse', { async: true })
   async onSessionClosed(payload: { sessionId: string }) {
     try {
       await this.analyseSession(payload.sessionId);

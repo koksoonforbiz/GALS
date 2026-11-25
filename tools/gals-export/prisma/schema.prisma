@@ -301,6 +301,7 @@ enum ActivityAction {
   NOTES_VIEWED
   CAMERA_BLOCKED
   CAMERA_RESTORED
+  PAGE_LEFT
 }
 
 // ─── Models ──────────────────────────────────────────────

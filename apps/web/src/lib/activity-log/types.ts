@@ -101,7 +101,8 @@ export type ActivityAction =
   | 'HIGHLIGHT_DELETED'
   | 'NOTES_VIEWED'
   | 'CAMERA_BLOCKED'
-  | 'CAMERA_RESTORED';
+  | 'CAMERA_RESTORED'
+  | 'PAGE_LEFT';
 
 export interface ActivityEvent {
   action: ActivityAction;
